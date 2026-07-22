@@ -25,6 +25,7 @@ mod command_registration;
 mod command_routing;
 mod interaction_dispatch;
 mod planned_rejoin;
+mod voice_playback;
 
 pub use command_registration::{
     CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
@@ -38,6 +39,7 @@ pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
 };
+pub use voice_playback::{VoicePlaybackError, join_and_play_wav, leave_voice};
 
 /// Read-only gateway facts that other Rust adapters may use only after their own OAuth or
 /// permission checks. Guild membership is intentionally the sole fact here: it contains no user
