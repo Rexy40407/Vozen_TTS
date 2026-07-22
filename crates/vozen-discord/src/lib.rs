@@ -18,12 +18,14 @@ use thiserror::Error;
 use vozen_contracts::{ContractError, DiscordCommandCatalog};
 
 mod command_registration;
+mod command_routing;
 mod planned_rejoin;
 
 pub use command_registration::{
     CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
     CommandRegistrationOutcome, DiscordHttpCommandRegistrationClient, register_commands,
 };
+pub use command_routing::{CommandArea, command_area, route_command};
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
