@@ -6,7 +6,13 @@
 use async_trait::async_trait;
 use serenity::client::Context;
 #[cfg(feature = "voice-driver")]
-use serenity::model::id::{ChannelId, GuildId};
+use serenity::{
+    builder::EditVoiceState,
+    model::{
+        channel::{Channel, ChannelType},
+        id::{ChannelId, GuildId},
+    },
+};
 
 use crate::{VoiceSessionTransport, VoiceSessionTransportError};
 
@@ -38,6 +44,10 @@ impl VoiceSessionTransport for SongbirdVoiceSessionTransport {
             .join(GuildId::new(guild_id), ChannelId::new(channel_id))
             .await
             .map_err(|_| VoiceSessionTransportError::Failed)?;
+        // Discord places bots in Stage channels as audience by default. Match Node's best-effort
+        // behaviour: first self-promote, then request to speak if a moderator must approve it.
+        // A Stage moderation failure never invalidates an otherwise successful voice join.
+        promote_stage_speaker(&self.context, ChannelId::new(channel_id)).await;
         Ok(())
     }
 
@@ -50,6 +60,25 @@ impl VoiceSessionTransport for SongbirdVoiceSessionTransport {
             .remove(GuildId::new(guild_id))
             .await
             .map_err(|_| VoiceSessionTransportError::Failed)
+    }
+}
+
+#[cfg(feature = "voice-driver")]
+async fn promote_stage_speaker(context: &Context, channel_id: ChannelId) {
+    let Ok(Channel::Guild(channel)) = channel_id.to_channel(&context.http).await else {
+        return;
+    };
+    if channel.kind != ChannelType::Stage {
+        return;
+    }
+    if channel
+        .edit_own_voice_state(&context.http, EditVoiceState::new().suppress(false))
+        .await
+        .is_err()
+    {
+        let _ = channel
+            .edit_own_voice_state(&context.http, EditVoiceState::new().request_to_speak(true))
+            .await;
     }
 }
 
