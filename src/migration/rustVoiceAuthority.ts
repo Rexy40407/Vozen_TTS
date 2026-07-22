@@ -37,6 +37,13 @@ export function rustTranslationPreferencesOwnCommand(
   );
 }
 
+/** Automatic mapped-channel translation uses a third, independent opt-in boundary. */
+export function rustTranslationOwnsAutomaticMessages(
+  enabled = process.env.RUST_AUTOMATIC_TRANSLATION_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true';
+}
+
 export function rustVoiceOwnsCommand(
   commandName: string,
   coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,

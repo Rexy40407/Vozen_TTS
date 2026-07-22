@@ -31,6 +31,9 @@ pub struct AutomaticTranslationInvocation<'a> {
     pub is_self: bool,
     pub is_bot: bool,
     pub is_webhook: bool,
+    /// A live Discord adapter must authorize this exact destination before quota is reserved.
+    /// A changed mapping fails closed instead of reusing authorization for another channel.
+    pub authorized_destination_channel_id: Option<&'a str>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -215,6 +218,11 @@ where
             let Some(mapping) = mapping else {
                 return AutomaticTranslationOutcome::Ignored(AutomaticTranslationDenial::NoMapping);
             };
+            if invocation.authorized_destination_channel_id
+                != Some(mapping.destination_channel_id.as_str())
+            {
+                return AutomaticTranslationOutcome::Ignored(AutomaticTranslationDenial::NoMapping);
+            }
             let input = translation_input(invocation.raw);
             if input.text.is_empty() {
                 return AutomaticTranslationOutcome::Ignored(
@@ -414,6 +422,7 @@ mod tests {
             is_self: false,
             is_bot: false,
             is_webhook: false,
+            authorized_destination_channel_id: Some("destination"),
         }
     }
 
@@ -460,6 +469,33 @@ mod tests {
         assert_eq!(
             service.prepare(invocation("hello")).await,
             AutomaticTranslationOutcome::ProviderDisabled
+        );
+        assert!(matches!(
+            store.lock().expect("store").reserve_translation_chars(
+                "guild",
+                "user",
+                FREE_USER_TRANSLATION_LIMIT,
+                FREE_GUILD_TRANSLATION_LIMIT,
+                FREE_USER_TRANSLATION_LIMIT,
+                "2024-03-01"
+            ),
+            Ok(TranslationReservation::Reserved { .. })
+        ));
+        assert_eq!(service.provider.calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn changed_mapping_destination_fails_closed_before_reserving_quota() {
+        let (store, service) = service(FakeProvider {
+            enabled: true,
+            result: Ok("unused".into()),
+            calls: AtomicUsize::new(0),
+        });
+        let mut request = invocation("hello");
+        request.authorized_destination_channel_id = Some("stale-destination");
+        assert_eq!(
+            service.prepare(request).await,
+            AutomaticTranslationOutcome::Ignored(AutomaticTranslationDenial::NoMapping)
         );
         assert!(matches!(
             store.lock().expect("store").reserve_translation_chars(

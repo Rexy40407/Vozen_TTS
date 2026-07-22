@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   rustTranslationOwnsCommand,
+  rustTranslationOwnsAutomaticMessages,
   rustTranslationPreferencesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -44,5 +45,11 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranslationPreferencesOwnCommand('translate', 'opt-out', 'true')).toBe(true);
     expect(rustTranslationPreferencesOwnCommand('translate', 'text', 'true')).toBe(false);
     expect(rustTranslationPreferencesOwnCommand('translate', 'map-add', 'true')).toBe(false);
+  });
+
+  it('keeps Node automatic translation authoritative until its own exact flag is enabled', () => {
+    expect(rustTranslationOwnsAutomaticMessages()).toBe(false);
+    expect(rustTranslationOwnsAutomaticMessages('yes')).toBe(false);
+    expect(rustTranslationOwnsAutomaticMessages(' TRUE ')).toBe(true);
   });
 });

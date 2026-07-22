@@ -30,7 +30,10 @@ import { log } from '../logging/logger';
 import { channelCard } from '../ui/messages';
 import { resolveQueueLane } from '../voice/queuePolicy';
 import { handleTranslationMessage } from '../translation/messageListener';
-import { rustVoiceOwnsAutoRead } from '../migration/rustVoiceAuthority';
+import {
+  rustTranslationOwnsAutomaticMessages,
+  rustVoiceOwnsAutoRead,
+} from '../migration/rustVoiceAuthority';
 import { translateTextForSpeech } from '../translation/explicit';
 import { getTranslationPreference } from '../store/translation';
 import { getChannelProfile } from '../store/channelProfiles';
@@ -163,7 +166,9 @@ export async function handleMessage(message: Message, deps: BotDeps): Promise<vo
     if (!me) return;
     // Text translation is an independent, never-spoken path. It runs before normal auto-read
     // admission and retains its own default-deny mappings and quotas.
-    await handleTranslationMessage(message, deps);
+    if (!rustTranslationOwnsAutomaticMessages()) {
+      await handleTranslationMessage(message, deps);
+    }
     // Vozen NEVER reads itself — anti-loop, regardless of read_bots.
     if (message.author.id === me.id) return;
     if (rustVoiceOwnsAutoRead()) return;

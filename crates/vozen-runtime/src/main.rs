@@ -7,6 +7,7 @@
 //! opt-in. Dashboard routes remain absent until their live Discord option provider has been
 //! migrated and shadow-tested.
 
+mod automatic_translation_sink;
 #[cfg(feature = "voice-driver")]
 mod core_voice_sink;
 mod file_export_sink;
@@ -72,6 +73,7 @@ struct RuntimeConfig {
     tts_file: Option<TtsFileRuntimeOptions>,
     translation_text: Option<TranslationTextRuntimeOptions>,
     translation_preferences: bool,
+    automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
 }
 
@@ -187,6 +189,12 @@ struct TranslationTextRuntimeOptions {
     provider: translation_provider::RuntimeTranslationProvider,
 }
 
+/// Automatic channel translation is a separate, explicitly promoted message path. It has no
+/// relationship to speaking or `/translate text`, so it remains off until its own flag is set.
+struct AutomaticTranslationRuntimeOptions {
+    provider: translation_provider::RuntimeTranslationProvider,
+}
+
 impl RuntimeConfig {
     fn from_environment() -> Result<Self, RuntimeError> {
         let discord_token = env::var("DISCORD_TOKEN").map_err(|_| RuntimeError::MissingToken)?;
@@ -224,6 +232,7 @@ impl RuntimeConfig {
                 .ok()
                 .as_deref(),
         );
+        let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         Ok(Self {
             discord_token,
@@ -238,6 +247,7 @@ impl RuntimeConfig {
             tts_file,
             translation_text,
             translation_preferences,
+            automatic_translation,
             dashboard,
         })
     }
@@ -318,6 +328,17 @@ fn translation_text_from_environment() -> Option<TranslationTextRuntimeOptions> 
     })
 }
 
+fn automatic_translation_from_environment() -> Option<AutomaticTranslationRuntimeOptions> {
+    automatic_translation_enabled(
+        env::var("RUST_AUTOMATIC_TRANSLATION_ENABLED")
+            .ok()
+            .as_deref(),
+    )
+    .then(|| AutomaticTranslationRuntimeOptions {
+        provider: translation_provider::RuntimeTranslationProvider::from_environment(),
+    })
+}
+
 /// This deliberately matches Node's safe opt-in semantics: only literal `true` can make Rust
 /// own a Discord interaction. `1`, `yes`, missing and spelling mistakes remain shadow-only.
 fn core_voice_enabled(raw: Option<&str>) -> bool {
@@ -333,6 +354,10 @@ fn translation_text_enabled(raw: Option<&str>) -> bool {
 }
 
 fn translation_preferences_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn automatic_translation_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -452,6 +477,22 @@ fn translation_preference_event_sink(
         translation_preference_sink::TranslationPreferenceGatewaySink::new(store)
             .map_err(|_| RuntimeError::TranslationPreferenceGateway)?,
     )))
+}
+
+fn automatic_translation_event_sink(
+    options: Option<AutomaticTranslationRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+    gateway_state: GatewayState,
+) -> Option<Arc<dyn GatewayEventSink>> {
+    options.map(|options| {
+        Arc::new(
+            automatic_translation_sink::AutomaticTranslationGatewaySink::new(
+                store,
+                gateway_state,
+                options.provider,
+            ),
+        ) as Arc<dyn GatewayEventSink>
+    })
 }
 
 #[cfg(not(feature = "voice-driver"))]
@@ -649,6 +690,13 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) =
         translation_preference_event_sink(config.translation_preferences, store.clone())?
     {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = automatic_translation_event_sink(
+        config.automatic_translation,
+        store.clone(),
+        gateway_state.clone(),
+    ) {
         event_sinks.push(sink);
     }
     let event_sink = match event_sinks.len() {
@@ -1000,6 +1048,15 @@ mod tests {
         assert!(!translation_preferences_enabled(Some("1")));
         assert!(!translation_preferences_enabled(Some("yes")));
         assert!(!translation_preferences_enabled(None));
+    }
+
+    #[test]
+    fn automatic_translation_promotion_is_exactly_opt_in_and_independent_of_other_paths() {
+        assert!(automatic_translation_enabled(Some("true")));
+        assert!(automatic_translation_enabled(Some(" TRUE ")));
+        assert!(!automatic_translation_enabled(Some("1")));
+        assert!(!automatic_translation_enabled(Some("yes")));
+        assert!(!automatic_translation_enabled(None));
     }
 
     #[test]
