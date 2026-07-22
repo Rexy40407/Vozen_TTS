@@ -63,3 +63,8 @@ jobs:
       - run: rustup component add clippy rustfmt --toolchain 1.97.1
       - run: npm run check:rust-contracts
       - run: npm run check:rust
+      # The portable Rust build deliberately omits Songbird's native Opus driver. Verify the
+      # production voice feature separately on Linux, where CMake and the compiler toolchain are
+      # present, so a control-plane-only green build can never hide a broken voice cutover.
+      - run: cmake --version
+      - run: npm run check:rust-voice
