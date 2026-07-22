@@ -20,10 +20,13 @@ use vozen_discord::{
 };
 use vozen_store::SqliteStore;
 
-use crate::{TtsFileRuntimeOptions, piper_adapter::PiperCommandSynthesizer, system_now_ms};
+use crate::{
+    TtsFileRuntimeOptions, engine_router::PerUserCommandSynthesizer,
+    piper_adapter::PiperCommandSynthesizer, system_now_ms,
+};
 
 pub struct TtsFileGatewaySink {
-    service: TtsFileExportService<PiperCommandSynthesizer>,
+    service: TtsFileExportService<PerUserCommandSynthesizer>,
     localizer: VoiceResponseLocalizer,
 }
 
@@ -32,12 +35,13 @@ impl TtsFileGatewaySink {
         store: Arc<Mutex<SqliteStore>>,
         options: TtsFileRuntimeOptions,
     ) -> Result<Self, GatewayEventDispatchError> {
-        let synthesizer = PiperCommandSynthesizer::production(
-            options.piper_path,
-            options.models_dir,
-            options.cache_dir,
-            options.piper_concurrency,
-        );
+        let synthesizer =
+            PerUserCommandSynthesizer::piper_only(PiperCommandSynthesizer::production(
+                options.piper_path,
+                options.models_dir,
+                options.cache_dir,
+                options.piper_concurrency,
+            ));
         let localizer = VoiceResponseLocalizer::from_generated_contract()
             .map_err(|_| GatewayEventDispatchError)?;
         Ok(Self {

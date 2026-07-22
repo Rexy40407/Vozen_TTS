@@ -10,6 +10,7 @@
 mod automatic_translation_sink;
 #[cfg(feature = "voice-driver")]
 mod core_voice_sink;
+mod engine_router;
 mod file_export_sink;
 mod piper_adapter;
 mod topgg_metrics;

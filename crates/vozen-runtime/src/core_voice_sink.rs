@@ -31,17 +31,20 @@ use vozen_discord::{
 };
 use vozen_store::SqliteStore;
 
-use crate::{CoreVoiceRuntimeOptions, piper_adapter::PiperCommandSynthesizer, system_now_ms};
+use crate::{
+    CoreVoiceRuntimeOptions, engine_router::PerUserCommandSynthesizer,
+    piper_adapter::PiperCommandSynthesizer, system_now_ms,
+};
 
 type Executor = CoreVoiceInteractionExecutor<
     SongbirdVoiceSessionTransport,
-    PiperCommandSynthesizer,
+    PerUserCommandSynthesizer,
     SongbirdCommandPlayback,
 >;
-type MessageService = MessageVoiceService<PiperCommandSynthesizer, SongbirdCommandPlayback>;
+type MessageService = MessageVoiceService<PerUserCommandSynthesizer, SongbirdCommandPlayback>;
 
 struct VoiceDependencies {
-    synthesizer: PiperCommandSynthesizer,
+    synthesizer: PerUserCommandSynthesizer,
     playback: SongbirdCommandPlayback,
     synthesis: GuildSynthesisCoordinator,
 }
@@ -89,11 +92,13 @@ impl CoreVoiceGatewaySink {
         }
         let options = &self.options;
         let dependencies = Arc::new(VoiceDependencies {
-            synthesizer: PiperCommandSynthesizer::production(
-                options.piper_path.clone(),
-                options.models_dir.clone(),
-                options.cache_dir.clone(),
-                options.piper_concurrency,
+            synthesizer: PerUserCommandSynthesizer::piper_only(
+                PiperCommandSynthesizer::production(
+                    options.piper_path.clone(),
+                    options.models_dir.clone(),
+                    options.cache_dir.clone(),
+                    options.piper_concurrency,
+                ),
             ),
             playback: SongbirdCommandPlayback::new(context.clone(), options.queue_cap),
             synthesis: GuildSynthesisCoordinator::default(),
