@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 pub mod account_api;
 pub mod discord_oauth;
+pub mod kofi_webhook;
 pub mod premium_api;
 
 use axum::body::Body;
