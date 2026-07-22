@@ -23,6 +23,7 @@ vozen-contracts = { path = "../vozen-contracts" }
 vozen-core = { path = "../vozen-core" }
 vozen-discord = { path = "../vozen-discord" }
 vozen-store = { path = "../vozen-store" }
+vozen-tts = { path = "../vozen-tts" }
 
 [lints]
 workspace = true

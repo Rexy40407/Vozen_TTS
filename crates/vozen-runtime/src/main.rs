@@ -7,6 +7,11 @@
 //! opt-in. Dashboard routes remain absent until their live Discord option provider has been
 //! migrated and shadow-tested.
 
+// The Piper-to-command adapter has independent tests but must not be constructed until the
+// promoted interaction sink has localized reply parity. Keeping this module staged avoids an
+// accidental live TTS path while preserving the adapter boundary for the next migration slice.
+#[allow(dead_code)]
+mod piper_adapter;
 mod topgg_metrics;
 
 use std::{
