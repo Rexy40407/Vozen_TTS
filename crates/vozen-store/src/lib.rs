@@ -28,6 +28,7 @@ mod premium;
 mod premium_code;
 mod pronunciation;
 mod telemetry;
+mod translation;
 mod user_profile;
 mod user_voice;
 mod voice_effect;
@@ -62,6 +63,7 @@ pub use telemetry::{
     OperationalMetric, OperationalProvider, ProviderHealth, ProviderHealthSnapshot,
     TalkUsageSource, provider_for_engine, utc_day_key, utc_day_key_from_unix_millis,
 };
+pub use translation::{TranslationMapping, TranslationPreference, TranslationPreferencePatch};
 pub use user_profile::{Birthday, is_valid_birthday};
 pub use user_voice::{UserEngine, UserVoice};
 pub use voice_effect::VoiceEffect;
@@ -103,6 +105,10 @@ pub enum StoreError {
     InvalidOperationalTelemetry(String),
     #[error("invalid birthday month/day")]
     InvalidBirthday,
+    #[error("invalid translation mapping")]
+    InvalidTranslationMapping,
+    #[error("translation mapping would create a direct cycle")]
+    TranslationCycle,
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 }
