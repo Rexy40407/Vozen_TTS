@@ -14,6 +14,7 @@ use rusqlite::Connection;
 use serde::Deserialize;
 use thiserror::Error;
 
+mod blocklist;
 mod guild_config;
 mod kofi_claim;
 mod kofi_delivery;
@@ -26,6 +27,7 @@ mod premium_code;
 mod pronunciation;
 mod user_voice;
 
+pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
 pub use guild_config::{GuildConfig, GuildConfigPatch};
 pub use kofi_claim::{
     ACTIVATION_TERMS_VERSION, ActivationConfirmation, ActivationOutcome, ClaimOutcome,
