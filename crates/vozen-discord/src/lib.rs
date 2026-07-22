@@ -102,6 +102,13 @@ pub use voice_session::{
 /// their response deadline, content handling and error accounting.
 #[async_trait]
 pub trait GatewayEventSink: Send + Sync {
+    /// Runs after this process has received READY and published its transient bot identity.
+    /// Implementations must treat it as an availability hook: a failure cannot prevent the
+    /// gateway from accepting later events, and reconnects may deliver READY again.
+    async fn on_ready(&self, _context: Context) -> Result<(), GatewayEventDispatchError> {
+        Ok(())
+    }
+
     async fn on_message(
         &self,
         context: Context,
@@ -434,6 +441,9 @@ impl EventHandler for VozenGatewayHandler {
             .remember_bot_user(ready.user.id.get().to_string());
         self.gateway_state
             .replace_guilds(ready.guilds.iter().map(|guild| guild.id.get().to_string()));
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_ready(context).await;
+        }
     }
 
     async fn guild_create(

@@ -6,7 +6,10 @@
 use std::{
     collections::BTreeMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use async_trait::async_trait;
@@ -19,9 +22,10 @@ use serenity::{
 };
 use vozen_discord::{
     CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor, CoreVoiceInteractionFacts,
-    DiscordMessageFactsOwned, GatewayEventDispatchError, GatewayEventSink, GatewayState,
-    MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService, SongbirdCommandPlayback,
-    SongbirdVoiceSessionTransport, collect_message_media,
+    DiscordDashboardOptionsProvider, DiscordMessageFactsOwned, GatewayEventDispatchError,
+    GatewayEventSink, GatewayState, MessageVoiceInvocation, MessageVoiceOutcome,
+    MessageVoiceService, PlannedRejoinService, RejoinChannelState, SongbirdCommandPlayback,
+    SongbirdVoiceSessionTransport, collect_message_media, consume_planned_rejoin_marker,
 };
 use vozen_store::SqliteStore;
 
@@ -47,6 +51,7 @@ pub struct CoreVoiceGatewaySink {
     executor: Mutex<Option<Arc<Executor>>>,
     message_service: Mutex<Option<Arc<MessageService>>>,
     last_speakers: Mutex<BTreeMap<String, String>>,
+    rejoin_attempted: AtomicBool,
 }
 
 impl CoreVoiceGatewaySink {
@@ -64,6 +69,7 @@ impl CoreVoiceGatewaySink {
             executor: Mutex::new(None),
             message_service: Mutex::new(None),
             last_speakers: Mutex::new(BTreeMap::new()),
+            rejoin_attempted: AtomicBool::new(false),
         }
     }
 
@@ -139,10 +145,75 @@ impl CoreVoiceGatewaySink {
         *current = Some(service.clone());
         Ok(service)
     }
+
+    /// Restores calls only once per process and only after checking every persisted channel
+    /// against Discord's live REST state. This is intentionally separate from the gateway's
+    /// small transient state: no stale voice presence can authorize a join by itself.
+    async fn recover_planned_sessions(
+        &self,
+        context: &Context,
+    ) -> Result<(), GatewayEventDispatchError> {
+        if self.rejoin_attempted.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        let marker_directory = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let scope = consume_planned_rejoin_marker(&marker_directory, std::time::SystemTime::now());
+        let presences = self
+            .store
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .voice_presences()
+            .map_err(|_| GatewayEventDispatchError)?;
+        if presences.is_empty() {
+            return Ok(());
+        }
+
+        // Persisted voice rows are active-call hints, not guild-scale data. Bound the startup
+        // lookups anyway so a damaged database cannot burst Discord's REST rate limit.
+        const REJOIN_LOOKUP_CONCURRENCY: usize = 4;
+        let provider = DiscordDashboardOptionsProvider::new(self.gateway_state.clone());
+        let mut states = BTreeMap::new();
+        for batch in presences.chunks(REJOIN_LOOKUP_CONCURRENCY) {
+            let mut tasks = tokio::task::JoinSet::new();
+            for presence in batch {
+                let provider = provider.clone();
+                let guild_id = presence.guild_id.clone();
+                let channel_id = presence.channel_id.clone();
+                tasks.spawn(async move {
+                    let state = provider.rejoin_channel_state(&guild_id, &channel_id).await;
+                    (guild_id, channel_id, state)
+                });
+            }
+            while let Some(result) = tasks.join_next().await {
+                if let Ok((guild_id, channel_id, state)) = result {
+                    states.insert((guild_id, channel_id), state);
+                }
+            }
+        }
+
+        PlannedRejoinService::new(
+            self.store.clone(),
+            self.gateway_state.clone(),
+            SongbirdVoiceSessionTransport::new(context.clone()),
+        )
+        .recover(scope.as_ref(), system_now_ms(), |guild_id, channel_id| {
+            states
+                .get(&(guild_id.to_owned(), channel_id.to_owned()))
+                .copied()
+                .unwrap_or(RejoinChannelState::NoPermissions)
+        })
+        .await
+        .map_err(|_| GatewayEventDispatchError)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl GatewayEventSink for CoreVoiceGatewaySink {
+    async fn on_ready(&self, context: Context) -> Result<(), GatewayEventDispatchError> {
+        self.recover_planned_sessions(&context).await
+    }
+
     async fn on_message(
         &self,
         context: Context,

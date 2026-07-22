@@ -6,7 +6,7 @@
 
 use serenity::model::{Permissions, channel::ChannelType, id::GuildId};
 
-use crate::GatewayState;
+use crate::{GatewayState, RejoinChannelState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiscordDashboardOption {
@@ -50,6 +50,54 @@ impl DiscordDashboardOptionsProvider {
         Some(dashboard_options_from_live_guild(
             &guild, &channels, &member,
         ))
+    }
+
+    /// Resolves a persisted call only from current Discord state. A transient REST failure is
+    /// deliberately indistinguishable from insufficient permission here: both retain the hint
+    /// without joining, whereas a missing or non-voice channel can be forgotten safely.
+    pub async fn rejoin_channel_state(
+        &self,
+        guild_id: &str,
+        channel_id: &str,
+    ) -> RejoinChannelState {
+        let Ok(guild_id) = guild_id.parse::<u64>() else {
+            return RejoinChannelState::Gone;
+        };
+        let Ok(channel_id) = channel_id.parse::<u64>() else {
+            return RejoinChannelState::Gone;
+        };
+        let Some(http) = self.gateway_state.discord_http() else {
+            return RejoinChannelState::NoPermissions;
+        };
+        let Some(bot_user_id) = self.gateway_state.bot_user_id() else {
+            return RejoinChannelState::NoPermissions;
+        };
+        let Ok(bot_user_id) = bot_user_id.parse::<u64>() else {
+            return RejoinChannelState::NoPermissions;
+        };
+        let guild_id = GuildId::new(guild_id);
+        let (guild, channels, member) = tokio::join!(
+            guild_id.to_partial_guild(&http),
+            guild_id.channels(&http),
+            guild_id.member(&http, serenity::model::id::UserId::new(bot_user_id)),
+        );
+        let (Ok(guild), Ok(channels), Ok(member)) = (guild, channels, member) else {
+            return RejoinChannelState::NoPermissions;
+        };
+        let Some(channel) = channels.get(&serenity::model::id::ChannelId::new(channel_id)) else {
+            return RejoinChannelState::Gone;
+        };
+        if !matches!(channel.kind, ChannelType::Voice | ChannelType::Stage) {
+            return RejoinChannelState::Gone;
+        }
+        if guild
+            .user_permissions_in(channel, &member)
+            .contains(Permissions::VIEW_CHANNEL | Permissions::CONNECT | Permissions::SPEAK)
+        {
+            RejoinChannelState::Ready
+        } else {
+            RejoinChannelState::NoPermissions
+        }
     }
 }
 
@@ -228,6 +276,21 @@ mod tests {
             locales
                 .iter()
                 .any(|locale| locale.id == "pt" && locale.label == "Português")
+        );
+    }
+
+    #[tokio::test]
+    async fn rejoin_validation_fails_closed_without_a_ready_discord_connection() {
+        let provider = DiscordDashboardOptionsProvider::new(GatewayState::default());
+        assert_eq!(
+            provider
+                .rejoin_channel_state("123456789012345678", "123456789012345678")
+                .await,
+            RejoinChannelState::NoPermissions
+        );
+        assert_eq!(
+            provider.rejoin_channel_state("bad", "channel").await,
+            RejoinChannelState::Gone
         );
     }
 }
