@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::admin_api::{AdminAuthorization, AdminAuthorizationResolver};
 use crate::premium_api::{
     ActivationIdentity, ActivationIdentityError, DiscordIdentity, DiscordIdentityVerifier,
 };
@@ -219,6 +220,19 @@ impl DiscordIdentityVerifier for DiscordOAuthVerifier {
         bearer: &str,
     ) -> Result<ActivationIdentity, ActivationIdentityError> {
         self.resolve_verified_email(bearer).await
+    }
+}
+
+#[async_trait]
+impl AdminAuthorizationResolver for DiscordOAuthVerifier {
+    /// Admin login intentionally revalidates `/oauth2/@me` on every attempt. In particular, this
+    /// does not reuse the short identity cache: a stale OAuth audience must never mint a session.
+    async fn resolve_authorization(&self, bearer: &str) -> Option<AdminAuthorization> {
+        let oauth = self.fetch_oauth(bearer).await.ok()?;
+        Some(AdminAuthorization {
+            user_id: oauth.user_id,
+            application_id: oauth.application_id,
+        })
     }
 }
 
@@ -436,5 +450,22 @@ mod tests {
         assert_eq!(http.calls.lock().unwrap().as_slice(), [DISCORD_OAUTH_ME]);
         let cache = verifier.cache.lock().unwrap();
         assert!(cache.contains_key(&token_cache_key("sensitive-token")));
+    }
+
+    #[tokio::test]
+    async fn admin_authorization_rechecks_audience_payload_without_needing_user_scope() {
+        let http = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("vozen-client", "owner", &[])),
+            user: Ok(user("owner", None, false)),
+        });
+        assert_eq!(
+            verifier(http.clone()).resolve_authorization("token").await,
+            Some(AdminAuthorization {
+                user_id: "owner".into(),
+                application_id: "vozen-client".into(),
+            })
+        );
+        assert_eq!(http.calls.lock().unwrap().as_slice(), [DISCORD_OAUTH_ME]);
     }
 }
