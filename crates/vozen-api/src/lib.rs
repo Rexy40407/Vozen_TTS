@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 pub mod account_api;
+pub mod admin_api;
 pub mod admin_auth;
 pub mod dashboard_api;
 pub mod dashboard_oauth;
