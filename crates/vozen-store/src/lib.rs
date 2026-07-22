@@ -63,7 +63,10 @@ pub use telemetry::{
     OperationalMetric, OperationalProvider, ProviderHealth, ProviderHealthSnapshot,
     TalkUsageSource, provider_for_engine, utc_day_key, utc_day_key_from_unix_millis,
 };
-pub use translation::{TranslationMapping, TranslationPreference, TranslationPreferencePatch};
+pub use translation::{
+    TranslationMapping, TranslationPreference, TranslationPreferencePatch, TranslationReservation,
+    TranslationReservationDenial,
+};
 pub use user_profile::{Birthday, is_valid_birthday};
 pub use user_voice::{UserEngine, UserVoice};
 pub use voice_effect::VoiceEffect;
@@ -109,6 +112,12 @@ pub enum StoreError {
     InvalidTranslationMapping,
     #[error("translation mapping would create a direct cycle")]
     TranslationCycle,
+    #[error("translation chars must be a positive integer")]
+    InvalidTranslationChars,
+    #[error("translation limits must be non-negative integers")]
+    InvalidTranslationLimit,
+    #[error("translation day must be UTC YYYY-MM-DD")]
+    InvalidTranslationDay,
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 }

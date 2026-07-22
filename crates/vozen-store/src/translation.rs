@@ -1,4 +1,5 @@
 use rusqlite::{OptionalExtension, params};
+use time::{Date, Duration, format_description::well_known::Iso8601};
 
 use crate::{SqliteStore, StoreError};
 
@@ -24,6 +25,18 @@ pub struct TranslationPreferencePatch {
     pub opted_out: Option<bool>,
     pub locale: Option<Option<String>>,
     pub speak_locale: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranslationReservation {
+    Reserved { chars: i64, day: String },
+    Denied(TranslationReservationDenial),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranslationReservationDenial {
+    GuildQuota,
+    UserQuota,
 }
 
 impl SqliteStore {
@@ -133,6 +146,79 @@ impl SqliteStore {
         )?;
         Ok(preference)
     }
+
+    pub fn reserve_translation_chars(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        chars: i64,
+        guild_limit: i64,
+        user_limit: i64,
+        day: &str,
+    ) -> Result<TranslationReservation, StoreError> {
+        if chars <= 0 {
+            return Err(StoreError::InvalidTranslationChars);
+        }
+        if guild_limit < 0 || user_limit < 0 {
+            return Err(StoreError::InvalidTranslationLimit);
+        }
+        let window_start = rolling_window_start(day)?;
+        let transaction = self.connection().unchecked_transaction()?;
+        let guild_used: i64 = transaction.query_row(
+            "SELECT COALESCE(SUM(chars), 0) FROM translation_daily_usage WHERE guild_id = ?1 AND day BETWEEN ?2 AND ?3",
+            params![guild_id, window_start, day], |row| row.get(0),
+        )?;
+        if guild_used.saturating_add(chars) > guild_limit {
+            return Ok(TranslationReservation::Denied(
+                TranslationReservationDenial::GuildQuota,
+            ));
+        }
+        let user_used: i64 = transaction.query_row(
+            "SELECT COALESCE(SUM(chars), 0) FROM translation_user_daily_usage WHERE guild_id = ?1 AND user_id = ?2 AND day BETWEEN ?3 AND ?4",
+            params![guild_id, user_id, window_start, day], |row| row.get(0),
+        )?;
+        if user_used.saturating_add(chars) > user_limit {
+            return Ok(TranslationReservation::Denied(
+                TranslationReservationDenial::UserQuota,
+            ));
+        }
+        transaction.execute(
+            "INSERT INTO translation_daily_usage (day, guild_id, chars) VALUES (?1, ?2, ?3) ON CONFLICT(day, guild_id) DO UPDATE SET chars = chars + excluded.chars",
+            params![day, guild_id, chars],
+        )?;
+        transaction.execute(
+            "INSERT INTO translation_user_daily_usage (day, guild_id, user_id, chars) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(day, guild_id, user_id) DO UPDATE SET chars = chars + excluded.chars",
+            params![day, guild_id, user_id, chars],
+        )?;
+        transaction.commit()?;
+        Ok(TranslationReservation::Reserved {
+            chars,
+            day: day.into(),
+        })
+    }
+
+    pub fn refund_translation_chars(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        reservation: &TranslationReservation,
+    ) -> Result<(), StoreError> {
+        let TranslationReservation::Reserved { chars, day } = reservation else {
+            return Ok(());
+        };
+        let transaction = self.connection().unchecked_transaction()?;
+        transaction.execute("UPDATE translation_daily_usage SET chars = MAX(0, chars - ?1) WHERE day = ?2 AND guild_id = ?3", params![chars, day, guild_id])?;
+        transaction.execute("UPDATE translation_user_daily_usage SET chars = MAX(0, chars - ?1) WHERE day = ?2 AND guild_id = ?3 AND user_id = ?4", params![chars, day, guild_id, user_id])?;
+        transaction.commit()?;
+        Ok(())
+    }
+}
+
+fn rolling_window_start(day: &str) -> Result<String, StoreError> {
+    let date = Date::parse(day, &Iso8601::DATE).map_err(|_| StoreError::InvalidTranslationDay)?;
+    (date - Duration::days(29))
+        .format(&Iso8601::DATE)
+        .map_err(|_| StoreError::InvalidTranslationDay)
 }
 
 #[cfg(test)]
@@ -187,5 +273,40 @@ mod tests {
         assert!(preference.opted_out);
         assert_eq!(preference.locale.as_deref(), Some("fr"));
         assert_eq!(preference.speak_locale.as_deref(), Some("es"));
+    }
+
+    #[test]
+    fn rolling_quota_reserves_atomically_and_refunds_safely() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        let reservation = store
+            .reserve_translation_chars("guild", "user", 8, 10, 8, "2026-03-01")
+            .expect("reserve");
+        assert!(matches!(
+            reservation,
+            TranslationReservation::Reserved { .. }
+        ));
+        assert_eq!(
+            store
+                .reserve_translation_chars("guild", "user", 1, 10, 8, "2026-03-01")
+                .expect("user cap"),
+            TranslationReservation::Denied(TranslationReservationDenial::UserQuota)
+        );
+        store
+            .refund_translation_chars("guild", "user", &reservation)
+            .expect("refund");
+        assert!(matches!(
+            store.reserve_translation_chars("guild", "user", 8, 10, 8, "2026-03-01"),
+            Ok(TranslationReservation::Reserved { .. })
+        ));
+        assert!(matches!(
+            store.reserve_translation_chars("guild", "other", 3, 10, 8, "2026-03-01"),
+            Ok(TranslationReservation::Denied(
+                TranslationReservationDenial::GuildQuota
+            ))
+        ));
+        assert!(matches!(
+            store.reserve_translation_chars("guild", "user", 1, 10, 8, "invalid"),
+            Err(StoreError::InvalidTranslationDay)
+        ));
     }
 }
