@@ -7,8 +7,10 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use serde_json::Value;
 
 const V1_METRICS_URL: &str = "https://top.gg/api/v1/projects/@me/metrics";
+const V1_COMMANDS_URL: &str = "https://top.gg/api/v1/projects/@me/commands";
 const LEGACY_METRICS_BASE_URL: &str = "https://top.gg/api/bots";
 pub const TOPGG_POST_INTERVAL: Duration = Duration::from_secs(30 * 60);
 const TOPGG_TIMEOUT: Duration = Duration::from_secs(10);
@@ -18,13 +20,14 @@ pub struct TopggMetricsRequest {
     pub url: String,
     pub method: TopggMetricsMethod,
     pub authorization: String,
-    pub server_count: usize,
+    pub body: Value,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TopggMetricsMethod {
     Patch,
     Post,
+    Put,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,12 +58,13 @@ impl TopggMetricsHttp for ReqwestTopggMetricsHttp {
         let method = match request.method {
             TopggMetricsMethod::Patch => reqwest::Method::PATCH,
             TopggMetricsMethod::Post => reqwest::Method::POST,
+            TopggMetricsMethod::Put => reqwest::Method::PUT,
         };
         let response = self
             .client
             .request(method, &request.url)
             .header(reqwest::header::AUTHORIZATION, request.authorization)
-            .json(&serde_json::json!({ "server_count": request.server_count }))
+            .json(&request.body)
             .send()
             .await
             .map_err(|_| ())?;
@@ -86,7 +90,7 @@ pub async fn post_topgg_stats(
             url: V1_METRICS_URL.into(),
             method: TopggMetricsMethod::Patch,
             authorization: format!("Bearer {token}"),
-            server_count,
+            body: serde_json::json!({ "server_count": server_count }),
         })
         .await;
     match v1 {
@@ -96,12 +100,32 @@ pub async fn post_topgg_stats(
                 url: format!("{LEGACY_METRICS_BASE_URL}/{bot_id}/stats"),
                 method: TopggMetricsMethod::Post,
                 authorization: token.to_owned(),
-                server_count,
+                body: serde_json::json!({ "server_count": server_count }),
             })
             .await
             .is_ok_and(|response| (200..300).contains(&response.status)),
         Ok(_) | Err(()) => false,
     }
+}
+
+/// Syncs exactly the already-validated public Discord registration payload. Owner-only commands
+/// are intentionally excluded because they do not belong in a public discovery listing.
+pub async fn sync_topgg_commands(
+    http: &impl TopggMetricsHttp,
+    token: &str,
+    commands: Vec<Value>,
+) -> bool {
+    if token.trim().is_empty() {
+        return false;
+    }
+    http.send(TopggMetricsRequest {
+        url: V1_COMMANDS_URL.into(),
+        method: TopggMetricsMethod::Put,
+        authorization: format!("Bearer {token}"),
+        body: Value::Array(commands),
+    })
+    .await
+    .is_ok_and(|response| (200..300).contains(&response.status))
 }
 
 fn is_discord_application_id(value: &str) -> bool {
@@ -150,7 +174,7 @@ mod tests {
                 url: V1_METRICS_URL.into(),
                 method: TopggMetricsMethod::Patch,
                 authorization: "Bearer token".into(),
-                server_count: 42,
+                body: serde_json::json!({ "server_count": 42 }),
             }]
         );
     }
@@ -182,5 +206,22 @@ mod tests {
         let http = fake([Ok(TopggMetricsResponse { status: 200 })]);
         assert!(!post_topgg_stats(&http, "bot", "", 1).await);
         assert!(http.requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn command_sync_uses_only_bearer_v1_payload() {
+        let http = fake([Ok(TopggMetricsResponse { status: 200 })]);
+        assert!(
+            sync_topgg_commands(&http, "token", vec![serde_json::json!({ "name": "join" })]).await
+        );
+        assert_eq!(
+            http.requests.lock().unwrap().as_slice(),
+            &[TopggMetricsRequest {
+                url: V1_COMMANDS_URL.into(),
+                method: TopggMetricsMethod::Put,
+                authorization: "Bearer token".into(),
+                body: serde_json::json!([{ "name": "join" }]),
+            }]
+        );
     }
 }

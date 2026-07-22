@@ -24,13 +24,18 @@ use vozen_api::{
     kofi_webhook::KofiWebhookConfig, map_public_status, premium_api::PremiumApiConfig,
     runtime_router, topgg_webhook::TopggWebhookConfig,
 };
+use vozen_contracts::DiscordCommandCatalog;
 use vozen_core::parse_kofi_shop_map;
 use vozen_discord::{
     DiscordRuntimeConfig, DiscordRuntimeError, GatewayState, run_discord_gateway_with_state,
 };
 use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
 
-use crate::topgg_metrics::{ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats};
+use crate::topgg_metrics::{
+    ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats, sync_topgg_commands,
+};
+
+const DISCORD_COMMAND_CONTRACT: &str = include_str!("../../../contracts/discord-commands.json");
 
 struct RuntimeConfig {
     discord_token: String,
@@ -394,9 +399,15 @@ fn spawn_topgg_metrics(config: TopggMetricsRuntimeConfig, gateway_state: Gateway
             // Discord gateway or trigger a retry loop with partial configuration.
             return;
         };
-        let mut interval = tokio::time::interval(TOPGG_POST_INTERVAL);
+        // Node starts Top.gg work from ClientReady. Do not publish a transient zero while the
+        // gateway is still establishing its authoritative guild cache.
+        while !gateway_state.is_ready() {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        if let Some(commands) = public_topgg_commands() {
+            let _ = sync_topgg_commands(&http, &config.token, commands).await;
+        }
         loop {
-            interval.tick().await;
             let _ = post_topgg_stats(
                 &http,
                 &config.client_id,
@@ -404,8 +415,16 @@ fn spawn_topgg_metrics(config: TopggMetricsRuntimeConfig, gateway_state: Gateway
                 gateway_state.guild_count(),
             )
             .await;
+            tokio::time::sleep(TOPGG_POST_INTERVAL).await;
         }
     });
+}
+
+fn public_topgg_commands() -> Option<Vec<serde_json::Value>> {
+    DiscordCommandCatalog::from_json(DISCORD_COMMAND_CONTRACT)
+        .ok()?
+        .public_registration_payload()
+        .ok()
 }
 
 #[cfg(test)]
@@ -482,5 +501,17 @@ mod tests {
                 .expect("status")
                 .already_redeemed
         );
+    }
+
+    #[test]
+    fn topgg_sync_uses_only_the_public_command_contract() {
+        let commands = public_topgg_commands().expect("public commands");
+        let names = commands
+            .iter()
+            .filter_map(|command| command.get("name").and_then(serde_json::Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"join"));
+        assert!(!names.contains(&"vozen-grant"));
+        assert!(!names.contains(&"dev"));
     }
 }

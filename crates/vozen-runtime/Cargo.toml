@@ -19,6 +19,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 vozen-api = { path = "../vozen-api" }
+vozen-contracts = { path = "../vozen-contracts" }
 vozen-core = { path = "../vozen-core" }
 vozen-discord = { path = "../vozen-discord" }
 vozen-store = { path = "../vozen-store" }
