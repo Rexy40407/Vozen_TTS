@@ -6,6 +6,7 @@ mod abbreviations;
 mod accent_restoration;
 mod kofi;
 mod language_detection;
+mod message_guard;
 mod message_speech_policy;
 mod play_queue;
 mod rate_limiter;
@@ -25,6 +26,7 @@ pub use kofi::{
     parse_kofi_shop_map, verify_kofi_token,
 };
 pub use language_detection::detect_language;
+pub use message_guard::{CountGate, DuplicateTracker, is_repetition_spam, normalize_for_duplicate};
 pub use message_speech_policy::{
     MessageSpeechDecision, MessageSpeechDenial, MessageSpeechInput, admit_message_speech,
 };

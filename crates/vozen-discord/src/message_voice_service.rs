@@ -9,7 +9,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use vozen_core::{MediaAnnouncement, MessageSpeechDecision, MessageSpeechDenial};
+use vozen_core::{
+    CountGate, DuplicateTracker, MediaAnnouncement, MessageSpeechDecision, MessageSpeechDenial,
+    is_repetition_spam,
+};
 use vozen_store::{
     OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore, UserEngine,
     utc_day_key_from_unix_millis,
@@ -39,6 +42,7 @@ pub enum MessageVoiceOutcome {
     Empty,
     RateLimited,
     FullyBlocked,
+    SpamSuppressed,
     Busy,
     SynthesisFailed,
     PlaybackFailed,
@@ -49,6 +53,8 @@ pub enum MessageVoiceOutcome {
 pub struct MessageVoiceService<S, P> {
     store: Arc<Mutex<SqliteStore>>,
     pipeline: Mutex<MessageSpeechPipeline>,
+    duplicate_tracker: Mutex<DuplicateTracker>,
+    count_gate: Mutex<CountGate>,
     synthesizer: S,
     playback: P,
     settings: CoreVoiceSettings,
@@ -66,6 +72,8 @@ impl<S, P> MessageVoiceService<S, P> {
         Self {
             store,
             pipeline: Mutex::new(MessageSpeechPipeline::default()),
+            duplicate_tracker: Mutex::new(DuplicateTracker::default()),
+            count_gate: Mutex::new(CountGate::default()),
             synthesizer,
             playback,
             settings,
@@ -80,6 +88,7 @@ where
     P: CommandVoicePlayback,
 {
     pub async fn execute(&self, invocation: MessageVoiceInvocation<'_>) -> MessageVoiceOutcome {
+        let now_ms = (self.now_ms)();
         let lane = {
             let store = match self.store.lock() {
                 Ok(store) => store,
@@ -121,15 +130,17 @@ where
                     resolve_user: invocation.resolve_user,
                     resolve_channel: invocation.resolve_channel,
                 },
-                (self.now_ms)(),
+                now_ms,
             )
         };
 
-        let request = match prepared {
+        let (request, cleaned_text, antispam) = match prepared {
             Ok(MessagePipelineOutcome::Ready {
                 lane: prepared_lane,
                 speech,
-            }) if prepared_lane == lane => speech.request,
+                cleaned_text,
+                antispam,
+            }) if prepared_lane == lane => (speech.request, cleaned_text, antispam),
             // The lane was determined by the same admission above. Treat a discrepancy as a
             // store/process fault rather than accidentally granting a different priority.
             Ok(MessagePipelineOutcome::Ready { .. }) | Ok(MessagePipelineOutcome::Denied(_)) => {
@@ -140,6 +151,17 @@ where
             Ok(MessagePipelineOutcome::FullyBlocked) => return MessageVoiceOutcome::FullyBlocked,
             Err(_) => return MessageVoiceOutcome::StoreUnavailable,
         };
+
+        if antispam
+            && self.is_spam(
+                invocation.facts.guild_id,
+                invocation.facts.author_id,
+                &cleaned_text,
+                now_ms,
+            )
+        {
+            return MessageVoiceOutcome::SpamSuppressed;
+        }
 
         match self.playback.reserve(invocation.facts.guild_id, lane).await {
             Ok(true) => {}
@@ -169,11 +191,18 @@ where
             .await
         {
             Ok(()) => {
-                self.record_accepted_speech(
+                if self.should_count(
                     invocation.facts.guild_id,
                     invocation.facts.author_id,
-                    &request.model,
-                );
+                    &cleaned_text,
+                    now_ms,
+                ) {
+                    self.record_accepted_speech(
+                        invocation.facts.guild_id,
+                        invocation.facts.author_id,
+                        &request.model,
+                    );
+                }
                 MessageVoiceOutcome::Queued
             }
             Err(_) => {
@@ -204,6 +233,26 @@ where
                 Some(&utc_day_key_from_unix_millis(now)),
             );
         }
+    }
+
+    fn is_spam(&self, guild_id: &str, user_id: &str, cleaned: &str, now_ms: i64) -> bool {
+        // Preserve Node ordering: even a repetition-spam message updates the fixed duplicate
+        // window, while a suppressed duplicate itself does not renew that window.
+        let duplicate = self
+            .duplicate_tracker
+            .lock()
+            .ok()
+            .is_some_and(|mut tracker| {
+                tracker.is_duplicate_spam(guild_id, user_id, cleaned, now_ms)
+            });
+        is_repetition_spam(cleaned) || duplicate
+    }
+
+    fn should_count(&self, guild_id: &str, user_id: &str, cleaned: &str, now_ms: i64) -> bool {
+        self.count_gate
+            .lock()
+            .ok()
+            .is_some_and(|mut gate| gate.should_count(guild_id, user_id, cleaned, now_ms))
     }
 
     fn record_synthesis_health(&self, success: bool) {
@@ -333,6 +382,13 @@ mod tests {
     }
 
     fn invocation<'a>(author_voice: Option<&'a str>) -> MessageVoiceInvocation<'a> {
+        invocation_with_raw(author_voice, "hello")
+    }
+
+    fn invocation_with_raw<'a>(
+        author_voice: Option<&'a str>,
+        raw: &'a str,
+    ) -> MessageVoiceInvocation<'a> {
         MessageVoiceInvocation {
             facts: DiscordMessageFacts {
                 guild_id: "guild",
@@ -346,7 +402,7 @@ mod tests {
                 member_role_ids: Some(&[]),
                 autojoined_for_author: false,
             },
-            raw: "hello",
+            raw,
             media: &[],
             detected_language: None,
             announce_speaker: None,
@@ -495,5 +551,73 @@ mod tests {
                 source: TalkUsageSource::Measured,
             })
         );
+    }
+
+    #[tokio::test]
+    async fn opt_in_antispam_suppresses_repetition_before_synthesis() {
+        let store = configured_store();
+        store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    antispam: Some(true),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("antispam");
+        let synthesizer = FakeSynthesizer::default();
+        let service = MessageVoiceService::new(
+            store,
+            synthesizer,
+            FakePlayback {
+                reserve: true,
+                enqueued: AtomicUsize::new(0),
+            },
+            settings(),
+            Arc::new(|| 0),
+        );
+
+        assert_eq!(
+            service
+                .execute(invocation_with_raw(
+                    Some("voice"),
+                    "poke poke poke poke poke poke poke poke poke poke"
+                ))
+                .await,
+            MessageVoiceOutcome::SpamSuppressed
+        );
+        assert_eq!(service.synthesizer.0.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn count_gate_keeps_repeated_queue_entries_out_of_usage_aggregates() {
+        let store = configured_store();
+        let service = MessageVoiceService::new(
+            store.clone(),
+            FakeSynthesizer::default(),
+            FakePlayback {
+                reserve: true,
+                enqueued: AtomicUsize::new(0),
+            },
+            settings(),
+            Arc::new(|| 0),
+        );
+
+        assert_eq!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Queued
+        );
+        assert_eq!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Queued
+        );
+        let usage = store
+            .lock()
+            .expect("store")
+            .dominant_talk_usage(&["user".into()], DominantTalkUsageOptions::default())
+            .expect("usage");
+        assert_eq!(usage.get("user").map(|usage| usage.samples), Some(1));
     }
 }

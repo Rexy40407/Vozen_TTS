@@ -25,6 +25,8 @@ pub enum MessagePipelineOutcome {
     Ready {
         lane: QueueLane,
         speech: PreparedMessageSpeech,
+        cleaned_text: String,
+        antispam: bool,
     },
 }
 
@@ -67,6 +69,8 @@ impl MessageSpeechPipeline {
             Err(MessagePreparationOutcome::Empty) => return Ok(MessagePipelineOutcome::Empty),
             Err(_) => unreachable!("only the initial cleaner can reject as empty"),
         };
+        let cleaned_text = draft.cleaned_text().to_owned();
+        let antispam = draft.antispam();
         if !self
             .rate_limiters
             .allow(input.guild_id, input.user_id, draft.rate_per_min(), now_ms)
@@ -74,9 +78,12 @@ impl MessageSpeechPipeline {
             return Ok(MessagePipelineOutcome::RateLimited);
         }
         match finish_message_speech(store, input, draft)? {
-            MessagePreparationOutcome::Ready(speech) => {
-                Ok(MessagePipelineOutcome::Ready { lane, speech })
-            }
+            MessagePreparationOutcome::Ready(speech) => Ok(MessagePipelineOutcome::Ready {
+                lane,
+                speech,
+                cleaned_text,
+                antispam,
+            }),
             MessagePreparationOutcome::Empty => unreachable!("a checked draft cannot become empty"),
             MessagePreparationOutcome::FullyBlocked => Ok(MessagePipelineOutcome::FullyBlocked),
         }

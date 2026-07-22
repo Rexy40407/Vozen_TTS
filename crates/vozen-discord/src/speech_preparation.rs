@@ -57,6 +57,14 @@ impl MessageSpeechDraft {
     pub fn rate_per_min(&self) -> i64 {
         self.guild.rate_per_min
     }
+
+    pub fn antispam(&self) -> bool {
+        self.guild.antispam
+    }
+
+    pub fn cleaned_text(&self) -> &str {
+        &self.cleaned
+    }
 }
 
 /// Resolves the configuration needed for cleaning and rejects an empty body before a caller
