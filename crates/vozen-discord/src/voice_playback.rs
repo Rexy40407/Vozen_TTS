@@ -18,6 +18,9 @@ use thiserror::Error;
 use crate::{CommandPlaybackError, CommandPlaybackState, CommandVoicePlayback};
 
 #[cfg(feature = "voice-driver")]
+use crate::QueueControlPlayback;
+
+#[cfg(feature = "voice-driver")]
 use vozen_core::QueueEnqueueOptions;
 #[cfg(any(feature = "voice-driver", test))]
 use vozen_core::{PublicQueueItem, QueueLane, QueueSource};
@@ -43,6 +46,7 @@ struct QueueTrackMetadata {
 #[derive(Default)]
 struct QueueTrackLedger {
     by_guild: BTreeMap<String, BTreeMap<Uuid, QueueTrackMetadata>>,
+    paused_guilds: BTreeSet<String>,
 }
 
 #[cfg(any(feature = "voice-driver", test))]
@@ -105,6 +109,18 @@ impl QueueTrackLedger {
 
     fn clear(&mut self, guild_id: &str) {
         self.by_guild.remove(guild_id);
+        self.paused_guilds.remove(guild_id);
+    }
+
+    /// Returns `true` only for the transition from playing to paused. It makes concurrent slash
+    /// commands deterministic without relying on a stale `TrackState` read.
+    fn pause(&mut self, guild_id: &str) -> bool {
+        self.paused_guilds.insert(guild_id.to_owned())
+    }
+
+    /// Returns `true` only if this Rust-owned player was paused before the call.
+    fn resume(&mut self, guild_id: &str) -> bool {
+        self.paused_guilds.remove(guild_id)
     }
 
     fn active_metadata(
@@ -374,6 +390,160 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
     }
 }
 
+/// Adapter for `/queue`. It interrogates Songbird on every operation, so a stale ledger can
+/// never authorize a removal or fabricate a queue entry. The ledger merely maps a live track UUID
+/// back to the opaque public identifier and author scope.
+#[cfg(feature = "voice-driver")]
+#[async_trait]
+impl QueueControlPlayback for SongbirdCommandPlayback {
+    async fn has_queue_player(&self, guild_id: &str) -> Result<bool, CommandPlaybackError> {
+        let guild_id = Self::guild_id(guild_id)?;
+        let manager = songbird::get(&self.context)
+            .await
+            .ok_or(CommandPlaybackError)?;
+        Ok(manager.get(guild_id).is_some())
+    }
+
+    async fn queue_snapshot(
+        &self,
+        guild_id: &str,
+        now_ms: u64,
+    ) -> Result<Vec<PublicQueueItem>, CommandPlaybackError> {
+        let discord_guild_id = Self::guild_id(guild_id)?;
+        let manager = songbird::get(&self.context)
+            .await
+            .ok_or(CommandPlaybackError)?;
+        let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
+        let handler = call.lock().await;
+        let active = handler
+            .queue()
+            .current_queue()
+            .into_iter()
+            .map(|track| track.uuid())
+            .collect::<Vec<_>>();
+        let snapshot = self
+            .queue_metadata
+            .lock()
+            .map_err(|_| CommandPlaybackError)?
+            .snapshot(guild_id, &active, now_ms);
+        Ok(snapshot)
+    }
+
+    async fn remove_queue_item(
+        &self,
+        guild_id: &str,
+        id: &str,
+        author_id: Option<&str>,
+    ) -> Result<bool, CommandPlaybackError> {
+        let discord_guild_id = Self::guild_id(guild_id)?;
+        let manager = songbird::get(&self.context)
+            .await
+            .ok_or(CommandPlaybackError)?;
+        let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
+        let handler = call.lock().await;
+        let active = handler.queue().current_queue();
+        let active_ids = active
+            .iter()
+            .map(songbird::tracks::TrackHandle::uuid)
+            .collect::<Vec<_>>();
+        let target = self
+            .queue_metadata
+            .lock()
+            .map_err(|_| CommandPlaybackError)?
+            .removable_track(guild_id, &active_ids, id, author_id);
+        let Some(target) = target else {
+            return Ok(false);
+        };
+        let Some(index) = active_ids.iter().position(|candidate| *candidate == target) else {
+            return Ok(false);
+        };
+        // `removable_track` excludes index zero, so this can never interrupt current speech.
+        let Some(removed) = handler.queue().dequeue(index) else {
+            return Ok(false);
+        };
+        drop(removed.stop());
+        self.queue_metadata
+            .lock()
+            .map_err(|_| CommandPlaybackError)?
+            .remove(guild_id, target);
+        Ok(true)
+    }
+
+    async fn clear_queue(&self, guild_id: &str) -> Result<(), CommandPlaybackError> {
+        <Self as CommandVoicePlayback>::silence(self, guild_id).await
+    }
+
+    async fn pause_queue(&self, guild_id: &str) -> Result<bool, CommandPlaybackError> {
+        let discord_guild_id = Self::guild_id(guild_id)?;
+        let manager = songbird::get(&self.context)
+            .await
+            .ok_or(CommandPlaybackError)?;
+        let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
+        let handler = call.lock().await;
+        let current = handler.queue().current();
+        drop(handler);
+        let Some(current) = current else {
+            return Ok(false);
+        };
+        let transitioned = self
+            .queue_metadata
+            .lock()
+            .map_err(|_| CommandPlaybackError)?
+            .pause(guild_id);
+        if !transitioned {
+            return Ok(false);
+        }
+        if current.pause().is_ok() {
+            Ok(true)
+        } else {
+            self.queue_metadata
+                .lock()
+                .map_err(|_| CommandPlaybackError)?
+                .resume(guild_id);
+            Err(CommandPlaybackError)
+        }
+    }
+
+    async fn resume_queue(&self, guild_id: &str) -> Result<bool, CommandPlaybackError> {
+        let discord_guild_id = Self::guild_id(guild_id)?;
+        let manager = songbird::get(&self.context)
+            .await
+            .ok_or(CommandPlaybackError)?;
+        let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
+        let handler = call.lock().await;
+        let current = handler.queue().current();
+        drop(handler);
+        let Some(current) = current else {
+            return Ok(false);
+        };
+        let transitioned = self
+            .queue_metadata
+            .lock()
+            .map_err(|_| CommandPlaybackError)?
+            .resume(guild_id);
+        if !transitioned {
+            return Ok(false);
+        }
+        if current.play().is_ok() {
+            Ok(true)
+        } else {
+            self.queue_metadata
+                .lock()
+                .map_err(|_| CommandPlaybackError)?
+                .pause(guild_id);
+            Err(CommandPlaybackError)
+        }
+    }
+
+    async fn state(&self, guild_id: &str) -> Result<CommandPlaybackState, CommandPlaybackError> {
+        <Self as CommandVoicePlayback>::state(self, guild_id).await
+    }
+
+    async fn skip_queue(&self, guild_id: &str) -> Result<(), CommandPlaybackError> {
+        <Self as CommandVoicePlayback>::skip(self, guild_id).await
+    }
+}
+
 #[cfg(not(feature = "voice-driver"))]
 #[async_trait]
 impl CommandVoicePlayback for SongbirdCommandPlayback {
@@ -576,5 +746,17 @@ mod tests {
         );
         assert!(ledger.snapshot("guild", &[], 0).is_empty());
         assert!(!ledger.by_guild.contains_key("guild"));
+    }
+
+    #[test]
+    fn queue_ledger_pause_state_has_idempotent_transitions_and_is_cleared_with_audio() {
+        let mut ledger = QueueTrackLedger::default();
+        assert!(ledger.pause("guild"));
+        assert!(!ledger.pause("guild"));
+        assert!(ledger.resume("guild"));
+        assert!(!ledger.resume("guild"));
+        assert!(ledger.pause("guild"));
+        ledger.clear("guild");
+        assert!(!ledger.resume("guild"));
     }
 }
