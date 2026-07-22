@@ -15,11 +15,15 @@ use serde::Deserialize;
 use thiserror::Error;
 
 mod guild_config;
+mod kofi_pending;
 mod migration;
 mod premium;
 mod premium_code;
 
 pub use guild_config::{GuildConfig, GuildConfigPatch};
+pub use kofi_pending::{
+    KofiPendingGrant, KofiPendingGrantInput, KofiPendingPlan, PENDING_RETENTION_MS,
+};
 pub use premium::{
     ActivateResult, ActivateStatus, EntitlementGrant, EntitlementSyncResult, GuildPassOwner,
     PremiumKind, PremiumPass, PremiumPassStatus, PremiumStatusView,
