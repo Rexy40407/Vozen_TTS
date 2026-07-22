@@ -27,6 +27,7 @@ mod premium;
 mod premium_code;
 mod pronunciation;
 mod telemetry;
+mod user_profile;
 mod user_voice;
 mod voice_presence;
 
@@ -58,6 +59,7 @@ pub use telemetry::{
     OperationalMetric, OperationalProvider, ProviderHealth, ProviderHealthSnapshot,
     TalkUsageSource, provider_for_engine, utc_day_key, utc_day_key_from_unix_millis,
 };
+pub use user_profile::{Birthday, is_valid_birthday};
 pub use user_voice::{UserEngine, UserVoice};
 pub use voice_presence::VoicePresence;
 
@@ -95,6 +97,8 @@ pub enum StoreError {
     InvalidOperationalMetricDay(String),
     #[error("database contains an unsupported operational telemetry value: {0}")]
     InvalidOperationalTelemetry(String),
+    #[error("invalid birthday month/day")]
+    InvalidBirthday,
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 }
