@@ -22,6 +22,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Serialize;
+use thiserror::Error;
 
 const INCIDENT_MAX_CHARS: usize = 240;
 const OFFICIAL_ORIGINS: [&str; 2] = ["https://vozen.org", "https://www.vozen.org"];
@@ -96,12 +97,59 @@ pub fn map_public_status(input: PublicStatusInput) -> PublicStatusResponse {
 /// Builds the safe public routes. Passing `None` keeps status opt-in: `/status` and
 /// `/api/public/status` return the same JSON 404 response as the Node implementation.
 pub fn public_router(public_status: Option<PublicStatusProvider>) -> Router {
+    public_routes(public_status).fallback(fallback)
+}
+
+fn public_routes(public_status: Option<PublicStatusProvider>) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/status", get(status))
         .route("/api/public/status", get(status))
-        .fallback(fallback)
         .with_state(AppState { public_status })
+}
+
+/// Configuration for the final Rust HTTP listener. Every sensitive surface remains explicitly
+/// opt-in: omitting it means the route does not exist. This builder only composes routers; it
+/// never binds a port, reads environment variables, or makes an outbound request.
+pub struct RuntimeRouterConfig {
+    pub public_status: Option<PublicStatusProvider>,
+    pub account: Option<account_api::AccountApiConfig>,
+    pub premium: Option<premium_api::PremiumApiConfig>,
+    pub dashboard: Option<dashboard_api::DashboardApiConfig>,
+    pub kofi_webhook: Option<kofi_webhook::KofiWebhookConfig>,
+}
+
+#[derive(Debug, Error)]
+pub enum RuntimeRouterError {
+    #[error("account API configuration: {0}")]
+    Account(#[from] account_api::AccountApiConfigError),
+    #[error("premium API configuration: {0}")]
+    Premium(#[from] premium_api::PremiumApiConfigError),
+    #[error("dashboard API configuration: {0}")]
+    Dashboard(#[from] dashboard_api::DashboardApiConfigError),
+    #[error("Ko-fi webhook configuration: {0}")]
+    KofiWebhook(#[from] kofi_webhook::KofiWebhookConfigError),
+}
+
+/// Composes the independently verified API surfaces for the cutover runtime. It avoids merging
+/// the public fallback until every opted-in route has been installed, so a health fallback can
+/// never shadow `/api/*` routes. Calling this is safe in shadow mode; serving its result is a
+/// separate deployment decision.
+pub fn runtime_router(config: RuntimeRouterConfig) -> Result<Router, RuntimeRouterError> {
+    let mut router = public_routes(config.public_status);
+    if let Some(account) = config.account {
+        router = router.merge(account_api::account_router(account)?);
+    }
+    if let Some(premium) = config.premium {
+        router = router.merge(premium_api::premium_router(premium)?);
+    }
+    if let Some(dashboard) = config.dashboard {
+        router = router.merge(dashboard_api::dashboard_router(dashboard)?);
+    }
+    if let Some(kofi_webhook) = config.kofi_webhook {
+        router = router.merge(kofi_webhook::kofi_webhook_router(kofi_webhook)?);
+    }
+    Ok(router.fallback(fallback))
 }
 
 async fn health() -> Json<StatusBody> {
@@ -191,6 +239,39 @@ mod tests {
     use super::*;
     use axum::body::to_bytes;
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn runtime_composition_keeps_only_explicitly_enabled_routes() {
+        let app = runtime_router(RuntimeRouterConfig {
+            public_status: None,
+            account: None,
+            premium: None,
+            dashboard: None,
+            kofi_webhook: None,
+        })
+        .expect("compose public-only runtime");
+        let health = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("health response");
+        assert_eq!(health.status(), StatusCode::OK);
+        let unavailable_route = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/activate")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("fallback response");
+        assert_eq!(unavailable_route.status(), StatusCode::NOT_FOUND);
+    }
 
     #[test]
     fn maps_public_status_without_sensitive_detail() {
