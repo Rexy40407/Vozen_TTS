@@ -24,6 +24,7 @@ use vozen_contracts::{ContractError, DiscordCommandCatalog};
 mod command_registration;
 mod command_routing;
 mod interaction_dispatch;
+mod message_pipeline;
 mod planned_rejoin;
 mod speech_preparation;
 mod voice_playback;
@@ -36,13 +37,14 @@ pub use command_routing::{CommandArea, command_area, route_command};
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
 };
+pub use message_pipeline::{MessagePipelineOutcome, MessageSpeechPipeline};
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
 };
 pub use speech_preparation::{
-    MessagePreparationInput, MessagePreparationOutcome, PreparedMessageSpeech,
-    prepare_message_speech,
+    MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
+    begin_message_speech, finish_message_speech, prepare_message_speech,
 };
 pub use voice_playback::{VoicePlaybackError, join_and_play_wav, leave_voice};
 

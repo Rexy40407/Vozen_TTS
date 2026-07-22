@@ -8,7 +8,7 @@ use vozen_core::{
     CleanTextOptions, MediaAnnouncement, SpeechPreparationInput, SynthRequest, VoicePreference,
     has_readable_text, prepare_speech, redact_blocked, redact_request,
 };
-use vozen_store::{ChannelProfile, SqliteStore, StoreError, VoiceEffect};
+use vozen_store::{ChannelProfile, GuildConfig, SqliteStore, StoreError, VoiceEffect};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PreparedMessageSpeech {
@@ -43,15 +43,27 @@ pub struct MessagePreparationInput<'a> {
     pub resolve_channel: &'a dyn Fn(&str) -> String,
 }
 
-/// Applies the current Node precedence exactly once:
-///
-/// user voice > channel voice > guild voice > channel locale voice > runtime default,
-/// and user speed > channel speed > runtime default.  Pronunciations remain personal first,
-/// then server-wide.  A blocklist redacts speech rather than dropping a whole mixed message.
-pub fn prepare_message_speech(
+/// Private user content after the safe cleaning step.  The gateway is deliberately unable to
+/// construct this itself: only this module can turn raw Discord text into a request candidate.
+pub struct MessageSpeechDraft {
+    cleaned: String,
+    guild: GuildConfig,
+    profile: Option<ChannelProfile>,
+}
+
+impl MessageSpeechDraft {
+    pub fn rate_per_min(&self) -> i64 {
+        self.guild.rate_per_min
+    }
+}
+
+/// Resolves the configuration needed for cleaning and rejects an empty body before a caller
+/// spends its rate-limit token.  The remaining persisted transformations happen in
+/// [`finish_message_speech`] so the legacy ordering remains exact.
+pub fn begin_message_speech(
     store: &SqliteStore,
-    input: MessagePreparationInput<'_>,
-) -> Result<MessagePreparationOutcome, StoreError> {
+    input: &MessagePreparationInput<'_>,
+) -> Result<Result<MessageSpeechDraft, MessagePreparationOutcome>, StoreError> {
     let guild = store.guild_config(input.guild_id)?;
     let profile = store.channel_profile(input.guild_id, input.channel_id)?;
     let max_chars = profile
@@ -68,25 +80,38 @@ pub fn prepare_message_speech(
         },
     );
     if !has_readable_text(&cleaned) && input.media.is_empty() {
-        return Ok(MessagePreparationOutcome::Empty);
+        return Ok(Err(MessagePreparationOutcome::Empty));
     }
+    Ok(Ok(MessageSpeechDraft {
+        cleaned,
+        guild,
+        profile,
+    }))
+}
 
+/// Completes preparation after the caller has accepted the message's rate-limit cost.
+pub fn finish_message_speech(
+    store: &SqliteStore,
+    input: MessagePreparationInput<'_>,
+    draft: MessageSpeechDraft,
+) -> Result<MessagePreparationOutcome, StoreError> {
     let blocklist = store.get_blocklist(input.guild_id)?;
     // Do this before speaker/media decoration. A message made solely of blocked words must not
     // turn into "Alice said" and look like it was accepted.
-    if input.media.is_empty() && !has_readable_text(&redact_blocked(&cleaned, &blocklist)) {
+    if input.media.is_empty() && !has_readable_text(&redact_blocked(&draft.cleaned, &blocklist)) {
         return Ok(MessagePreparationOutcome::FullyBlocked);
     }
 
     let user_voice = store.get_user_voice(input.guild_id, input.user_id)?;
     let user_pronunciations = store.get_user_pronunciations(input.user_id)?;
     let server_pronunciations = store.get_server_pronunciations(input.guild_id)?;
-    let configured_voice = profile
+    let configured_voice = draft
+        .profile
         .as_ref()
         .and_then(|profile| non_empty(profile.default_voice.as_deref()))
-        .or_else(|| non_empty(Some(guild.default_voice.as_str())))
-        .or_else(|| locale_voice(profile.as_ref(), input.available_models));
-    let profile_speed = profile.as_ref().and_then(|profile| profile.speed);
+        .or_else(|| non_empty(Some(draft.guild.default_voice.as_str())))
+        .or_else(|| locale_voice(draft.profile.as_ref(), input.available_models));
+    let profile_speed = draft.profile.as_ref().and_then(|profile| profile.speed);
     let voice_preference = user_voice.as_ref().map(|voice| VoicePreference {
         model: voice.model.clone(),
         speed: voice.speed,
@@ -96,7 +121,7 @@ pub fn prepare_message_speech(
         .chain(server_pronunciations)
         .collect::<Vec<_>>();
     let prepared = prepare_speech(SpeechPreparationInput {
-        personal: &cleaned,
+        personal: &draft.cleaned,
         pronunciations: &pronunciations,
         user_voice: voice_preference.as_ref(),
         available_models: input.available_models,
@@ -123,6 +148,21 @@ pub fn prepare_message_speech(
         request,
         personal_effect: store.voice_effect(input.guild_id, input.user_id)?,
     }))
+}
+
+/// Applies the current Node precedence exactly once:
+///
+/// user voice > channel voice > guild voice > channel locale voice > runtime default,
+/// and user speed > channel speed > runtime default.  Pronunciations remain personal first,
+/// then server-wide.  A blocklist redacts speech rather than dropping a whole mixed message.
+pub fn prepare_message_speech(
+    store: &SqliteStore,
+    input: MessagePreparationInput<'_>,
+) -> Result<MessagePreparationOutcome, StoreError> {
+    match begin_message_speech(store, &input)? {
+        Ok(draft) => finish_message_speech(store, input, draft),
+        Err(outcome) => Ok(outcome),
+    }
 }
 
 fn non_empty(value: Option<&str>) -> Option<&str> {
