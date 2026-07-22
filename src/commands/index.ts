@@ -53,6 +53,7 @@ import {
   rustTranslationOwnsCommand,
   rustTranslationPreferencesOwnCommand,
   rustVoiceOwnsCommand,
+  rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
 import { handleTranslate } from './handlers/translation';
@@ -272,6 +273,10 @@ export async function handleInteraction(
     rustTranslationPreferencesOwnCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
+    ) ||
+    rustVoicePreferencesOwnCommand(
+      i.commandName,
+      i.commandName === 'voice' ? i.options.getSubcommand(false) : null,
     )
   )
     return;

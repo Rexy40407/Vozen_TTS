@@ -57,6 +57,28 @@ export function rustVoiceOwnsCommand(
 }
 
 /**
+ * `/voice` is a mixed surface.  Rust may claim only the preference leaves with a complete
+ * localised response contract; the model picker, browser, preview and interactive panel stay
+ * Node-owned until their display and playback contracts have parity.
+ */
+export function rustVoicePreferencesOwnCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_VOICE_PREFERENCES_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'voice' &&
+    (subcommand === 'reset' ||
+      subcommand === 'detection' ||
+      subcommand === 'opt-out' ||
+      subcommand === 'opt-in' ||
+      subcommand === 'nickname' ||
+      subcommand === 'effect')
+  );
+}
+
+/**
  * Message ownership is deliberately separate from slash-command ownership. Rust can only take
  * auto-read after its same-call pipeline has been shadow-tested; requiring both exact flags
  * prevents a typo from making Node drop messages while Rust is inactive.

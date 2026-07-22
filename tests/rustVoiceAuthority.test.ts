@@ -5,6 +5,7 @@ import {
   rustTranslationPreferencesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
+  rustVoicePreferencesOwnCommand,
 } from '../src/migration/rustVoiceAuthority';
 
 describe('Rust core voice migration ownership', () => {
@@ -45,6 +46,17 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranslationPreferencesOwnCommand('translate', 'opt-out', 'true')).toBe(true);
     expect(rustTranslationPreferencesOwnCommand('translate', 'text', 'true')).toBe(false);
     expect(rustTranslationPreferencesOwnCommand('translate', 'map-add', 'true')).toBe(false);
+  });
+
+  it('yields only Rust-complete textual voice preferences under their own flag', () => {
+    expect(rustVoicePreferencesOwnCommand('voice', 'reset')).toBe(false);
+    expect(rustVoicePreferencesOwnCommand('voice', 'reset', 'yes')).toBe(false);
+    expect(rustVoicePreferencesOwnCommand('voice', 'reset', ' TRUE ')).toBe(true);
+    expect(rustVoicePreferencesOwnCommand('voice', 'detection', 'true')).toBe(true);
+    expect(rustVoicePreferencesOwnCommand('voice', 'effect', 'true')).toBe(true);
+    expect(rustVoicePreferencesOwnCommand('voice', 'set', 'true')).toBe(false);
+    expect(rustVoicePreferencesOwnCommand('voice', 'preview', 'true')).toBe(false);
+    expect(rustVoicePreferencesOwnCommand('translate', 'reset', 'true')).toBe(false);
   });
 
   it('keeps Node automatic translation authoritative until its own exact flag is enabled', () => {

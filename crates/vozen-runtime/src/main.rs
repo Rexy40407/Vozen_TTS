@@ -16,6 +16,7 @@ mod topgg_metrics;
 mod translation_preference_sink;
 mod translation_provider;
 mod translation_text_sink;
+mod voice_preference_sink;
 
 use std::{
     env,
@@ -73,6 +74,7 @@ struct RuntimeConfig {
     tts_file: Option<TtsFileRuntimeOptions>,
     translation_text: Option<TranslationTextRuntimeOptions>,
     translation_preferences: bool,
+    voice_preferences: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
 }
@@ -232,6 +234,8 @@ impl RuntimeConfig {
                 .ok()
                 .as_deref(),
         );
+        let voice_preferences =
+            voice_preferences_enabled(env::var("RUST_VOICE_PREFERENCES_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         Ok(Self {
@@ -247,6 +251,7 @@ impl RuntimeConfig {
             tts_file,
             translation_text,
             translation_preferences,
+            voice_preferences,
             automatic_translation,
             dashboard,
         })
@@ -354,6 +359,10 @@ fn translation_text_enabled(raw: Option<&str>) -> bool {
 }
 
 fn translation_preferences_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn voice_preferences_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -476,6 +485,19 @@ fn translation_preference_event_sink(
     Ok(Some(Arc::new(
         translation_preference_sink::TranslationPreferenceGatewaySink::new(store)
             .map_err(|_| RuntimeError::TranslationPreferenceGateway)?,
+    )))
+}
+
+fn voice_preference_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        voice_preference_sink::VoicePreferenceGatewaySink::new(store)
+            .map_err(|_| RuntimeError::VoicePreferenceGateway)?,
     )))
 }
 
@@ -627,6 +649,8 @@ enum RuntimeError {
     TranslationGateway,
     #[error("translation preference gateway initialisation failed")]
     TranslationPreferenceGateway,
+    #[error("voice preference gateway initialisation failed")]
+    VoicePreferenceGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -690,6 +714,9 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) =
         translation_preference_event_sink(config.translation_preferences, store.clone())?
     {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = voice_preference_event_sink(config.voice_preferences, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1048,6 +1075,15 @@ mod tests {
         assert!(!translation_preferences_enabled(Some("1")));
         assert!(!translation_preferences_enabled(Some("yes")));
         assert!(!translation_preferences_enabled(None));
+    }
+
+    #[test]
+    fn voice_preference_promotion_is_exactly_opt_in_and_independent_of_voice_driver() {
+        assert!(voice_preferences_enabled(Some("true")));
+        assert!(voice_preferences_enabled(Some(" TRUE ")));
+        assert!(!voice_preferences_enabled(Some("1")));
+        assert!(!voice_preferences_enabled(Some("yes")));
+        assert!(!voice_preferences_enabled(None));
     }
 
     #[test]
