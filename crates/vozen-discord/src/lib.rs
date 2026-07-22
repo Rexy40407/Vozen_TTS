@@ -32,6 +32,7 @@ mod core_voice_executor;
 mod core_voice_interaction;
 mod core_voice_response;
 mod core_voice_service;
+mod dashboard_options;
 mod interaction_dispatch;
 mod message_admission;
 mod message_interaction;
@@ -64,6 +65,10 @@ pub use core_voice_service::{
     CommandPlaybackError, CommandPlaybackState, CommandSpeechSynthesizer, CommandSynthesisError,
     CommandVoicePlayback, CorePlaybackControlOutcome, CoreTtsOutcome, CoreVoiceInvocation,
     CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
+};
+pub use dashboard_options::{
+    DiscordDashboardOption, DiscordDashboardOptions, DiscordDashboardOptionsProvider,
+    locale_display_options, voice_display_options,
 };
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
@@ -129,6 +134,9 @@ pub struct GatewayState {
     guild_ids: Arc<RwLock<BTreeSet<String>>>,
     guild_names: Arc<RwLock<BTreeMap<String, String>>>,
     voice_channels: Arc<RwLock<BTreeMap<String, BTreeMap<String, String>>>>,
+    /// HTTP is retained after READY only for low-frequency, authorized dashboard option lookups.
+    /// It contains no message content or cached guild/member state.
+    http: Arc<RwLock<Option<Arc<serenity::http::Http>>>>,
 }
 
 impl GatewayState {
@@ -194,6 +202,10 @@ impl GatewayState {
         })
     }
 
+    pub(crate) fn discord_http(&self) -> Option<Arc<serenity::http::Http>> {
+        self.http.read().ok()?.clone()
+    }
+
     fn replace_guilds(&self, guild_ids: impl IntoIterator<Item = String>) {
         let guild_ids = guild_ids.into_iter().collect::<BTreeSet<_>>();
         if let Ok(mut current) = self.guild_ids.write() {
@@ -229,6 +241,12 @@ impl GatewayState {
         }
         if let Ok(mut guild_names) = self.guild_names.write() {
             guild_names.insert(guild_id, guild_name);
+        }
+    }
+
+    fn remember_http(&self, http: Arc<serenity::http::Http>) {
+        if let Ok(mut current) = self.http.write() {
+            *current = Some(http);
         }
     }
 
@@ -409,7 +427,8 @@ struct VozenGatewayHandler {
 
 #[async_trait]
 impl EventHandler for VozenGatewayHandler {
-    async fn ready(&self, _context: Context, ready: Ready) {
+    async fn ready(&self, context: Context, ready: Ready) {
+        self.gateway_state.remember_http(context.http.clone());
         self.gateway_state.mark_ready();
         self.gateway_state
             .remember_bot_user(ready.user.id.get().to_string());

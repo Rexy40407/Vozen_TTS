@@ -70,8 +70,12 @@ pub enum DashboardOptionsError {
 }
 
 /// Data obtained from the live Discord client only after authorization. Errors fail closed.
+#[async_trait]
 pub trait DashboardOptionsProvider: Send + Sync {
-    fn options_for_guild(&self, guild_id: &str) -> Result<DashboardOptions, DashboardOptionsError>;
+    async fn options_for_guild(
+        &self,
+        guild_id: &str,
+    ) -> Result<DashboardOptions, DashboardOptionsError>;
 }
 
 pub struct DashboardApiConfig {
@@ -151,7 +155,7 @@ async fn get_guild(
         return error(StatusCode::BAD_REQUEST, "invalid_guild", &state);
     }
     match authorize(&state, bearer, &guild_id).await {
-        Ok(()) => match build_payload(&state, &guild_id) {
+        Ok(()) => match build_payload(&state, &guild_id).await {
             Ok(payload) => json_response(StatusCode::OK, payload, &state),
             Err(DashboardOptionsError::Unavailable) => {
                 error(StatusCode::INTERNAL_SERVER_ERROR, "internal", &state)
@@ -179,7 +183,7 @@ async fn save_guild(
     let Some(input) = read_json(request).await else {
         return error(StatusCode::BAD_REQUEST, "invalid_json", &state);
     };
-    let options = match state.options.options_for_guild(&guild_id) {
+    let options = match state.options.options_for_guild(&guild_id).await {
         Ok(options) => options,
         Err(DashboardOptionsError::Unavailable) => {
             return error(StatusCode::INTERNAL_SERVER_ERROR, "internal", &state);
@@ -234,7 +238,7 @@ async fn save_profile(
     let Some(input) = read_json(request).await else {
         return error(StatusCode::BAD_REQUEST, "invalid_json", &state);
     };
-    let options = match state.options.options_for_guild(&guild_id) {
+    let options = match state.options.options_for_guild(&guild_id).await {
         Ok(options) => options,
         Err(DashboardOptionsError::Unavailable) => {
             return error(StatusCode::INTERNAL_SERVER_ERROR, "internal", &state);
@@ -319,8 +323,15 @@ async fn authorize(state: &DashboardState, bearer: &str, guild_id: &str) -> Resu
     }
 }
 
-fn build_payload(state: &DashboardState, guild_id: &str) -> Result<Value, DashboardOptionsError> {
-    build_payload_with_options(state, guild_id, state.options.options_for_guild(guild_id)?)
+async fn build_payload(
+    state: &DashboardState,
+    guild_id: &str,
+) -> Result<Value, DashboardOptionsError> {
+    build_payload_with_options(
+        state,
+        guild_id,
+        state.options.options_for_guild(guild_id).await?,
+    )
 }
 
 fn build_payload_with_options(
@@ -538,8 +549,9 @@ mod tests {
         }
     }
     struct Options;
+    #[async_trait]
     impl DashboardOptionsProvider for Options {
-        fn options_for_guild(
+        async fn options_for_guild(
             &self,
             _guild_id: &str,
         ) -> Result<DashboardOptions, DashboardOptionsError> {

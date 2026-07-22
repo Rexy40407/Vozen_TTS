@@ -21,21 +21,31 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(feature = "voice-driver")]
 use std::fs;
 
 use thiserror::Error;
 use vozen_api::{
     ProviderHealth as PublicProviderHealth, PublicStatusInput, PublicStatusProvider,
-    RuntimeRouterConfig, account_api::AccountApiConfig, discord_oauth::DiscordOAuthVerifier,
-    kofi_webhook::KofiWebhookConfig, map_public_status, premium_api::PremiumApiConfig,
-    runtime_router, topgg_webhook::TopggWebhookConfig,
+    RuntimeRouterConfig,
+    account_api::AccountApiConfig,
+    dashboard_api::{
+        DashboardApiConfig, DashboardOption, DashboardOptions, DashboardOptionsError,
+        DashboardOptionsProvider,
+    },
+    dashboard_oauth::DiscordDashboardAuthorizer,
+    discord_oauth::DiscordOAuthVerifier,
+    kofi_webhook::KofiWebhookConfig,
+    map_public_status,
+    premium_api::PremiumApiConfig,
+    runtime_router,
+    topgg_webhook::TopggWebhookConfig,
 };
 use vozen_contracts::DiscordCommandCatalog;
 use vozen_core::parse_kofi_shop_map;
 use vozen_discord::{
-    CoreVoiceSettings, DiscordRuntimeConfig, DiscordRuntimeError, GatewayEventSink, GatewayState,
-    run_discord_gateway_with_state_and_sink,
+    CoreVoiceSettings, DiscordDashboardOptionsProvider, DiscordRuntimeConfig, DiscordRuntimeError,
+    GatewayEventSink, GatewayState, locale_display_options,
+    run_discord_gateway_with_state_and_sink, voice_display_options,
 };
 use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
 
@@ -55,6 +65,7 @@ struct RuntimeConfig {
     topgg_metrics: Option<TopggMetricsRuntimeConfig>,
     vote_redemption_secret: Option<String>,
     core_voice: Option<CoreVoiceRuntimeOptions>,
+    dashboard: Option<DashboardRuntimeOptions>,
 }
 
 struct PublicStatusConfig {
@@ -77,6 +88,61 @@ struct TopggWebhookRuntimeConfig {
 struct TopggMetricsRuntimeConfig {
     client_id: String,
     token: String,
+}
+
+/// Browser dashboard migration is separate from the command promotion. It stays disabled unless
+/// the operator explicitly enables it, so a loopback Rust shadow process cannot take ownership
+/// of account configuration accidentally.
+struct DashboardRuntimeOptions {
+    models_dir: PathBuf,
+}
+
+struct RuntimeDashboardOptionsProvider {
+    discord: DiscordDashboardOptionsProvider,
+    voices: Vec<DashboardOption>,
+    locales: Vec<DashboardOption>,
+}
+
+impl RuntimeDashboardOptionsProvider {
+    fn new(gateway_state: GatewayState, models: Vec<String>) -> Self {
+        Self {
+            discord: DiscordDashboardOptionsProvider::new(gateway_state),
+            voices: dashboard_options(voice_display_options(&models)),
+            locales: dashboard_options(locale_display_options()),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl DashboardOptionsProvider for RuntimeDashboardOptionsProvider {
+    async fn options_for_guild(
+        &self,
+        guild_id: &str,
+    ) -> Result<DashboardOptions, DashboardOptionsError> {
+        let options = self
+            .discord
+            .options_for_guild(guild_id)
+            .await
+            .ok_or(DashboardOptionsError::Unavailable)?;
+        Ok(DashboardOptions {
+            channels: dashboard_options(options.channels),
+            voices: self.voices.clone(),
+            locales: self.locales.clone(),
+            voice_channels: dashboard_options(options.voice_channels),
+            roles: dashboard_options(options.roles),
+        })
+    }
+}
+
+fn dashboard_options(options: Vec<vozen_discord::DiscordDashboardOption>) -> Vec<DashboardOption> {
+    options
+        .into_iter()
+        .map(|option| DashboardOption {
+            id: option.id,
+            label: option.label,
+            unavailable: false,
+        })
+        .collect()
 }
 
 /// Explicit opt-in configuration for the first Rust-owned Discord voice commands.
@@ -125,6 +191,7 @@ impl RuntimeConfig {
         let topgg_metrics = topgg_metrics_from_environment()?;
         let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
         let core_voice = core_voice_from_environment()?;
+        let dashboard = dashboard_from_environment()?;
         Ok(Self {
             discord_token,
             database_path,
@@ -135,6 +202,7 @@ impl RuntimeConfig {
             topgg_metrics,
             vote_redemption_secret,
             core_voice,
+            dashboard,
         })
     }
 }
@@ -175,6 +243,23 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
 /// This deliberately matches Node's safe opt-in semantics: only literal `true` can make Rust
 /// own a Discord interaction. `1`, `yes`, missing and spelling mistakes remain shadow-only.
 fn core_voice_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn dashboard_from_environment() -> Result<Option<DashboardRuntimeOptions>, RuntimeError> {
+    if !dashboard_enabled(env::var("RUST_DASHBOARD_ENABLED").ok().as_deref()) {
+        return Ok(None);
+    }
+    let models_dir: PathBuf = nonempty_env("MODELS_DIR")
+        .unwrap_or_else(|| "./models".to_owned())
+        .into();
+    // Validate now. A dashboard with an empty model selection would silently reject every
+    // existing default voice, so its operator must fix the local model directory first.
+    let _ = discover_piper_models(&models_dir)?;
+    Ok(Some(DashboardRuntimeOptions { models_dir }))
+}
+
+fn dashboard_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -239,7 +324,6 @@ fn core_voice_event_sink(
     Ok(None)
 }
 
-#[cfg(feature = "voice-driver")]
 fn discover_piper_models(models_dir: &std::path::Path) -> Result<Vec<String>, RuntimeError> {
     let entries = fs::read_dir(models_dir).map_err(|_| RuntimeError::ModelsUnavailable)?;
     let mut models = entries
@@ -358,6 +442,8 @@ enum RuntimeError {
     DefaultVoiceUnavailable,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
+    #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
+    DashboardRequiresPremiumHttp,
     #[error("SQLite startup failed: {0}")]
     Store(#[from] vozen_store::StoreError),
     #[error("SQLite store lock was poisoned")]
@@ -412,6 +498,7 @@ async fn run() -> Result<(), RuntimeError> {
     };
     let app = build_http_router(
         config.premium_http,
+        config.dashboard,
         config.topgg_webhook,
         config.public_status,
         store,
@@ -426,6 +513,7 @@ async fn run() -> Result<(), RuntimeError> {
 
 fn build_http_router(
     premium_http: Option<PremiumHttpConfig>,
+    dashboard: Option<DashboardRuntimeOptions>,
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
     public_status: Option<PublicStatusConfig>,
     store: Arc<Mutex<SqliteStore>>,
@@ -435,6 +523,9 @@ fn build_http_router(
         public_status_provider(store.clone(), gateway_state.clone(), config.incident)
     });
     let Some(config) = premium_http else {
+        if dashboard.is_some() {
+            return Err(RuntimeError::DashboardRequiresPremiumHttp);
+        }
         return runtime_router(RuntimeRouterConfig {
             public_status,
             account: None,
@@ -453,7 +544,7 @@ fn build_http_router(
     };
 
     let verifier = Arc::new(
-        DiscordOAuthVerifier::production(config.client_id)
+        DiscordOAuthVerifier::production(config.client_id.clone())
             .map_err(|_| RuntimeError::OAuthClient)?,
     );
     let now = Arc::new(system_now_ms);
@@ -468,6 +559,26 @@ fn build_http_router(
                 now: now.clone(),
                 on_unmapped_shop: None,
             });
+    let dashboard = dashboard
+        .map(|dashboard| {
+            let models = discover_piper_models(&dashboard.models_dir)?;
+            let authorization_state = gateway_state.clone();
+            let authorizer =
+                DiscordDashboardAuthorizer::production(config.client_id.clone(), move |guild_id| {
+                    authorization_state.bot_has_guild(guild_id)
+                })
+                .map_err(|_| RuntimeError::OAuthClient)?;
+            Ok::<DashboardApiConfig, RuntimeError>(DashboardApiConfig {
+                origin: config.origin.clone(),
+                store: store.clone(),
+                authorizer: Arc::new(authorizer),
+                options: Arc::new(RuntimeDashboardOptionsProvider::new(
+                    gateway_state.clone(),
+                    models,
+                )),
+            })
+        })
+        .transpose()?;
     runtime_router(RuntimeRouterConfig {
         public_status,
         account: Some(AccountApiConfig {
@@ -486,9 +597,10 @@ fn build_http_router(
             identity_verifier: verifier,
             now,
         }),
-        // Dashboard remains fail-closed until options are produced from the current Serenity
-        // cache after the same authorization check that guards every configuration request.
-        dashboard: None,
+        // Only `RUST_DASHBOARD_ENABLED=true` produces this route. Its authorizer rechecks
+        // OAuth audience/scope, Manage Guild and current bot presence before the options
+        // provider asks Discord for the bot's current authorised channels and roles.
+        dashboard,
         kofi_webhook,
         topgg_webhook: topgg_webhook.map(|config| TopggWebhookConfig {
             webhook_secret: config.webhook_secret,
@@ -640,6 +752,27 @@ mod tests {
         assert!(!core_voice_enabled(Some("1")));
         assert!(!core_voice_enabled(Some("yes")));
         assert!(!core_voice_enabled(None));
+    }
+
+    #[test]
+    fn rust_dashboard_promotion_is_exactly_opt_in() {
+        assert!(dashboard_enabled(Some("true")));
+        assert!(dashboard_enabled(Some(" TRUE ")));
+        assert!(!dashboard_enabled(Some("1")));
+        assert!(!dashboard_enabled(Some("yes")));
+        assert!(!dashboard_enabled(None));
+    }
+
+    #[tokio::test]
+    async fn dashboard_options_fail_closed_without_a_ready_gateway_connection() {
+        let provider = RuntimeDashboardOptionsProvider::new(
+            GatewayState::default(),
+            vec!["en_US-amy-medium".into()],
+        );
+        assert!(matches!(
+            provider.options_for_guild("123456789012345678").await,
+            Err(DashboardOptionsError::Unavailable)
+        ));
     }
 
     #[test]
