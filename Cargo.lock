@@ -4149,6 +4149,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "vozen-tts"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "sha2",
+ "thiserror 2.0.19",
+ "tokio",
+ "uuid",
+ "vozen-core",
+]
+
+[[package]]
 name = "want"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
