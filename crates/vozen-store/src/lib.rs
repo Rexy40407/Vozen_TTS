@@ -21,6 +21,7 @@ mod kofi_pending;
 mod migration;
 mod premium;
 mod premium_code;
+mod user_voice;
 
 pub use guild_config::{GuildConfig, GuildConfigPatch};
 pub use kofi_claim::{
@@ -39,6 +40,7 @@ pub use premium::{
 pub use premium_code::{
     PremiumCode, PremiumCodeInput, PremiumCodePlan, RedeemCodeResult, RedeemCodeStatus,
 };
+pub use user_voice::{UserEngine, UserVoice};
 
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
 const SQLITE_SCHEMA: &str = include_str!("../../../contracts/sqlite-schema.json");
