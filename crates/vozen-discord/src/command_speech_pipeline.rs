@@ -7,8 +7,8 @@
 //! cleaning, preferences and the blocklist prepare a private request for playback.
 
 use vozen_core::{
-    GuildRateLimiters, QueueLane, RolePolicy, UserSpeechAdmission, UserSpeechDenial,
-    admit_user_speech,
+    GuildRateLimiters, QueueLane, RolePolicy, SynthesisEngine, UserSpeechAdmission,
+    UserSpeechDenial, admit_user_speech,
 };
 use vozen_store::{SqliteStore, StoreError};
 
@@ -31,6 +31,7 @@ pub struct CommandSpeechInput<'a> {
     pub available_models: &'a [String],
     pub runtime_default_voice: &'a str,
     pub runtime_default_speed: f64,
+    pub runtime_default_engine: SynthesisEngine,
     /// Must be absent unless the caller already checked the user's detection opt-in.
     pub detected_language: Option<&'a str>,
     pub resolve_user: &'a dyn Fn(&str) -> String,
@@ -112,6 +113,7 @@ impl CommandSpeechPipeline {
                 available_models: input.available_models,
                 runtime_default_voice: input.runtime_default_voice,
                 runtime_default_speed: input.runtime_default_speed,
+                runtime_default_engine: input.runtime_default_engine,
                 detected_language: input.detected_language,
                 announce_speaker: None,
                 media: &[],
@@ -154,6 +156,7 @@ mod tests {
             available_models: models,
             runtime_default_voice: "en_US-amy-medium",
             runtime_default_speed: 1.0,
+            runtime_default_engine: SynthesisEngine::Piper,
             detected_language: None,
             resolve_user: &|id| format!("user-{id}"),
             resolve_channel: &|id| format!("channel-{id}"),

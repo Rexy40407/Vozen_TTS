@@ -5,15 +5,16 @@
 //! detection; the default remains a fixed, explicitly selected voice.
 
 use crate::{
-    PronunciationEntry, SpeechSegment, SynthRequest, accent_language_of_model, apply_pronunciation,
-    cap_synth_request, expand_abbreviations, pick_voice_for_language, restore_accents,
-    split_english_slang,
+    PronunciationEntry, SpeechSegment, SynthRequest, SynthesisEngine, accent_language_of_model,
+    apply_pronunciation, cap_synth_request, expand_abbreviations, pick_voice_for_language,
+    restore_accents, split_english_slang,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VoicePreference {
     pub model: String,
     pub speed: f64,
+    pub engine: SynthesisEngine,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,8 +46,10 @@ pub struct SpeechPreparationInput<'a> {
     pub user_voice: Option<&'a VoicePreference>,
     pub available_models: &'a [String],
     pub guild_default_voice: Option<&'a str>,
+    pub channel_engine: Option<SynthesisEngine>,
     pub default_voice: &'a str,
     pub default_speed: f64,
+    pub default_engine: SynthesisEngine,
     /// This is false by default. The Discord adapter must never infer consent from a message.
     pub auto_detect: bool,
     /// ISO 639-3 result produced by the opted-in detector. `None` fails safely to the preferred
@@ -70,6 +73,7 @@ pub fn prepare_speech(input: SpeechPreparationInput<'_>) -> PreparedSpeech {
         .user_voice
         .map_or(input.default_speed, |voice| voice.speed);
     let preferred = preferred_model(&input);
+    let engine = preferred_engine(&input);
 
     let mut prepared = if !input.auto_detect {
         let spoken = restore_accents(
@@ -81,6 +85,7 @@ pub fn prepare_speech(input: SpeechPreparationInput<'_>) -> PreparedSpeech {
                 text: spoken.clone(),
                 model: preferred,
                 speed,
+                engine,
                 segments: None,
                 single_voice: Some(true),
                 emphasis_source: Some(spoken.clone()),
@@ -95,6 +100,7 @@ pub fn prepare_speech(input: SpeechPreparationInput<'_>) -> PreparedSpeech {
             input.available_models,
             &preferred,
             speed,
+            engine,
         )
     };
 
@@ -124,6 +130,14 @@ fn preferred_model(input: &SpeechPreparationInput<'_>) -> String {
         .unwrap_or_else(|| "en_US-amy-medium".to_owned())
 }
 
+fn preferred_engine(input: &SpeechPreparationInput<'_>) -> SynthesisEngine {
+    input
+        .user_voice
+        .map(|voice| voice.engine)
+        .or(input.channel_engine)
+        .unwrap_or(input.default_engine)
+}
+
 fn prepare_detected(
     personal: &str,
     pronunciations: &[PronunciationEntry],
@@ -131,6 +145,7 @@ fn prepare_detected(
     available_models: &[String],
     preferred: &str,
     speed: f64,
+    engine: SynthesisEngine,
 ) -> PreparedSpeech {
     let pronounced = apply_pronunciation(personal, pronunciations);
     let raw_segments = split_english_slang(&pronounced);
@@ -168,6 +183,7 @@ fn prepare_detected(
             text: spoken.clone(),
             model,
             speed,
+            engine,
             segments: (has_english && has_other).then_some(segments),
             single_voice: None,
             emphasis_source: Some(spoken.clone()),
@@ -426,8 +442,10 @@ mod tests {
             user_voice: None,
             available_models,
             guild_default_voice: None,
+            channel_engine: None,
             default_voice: "en_US-amy-medium",
             default_speed: 1.0,
+            default_engine: SynthesisEngine::Piper,
             auto_detect: false,
             detected_language: None,
             announce_speaker: None,
@@ -446,12 +464,14 @@ mod tests {
         let voice = VoicePreference {
             model: "pt_PT-google-medium".into(),
             speed: 1.25,
+            engine: SynthesisEngine::Kokoro,
         };
         let mut preferred = input("nao voce", &available);
         preferred.user_voice = Some(&voice);
         let prepared = prepare_speech(preferred);
         assert_eq!(prepared.request.model, voice.model);
         assert_eq!(prepared.request.speed, 1.25);
+        assert_eq!(prepared.request.engine, SynthesisEngine::Kokoro);
         assert_eq!(prepared.spoken, "não você");
     }
 
@@ -481,6 +501,7 @@ mod tests {
         let voice = VoicePreference {
             model: "pt_PT-google-medium".into(),
             speed: 1.0,
+            engine: SynthesisEngine::Piper,
         };
         let mut with_announcements = input("ola", &available);
         with_announcements.user_voice = Some(&voice);
@@ -508,6 +529,7 @@ mod tests {
         let voice = VoicePreference {
             model: "fr_FR-siwis-medium".into(),
             speed: 1.0,
+            engine: SynthesisEngine::Gcloud,
         };
         let mut with_markdown = input("bonjour", &available);
         with_markdown.user_voice = Some(&voice);

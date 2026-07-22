@@ -11,7 +11,7 @@ use std::{
 
 use async_trait::async_trait;
 use thiserror::Error;
-use vozen_core::{QueueEnqueueOptions, QueueLane, QueueSource, SynthRequest};
+use vozen_core::{QueueEnqueueOptions, QueueLane, QueueSource, SynthRequest, SynthesisEngine};
 use vozen_store::SqliteStore;
 
 use crate::{
@@ -121,6 +121,8 @@ pub struct CoreVoiceSettings {
     pub available_models: Vec<String>,
     pub default_voice: String,
     pub default_speed: f64,
+    /// Concrete route used for legacy `google` voice preferences.
+    pub default_engine: SynthesisEngine,
 }
 
 pub struct CoreVoiceService<T, S, P> {
@@ -294,6 +296,7 @@ where
                     available_models: &self.settings.available_models,
                     runtime_default_voice: &self.settings.default_voice,
                     runtime_default_speed: self.settings.default_speed,
+                    runtime_default_engine: self.settings.default_engine,
                     detected_language: None,
                     resolve_user: invocation.resolve_user,
                     resolve_channel: invocation.resolve_channel,
@@ -555,6 +558,7 @@ mod tests {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),
                 default_speed: 1.0,
+                default_engine: SynthesisEngine::Piper,
             },
             Arc::new(|| 0),
         );
@@ -670,6 +674,7 @@ mod tests {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),
                 default_speed: 1.0,
+                default_engine: SynthesisEngine::Piper,
             },
             Arc::new(|| 0),
         );
@@ -742,6 +747,7 @@ mod tests {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),
                 default_speed: 1.0,
+                default_engine: SynthesisEngine::Piper,
             },
             Arc::new(|| 0),
         ));

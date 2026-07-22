@@ -20,7 +20,7 @@ use serenity::{
     client::Context,
     model::application::Interaction,
 };
-use vozen_core::detect_language;
+use vozen_core::{SynthesisEngine, detect_language};
 use vozen_discord::{
     CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor, CoreVoiceInteractionFacts,
     DiscordDashboardOptionsProvider, DiscordMessageFactsOwned, GatewayEventDispatchError,
@@ -449,6 +449,7 @@ mod tests {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),
                 default_speed: 1.0,
+                default_engine: SynthesisEngine::Piper,
             },
         };
         assert_eq!(options.piper_concurrency, 2);
@@ -485,6 +486,7 @@ mod tests {
                     available_models: vec!["en_US-amy-medium".into()],
                     default_voice: "en_US-amy-medium".into(),
                     default_speed: 1.0,
+                    default_engine: SynthesisEngine::Piper,
                 },
             },
         );

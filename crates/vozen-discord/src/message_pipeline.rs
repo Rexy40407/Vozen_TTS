@@ -133,6 +133,7 @@ mod tests {
             available_models: models,
             runtime_default_voice: "en_US-amy-medium",
             runtime_default_speed: 1.0,
+            runtime_default_engine: vozen_core::SynthesisEngine::Piper,
             detected_language: None,
             announce_speaker: None,
             media: &[] as &[MediaAnnouncement],

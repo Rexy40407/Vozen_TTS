@@ -167,12 +167,14 @@ impl PlayQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SynthesisEngine;
 
     fn request(text: &str) -> SynthRequest {
         SynthRequest {
             text: text.to_owned(),
             model: "en_US-amy-medium".to_owned(),
             speed: 1.0,
+            engine: SynthesisEngine::Default,
             segments: None,
             single_voice: None,
             emphasis_source: None,

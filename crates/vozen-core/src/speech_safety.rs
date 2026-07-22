@@ -19,11 +19,23 @@ pub struct SpeechSegment {
     pub model: String,
 }
 
+/// The requested synthesis route after all persistent preference precedence has resolved.
+/// `Default` retains the legacy SQLite meaning of `google`: use the operator-configured
+/// default provider, rather than assuming a particular external provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SynthesisEngine {
+    Default,
+    Piper,
+    Kokoro,
+    Gcloud,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SynthRequest {
     pub text: String,
     pub model: String,
     pub speed: f64,
+    pub engine: SynthesisEngine,
     pub segments: Option<Vec<SpeechSegment>>,
     pub single_voice: Option<bool>,
     pub emphasis_source: Option<String>,
@@ -103,6 +115,7 @@ pub fn redact_request(request: &SynthRequest, blocklist: &[String]) -> SynthRequ
         text: redact_blocked(&request.text, blocklist),
         model: request.model.clone(),
         speed: request.speed,
+        engine: request.engine,
         segments,
         single_voice: request.single_voice,
         emphasis_source: request.emphasis_source.clone(),
@@ -140,6 +153,7 @@ pub fn cap_synth_request(request: &SynthRequest) -> SynthRequest {
         text: take_code_points(&request.text, MAX_SYNTH_CHARS),
         model: request.model.clone(),
         speed: request.speed,
+        engine: request.engine,
         segments,
         single_voice: request.single_voice,
         emphasis_source: request.emphasis_source.clone(),
@@ -211,6 +225,7 @@ mod tests {
             text: text.to_owned(),
             model: "en_US-amy-medium".to_owned(),
             speed: 1.0,
+            engine: SynthesisEngine::Default,
             segments: None,
             single_voice: Some(true),
             emphasis_source: Some(text.to_owned()),

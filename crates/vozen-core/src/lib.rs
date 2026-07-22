@@ -48,8 +48,9 @@ pub use speech_preparation::{
     VoicePreference, prepare_speech,
 };
 pub use speech_safety::{
-    MAX_SYNTH_CHARS, PronunciationEntry, SpeechSegment, SynthRequest, apply_pronunciation,
-    cap_synth_request, has_readable_text, is_blocked, redact_blocked, redact_request,
+    MAX_SYNTH_CHARS, PronunciationEntry, SpeechSegment, SynthRequest, SynthesisEngine,
+    apply_pronunciation, cap_synth_request, has_readable_text, is_blocked, redact_blocked,
+    redact_request,
 };
 pub use text_cleaning::{
     CleanTextOptions, MediaKind, clean_text, collect_markdown_media, collect_url_media,

@@ -122,6 +122,7 @@ where
                     available_models: &self.settings.available_models,
                     runtime_default_voice: &self.settings.default_voice,
                     runtime_default_speed: self.settings.default_speed,
+                    runtime_default_engine: self.settings.default_engine,
                     detected_language,
                     announce_speaker: None,
                     media: &[],
@@ -201,6 +202,7 @@ mod tests {
             available_models: vec!["en_US-amy-medium".into()],
             default_voice: "en_US-amy-medium".into(),
             default_speed: 1.0,
+            default_engine: vozen_core::SynthesisEngine::Piper,
         }
     }
 

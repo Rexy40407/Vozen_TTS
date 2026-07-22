@@ -46,7 +46,7 @@ use vozen_api::{
     topgg_webhook::TopggWebhookConfig,
 };
 use vozen_contracts::DiscordCommandCatalog;
-use vozen_core::parse_kofi_shop_map;
+use vozen_core::{SynthesisEngine, parse_kofi_shop_map};
 use vozen_discord::{
     CompositeGatewayEventSink, CoreVoiceSettings, DiscordDashboardOptionsProvider,
     DiscordRuntimeConfig, DiscordRuntimeError, GatewayEventSink, GatewayState,
@@ -290,6 +290,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             available_models: Vec::new(),
             default_voice,
             default_speed,
+            default_engine: SynthesisEngine::Piper,
         },
     }))
 }
@@ -321,6 +322,7 @@ fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeE
             available_models: Vec::new(),
             default_voice,
             default_speed,
+            default_engine: SynthesisEngine::Piper,
         },
     }))
 }

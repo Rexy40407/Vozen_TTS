@@ -5,8 +5,8 @@
 //! gateway handler cannot accidentally use a different precedence for `/tts` and auto-read.
 
 use vozen_core::{
-    CleanTextOptions, MediaAnnouncement, SpeechPreparationInput, SynthRequest, VoicePreference,
-    has_readable_text, prepare_speech, redact_blocked, redact_request,
+    CleanTextOptions, MediaAnnouncement, SpeechPreparationInput, SynthRequest, SynthesisEngine,
+    VoicePreference, has_readable_text, prepare_speech, redact_blocked, redact_request,
 };
 use vozen_store::{ChannelProfile, GuildConfig, SqliteStore, StoreError, VoiceEffect};
 
@@ -42,6 +42,9 @@ pub struct MessagePreparationInput<'a> {
     pub available_models: &'a [String],
     pub runtime_default_voice: &'a str,
     pub runtime_default_speed: f64,
+    /// Runtime configuration behind legacy `google` preferences. The Rust canary currently
+    /// supports Piper only, but this value remains explicit so it cannot silently drift.
+    pub runtime_default_engine: SynthesisEngine,
     /// Must be absent unless the caller has already checked the user's opt-in setting.
     pub detected_language: Option<&'a str>,
     pub announce_speaker: Option<&'a str>,
@@ -140,6 +143,7 @@ pub fn finish_message_speech(
     let voice_preference = user_voice.as_ref().map(|voice| VoicePreference {
         model: voice.model.clone(),
         speed: voice.speed,
+        engine: synthesis_engine(voice.engine),
     });
     let pronunciations = user_pronunciations
         .into_iter()
@@ -151,8 +155,14 @@ pub fn finish_message_speech(
         user_voice: voice_preference.as_ref(),
         available_models: input.available_models,
         guild_default_voice: configured_voice,
+        channel_engine: draft
+            .profile
+            .as_ref()
+            .and_then(|profile| profile.engine)
+            .map(synthesis_engine),
         default_voice: input.runtime_default_voice,
         default_speed: profile_speed.unwrap_or(input.runtime_default_speed),
+        default_engine: input.runtime_default_engine,
         auto_detect: store.is_detection_on(input.guild_id, input.user_id)?,
         detected_language: input.detected_language,
         announce_speaker: input.announce_speaker,
@@ -173,6 +183,15 @@ pub fn finish_message_speech(
         request,
         personal_effect: store.voice_effect(input.guild_id, input.user_id)?,
     }))
+}
+
+fn synthesis_engine(engine: vozen_store::UserEngine) -> SynthesisEngine {
+    match engine {
+        vozen_store::UserEngine::Google => SynthesisEngine::Default,
+        vozen_store::UserEngine::Piper => SynthesisEngine::Piper,
+        vozen_store::UserEngine::Kokoro => SynthesisEngine::Kokoro,
+        vozen_store::UserEngine::Gcloud => SynthesisEngine::Gcloud,
+    }
 }
 
 /// Applies the current Node precedence exactly once:
@@ -236,6 +255,7 @@ mod tests {
             available_models: models,
             runtime_default_voice: "en_US-amy-medium",
             runtime_default_speed: 1.0,
+            runtime_default_engine: SynthesisEngine::Piper,
             detected_language: None,
             announce_speaker: None,
             media: &[],

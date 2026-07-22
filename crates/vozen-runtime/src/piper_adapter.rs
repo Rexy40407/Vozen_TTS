@@ -7,7 +7,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use vozen_core::SynthRequest;
+use vozen_core::{SynthRequest, SynthesisEngine};
 use vozen_discord::{CommandSpeechSynthesizer, CommandSynthesisError};
 use vozen_tts::CommandPiperRunner;
 use vozen_tts::{PiperEngine, PiperRunner};
@@ -47,6 +47,14 @@ where
     R: PiperRunner + 'static,
 {
     async fn synthesize(&self, request: &SynthRequest) -> Result<PathBuf, CommandSynthesisError> {
+        // A Rust canary that only installed Piper must never acknowledge a paid/provider-specific
+        // preference and then synthesize it with Piper. The future router owns these routes.
+        if !matches!(
+            request.engine,
+            SynthesisEngine::Default | SynthesisEngine::Piper
+        ) {
+            return Err(CommandSynthesisError);
+        }
         self.engine
             .synth(request)
             .await
@@ -94,6 +102,7 @@ mod tests {
             text: "private text".into(),
             model: "en_US-amy-medium".into(),
             speed: 1.0,
+            engine: SynthesisEngine::Default,
             segments: None,
             single_voice: None,
             emphasis_source: None,
@@ -124,6 +133,31 @@ mod tests {
 
         assert!(adapter.synthesize(&request()).await.is_err());
         assert_eq!(runner.calls.load(Ordering::Relaxed), 1);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn unsupported_paid_engines_never_fall_through_to_piper() {
+        let root = std::env::temp_dir().join(format!(
+            "vozen-piper-adapter-unsupported-{}",
+            std::process::id()
+        ));
+        let models = root.join("models");
+        std::fs::create_dir_all(&models).expect("models directory");
+        std::fs::write(models.join("en_US-amy-medium.onnx"), b"placeholder")
+            .expect("model placeholder");
+        let runner = Arc::new(FailingRunner::default());
+        let adapter = PiperCommandSynthesizer::new(Arc::new(PiperEngine::new(
+            runner.clone(),
+            &models,
+            root.join("cache"),
+            1,
+        )));
+        let mut paid_request = request();
+        paid_request.engine = SynthesisEngine::Kokoro;
+
+        assert!(adapter.synthesize(&paid_request).await.is_err());
+        assert_eq!(runner.calls.load(Ordering::Relaxed), 0);
         let _ = std::fs::remove_dir_all(root);
     }
 }
