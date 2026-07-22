@@ -24,6 +24,7 @@ use songbird::serenity::SerenityInit;
 use thiserror::Error;
 use vozen_contracts::{ContractError, DiscordCommandCatalog};
 
+mod automatic_translation_service;
 mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
@@ -53,6 +54,10 @@ mod voice_i18n;
 mod voice_playback;
 mod voice_session;
 
+pub use automatic_translation_service::{
+    AutomaticTranslationDelivery, AutomaticTranslationInvocation, AutomaticTranslationOutcome,
+    AutomaticTranslationService, MAX_AUTOMATIC_TRANSLATION_IN_FLIGHT,
+};
 pub use command_registration::{
     CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
     CommandRegistrationOutcome, DiscordHttpCommandRegistrationClient, register_commands,
