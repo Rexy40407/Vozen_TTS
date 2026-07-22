@@ -4128,8 +4128,12 @@ dependencies = [
 name = "vozen-discord"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "reqwest",
+ "serde",
  "serde_json",
  "serenity",
+ "sha2",
  "songbird",
  "thiserror 2.0.19",
  "tokio",

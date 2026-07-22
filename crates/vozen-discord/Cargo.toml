@@ -13,8 +13,12 @@ rust-version.workspace = true
 voice-driver = ["songbird/driver", "songbird/tungstenite"]
 
 [dependencies]
-serenity.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+serenity.workspace = true
 songbird.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

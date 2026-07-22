@@ -82,13 +82,22 @@ impl DiscordCommandCatalog {
     /// JSON payloads ready for Discord command registration. They deliberately contain the
     /// original option metadata instead of a separately maintained Rust copy.
     pub fn public_registration_payload(&self) -> Result<Vec<serde_json::Value>, ContractError> {
-        self.public_commands
+        registration_payload(&self.public_commands)
+    }
+
+    /// Owner-only commands are registered in the configured control guild, never alongside the
+    /// global public catalog. Keeping this payload here prevents a second Rust command list from
+    /// drifting from the Node-generated contract.
+    pub fn owner_registration_payload(&self) -> Result<Vec<serde_json::Value>, ContractError> {
+        registration_payload(&self.owner_commands)
+    }
+
+    /// Resolves whether a root belongs to the owner-only catalog before a gateway adapter invokes
+    /// any handler. Registration visibility is not an authorization boundary.
+    pub fn is_owner_command(&self, root: &str) -> bool {
+        self.owner_commands
             .iter()
-            .map(|command| {
-                serde_json::to_value(command)
-                    .map_err(|error| ContractError::InvalidJson(error.to_string()))
-            })
-            .collect()
+            .any(|command| command.name == root)
     }
 
     /// Resolves the exact leaf selected by Discord before a handler is invoked.
@@ -131,7 +140,21 @@ impl DiscordCommandCatalog {
                 })
         })
     }
+}
 
+fn registration_payload(
+    commands: &[DiscordCommand],
+) -> Result<Vec<serde_json::Value>, ContractError> {
+    commands
+        .iter()
+        .map(|command| {
+            serde_json::to_value(command)
+                .map_err(|error| ContractError::InvalidJson(error.to_string()))
+        })
+        .collect()
+}
+
+impl DiscordCommandCatalog {
     pub fn validate(&self) -> Result<(), ContractError> {
         if self.schema_version != DISCORD_COMMAND_CONTRACT_VERSION {
             return Err(ContractError::UnsupportedSchema {
@@ -191,6 +214,23 @@ mod tests {
             ),
             source["public_commands"]
         );
+    }
+
+    #[test]
+    fn preserves_owner_registration_fields_and_marks_owner_roots() {
+        let catalog = DiscordCommandCatalog::from_json(CURRENT_COMMANDS).expect("valid contract");
+        let source: serde_json::Value =
+            serde_json::from_str(CURRENT_COMMANDS).expect("source JSON");
+        assert_eq!(
+            serde_json::Value::Array(
+                catalog
+                    .owner_registration_payload()
+                    .expect("serializable owner payload")
+            ),
+            source["owner_commands"]
+        );
+        assert!(catalog.is_owner_command("vozen-grant"));
+        assert!(!catalog.is_owner_command("setup"));
     }
 
     #[test]

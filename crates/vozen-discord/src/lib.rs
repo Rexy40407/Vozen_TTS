@@ -17,6 +17,13 @@ use songbird::serenity::SerenityInit;
 use thiserror::Error;
 use vozen_contracts::{ContractError, DiscordCommandCatalog};
 
+mod command_registration;
+
+pub use command_registration::{
+    CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
+    CommandRegistrationOutcome, DiscordHttpCommandRegistrationClient, register_commands,
+};
+
 const DISCORD_COMMANDS: &str = include_str!("../../../contracts/discord-commands.json");
 
 static COMMAND_CATALOG: LazyLock<DiscordCommandCatalog> = LazyLock::new(|| {
