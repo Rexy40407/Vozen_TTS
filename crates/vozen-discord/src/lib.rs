@@ -46,8 +46,9 @@ pub use command_speech_pipeline::{
 };
 pub use core_voice_command::{CoreVoiceCommand, CoreVoiceCommandError, parse_promoted_core_voice};
 pub use core_voice_service::{
-    CommandPlaybackError, CommandSpeechSynthesizer, CommandSynthesisError, CommandVoicePlayback,
-    CoreTtsOutcome, CoreVoiceInvocation, CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
+    CommandPlaybackError, CommandPlaybackState, CommandSpeechSynthesizer, CommandSynthesisError,
+    CommandVoicePlayback, CorePlaybackControlOutcome, CoreTtsOutcome, CoreVoiceInvocation,
+    CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
 };
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,

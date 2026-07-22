@@ -15,6 +15,8 @@ use crate::{CommandArea, command_path_from_options, route_command};
 pub enum CoreVoiceCommand {
     Join,
     Leave,
+    Skip,
+    ShutUp,
     /// The raw argument is kept only for this interaction. Cleaning, rate limiting and all
     /// durable preference resolution happen in the later speech pipeline.
     Tts {
@@ -35,7 +37,7 @@ pub enum CoreVoiceCommandError {
 }
 
 /// Parses only the promoted root commands. A contract-valid command from another area, or a
-/// core command that has not yet reached parity (`/tts-file`, `/skip`, etc.), returns `None`
+/// core command that has not yet reached parity (`/tts-file`, etc.), returns `None`
 /// instead of being accidentally consumed by the Rust runtime.
 pub fn parse_promoted_core_voice(
     command: &CommandData,
@@ -47,6 +49,8 @@ pub fn parse_promoted_core_voice(
     match command.name.as_str() {
         "join" => Ok(Some(CoreVoiceCommand::Join)),
         "leave" => Ok(Some(CoreVoiceCommand::Leave)),
+        "skip" => Ok(Some(CoreVoiceCommand::Skip)),
+        "shut-up" => Ok(Some(CoreVoiceCommand::ShutUp)),
         "tts" => {
             if command.options.iter().any(|option| option.name != "text") {
                 return Err(CoreVoiceCommandError::UnexpectedOption);
@@ -93,6 +97,20 @@ mod tests {
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"skip","type":1,"options":[]}"#
+            ))
+            .expect("skip"),
+            Some(CoreVoiceCommand::Skip)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"shut-up","type":1,"options":[]}"#
+            ))
+            .expect("shut-up"),
+            Some(CoreVoiceCommand::ShutUp)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
                 r#"{"id":"1","name":"tts","type":1,"options":[{"name":"text","type":3,"value":"  Olá  "}]}"#,
             ))
             .expect("tts"),
@@ -107,7 +125,7 @@ mod tests {
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
-                r#"{"id":"1","name":"skip","type":1,"options":[]}"#
+                r#"{"id":"1","name":"tts-file","type":1,"options":[]}"#
             ))
             .expect("unpromoted core command"),
             None

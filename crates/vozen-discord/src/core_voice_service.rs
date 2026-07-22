@@ -27,6 +27,15 @@ pub struct CommandSynthesisError;
 #[error("voice playback failed")]
 pub struct CommandPlaybackError;
 
+/// Command handlers only see whether a call exists and whether it is currently speaking; they
+/// never inspect another member's queue entries or text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandPlaybackState {
+    NoSession,
+    Idle,
+    Active,
+}
+
 /// Synthesizes an already-authorized private request. Implementations must never log the request
 /// text or use it as a shell argument.
 #[async_trait]
@@ -41,12 +50,15 @@ pub trait CommandSpeechSynthesizer: Send + Sync {
 /// the request and no later accounting may treat it as spoken.
 #[async_trait]
 pub trait CommandVoicePlayback: Send + Sync {
+    async fn state(&self, guild_id: &str) -> Result<CommandPlaybackState, CommandPlaybackError>;
     async fn enqueue(
         &self,
         guild_id: &str,
         wav: &Path,
         lane: QueueLane,
     ) -> Result<bool, CommandPlaybackError>;
+    async fn skip(&self, guild_id: &str) -> Result<(), CommandPlaybackError>;
+    async fn silence(&self, guild_id: &str) -> Result<(), CommandPlaybackError>;
 }
 
 /// Facts that Discord resolved for an interaction. Role IDs are read only from the current guild
@@ -79,8 +91,18 @@ pub enum CoreVoiceOutcome {
     Joined(JoinVoiceOutcome),
     Left(LeaveVoiceOutcome),
     Tts(CoreTtsOutcome),
+    Skipped(CorePlaybackControlOutcome),
+    Silenced(CorePlaybackControlOutcome),
     /// A contract-valid but not-yet-promoted command must remain with the Node runtime.
     NotPromoted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CorePlaybackControlOutcome {
+    NotInVoice,
+    NothingPlaying,
+    Completed,
+    PlaybackFailed,
 }
 
 /// Operational configuration selected at Rust process startup. These values are trusted
@@ -151,9 +173,39 @@ where
             CoreVoiceCommand::Leave => {
                 CoreVoiceOutcome::Left(self.sessions.leave_explicitly(invocation.guild_id).await)
             }
+            CoreVoiceCommand::Skip => {
+                CoreVoiceOutcome::Skipped(self.skip(invocation.guild_id).await)
+            }
+            CoreVoiceCommand::ShutUp => {
+                CoreVoiceOutcome::Silenced(self.silence(invocation.guild_id).await)
+            }
             CoreVoiceCommand::Tts { text } => {
                 CoreVoiceOutcome::Tts(self.execute_tts(invocation, text).await)
             }
+        }
+    }
+
+    async fn skip(&self, guild_id: &str) -> CorePlaybackControlOutcome {
+        match self.playback.state(guild_id).await {
+            Ok(CommandPlaybackState::NoSession) => CorePlaybackControlOutcome::NotInVoice,
+            Ok(CommandPlaybackState::Idle) => CorePlaybackControlOutcome::NothingPlaying,
+            Ok(CommandPlaybackState::Active) => match self.playback.skip(guild_id).await {
+                Ok(()) => CorePlaybackControlOutcome::Completed,
+                Err(_) => CorePlaybackControlOutcome::PlaybackFailed,
+            },
+            Err(_) => CorePlaybackControlOutcome::PlaybackFailed,
+        }
+    }
+
+    async fn silence(&self, guild_id: &str) -> CorePlaybackControlOutcome {
+        match self.playback.state(guild_id).await {
+            Ok(CommandPlaybackState::NoSession) => CorePlaybackControlOutcome::NotInVoice,
+            Ok(CommandPlaybackState::Idle) => CorePlaybackControlOutcome::NothingPlaying,
+            Ok(CommandPlaybackState::Active) => match self.playback.silence(guild_id).await {
+                Ok(()) => CorePlaybackControlOutcome::Completed,
+                Err(_) => CorePlaybackControlOutcome::PlaybackFailed,
+            },
+            Err(_) => CorePlaybackControlOutcome::PlaybackFailed,
         }
     }
 
@@ -275,14 +327,35 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
     struct FakePlayback {
         lanes: Mutex<Vec<QueueLane>>,
         accepted: bool,
+        state: CommandPlaybackState,
+        skips: AtomicUsize,
+        silences: AtomicUsize,
+    }
+
+    impl Default for FakePlayback {
+        fn default() -> Self {
+            Self {
+                lanes: Mutex::new(Vec::new()),
+                accepted: false,
+                state: CommandPlaybackState::NoSession,
+                skips: AtomicUsize::new(0),
+                silences: AtomicUsize::new(0),
+            }
+        }
     }
 
     #[async_trait]
     impl CommandVoicePlayback for FakePlayback {
+        async fn state(
+            &self,
+            _guild_id: &str,
+        ) -> Result<CommandPlaybackState, CommandPlaybackError> {
+            Ok(self.state)
+        }
+
         async fn enqueue(
             &self,
             _guild_id: &str,
@@ -291,6 +364,16 @@ mod tests {
         ) -> Result<bool, CommandPlaybackError> {
             self.lanes.lock().expect("lanes").push(lane);
             Ok(self.accepted)
+        }
+
+        async fn skip(&self, _guild_id: &str) -> Result<(), CommandPlaybackError> {
+            self.skips.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+
+        async fn silence(&self, _guild_id: &str) -> Result<(), CommandPlaybackError> {
+            self.silences.fetch_add(1, Ordering::Relaxed);
+            Ok(())
         }
     }
 
@@ -311,6 +394,7 @@ mod tests {
             FakeSynthesizer::default(),
             FakePlayback {
                 accepted,
+                state: CommandPlaybackState::Active,
                 ..FakePlayback::default()
             },
             CoreVoiceSettings {
@@ -405,5 +489,33 @@ mod tests {
                 .await,
             CoreVoiceOutcome::Tts(CoreTtsOutcome::Busy)
         );
+    }
+
+    #[tokio::test]
+    async fn skip_and_silence_only_run_when_audio_is_active() {
+        let (service, _, _) = service(true);
+        assert_eq!(
+            service.execute(invocation(), &CoreVoiceCommand::Skip).await,
+            CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::Completed)
+        );
+        assert_eq!(
+            service
+                .execute(invocation(), &CoreVoiceCommand::ShutUp)
+                .await,
+            CoreVoiceOutcome::Silenced(CorePlaybackControlOutcome::Completed)
+        );
+        assert_eq!(service.playback.skips.load(Ordering::Relaxed), 1);
+        assert_eq!(service.playback.silences.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn idle_playback_does_not_claim_to_have_skipped_any_audio() {
+        let (mut service, _, _) = service(true);
+        service.playback.state = CommandPlaybackState::Idle;
+        assert_eq!(
+            service.execute(invocation(), &CoreVoiceCommand::Skip).await,
+            CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NothingPlaying)
+        );
+        assert_eq!(service.playback.skips.load(Ordering::Relaxed), 0);
     }
 }
