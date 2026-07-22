@@ -9,7 +9,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     env,
-    sync::{Arc, LazyLock, RwLock},
+    sync::{
+        Arc, LazyLock, RwLock,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use serenity::{
@@ -76,6 +79,7 @@ pub use voice_session::{
 /// mapping required to enforce same-call speech admission without Serenity's global member cache.
 #[derive(Clone, Default)]
 pub struct GatewayState {
+    ready: Arc<AtomicBool>,
     bot_user_id: Arc<RwLock<Option<String>>>,
     guild_ids: Arc<RwLock<BTreeSet<String>>>,
     guild_names: Arc<RwLock<BTreeMap<String, String>>>,
@@ -83,6 +87,12 @@ pub struct GatewayState {
 }
 
 impl GatewayState {
+    /// Whether this process received Discord's READY event. The value contains no guild or user
+    /// identifiers and is safe to consume in the coarse public status mapper.
+    pub fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Acquire)
+    }
+
     pub fn bot_has_guild(&self, guild_id: &str) -> bool {
         self.guild_ids
             .read()
@@ -138,6 +148,10 @@ impl GatewayState {
         if let Ok(mut bot_user_id) = self.bot_user_id.write() {
             *bot_user_id = Some(user_id);
         }
+    }
+
+    fn mark_ready(&self) {
+        self.ready.store(true, Ordering::Release);
     }
 
     /// Sets only the bot's own transient voice fact. Used by `/join` and `/leave` to close the
@@ -320,6 +334,7 @@ struct VozenGatewayHandler {
 #[async_trait]
 impl EventHandler for VozenGatewayHandler {
     async fn ready(&self, _context: Context, ready: Ready) {
+        self.gateway_state.mark_ready();
         self.gateway_state
             .remember_bot_user(ready.user.id.get().to_string());
         self.gateway_state

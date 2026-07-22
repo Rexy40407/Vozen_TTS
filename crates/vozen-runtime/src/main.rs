@@ -17,20 +17,27 @@ use std::{
 
 use thiserror::Error;
 use vozen_api::{
+    ProviderHealth as PublicProviderHealth, PublicStatusInput, PublicStatusProvider,
     RuntimeRouterConfig, account_api::AccountApiConfig, discord_oauth::DiscordOAuthVerifier,
-    kofi_webhook::KofiWebhookConfig, premium_api::PremiumApiConfig, runtime_router,
+    kofi_webhook::KofiWebhookConfig, map_public_status, premium_api::PremiumApiConfig,
+    runtime_router,
 };
 use vozen_core::parse_kofi_shop_map;
 use vozen_discord::{
     DiscordRuntimeConfig, DiscordRuntimeError, GatewayState, run_discord_gateway_with_state,
 };
-use vozen_store::SqliteStore;
+use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
 
 struct RuntimeConfig {
     discord_token: String,
     database_path: PathBuf,
     health_bind: Option<SocketAddr>,
+    public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
+}
+
+struct PublicStatusConfig {
+    incident: Option<String>,
 }
 
 struct PremiumHttpConfig {
@@ -65,13 +72,28 @@ impl RuntimeConfig {
             Err(env::VarError::NotUnicode(_)) => return Err(RuntimeError::InvalidHealthPort),
         };
         let premium_http = premium_http_from_environment()?;
+        let public_status = public_status_from_environment();
         Ok(Self {
             discord_token,
             database_path,
             health_bind,
+            public_status,
             premium_http,
         })
     }
+}
+
+/// Mirrors Node's deliberately strict public-status opt-in: only `true` enables a public route.
+fn public_status_from_environment() -> Option<PublicStatusConfig> {
+    public_status_enabled(env::var("PUBLIC_STATUS_ENABLED").ok().as_deref()).then_some(
+        PublicStatusConfig {
+            incident: nonempty_env("PUBLIC_STATUS_INCIDENT"),
+        },
+    )
+}
+
+fn public_status_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
 /// Mirrors Node's dangerous-feature flag: only the literal value `true` enables the browser
@@ -147,7 +169,12 @@ async fn run() -> Result<(), RuntimeError> {
     let Some(health_bind) = config.health_bind else {
         return gateway.await.map_err(RuntimeError::from);
     };
-    let app = build_http_router(config.premium_http, store, gateway_state)?;
+    let app = build_http_router(
+        config.premium_http,
+        config.public_status,
+        store,
+        gateway_state,
+    )?;
     let listener = tokio::net::TcpListener::bind(health_bind).await?;
     tokio::select! {
         result = gateway => result.map_err(RuntimeError::from),
@@ -157,12 +184,16 @@ async fn run() -> Result<(), RuntimeError> {
 
 fn build_http_router(
     premium_http: Option<PremiumHttpConfig>,
+    public_status: Option<PublicStatusConfig>,
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
 ) -> Result<axum::Router, RuntimeError> {
+    let public_status = public_status.map(|config| {
+        public_status_provider(store.clone(), gateway_state.clone(), config.incident)
+    });
     let Some(config) = premium_http else {
         return runtime_router(RuntimeRouterConfig {
-            public_status: None,
+            public_status,
             account: None,
             premium: None,
             dashboard: None,
@@ -188,7 +219,7 @@ fn build_http_router(
                 on_unmapped_shop: None,
             });
     runtime_router(RuntimeRouterConfig {
-        public_status: None,
+        public_status,
         account: Some(AccountApiConfig {
             origin: config.origin.clone(),
             store: store.clone(),
@@ -211,6 +242,38 @@ fn build_http_router(
         kofi_webhook,
     })
     .map_err(RuntimeError::from)
+}
+
+/// Produces the same coarse public status shape as Node. Any SQLite problem becomes an
+/// unavailable database/providers component; provider names and errors never leave the process.
+fn public_status_provider(
+    store: Arc<Mutex<SqliteStore>>,
+    gateway_state: GatewayState,
+    incident: Option<String>,
+) -> PublicStatusProvider {
+    Arc::new(move || {
+        let (database_ready, provider_states) = match store.lock() {
+            Ok(store) => match store.list_provider_health() {
+                Ok(rows) => (
+                    true,
+                    rows.into_iter()
+                        .map(|row| match row.health {
+                            StoreProviderHealth::Healthy => PublicProviderHealth::Healthy,
+                            StoreProviderHealth::Degraded => PublicProviderHealth::Degraded,
+                        })
+                        .collect(),
+                ),
+                Err(_) => (false, Vec::new()),
+            },
+            Err(_) => (false, Vec::new()),
+        };
+        map_public_status(PublicStatusInput {
+            bot_ready: gateway_state.is_ready(),
+            database_ready,
+            provider_states,
+            incident_message: incident.clone(),
+        })
+    })
 }
 
 fn system_now_ms() -> i64 {
@@ -246,5 +309,31 @@ mod tests {
         assert!(!premium_http_enabled(Some("1")));
         assert!(!premium_http_enabled(Some("yes")));
         assert!(!premium_http_enabled(None));
+    }
+
+    #[test]
+    fn public_status_flag_is_exactly_opt_in() {
+        assert!(public_status_enabled(Some("true")));
+        assert!(public_status_enabled(Some("TRUE")));
+        assert!(!public_status_enabled(Some("1")));
+        assert!(!public_status_enabled(Some("yes")));
+        assert!(!public_status_enabled(None));
+    }
+
+    #[test]
+    fn public_status_fails_closed_until_gateway_ready_and_never_leaks_provider_detail() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let state = GatewayState::default();
+        let response = public_status_provider(store, state, Some("  planned\nwork  ".into()))();
+        assert_eq!(response.status, vozen_api::PublicStatusState::Unavailable);
+        assert_eq!(response.incident.as_deref(), Some("planned work"));
+        assert_eq!(
+            response.components.bot,
+            vozen_api::PublicStatusState::Unavailable
+        );
+        assert_eq!(
+            response.components.database,
+            vozen_api::PublicStatusState::Operational
+        );
     }
 }
