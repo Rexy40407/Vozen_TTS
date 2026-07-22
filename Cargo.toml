@@ -29,6 +29,7 @@ sha2 = "0.10.9"
 subtle = "2.6.1"
 form_urlencoded = "1.2.2"
 serenity = { version = "0.12.5", default-features = false, features = ["client", "gateway", "model", "rustls_backend"] }
+async-trait = "0.1.91"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

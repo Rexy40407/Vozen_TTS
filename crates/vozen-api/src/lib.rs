@@ -8,6 +8,8 @@
 
 use std::sync::Arc;
 
+pub mod premium_api;
+
 use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, header};
 use axum::response::{IntoResponse, Response};
