@@ -27,6 +27,7 @@ mod interaction_dispatch;
 mod message_admission;
 mod message_pipeline;
 mod planned_rejoin;
+mod songbird_transport;
 mod speech_preparation;
 mod voice_playback;
 mod voice_session;
@@ -45,6 +46,7 @@ pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
 };
+pub use songbird_transport::SongbirdVoiceSessionTransport;
 pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
     begin_message_speech, finish_message_speech, prepare_message_speech,
