@@ -11,7 +11,7 @@ use std::{
 
 use vozen_core::{MediaAnnouncement, MessageSpeechDecision, MessageSpeechDenial};
 use vozen_store::{
-    OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore,
+    OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore, UserEngine,
     utc_day_key_from_unix_millis,
 };
 
@@ -168,7 +168,14 @@ where
             .enqueue_reserved(invocation.facts.guild_id, Path::new(&wav), lane)
             .await
         {
-            Ok(()) => MessageVoiceOutcome::Queued,
+            Ok(()) => {
+                self.record_accepted_speech(
+                    invocation.facts.guild_id,
+                    invocation.facts.author_id,
+                    &request.model,
+                );
+                MessageVoiceOutcome::Queued
+            }
             Err(_) => {
                 let _ = self
                     .playback
@@ -223,6 +230,15 @@ where
             );
         }
     }
+
+    /// Mirrors the Node rule: usage changes only after playback accepted the rendered request.
+    /// The established `talk_usage` aggregate is best-effort and contains neither message text
+    /// nor audio; failure to update the dashboard counter cannot undo valid playback.
+    fn record_accepted_speech(&self, guild_id: &str, user_id: &str, model: &str) {
+        if let Ok(store) = self.store.lock() {
+            let _ = store.bump_talk_usage(guild_id, user_id, model, UserEngine::Piper);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -237,7 +253,10 @@ mod tests {
 
     use async_trait::async_trait;
     use vozen_core::{QueueLane, SynthRequest};
-    use vozen_store::{GuildConfigPatch, OperationalMetric, OperationalProvider, SqliteStore};
+    use vozen_store::{
+        DominantTalkUsageOptions, GuildConfigPatch, OperationalMetric, OperationalProvider,
+        SqliteStore, TalkUsageSource,
+    };
 
     use super::*;
     use crate::{CommandPlaybackError, CommandPlaybackState, CommandSynthesisError};
@@ -463,6 +482,18 @@ mod tests {
                 .iter()
                 .any(|row| row.provider == OperationalProvider::Piper
                     && row.health == ProviderHealth::Healthy)
+        );
+        let usage = store
+            .dominant_talk_usage(&["user".into()], DominantTalkUsageOptions::default())
+            .expect("usage");
+        assert_eq!(
+            usage.get("user"),
+            Some(&vozen_store::DominantTalkUsage {
+                language: Some("en_US".into()),
+                engine: Some(UserEngine::Piper),
+                samples: 1,
+                source: TalkUsageSource::Measured,
+            })
         );
     }
 }
