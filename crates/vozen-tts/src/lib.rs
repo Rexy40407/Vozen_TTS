@@ -33,6 +33,8 @@ pub enum TtsError {
     ProcessFailed,
     #[error("Piper did not produce a non-empty WAV")]
     EmptyOutput,
+    #[error("segmented speech requires the queued WAV compositor")]
+    SegmentedRequestUnsupported,
     #[error("TTS I/O failed: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -159,6 +161,13 @@ impl<R: PiperRunner> PiperEngine<R> {
 
     /// Returns the cached immutable WAV path, synthesising at most `concurrency` misses.
     pub async fn synth(&self, request: &SynthRequest) -> Result<PathBuf, TtsError> {
+        // `segments` represent deliberately different voice/language selections. Treating the
+        // outer `text` as a single Piper utterance would silently discard that routing decision
+        // and speak part of the message with the wrong voice. The future queue compositor will
+        // synthesise each segment then concatenate compatible WAV frames; until then fail closed.
+        if request.segments.is_some() {
+            return Err(TtsError::SegmentedRequestUnsupported);
+        }
         if !is_safe_model_name(&request.model) {
             return Err(TtsError::InvalidModel);
         }
@@ -296,6 +305,26 @@ mod tests {
         assert!(matches!(
             engine.synth(&bad).await,
             Err(TtsError::InvalidModel)
+        ));
+        assert_eq!(runner.calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn refuses_multi_voice_requests_until_the_wav_compositor_exists() {
+        let root = temp_dir("segments");
+        let runner = Arc::new(FakeRunner {
+            calls: AtomicUsize::new(0),
+            bytes: b"wav".to_vec(),
+        });
+        let engine = PiperEngine::new(runner.clone(), root.join("models"), root.join("cache"), 1);
+        let mut segmented = request();
+        segmented.segments = Some(vec![vozen_core::SpeechSegment {
+            text: "hello".into(),
+            model: "en_US-amy-medium".into(),
+        }]);
+        assert!(matches!(
+            engine.synth(&segmented).await,
+            Err(TtsError::SegmentedRequestUnsupported)
         ));
         assert_eq!(runner.calls.load(Ordering::Relaxed), 0);
     }
