@@ -23,6 +23,7 @@ use vozen_contracts::{ContractError, DiscordCommandCatalog};
 
 mod command_registration;
 mod command_routing;
+mod command_speech_pipeline;
 mod core_voice_command;
 mod interaction_dispatch;
 mod message_admission;
@@ -38,6 +39,9 @@ pub use command_registration::{
     CommandRegistrationOutcome, DiscordHttpCommandRegistrationClient, register_commands,
 };
 pub use command_routing::{CommandArea, command_area, route_command};
+pub use command_speech_pipeline::{
+    CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline,
+};
 pub use core_voice_command::{CoreVoiceCommand, CoreVoiceCommandError, parse_promoted_core_voice};
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
