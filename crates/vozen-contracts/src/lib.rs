@@ -8,6 +8,144 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub const DISCORD_COMMAND_CONTRACT_VERSION: u16 = 1;
+pub const VOICE_RESPONSE_I18N_CONTRACT_VERSION: u16 = 1;
+
+/// Generated from the Node i18n catalogue. It contains only strings that a promoted Rust voice
+/// interaction can currently emit, retaining the Node locale fallback semantics without a second
+/// handwritten translation table.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct VoiceResponseCatalog {
+    pub schema_version: u16,
+    pub generated_from: String,
+    pub default_locale: String,
+    pub supported_locales: Vec<String>,
+    pub keys: Vec<String>,
+    pub messages: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum VoiceResponseContractError {
+    #[error("invalid voice response i18n JSON: {0}")]
+    InvalidJson(String),
+    #[error("unsupported voice response schema {found}")]
+    UnsupportedSchema { found: u16 },
+    #[error("voice response default locale is not supported")]
+    InvalidDefaultLocale,
+    #[error("voice response contract contains duplicate {kind}: {value}")]
+    Duplicate { kind: &'static str, value: String },
+    #[error("voice response contract is missing locale messages for {locale}")]
+    MissingLocale { locale: String },
+    #[error("voice response contract locale {locale} has an invalid key set")]
+    InvalidKeySet { locale: String },
+    #[error("voice response contract has an empty message for {locale}:{key}")]
+    EmptyMessage { locale: String, key: String },
+}
+
+impl VoiceResponseCatalog {
+    pub fn from_json(json: &str) -> Result<Self, VoiceResponseContractError> {
+        let catalog = serde_json::from_str::<Self>(json)
+            .map_err(|error| VoiceResponseContractError::InvalidJson(error.to_string()))?;
+        catalog.validate()?;
+        Ok(catalog)
+    }
+
+    /// Mirrors Node's locale precedence: a supported Discord client locale wins, then the stored
+    /// guild locale, then canonical English. Discord variants such as `pt-BR` normalize to `pt`.
+    #[must_use]
+    pub fn resolve_locale<'a>(
+        &'a self,
+        interaction_locale: Option<&str>,
+        guild_locale: Option<&str>,
+    ) -> &'a str {
+        interaction_locale
+            .and_then(|locale| self.normalize_locale(locale))
+            .or_else(|| guild_locale.and_then(|locale| self.normalize_locale(locale)))
+            .unwrap_or(&self.default_locale)
+    }
+
+    /// Resolves an existing key after locale selection. Validation ensures that every supported
+    /// locale has every generated key, but the default fallback is retained defensively.
+    #[must_use]
+    pub fn message<'a>(&'a self, key: &str, locale: &str) -> Option<&'a str> {
+        self.messages
+            .get(locale)
+            .and_then(|messages| messages.get(key))
+            .or_else(|| {
+                self.messages
+                    .get(&self.default_locale)
+                    .and_then(|messages| messages.get(key))
+            })
+            .map(String::as_str)
+    }
+
+    fn normalize_locale<'a>(&'a self, raw: &str) -> Option<&'a str> {
+        let base = raw.split('-').next()?.to_ascii_lowercase();
+        self.supported_locales
+            .iter()
+            .find(|locale| locale.as_str() == base)
+            .map(String::as_str)
+    }
+
+    fn validate(&self) -> Result<(), VoiceResponseContractError> {
+        if self.schema_version != VOICE_RESPONSE_I18N_CONTRACT_VERSION {
+            return Err(VoiceResponseContractError::UnsupportedSchema {
+                found: self.schema_version,
+            });
+        }
+        let locales = self
+            .supported_locales
+            .iter()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        if locales.len() != self.supported_locales.len() {
+            return Err(VoiceResponseContractError::Duplicate {
+                kind: "locale",
+                value: "duplicate".into(),
+            });
+        }
+        if !locales.contains(self.default_locale.as_str()) {
+            return Err(VoiceResponseContractError::InvalidDefaultLocale);
+        }
+        let keys = self
+            .keys
+            .iter()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        if keys.len() != self.keys.len() {
+            return Err(VoiceResponseContractError::Duplicate {
+                kind: "key",
+                value: "duplicate".into(),
+            });
+        }
+        for locale in &self.supported_locales {
+            let messages = self.messages.get(locale).ok_or_else(|| {
+                VoiceResponseContractError::MissingLocale {
+                    locale: locale.clone(),
+                }
+            })?;
+            if messages
+                .keys()
+                .map(String::as_str)
+                .collect::<std::collections::BTreeSet<_>>()
+                != keys
+            {
+                return Err(VoiceResponseContractError::InvalidKeySet {
+                    locale: locale.clone(),
+                });
+            }
+            if let Some((key, _)) = messages
+                .iter()
+                .find(|(_, message)| message.trim().is_empty())
+            {
+                return Err(VoiceResponseContractError::EmptyMessage {
+                    locale: locale.clone(),
+                    key: key.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct DiscordCommandCatalog {
@@ -190,6 +328,21 @@ mod tests {
     use super::*;
 
     const CURRENT_COMMANDS: &str = include_str!("../../../contracts/discord-commands.json");
+    const VOICE_RESPONSE_I18N: &str = include_str!("../../../contracts/voice-response-i18n.json");
+
+    #[test]
+    fn current_voice_response_i18n_contract_is_complete_and_uses_node_fallback_order() {
+        let catalog = VoiceResponseCatalog::from_json(VOICE_RESPONSE_I18N).expect("valid i18n");
+        assert_eq!(catalog.supported_locales.len(), 35);
+        assert_eq!(catalog.resolve_locale(Some("fr-CA"), Some("pt")), "fr");
+        assert_eq!(catalog.resolve_locale(Some("ko"), Some("pt-BR")), "pt");
+        assert_eq!(catalog.resolve_locale(None, None), "en");
+        assert!(
+            catalog
+                .message("tts.notInVoice", "fr")
+                .is_some_and(|message| !message.is_empty())
+        );
+    }
 
     #[test]
     fn current_discord_command_contract_is_valid() {
