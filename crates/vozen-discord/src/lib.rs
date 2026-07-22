@@ -29,6 +29,7 @@ mod interaction_dispatch;
 mod message_admission;
 mod message_pipeline;
 mod planned_rejoin;
+mod rejoin_service;
 mod songbird_transport;
 mod speech_preparation;
 mod voice_playback;
@@ -52,6 +53,7 @@ pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
 };
+pub use rejoin_service::{PlannedRejoinError, PlannedRejoinOutcome, PlannedRejoinService};
 pub use songbird_transport::SongbirdVoiceSessionTransport;
 pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
@@ -134,7 +136,7 @@ impl GatewayState {
 
     /// Sets only the bot's own transient voice fact. Used by `/join` and `/leave` to close the
     /// gap before Discord sends the subsequent voice-state gateway update.
-    fn set_bot_voice_channel(&self, guild_id: &str, channel_id: Option<String>) {
+    pub(crate) fn set_bot_voice_channel(&self, guild_id: &str, channel_id: Option<String>) {
         let Some(bot_user_id) = self.bot_user_id.read().ok().and_then(|id| id.clone()) else {
             return;
         };
