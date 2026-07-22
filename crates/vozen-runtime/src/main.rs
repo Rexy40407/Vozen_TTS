@@ -12,7 +12,7 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use thiserror::Error;
@@ -35,6 +35,7 @@ struct RuntimeConfig {
     public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
+    vote_redemption_secret: Option<String>,
 }
 
 struct PublicStatusConfig {
@@ -81,6 +82,7 @@ impl RuntimeConfig {
         let premium_http = premium_http_from_environment()?;
         let public_status = public_status_from_environment();
         let topgg_webhook = topgg_webhook_from_environment()?;
+        let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
         Ok(Self {
             discord_token,
             database_path,
@@ -88,6 +90,7 @@ impl RuntimeConfig {
             public_status,
             premium_http,
             topgg_webhook,
+            vote_redemption_secret,
         })
     }
 }
@@ -166,6 +169,8 @@ enum RuntimeError {
     OAuthClient,
     #[error("SQLite startup failed: {0}")]
     Store(#[from] vozen_store::StoreError),
+    #[error("SQLite store lock was poisoned")]
+    StoreLock,
     #[error("Discord gateway failed: {0}")]
     Discord(#[from] DiscordRuntimeError),
     #[error("HTTP route construction failed: {0}")]
@@ -188,6 +193,15 @@ async fn run() -> Result<(), RuntimeError> {
     // Opening the store verifies/migrates the exact Node SQLite schema before the Rust gateway
     // does any work. Keep the handle alive for the whole process; future adapters share it.
     let store = Arc::new(Mutex::new(SqliteStore::open(&config.database_path)?));
+    if let Some(redemption_secret) = config.vote_redemption_secret.as_deref() {
+        store
+            .lock()
+            .map_err(|_| RuntimeError::StoreLock)?
+            .initialize_vote_redemption_ledger(redemption_secret)?;
+    }
+    // Retention is best effort: a one-off SQLite lock must not take down Discord, and the next
+    // daily pass retries. The permanent HMAC marker is deliberately not touched by this job.
+    spawn_vote_retention(store.clone());
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
@@ -329,6 +343,27 @@ fn system_now_ms() -> i64 {
         .unwrap_or_default()
 }
 
+fn purge_vote_retention(
+    store: &SqliteStore,
+    now: i64,
+) -> Result<(usize, usize), vozen_store::StoreError> {
+    let rewards = store.purge_expired_vote_rewards(now)?;
+    let events = store.purge_expired_topgg_events(now)?;
+    Ok((rewards, events))
+}
+
+fn spawn_vote_retention(store: Arc<Mutex<SqliteStore>>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
+        loop {
+            interval.tick().await;
+            if let Ok(store) = store.lock() {
+                let _ = purge_vote_retention(&store, system_now_ms());
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,6 +415,28 @@ mod tests {
         assert_eq!(
             response.components.database,
             vozen_api::PublicStatusState::Operational
+        );
+    }
+
+    #[test]
+    fn retention_removes_only_expired_raw_vote_records_and_delivery_ids() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        let secret = "0123456789abcdef0123456789abcdef";
+        let user = "12345678901234567";
+        store
+            .claim_topgg_vote_reward(Some("delivery"), user, 1_000, secret)
+            .expect("reward");
+        let (rewards, events) = purge_vote_retention(
+            &store,
+            1_000 + vozen_store::VOTE_REWARD_MS + vozen_store::TOPGG_EVENT_RETENTION_MS + 1,
+        )
+        .expect("purge");
+        assert_eq!((rewards, events), (1, 1));
+        assert!(
+            store
+                .vote_reward_status(user, secret)
+                .expect("status")
+                .already_redeemed
         );
     }
 }

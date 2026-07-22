@@ -74,7 +74,7 @@ pub use voice_effect::VoiceEffect;
 pub use voice_presence::VoicePresence;
 pub use vote_reward::{
     TOPGG_EVENT_RETENTION_MS, TopggVoteRewardResult, VOTE_REDEMPTION_SECRET_MIN_LENGTH,
-    VoteRewardResult, VoteRewardStatus,
+    VOTE_REWARD_MS, VoteRewardResult, VoteRewardStatus,
 };
 
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
