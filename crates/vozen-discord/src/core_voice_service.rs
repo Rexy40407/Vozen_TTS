@@ -389,12 +389,13 @@ mod tests {
     use std::{
         path::PathBuf,
         sync::{
-            Mutex,
+            Arc, Mutex,
             atomic::{AtomicUsize, Ordering},
         },
     };
 
     use async_trait::async_trait;
+    use tokio::sync::Notify;
     use vozen_store::{GuildConfigPatch, SqliteStore};
 
     use super::*;
@@ -434,6 +435,23 @@ mod tests {
             if self.fails {
                 return Err(CommandSynthesisError);
             }
+            Ok(PathBuf::from("voice.wav"))
+        }
+    }
+
+    struct BlockingSynthesizer {
+        started: Arc<Notify>,
+        release: Arc<Notify>,
+    }
+
+    #[async_trait]
+    impl CommandSpeechSynthesizer for BlockingSynthesizer {
+        async fn synthesize(
+            &self,
+            _request: &SynthRequest,
+        ) -> Result<PathBuf, CommandSynthesisError> {
+            self.started.notify_one();
+            self.release.notified().await;
             Ok(PathBuf::from("voice.wav"))
         }
     }
@@ -696,5 +714,59 @@ mod tests {
             CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NothingPlaying)
         );
         assert_eq!(service.playback.skips.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn skip_cancels_synthesis_before_it_can_enqueue_audio() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let state = GatewayState::default();
+        state.remember_bot_user("bot".into());
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        let started = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let service = Arc::new(CoreVoiceService::new(
+            store,
+            state,
+            FakeVoiceTransport,
+            BlockingSynthesizer {
+                started: started.clone(),
+                release: release.clone(),
+            },
+            FakePlayback {
+                accepted: true,
+                state: CommandPlaybackState::Idle,
+                ..FakePlayback::default()
+            },
+            CoreVoiceSettings {
+                available_models: vec!["en_US-amy-medium".into()],
+                default_voice: "en_US-amy-medium".into(),
+                default_speed: 1.0,
+            },
+            Arc::new(|| 0),
+        ));
+        let command = CoreVoiceCommand::Tts {
+            text: "hello".into(),
+        };
+        let queued = service.execute(invocation(), &command);
+        tokio::pin!(queued);
+        let started_signal = started.notified();
+        tokio::pin!(started_signal);
+        tokio::select! {
+            _ = &mut started_signal => {}
+            outcome = &mut queued => panic!("synthesis completed before skip: {outcome:?}"),
+        }
+        assert_eq!(
+            service.execute(invocation(), &CoreVoiceCommand::Skip).await,
+            CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::Completed)
+        );
+        release.notify_one();
+
+        assert_eq!(
+            queued.await,
+            CoreVoiceOutcome::Tts(CoreTtsOutcome::PlaybackFailed)
+        );
+        assert_eq!(service.playback.enqueues.load(Ordering::Relaxed), 0);
+        assert_eq!(service.playback.reservations.load(Ordering::Relaxed), 0);
     }
 }
