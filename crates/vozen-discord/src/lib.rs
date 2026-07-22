@@ -68,7 +68,9 @@ pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
     begin_message_speech, finish_message_speech, prepare_message_speech,
 };
-pub use voice_playback::{VoicePlaybackError, join_and_enqueue_wav, leave_voice};
+pub use voice_playback::{
+    SongbirdCommandPlayback, VoicePlaybackError, join_and_enqueue_wav, leave_voice,
+};
 pub use voice_session::{
     JoinVoiceOutcome, LeaveVoiceOutcome, VoiceSessionService, VoiceSessionTransport,
     VoiceSessionTransportError,
