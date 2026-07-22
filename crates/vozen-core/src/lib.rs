@@ -2,6 +2,14 @@
 
 //! Pure product policies. Adapters for Discord, SQLite and HTTP live in later crates.
 
+mod kofi;
+
+pub use kofi::{
+    KofiEvent, KofiGrant, KofiPlan, PREMIUM_MAX_SEATS, PREMIUM_PASS_SEATS, ShopProduct,
+    extract_kofi_discord_id, hash_kofi_email, map_kofi_to_grant, parse_kofi_payload,
+    parse_kofi_shop_map, verify_kofi_token,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueueLane {
     Standard,
