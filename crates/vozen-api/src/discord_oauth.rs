@@ -1,0 +1,421 @@
+//! Discord OAuth verifier for the browser account API.
+//!
+//! Access tokens are treated as credentials: this module never logs or stores a token, and only
+//! caches the SHA-256 digest of a token for the short identity-only lookup used by receipt claims.
+
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+use async_trait::async_trait;
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+
+use crate::premium_api::{
+    ActivationIdentity, ActivationIdentityError, DiscordIdentity, DiscordIdentityVerifier,
+};
+
+const DISCORD_ME: &str = "https://discord.com/api/v10/users/@me";
+const DISCORD_OAUTH_ME: &str = "https://discord.com/api/v10/oauth2/@me";
+const DISCORD_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
+const IDENTITY_TTL_MS: i64 = 60_000;
+const IDENTITY_CACHE_MAX_ENTRIES: usize = 512;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiscordHttpError {
+    InvalidToken,
+    Unavailable,
+}
+
+/// Small HTTP boundary so OAuth semantics can be tested without a real Discord request.
+#[async_trait]
+pub trait DiscordOAuthHttp: Send + Sync {
+    async fn get_json(&self, url: &'static str, bearer: &str) -> Result<Value, DiscordHttpError>;
+}
+
+#[derive(Clone)]
+pub struct ReqwestDiscordOAuthHttp {
+    client: reqwest::Client,
+}
+
+impl ReqwestDiscordOAuthHttp {
+    pub fn new() -> Result<Self, reqwest::Error> {
+        Ok(Self {
+            client: reqwest::Client::builder()
+                .timeout(DISCORD_FETCH_TIMEOUT)
+                .build()?,
+        })
+    }
+}
+
+#[async_trait]
+impl DiscordOAuthHttp for ReqwestDiscordOAuthHttp {
+    async fn get_json(&self, url: &'static str, bearer: &str) -> Result<Value, DiscordHttpError> {
+        let response = self
+            .client
+            .get(url)
+            .bearer_auth(bearer)
+            .send()
+            .await
+            .map_err(|_| DiscordHttpError::Unavailable)?;
+        let status = response.status();
+        if status.as_u16() == 401 || status.as_u16() == 403 {
+            return Err(DiscordHttpError::InvalidToken);
+        }
+        if !status.is_success() {
+            return Err(DiscordHttpError::Unavailable);
+        }
+        response
+            .json()
+            .await
+            .map_err(|_| DiscordHttpError::Unavailable)
+    }
+}
+
+#[derive(Clone)]
+pub struct DiscordOAuthVerifier {
+    expected_client_id: Arc<str>,
+    http: Arc<dyn DiscordOAuthHttp>,
+    now: Arc<dyn Fn() -> i64 + Send + Sync>,
+    cache: Arc<Mutex<HashMap<[u8; 32], CachedIdentity>>>,
+}
+
+#[derive(Clone)]
+struct CachedIdentity {
+    identity: Option<DiscordIdentity>,
+    expires_at: i64,
+}
+
+impl DiscordOAuthVerifier {
+    pub fn production(expected_client_id: impl Into<String>) -> Result<Self, reqwest::Error> {
+        Ok(Self::new(
+            expected_client_id,
+            Arc::new(ReqwestDiscordOAuthHttp::new()?),
+            Arc::new(system_now_ms),
+        ))
+    }
+
+    pub fn new(
+        expected_client_id: impl Into<String>,
+        http: Arc<dyn DiscordOAuthHttp>,
+        now: Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) -> Self {
+        Self {
+            expected_client_id: Arc::from(expected_client_id.into()),
+            http,
+            now,
+            cache: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    async fn resolve_claim_identity(&self, bearer: &str) -> Option<DiscordIdentity> {
+        let now = (self.now)();
+        let cache_key = token_cache_key(bearer);
+        if let Some(cached) = self.cache_get(cache_key, now) {
+            return cached;
+        }
+
+        let identity = match self.fetch_oauth(bearer).await {
+            Ok(oauth)
+                if oauth.application_id == self.expected_client_id.as_ref()
+                    && oauth.scopes.iter().any(|scope| scope == "identify") =>
+            {
+                match self.fetch_user(bearer).await {
+                    Ok(user) if user.id == oauth.user_id => Some(DiscordIdentity { id: user.id }),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        self.cache_put(cache_key, identity.clone(), now);
+        identity
+    }
+
+    async fn resolve_verified_email(
+        &self,
+        bearer: &str,
+    ) -> Result<ActivationIdentity, ActivationIdentityError> {
+        let oauth = self.fetch_oauth(bearer).await.map_err(map_oauth_error)?;
+        if oauth.application_id != self.expected_client_id.as_ref() {
+            return Err(ActivationIdentityError::WrongAudience);
+        }
+        if !oauth.scopes.iter().any(|scope| scope == "identify") {
+            return Err(ActivationIdentityError::InvalidToken);
+        }
+        if !oauth.scopes.iter().any(|scope| scope == "email") {
+            return Err(ActivationIdentityError::NoEmailScope);
+        }
+        let user = self.fetch_user(bearer).await.map_err(map_oauth_error)?;
+        if user.id != oauth.user_id {
+            return Err(ActivationIdentityError::InvalidToken);
+        }
+        let Some(email) = user.email.filter(|email| !email.trim().is_empty()) else {
+            return Err(ActivationIdentityError::EmailMissing);
+        };
+        if !user.verified {
+            return Err(ActivationIdentityError::EmailUnverified);
+        }
+        Ok(ActivationIdentity { id: user.id, email })
+    }
+
+    async fn fetch_oauth(&self, bearer: &str) -> Result<OAuthInfo, DiscordHttpError> {
+        let value = self.http.get_json(DISCORD_OAUTH_ME, bearer).await?;
+        parse_oauth(value).ok_or(DiscordHttpError::InvalidToken)
+    }
+
+    async fn fetch_user(&self, bearer: &str) -> Result<DiscordUser, DiscordHttpError> {
+        let value = self.http.get_json(DISCORD_ME, bearer).await?;
+        parse_user(value).ok_or(DiscordHttpError::InvalidToken)
+    }
+
+    fn cache_get(&self, cache_key: [u8; 32], now: i64) -> Option<Option<DiscordIdentity>> {
+        let Ok(mut cache) = self.cache.lock() else {
+            return None;
+        };
+        cache.retain(|_, item| item.expires_at > now);
+        cache.get(&cache_key).map(|item| item.identity.clone())
+    }
+
+    fn cache_put(&self, cache_key: [u8; 32], identity: Option<DiscordIdentity>, now: i64) {
+        let Ok(mut cache) = self.cache.lock() else {
+            return;
+        };
+        cache.retain(|_, item| item.expires_at > now);
+        while cache.len() >= IDENTITY_CACHE_MAX_ENTRIES && !cache.contains_key(&cache_key) {
+            let oldest = cache
+                .iter()
+                .min_by_key(|(_, item)| item.expires_at)
+                .map(|(key, _)| *key);
+            if let Some(oldest) = oldest {
+                cache.remove(&oldest);
+            } else {
+                break;
+            }
+        }
+        cache.insert(
+            cache_key,
+            CachedIdentity {
+                identity,
+                expires_at: now.saturating_add(IDENTITY_TTL_MS),
+            },
+        );
+    }
+}
+
+#[async_trait]
+impl DiscordIdentityVerifier for DiscordOAuthVerifier {
+    async fn resolve_identity(&self, bearer: &str) -> Result<DiscordIdentity, ()> {
+        self.resolve_claim_identity(bearer).await.ok_or(())
+    }
+
+    async fn resolve_activation_identity(
+        &self,
+        bearer: &str,
+    ) -> Result<ActivationIdentity, ActivationIdentityError> {
+        self.resolve_verified_email(bearer).await
+    }
+}
+
+struct OAuthInfo {
+    application_id: String,
+    user_id: String,
+    scopes: Vec<String>,
+}
+
+struct DiscordUser {
+    id: String,
+    email: Option<String>,
+    verified: bool,
+}
+
+fn parse_oauth(value: Value) -> Option<OAuthInfo> {
+    let object = value.as_object()?;
+    let application_id = object
+        .get("application")?
+        .as_object()?
+        .get("id")?
+        .as_str()?;
+    let user_id = object.get("user")?.as_object()?.get("id")?.as_str()?;
+    let scopes = object
+        .get("scopes")
+        .and_then(Value::as_array)
+        .map(|scopes| {
+            scopes
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(OAuthInfo {
+        application_id: application_id.to_owned(),
+        user_id: user_id.to_owned(),
+        scopes,
+    })
+}
+
+fn parse_user(value: Value) -> Option<DiscordUser> {
+    let object = value.as_object()?;
+    Some(DiscordUser {
+        id: object.get("id")?.as_str()?.to_owned(),
+        email: object
+            .get("email")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        verified: object.get("verified") == Some(&Value::Bool(true)),
+    })
+}
+
+fn map_oauth_error(error: DiscordHttpError) -> ActivationIdentityError {
+    match error {
+        DiscordHttpError::InvalidToken => ActivationIdentityError::InvalidToken,
+        DiscordHttpError::Unavailable => ActivationIdentityError::DiscordUnavailable,
+    }
+}
+
+fn token_cache_key(token: &str) -> [u8; 32] {
+    Sha256::digest(token.as_bytes()).into()
+}
+
+fn system_now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(i64::MAX)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+    use serde_json::json;
+
+    struct FakeHttp {
+        calls: Mutex<Vec<&'static str>>,
+        oauth: Result<Value, DiscordHttpError>,
+        user: Result<Value, DiscordHttpError>,
+    }
+
+    #[async_trait]
+    impl DiscordOAuthHttp for FakeHttp {
+        async fn get_json(
+            &self,
+            url: &'static str,
+            _bearer: &str,
+        ) -> Result<Value, DiscordHttpError> {
+            self.calls.lock().unwrap().push(url);
+            match url {
+                DISCORD_OAUTH_ME => self.oauth.clone(),
+                DISCORD_ME => self.user.clone(),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    fn oauth(app: &str, user: &str, scopes: &[&str]) -> Value {
+        json!({"application":{"id":app},"user":{"id":user},"scopes":scopes})
+    }
+
+    fn user(id: &str, email: Option<&str>, verified: bool) -> Value {
+        json!({"id":id,"email":email,"verified":verified})
+    }
+
+    fn verifier(http: Arc<FakeHttp>) -> DiscordOAuthVerifier {
+        DiscordOAuthVerifier::new("vozen-client", http, Arc::new(|| 1_000))
+    }
+
+    #[tokio::test]
+    async fn requires_our_audience_and_the_same_discord_identity_for_receipts() {
+        let http = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("other-client", "user-a", &["identify"])),
+            user: Ok(user("user-a", None, false)),
+        });
+        assert!(
+            verifier(http.clone())
+                .resolve_identity("token")
+                .await
+                .is_err()
+        );
+        assert_eq!(http.calls.lock().unwrap().as_slice(), [DISCORD_OAUTH_ME]);
+
+        let mismatch = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("vozen-client", "user-a", &["identify"])),
+            user: Ok(user("user-b", None, false)),
+        });
+        assert!(verifier(mismatch).resolve_identity("token").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn activation_requires_email_scope_verified_email_and_matching_identity() {
+        let wrong_audience = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("other-client", "user-a", &["identify", "email"])),
+            user: Ok(user("user-a", Some("buyer@example.com"), true)),
+        });
+        assert_eq!(
+            verifier(wrong_audience)
+                .resolve_activation_identity("token")
+                .await,
+            Err(ActivationIdentityError::WrongAudience)
+        );
+
+        let no_scope = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("vozen-client", "user-a", &["identify"])),
+            user: Ok(user("user-a", Some("buyer@example.com"), true)),
+        });
+        assert_eq!(
+            verifier(no_scope)
+                .resolve_activation_identity("token")
+                .await,
+            Err(ActivationIdentityError::NoEmailScope)
+        );
+
+        let good = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("vozen-client", "user-a", &["identify", "email"])),
+            user: Ok(user("user-a", Some("buyer@example.com"), true)),
+        });
+        assert_eq!(
+            verifier(good).resolve_activation_identity("token").await,
+            Ok(ActivationIdentity {
+                id: "user-a".into(),
+                email: "buyer@example.com".into()
+            })
+        );
+
+        let unavailable = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Err(DiscordHttpError::Unavailable),
+            user: Ok(user("user-a", Some("buyer@example.com"), true)),
+        });
+        assert_eq!(
+            verifier(unavailable)
+                .resolve_activation_identity("token")
+                .await,
+            Err(ActivationIdentityError::DiscordUnavailable)
+        );
+    }
+
+    #[tokio::test]
+    async fn only_the_digest_is_cached_and_invalid_tokens_fail_closed() {
+        let http = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Err(DiscordHttpError::InvalidToken),
+            user: Ok(user("user-a", None, false)),
+        });
+        let verifier = verifier(http.clone());
+        assert!(verifier.resolve_identity("sensitive-token").await.is_err());
+        assert!(verifier.resolve_identity("sensitive-token").await.is_err());
+        assert_eq!(http.calls.lock().unwrap().as_slice(), [DISCORD_OAUTH_ME]);
+        let cache = verifier.cache.lock().unwrap();
+        assert!(cache.contains_key(&token_cache_key("sensitive-token")));
+    }
+}
