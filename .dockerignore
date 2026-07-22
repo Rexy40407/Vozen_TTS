@@ -1,0 +1,34 @@
+# Reinstalado dentro da imagem via `npm ci` (prebuilds nativos para Linux).
+node_modules
+
+# Construido dentro da imagem via `npm run build`.
+dist
+
+# Nunca enviar para o contexto de build / imagem.
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Base de dados SQLite + WAL/SHM (dados locais; vem de volume em runtime).
+*.db
+*.db-shm
+*.db-wal
+
+# Cache de audio gerada em runtime (criada ao lado da DB).
+audio-cache/
+cache/
+
+# Modelos do Piper e binario: vem de volumes montados, nao da imagem.
+models/
+piper/
+
+# Diversos.
+coverage
+*.log
+npm-debug.log*
+docs
+
+# Brand assets (imagens de docs/README): nao precisam na imagem runtime.
+assets/

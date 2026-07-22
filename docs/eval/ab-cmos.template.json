@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "title": "Voxi — grelha A/B + CMOS (ITU-T P.800 CCR) — TEMPLATE VAZIO",
+    "purpose": "Validacao comparativa emparelhada A(antes) vs B(depois) por iteracao. Mede o DELTA de uma alavanca de codigo. Ver docs/VOICE-EVAL-MOS-AB.md §3.",
+    "status": "pending — NENHUMA preferencia/CMOS preenchida (sem raters/audio; nao inventar).",
+    "cmos_scale": { "+3": "muito melhor", "+2": "melhor", "+1": "lig. melhor", "0": "igual", "-1": "lig. pior", "-2": "pior", "-3": "muito pior" },
+    "pass_criterion": "Merge B so se: (a) CMOS medio > 0 com IC95 que NAO cruza 0, E (b) preferencia por B significativa (binomial, p<0.05).",
+    "levers": {
+      "C2_tier": "modelo em MODELS_DIR (x_low/low -> medium/high)",
+      "C3_length_scale": "VOICE_CALIBRATION[model] (valor MEDIDO pelo metodo A3)",
+      "C4_synth_params": "VOICE_PARAM_OVERRIDES[model] (noise_scale/noise_w/sentence_silence)",
+      "C4_global_preset": "ORGANIC_LENGTH_SCALE / PIPER_DEFAULT_SYNTH_PARAMS"
+    },
+    "blind": "A/B trocam de lado por rater; rater nao sabe qual e 'antes'."
+  },
+  "tests": [
+    {
+      "iteration_id": "<ex. iter-003>",
+      "voice_model": "<ex. it_IT-riccardo-medium>",
+      "locale": "<ex. it_IT>",
+      "lever": "<C2_tier | C3_length_scale | C4_synth_params | C4_global_preset>",
+      "condition_A": "<descricao do 'antes', ex. length_scale calibracao=1.0>",
+      "condition_B": "<descricao do 'depois', ex. calibracao=1.3 (medido 58ms/fonema)>",
+      "sentence_ref": "<locale de reference-sentences.json>",
+      "ratings": [
+        {
+          "rater_id": "<anon>",
+          "native_speaker": true,
+          "cmos": null,
+          "forced_choice": "<A | B | none>"
+        }
+      ],
+      "result": {
+        "cmos_mean": null,
+        "cmos_ci95": null,
+        "pct_prefer_B": null,
+        "binomial_p": null,
+        "n_raters": null,
+        "decision": "<pending | merge | reject>"
+      }
+    }
+  ]
+}

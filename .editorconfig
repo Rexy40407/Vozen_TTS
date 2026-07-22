@@ -1,0 +1,12 @@
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Espelha o .gitattributes: scripts shell TEM de ficar em LF (dash não tolera CRLF).
+[*.sh]
+end_of_line = lf

@@ -1,0 +1,10 @@
+# Normalizacao de fins de linha (end-of-line).
+#
+# Scripts shell TEM de ficar em LF no working tree, em QUALQUER plataforma e
+# independentemente de core.autocrlf. Razao: docker/healthcheck.sh e copiado
+# para a imagem (COPY no Dockerfile) e corrido por /bin/sh (dash) na base
+# Debian slim. O dash NAO tolera CRLF — uma linha tipo `then\r` deixa de ser a
+# palavra reservada `then` e da erro de sintaxe, marcando o container como
+# UNHEALTHY mesmo no caminho default (sem HEALTH_PORT). Forcar eol=lf evita que
+# um clone em Windows com autocrlf=true reintroduza CRLF e quebre o HEALTHCHECK.
+*.sh text eol=lf

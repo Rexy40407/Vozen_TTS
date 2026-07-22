@@ -1,0 +1,92 @@
+name: Bug report
+description: Report a reproducible problem with Vozen
+title: '[Bug]: '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Vozen. For security vulnerabilities, stop here and follow the [Security Policy](https://github.com/Rexy40407/discord-bot-Vozen/security/policy) instead.
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Where did the problem happen?
+      options:
+        - Hosted Vozen bot
+        - Self-hosted instance
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and its impact clearly.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reliable sequence of commands or actions.
+      placeholder: |
+        1. Join a voice channel
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: For self-hosting, provide the Git commit. For the hosted bot, write "hosted".
+      placeholder: hosted or 0e04c02
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: For self-hosting, include the OS and Node.js version. Otherwise write "hosted".
+      placeholder: Ubuntu 24.04, Node.js 22.12.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Remove Discord tokens, API keys, personal data, and unrelated message content.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add anything else that may help diagnose the problem.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed secrets, credentials, and personal data from this report.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
