@@ -46,17 +46,25 @@ pub trait CommandSpeechSynthesizer: Send + Sync {
     ) -> Result<std::path::PathBuf, CommandSynthesisError>;
 }
 
-/// Accepts an immutable WAV in the guild's existing FIFO. `Ok(false)` means capacity rejected
-/// the request and no later accounting may treat it as spoken.
+/// Reserves capacity before synthesis and later accepts the immutable WAV in the guild FIFO.
+/// This prevents an already-full queue from spending CPU on Piper output that can never play.
+/// Implementations must make a successful reservation visible to every concurrent request and
+/// must release it when `cancel_reservation` is called.
 #[async_trait]
 pub trait CommandVoicePlayback: Send + Sync {
     async fn state(&self, guild_id: &str) -> Result<CommandPlaybackState, CommandPlaybackError>;
-    async fn enqueue(
+    async fn reserve(&self, guild_id: &str, lane: QueueLane) -> Result<bool, CommandPlaybackError>;
+    async fn enqueue_reserved(
         &self,
         guild_id: &str,
         wav: &Path,
         lane: QueueLane,
-    ) -> Result<bool, CommandPlaybackError>;
+    ) -> Result<(), CommandPlaybackError>;
+    async fn cancel_reservation(
+        &self,
+        guild_id: &str,
+        lane: QueueLane,
+    ) -> Result<(), CommandPlaybackError>;
     async fn skip(&self, guild_id: &str) -> Result<(), CommandPlaybackError>;
     async fn silence(&self, guild_id: &str) -> Result<(), CommandPlaybackError>;
 }
@@ -258,14 +266,34 @@ where
             Ok(CommandSpeechOutcome::FullyBlocked) => return CoreTtsOutcome::FullyBlocked,
             Err(_) => return CoreTtsOutcome::StoreUnavailable,
         };
+        match self.playback.reserve(invocation.guild_id, lane).await {
+            Ok(true) => {}
+            Ok(false) => return CoreTtsOutcome::Busy,
+            Err(_) => return CoreTtsOutcome::PlaybackFailed,
+        }
         let wav = match self.synthesizer.synthesize(&request).await {
             Ok(wav) => wav,
-            Err(_) => return CoreTtsOutcome::SynthesisFailed,
+            Err(_) => {
+                let _ = self
+                    .playback
+                    .cancel_reservation(invocation.guild_id, lane)
+                    .await;
+                return CoreTtsOutcome::SynthesisFailed;
+            }
         };
-        match self.playback.enqueue(invocation.guild_id, &wav, lane).await {
-            Ok(true) => CoreTtsOutcome::Queued,
-            Ok(false) => CoreTtsOutcome::Busy,
-            Err(_) => CoreTtsOutcome::PlaybackFailed,
+        match self
+            .playback
+            .enqueue_reserved(invocation.guild_id, &wav, lane)
+            .await
+        {
+            Ok(()) => CoreTtsOutcome::Queued,
+            Err(_) => {
+                let _ = self
+                    .playback
+                    .cancel_reservation(invocation.guild_id, lane)
+                    .await;
+                CoreTtsOutcome::PlaybackFailed
+            }
         }
     }
 
@@ -314,6 +342,7 @@ mod tests {
     #[derive(Default)]
     struct FakeSynthesizer {
         calls: AtomicUsize,
+        fails: bool,
     }
 
     #[async_trait]
@@ -323,6 +352,9 @@ mod tests {
             _request: &SynthRequest,
         ) -> Result<PathBuf, CommandSynthesisError> {
             self.calls.fetch_add(1, Ordering::Relaxed);
+            if self.fails {
+                return Err(CommandSynthesisError);
+            }
             Ok(PathBuf::from("voice.wav"))
         }
     }
@@ -330,6 +362,8 @@ mod tests {
     struct FakePlayback {
         lanes: Mutex<Vec<QueueLane>>,
         accepted: bool,
+        reservations: AtomicUsize,
+        enqueues: AtomicUsize,
         state: CommandPlaybackState,
         skips: AtomicUsize,
         silences: AtomicUsize,
@@ -340,6 +374,8 @@ mod tests {
             Self {
                 lanes: Mutex::new(Vec::new()),
                 accepted: false,
+                reservations: AtomicUsize::new(0),
+                enqueues: AtomicUsize::new(0),
                 state: CommandPlaybackState::NoSession,
                 skips: AtomicUsize::new(0),
                 silences: AtomicUsize::new(0),
@@ -356,14 +392,35 @@ mod tests {
             Ok(self.state)
         }
 
-        async fn enqueue(
+        async fn reserve(
+            &self,
+            _guild_id: &str,
+            lane: QueueLane,
+        ) -> Result<bool, CommandPlaybackError> {
+            if self.accepted {
+                self.lanes.lock().expect("lanes").push(lane);
+                self.reservations.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(self.accepted)
+        }
+
+        async fn enqueue_reserved(
             &self,
             _guild_id: &str,
             _wav: &Path,
-            lane: QueueLane,
-        ) -> Result<bool, CommandPlaybackError> {
-            self.lanes.lock().expect("lanes").push(lane);
-            Ok(self.accepted)
+            _lane: QueueLane,
+        ) -> Result<(), CommandPlaybackError> {
+            self.enqueues.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+
+        async fn cancel_reservation(
+            &self,
+            _guild_id: &str,
+            _lane: QueueLane,
+        ) -> Result<(), CommandPlaybackError> {
+            self.reservations.fetch_sub(1, Ordering::Relaxed);
+            Ok(())
         }
 
         async fn skip(&self, _guild_id: &str) -> Result<(), CommandPlaybackError> {
@@ -489,6 +546,49 @@ mod tests {
                 .await,
             CoreVoiceOutcome::Tts(CoreTtsOutcome::Busy)
         );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn failed_synthesis_releases_the_previously_reserved_capacity() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let state = GatewayState::default();
+        state.remember_bot_user("bot".into());
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        let service = CoreVoiceService::new(
+            store,
+            state,
+            FakeVoiceTransport,
+            FakeSynthesizer {
+                calls: AtomicUsize::new(0),
+                fails: true,
+            },
+            FakePlayback {
+                accepted: true,
+                state: CommandPlaybackState::Active,
+                ..FakePlayback::default()
+            },
+            CoreVoiceSettings {
+                available_models: vec!["en_US-amy-medium".into()],
+                default_voice: "en_US-amy-medium".into(),
+                default_speed: 1.0,
+            },
+            Arc::new(|| 0),
+        );
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::Tts {
+                        text: "hello".into()
+                    }
+                )
+                .await,
+            CoreVoiceOutcome::Tts(CoreTtsOutcome::SynthesisFailed)
+        );
+        assert_eq!(service.playback.reservations.load(Ordering::Relaxed), 0);
+        assert_eq!(service.playback.enqueues.load(Ordering::Relaxed), 0);
     }
 
     #[tokio::test]
