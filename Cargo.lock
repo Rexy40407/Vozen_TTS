@@ -4143,6 +4143,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "vozen-runtime"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "thiserror 2.0.19",
+ "tokio",
+ "vozen-api",
+ "vozen-discord",
+ "vozen-store",
+]
+
+[[package]]
 name = "vozen-store"
 version = "0.1.0"
 dependencies = [
