@@ -49,7 +49,7 @@ import {
   handleRandomizer,
 } from './handlers/personal';
 import { handlePrivacy } from './handlers/privacy';
-import { rustVoiceOwnsCommand } from '../migration/rustVoiceAuthority';
+import { rustTranslationOwnsCommand, rustVoiceOwnsCommand } from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
 import { handleTranslate } from './handlers/translation';
 import { localeForUser } from './helpers';
@@ -259,7 +259,14 @@ export async function handleInteraction(
   // The Rust process responds to this exact interaction when the explicitly opt-in migration
   // flag is active. Returning before any defer/write prevents a double response from the two
   // Discord gateway sessions; every other command remains Node-owned.
-  if (rustVoiceOwnsCommand(i.commandName)) return;
+  if (
+    rustVoiceOwnsCommand(i.commandName) ||
+    rustTranslationOwnsCommand(
+      i.commandName,
+      i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
+    )
+  )
+    return;
   try {
     switch (i.commandName) {
       case 'join':

@@ -63,6 +63,24 @@ impl VoiceResponseLocalizer {
             .message(key, locale)
             .map(|template| interpolate(template, parameters))
     }
+
+    /// Checks an explicit command locale exactly, matching Node's command validation. Discord
+    /// client locales may contain a region variant, but an explicit `/translate locale:pt-BR`
+    /// is intentionally rejected because the command contract stores base locale ids only.
+    #[must_use]
+    pub fn supports_explicit_locale(&self, locale: &str) -> bool {
+        self.catalog
+            .supported_locales
+            .iter()
+            .any(|supported| supported == locale)
+    }
+
+    /// Resolves a Discord client locale to a supported base code or canonical English. This is
+    /// used only when a command omits its target locale; it never broadens explicit input.
+    #[must_use]
+    pub fn default_for_discord_locale(&self, locale: Option<&str>) -> String {
+        self.catalog.resolve_locale(locale, None).to_owned()
+    }
 }
 
 fn interpolate(template: &str, parameters: &BTreeMap<&str, String>) -> String {
@@ -138,6 +156,27 @@ mod tests {
         assert_ne!(
             french,
             "Your text is too long for a file (max 500 characters)."
+        );
+    }
+
+    #[test]
+    fn distinguishes_explicit_locale_validation_from_discord_locale_fallback() {
+        let localizer = VoiceResponseLocalizer::from_generated_contract().expect("catalog");
+        assert!(localizer.supports_explicit_locale("pt"));
+        assert!(!localizer.supports_explicit_locale("pt-BR"));
+        assert_eq!(localizer.default_for_discord_locale(Some("pt-BR")), "pt");
+        assert_eq!(localizer.default_for_discord_locale(Some("unknown")), "en");
+    }
+
+    #[test]
+    fn localizer_renders_the_generated_private_translation_message() {
+        let localizer = VoiceResponseLocalizer::from_generated_contract().expect("catalog");
+        let mut parameters = BTreeMap::new();
+        parameters.insert("locale", "pt".into());
+        parameters.insert("text", "olá".into());
+        assert_eq!(
+            localizer.render_key("translation.ready", Some("en-US"), None, &parameters),
+            Some("**Translation · pt**\nolá".into())
         );
     }
 }

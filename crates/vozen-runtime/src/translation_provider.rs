@@ -22,6 +22,22 @@ pub struct AzureTranslationProvider {
     client: Client,
 }
 
+/// Runtime provider selection. Invalid or incomplete environment configuration intentionally
+/// stays disabled so the promoted command can return the same generic diagnostic as Node rather
+/// than failing the whole Discord process at startup.
+pub enum RuntimeTranslationProvider {
+    Disabled,
+    Azure(AzureTranslationProvider),
+}
+
+impl RuntimeTranslationProvider {
+    pub fn from_environment() -> Self {
+        AzureTranslationProvider::from_environment()
+            .map(Self::Azure)
+            .unwrap_or(Self::Disabled)
+    }
+}
+
 impl AzureTranslationProvider {
     /// Returns `None` unless the existing `TRANSLATION_PROVIDER=azure` configuration is fully
     /// valid. It never reports individual credentials or URLs to Discord.
@@ -107,6 +123,20 @@ impl ExplicitTranslationProvider for AzureTranslationProvider {
             .filter(|text| !text.trim().is_empty())
             .map(str::to_owned)
             .ok_or(())
+    }
+}
+
+#[async_trait]
+impl ExplicitTranslationProvider for RuntimeTranslationProvider {
+    fn is_enabled(&self) -> bool {
+        matches!(self, Self::Azure(_))
+    }
+
+    async fn translate(&self, text: &str, target_locale: &str) -> Result<String, ()> {
+        match self {
+            Self::Disabled => Err(()),
+            Self::Azure(provider) => provider.translate(text, target_locale).await,
+        }
     }
 }
 

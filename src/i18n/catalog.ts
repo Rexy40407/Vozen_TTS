@@ -24,6 +24,16 @@ export interface Entry {
 }
 
 export const catalog: Record<string, Entry> = {
+  // Private `/translate text` responses. Automatic translation has separate configuration.
+  // Other locales fall back to the canonical English copy until their local catalogue adds them.
+  'translation.ready': { en: '**Translation · {locale}**\n{text}' },
+  'translation.invalidLocale': { en: 'That locale is not supported.' },
+  'translation.quota': { en: 'Your rolling 30-day translation limit has been reached.' },
+  'translation.disabled': {
+    en: 'Translation is temporarily unavailable because no provider is configured.',
+  },
+  'translation.empty': { en: 'Provide readable text to translate.' },
+  'translation.unavailable': { en: 'Translation is temporarily unavailable.' },
   // ── generico ──────────────────────────────────────────────────────────────
   'error.generic': {
     en: 'Something went wrong. Please try again.',

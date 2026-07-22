@@ -34,6 +34,12 @@ const KEYS = [
   'ttsFile.unavailable',
   'ttsFile.ready',
   'ttsFile.failed',
+  'translation.ready',
+  'translation.invalidLocale',
+  'translation.quota',
+  'translation.disabled',
+  'translation.empty',
+  'translation.unavailable',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };

@@ -62,7 +62,13 @@
     "ttsFile.tooLong",
     "ttsFile.unavailable",
     "ttsFile.ready",
-    "ttsFile.failed"
+    "ttsFile.failed",
+    "translation.ready",
+    "translation.invalidLocale",
+    "translation.quota",
+    "translation.disabled",
+    "translation.empty",
+    "translation.unavailable"
   ],
   "messages": {
     "en": {
@@ -88,7 +94,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -113,7 +125,13 @@
       "ttsFile.tooLong": "Mantem a exportaÃ§Ã£o de Ã¡udio com {max} caracteres ou menos.",
       "ttsFile.unavailable": "A voz selecionada nÃ£o estÃ¡ disponÃ­vel nesta instÃ¢ncia. Escolhe outra voz e tenta novamente.",
       "ttsFile.ready": "O teu ficheiro de Ã¡udio privado estÃ¡ pronto. O Vozen nÃ£o o guarda depois da entrega.",
-      "ttsFile.failed": "NÃ£o consegui criar esse ficheiro de Ã¡udio. Tenta outra vez."
+      "ttsFile.failed": "NÃ£o consegui criar esse ficheiro de Ã¡udio. Tenta outra vez.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -138,7 +156,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -163,7 +187,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -188,7 +218,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -213,7 +249,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -238,7 +280,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -263,7 +311,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -288,7 +342,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -313,7 +373,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -338,7 +404,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -363,7 +435,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -388,7 +466,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -413,7 +497,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -438,7 +528,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -463,7 +559,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -488,7 +590,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -513,7 +621,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -538,7 +652,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -563,7 +683,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -588,7 +714,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -613,7 +745,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -638,7 +776,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -663,7 +807,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -688,7 +838,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -713,7 +869,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -738,7 +900,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -763,7 +931,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -788,7 +962,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -813,7 +993,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -838,7 +1024,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -863,7 +1055,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -888,7 +1086,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -913,7 +1117,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -938,7 +1148,13 @@
       "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
       "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
       "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
-      "ttsFile.failed": "I could not create that audio file. Please try again."
+      "ttsFile.failed": "I could not create that audio file. Please try again.",
+      "translation.ready": "**Translation · {locale}**\n{text}",
+      "translation.invalidLocale": "That locale is not supported.",
+      "translation.quota": "Your rolling 30-day translation limit has been reached.",
+      "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
+      "translation.empty": "Provide readable text to translate.",
+      "translation.unavailable": "Translation is temporarily unavailable."
     }
   }
 }

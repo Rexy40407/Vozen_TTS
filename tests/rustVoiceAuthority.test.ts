@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { rustVoiceOwnsAutoRead, rustVoiceOwnsCommand } from '../src/migration/rustVoiceAuthority';
+import {
+  rustTranslationOwnsCommand,
+  rustVoiceOwnsAutoRead,
+  rustVoiceOwnsCommand,
+} from '../src/migration/rustVoiceAuthority';
 
 describe('Rust core voice migration ownership', () => {
   it('is off unless explicitly enabled and only yields the promoted command set', () => {
@@ -20,5 +24,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoiceOwnsAutoRead('true', 'yes')).toBe(false);
     expect(rustVoiceOwnsAutoRead('false', 'true')).toBe(false);
     expect(rustVoiceOwnsAutoRead(' TRUE ', ' true ')).toBe(true);
+  });
+
+  it('only yields the private translate text leaf when its exact flag is enabled', () => {
+    expect(rustTranslationOwnsCommand('translate', 'text')).toBe(false);
+    expect(rustTranslationOwnsCommand('translate', 'text', 'yes')).toBe(false);
+    expect(rustTranslationOwnsCommand('translate', 'text', ' TRUE ')).toBe(true);
+    expect(rustTranslationOwnsCommand('translate', 'language', 'true')).toBe(false);
+    expect(rustTranslationOwnsCommand('translate', 'map-add', 'true')).toBe(false);
+    expect(rustTranslationOwnsCommand('tts', 'text', 'true')).toBe(false);
   });
 });

@@ -13,6 +13,7 @@ mod file_export_sink;
 mod piper_adapter;
 mod topgg_metrics;
 mod translation_provider;
+mod translation_text_sink;
 
 use std::{
     env,
@@ -68,6 +69,7 @@ struct RuntimeConfig {
     vote_redemption_secret: Option<String>,
     core_voice: Option<CoreVoiceRuntimeOptions>,
     tts_file: Option<TtsFileRuntimeOptions>,
+    translation_text: Option<TranslationTextRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
 }
 
@@ -177,6 +179,12 @@ struct TtsFileRuntimeOptions {
     settings: CoreVoiceSettings,
 }
 
+/// This is separate from automatic channel translation and is disabled unless the exact flag
+/// is enabled alongside the matching Node ownership boundary.
+struct TranslationTextRuntimeOptions {
+    provider: translation_provider::RuntimeTranslationProvider,
+}
+
 impl RuntimeConfig {
     fn from_environment() -> Result<Self, RuntimeError> {
         let discord_token = env::var("DISCORD_TOKEN").map_err(|_| RuntimeError::MissingToken)?;
@@ -208,6 +216,7 @@ impl RuntimeConfig {
         let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
         let core_voice = core_voice_from_environment()?;
         let tts_file = tts_file_from_environment()?;
+        let translation_text = translation_text_from_environment();
         let dashboard = dashboard_from_environment()?;
         Ok(Self {
             discord_token,
@@ -220,6 +229,7 @@ impl RuntimeConfig {
             vote_redemption_secret,
             core_voice,
             tts_file,
+            translation_text,
             dashboard,
         })
     }
@@ -292,6 +302,14 @@ fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeE
     }))
 }
 
+fn translation_text_from_environment() -> Option<TranslationTextRuntimeOptions> {
+    translation_text_enabled(env::var("RUST_TRANSLATE_TEXT_ENABLED").ok().as_deref()).then(|| {
+        TranslationTextRuntimeOptions {
+            provider: translation_provider::RuntimeTranslationProvider::from_environment(),
+        }
+    })
+}
+
 /// This deliberately matches Node's safe opt-in semantics: only literal `true` can make Rust
 /// own a Discord interaction. `1`, `yes`, missing and spelling mistakes remain shadow-only.
 fn core_voice_enabled(raw: Option<&str>) -> bool {
@@ -299,6 +317,10 @@ fn core_voice_enabled(raw: Option<&str>) -> bool {
 }
 
 fn tts_file_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn translation_text_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -391,6 +413,19 @@ fn tts_file_event_sink(
     Ok(Some(Arc::new(
         file_export_sink::TtsFileGatewaySink::new(store, options)
             .map_err(|_| RuntimeError::TtsFileGateway)?,
+    )))
+}
+
+fn translation_text_event_sink(
+    options: Option<TranslationTextRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    let Some(options) = options else {
+        return Ok(None);
+    };
+    Ok(Some(Arc::new(
+        translation_text_sink::TranslationTextGatewaySink::new(store, options.provider)
+            .map_err(|_| RuntimeError::TranslationGateway)?,
     )))
 }
 
@@ -522,6 +557,8 @@ enum RuntimeError {
     DefaultVoiceUnavailable,
     #[error("private TTS file gateway initialisation failed")]
     TtsFileGateway,
+    #[error("private translation gateway initialisation failed")]
+    TranslationGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -549,10 +586,6 @@ async fn main() {
 
 async fn run() -> Result<(), RuntimeError> {
     let config = RuntimeConfig::from_environment()?;
-    // Parse the existing Azure settings now, but retain no command/event binding until the
-    // localized `/translate` adapter is promoted. Constructing this client sends no request and
-    // cannot make the Rust shadow process claim any Discord interaction.
-    let _translation_provider = translation_provider::AzureTranslationProvider::from_environment();
     // Opening the store verifies/migrates the exact Node SQLite schema before the Rust gateway
     // does any work. Keep the handle alive for the whole process; future adapters share it.
     let store = Arc::new(Mutex::new(SqliteStore::open(&config.database_path)?));
@@ -581,6 +614,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = tts_file_event_sink(config.tts_file, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = translation_text_event_sink(config.translation_text, store.clone())? {
         event_sinks.push(sink);
     }
     let event_sink = match event_sinks.len() {
@@ -914,6 +950,15 @@ mod tests {
         assert!(!tts_file_enabled(Some("1")));
         assert!(!tts_file_enabled(Some("yes")));
         assert!(!tts_file_enabled(None));
+    }
+
+    #[test]
+    fn private_translation_promotion_is_exactly_opt_in_and_independent_of_calls() {
+        assert!(translation_text_enabled(Some("true")));
+        assert!(translation_text_enabled(Some(" TRUE ")));
+        assert!(!translation_text_enabled(Some("1")));
+        assert!(!translation_text_enabled(Some("yes")));
+        assert!(!translation_text_enabled(None));
     }
 
     #[test]

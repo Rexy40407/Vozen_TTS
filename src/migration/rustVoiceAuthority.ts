@@ -9,6 +9,21 @@
 const RUST_CORE_VOICE_COMMANDS = new Set(['join', 'leave', 'tts', 'skip', 'shut-up']);
 const RUST_PRIVATE_TTS_FILE_COMMANDS = new Set(['tts-file']);
 
+/**
+ * Translation promotion is leaf-level: `/translate` also contains server mappings, opt-outs
+ * and automatic-translation settings which remain Node-owned. Rust may only claim the private
+ * `text` leaf after its matching runtime adapter is intentionally started.
+ */
+export function rustTranslationOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_TRANSLATE_TEXT_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' && commandName === 'translate' && subcommand === 'text'
+  );
+}
+
 export function rustVoiceOwnsCommand(
   commandName: string,
   coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
