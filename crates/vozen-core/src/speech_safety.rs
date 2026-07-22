@@ -70,7 +70,7 @@ pub fn redact_blocked(text: &str, blocklist: &[String]) -> String {
         .map(|word| word.trim())
         .filter(|word| !word.is_empty())
     {
-        let (next, did_replace) = replace_whole_word_inner(&output, word, " ");
+        let (next, did_replace) = replace_whole_word_with(&output, word, |_| " ".to_owned());
         output = next;
         changed |= did_replace;
     }
@@ -158,10 +158,13 @@ fn contains_whole_word(text: &str, term: &str) -> bool {
 }
 
 fn replace_whole_word(text: &str, term: &str, replacement: &str) -> String {
-    replace_whole_word_inner(text, term, replacement).0
+    replace_whole_word_with(text, term, |_| replacement.to_owned()).0
 }
 
-fn replace_whole_word_inner(text: &str, term: &str, replacement: &str) -> (String, bool) {
+pub(crate) fn replace_whole_word_with<F>(text: &str, term: &str, replacement: F) -> (String, bool)
+where
+    F: Fn(&str) -> String,
+{
     let regex = literal_case_insensitive_regex(term);
     let mut output = String::with_capacity(text.len());
     let mut cursor = 0;
@@ -172,7 +175,7 @@ fn replace_whole_word_inner(text: &str, term: &str, replacement: &str) -> (Strin
             continue;
         }
         output.push_str(&text[cursor..matched.start()]);
-        output.push_str(replacement);
+        output.push_str(&replacement(matched.as_str()));
         cursor = matched.end();
         changed = true;
     }
