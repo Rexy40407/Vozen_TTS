@@ -16,6 +16,7 @@ use thiserror::Error;
 
 mod blocklist;
 mod channel_profile;
+mod data_lifecycle;
 mod guild_config;
 mod kofi_claim;
 mod kofi_delivery;
@@ -34,6 +35,7 @@ mod voice_presence;
 
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
 pub use channel_profile::{ChannelProfile, ChannelProfilePatch, MAX_CHANNEL_PROFILES_PER_GUILD};
+pub use data_lifecycle::{GUILD_PURGE_TABLES, USER_ERASE_TABLES};
 pub use guild_config::{GuildConfig, GuildConfigPatch};
 pub use kofi_claim::{
     ACTIVATION_TERMS_VERSION, ActivationConfirmation, ActivationOutcome, ClaimOutcome,
