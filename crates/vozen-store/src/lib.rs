@@ -14,6 +14,10 @@ use rusqlite::Connection;
 use serde::Deserialize;
 use thiserror::Error;
 
+mod guild_config;
+
+pub use guild_config::{GuildConfig, GuildConfigPatch};
+
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
 const SQLITE_SCHEMA: &str = include_str!("../../../contracts/sqlite-schema.json");
 
@@ -76,6 +80,10 @@ impl SqliteStore {
             |row| row.get::<_, i64>(0),
         )?;
         Ok(found != 0)
+    }
+
+    pub(crate) fn connection(&self) -> &Connection {
+        &self.connection
     }
 }
 
