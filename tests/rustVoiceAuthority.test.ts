@@ -28,6 +28,7 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoiceOwnsAutoRead('true', 'yes')).toBe(false);
     expect(rustVoiceOwnsAutoRead('false', 'true')).toBe(false);
     expect(rustVoiceOwnsAutoRead(' TRUE ', ' true ')).toBe(true);
+    expect(rustVoiceOwnsAutoRead('true', 'true', 'neural')).toBe(false);
   });
 
   it('only yields the private translate text leaf when its exact flag is enabled', () => {

@@ -100,8 +100,11 @@ export function rustVoicePreferencesOwnCommand(
 export function rustVoiceOwnsAutoRead(
   coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
   messageEnabled = process.env.RUST_MESSAGE_AUTOREAD_ENABLED,
+  ttsEngine = process.env.TTS_ENGINE,
 ): boolean {
   return (
-    coreEnabled?.trim().toLowerCase() === 'true' && messageEnabled?.trim().toLowerCase() === 'true'
+    coreEnabled?.trim().toLowerCase() === 'true' &&
+    messageEnabled?.trim().toLowerCase() === 'true' &&
+    rustPiperCompatible(ttsEngine)
   );
 }
