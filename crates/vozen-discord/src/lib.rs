@@ -48,7 +48,7 @@ pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
     begin_message_speech, finish_message_speech, prepare_message_speech,
 };
-pub use voice_playback::{VoicePlaybackError, join_and_play_wav, leave_voice};
+pub use voice_playback::{VoicePlaybackError, join_and_enqueue_wav, leave_voice};
 
 /// Minimal gateway facts used by the Rust adapters. It intentionally contains neither message
 /// content, profiles nor tokens: the only live voice data is a transient guild/user/channel ID

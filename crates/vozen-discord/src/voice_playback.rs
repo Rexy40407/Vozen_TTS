@@ -18,11 +18,13 @@ pub enum VoicePlaybackError {
     JoinFailed,
 }
 
-/// Joins (or switches to) the requested call, replaces the current audio and plays a local WAV.
+/// Joins (or switches to) the requested call and queues a local WAV after already accepted work.
+/// Songbird's native queue starts the first item immediately and advances only when the prior
+/// track ends, so a new request can never interrupt another user's accepted speech.
 /// Callers must already have verified same-call/premium/rejoin policy and Connect+Speak access;
 /// this adapter never turns a stored channel id into authorization.
 #[cfg(feature = "voice-driver")]
-pub async fn join_and_play_wav(
+pub async fn join_and_enqueue_wav(
     context: &serenity::client::Context,
     guild_id: serenity::model::id::GuildId,
     channel_id: serenity::model::id::ChannelId,
@@ -36,8 +38,9 @@ pub async fn join_and_play_wav(
         .await
         .map_err(|_| VoicePlaybackError::JoinFailed)?;
     let mut handler = call.lock().await;
-    handler.stop();
-    handler.play_input(songbird::input::File::new(wav).into());
+    handler
+        .enqueue_input(songbird::input::File::new(wav).into())
+        .await;
     Ok(())
 }
 
@@ -58,7 +61,7 @@ pub async fn leave_voice(
 }
 
 #[cfg(not(feature = "voice-driver"))]
-pub async fn join_and_play_wav(
+pub async fn join_and_enqueue_wav(
     _context: &serenity::client::Context,
     _guild_id: serenity::model::id::GuildId,
     _channel_id: serenity::model::id::ChannelId,
