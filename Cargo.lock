@@ -4151,6 +4151,7 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "vozen-api",
+ "vozen-core",
  "vozen-discord",
  "vozen-store",
 ]

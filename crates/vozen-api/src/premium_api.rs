@@ -68,8 +68,10 @@ pub trait DiscordIdentityVerifier: Send + Sync {
 pub struct PremiumApiConfig {
     /// Exact public site origin, normally `https://vozen.org`.
     pub origin: String,
-    /// Key only used to derive an HMAC of Discord's verified email. It is never returned/logged.
-    pub kofi_webhook_token: String,
+    /// Optional key used to derive an HMAC of Discord's verified email. It is never
+    /// returned/logged. Receipt-code claims deliberately remain available without it;
+    /// email activation answers `kofi_unavailable`, matching the existing Node API.
+    pub kofi_webhook_token: Option<String>,
     pub store: Arc<Mutex<SqliteStore>>,
     pub identity_verifier: Arc<dyn DiscordIdentityVerifier>,
     pub now: Arc<dyn Fn() -> i64 + Send + Sync>,
@@ -78,7 +80,7 @@ pub struct PremiumApiConfig {
 #[derive(Clone)]
 struct PremiumApiState {
     origin: HeaderValue,
-    kofi_webhook_token: Arc<str>,
+    kofi_webhook_token: Option<Arc<str>>,
     store: Arc<Mutex<SqliteStore>>,
     identity_verifier: Arc<dyn DiscordIdentityVerifier>,
     now: Arc<dyn Fn() -> i64 + Send + Sync>,
@@ -96,15 +98,15 @@ struct RateState {
 pub fn premium_router(config: PremiumApiConfig) -> Result<Router, PremiumApiConfigError> {
     let origin =
         HeaderValue::from_str(&config.origin).map_err(|_| PremiumApiConfigError::Origin)?;
-    if config.kofi_webhook_token.trim().is_empty() {
-        return Err(PremiumApiConfigError::KofiToken);
-    }
     Ok(Router::new()
         .route("/api/link", any(link_request))
         .route("/api/activate", any(activate_request))
         .with_state(PremiumApiState {
             origin,
-            kofi_webhook_token: Arc::from(config.kofi_webhook_token),
+            kofi_webhook_token: config
+                .kofi_webhook_token
+                .filter(|token| !token.trim().is_empty())
+                .map(Arc::from),
             store: config.store,
             identity_verifier: config.identity_verifier,
             now: config.now,
@@ -115,14 +117,12 @@ pub fn premium_router(config: PremiumApiConfig) -> Result<Router, PremiumApiConf
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PremiumApiConfigError {
     Origin,
-    KofiToken,
 }
 
 impl std::fmt::Display for PremiumApiConfigError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
             Self::Origin => "premium API requires a valid exact site origin",
-            Self::KofiToken => "premium API requires the Ko-fi webhook token",
         })
     }
 }
@@ -262,6 +262,13 @@ async fn activate_request(
             &state,
         );
     };
+    let Some(kofi_webhook_token) = &state.kofi_webhook_token else {
+        return json_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            json!({"error":"kofi_unavailable"}),
+            &state,
+        );
+    };
     let identity = match state
         .identity_verifier
         .resolve_activation_identity(bearer)
@@ -304,7 +311,7 @@ async fn activate_request(
             );
         }
     };
-    let email_hash = hash_kofi_email(&state.kofi_webhook_token, &identity.email);
+    let email_hash = hash_kofi_email(kofi_webhook_token, &identity.email);
     let outcome = match store_activation(&state, &identity.id, &email_hash, (state.now)()) {
         Ok(outcome) => outcome,
         Err(()) => {
@@ -540,7 +547,7 @@ mod tests {
     fn app(store: Arc<Mutex<SqliteStore>>) -> Router {
         premium_router(PremiumApiConfig {
             origin: "https://vozen.org".into(),
-            kofi_webhook_token: "kofi-secret".into(),
+            kofi_webhook_token: Some("kofi-secret".into()),
             store,
             identity_verifier: Arc::new(Identities),
             now: Arc::new(|| NOW),
@@ -668,6 +675,59 @@ mod tests {
                 .expect("pass")
                 .is_some()
         );
+    }
+
+    #[tokio::test]
+    async fn activation_is_explicitly_unavailable_without_kofi_but_receipt_claims_still_work() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let app = premium_router(PremiumApiConfig {
+            origin: "https://vozen.org".into(),
+            kofi_webhook_token: None,
+            store: store.clone(),
+            identity_verifier: Arc::new(Identities),
+            now: Arc::new(|| NOW),
+        })
+        .expect("router without Ko-fi token");
+
+        let unavailable = app
+            .clone()
+            .oneshot(request(
+                "/api/activate",
+                Some("Bearer valid"),
+                r#"{"termsAccepted":true,"termsVersion":"2026-07-19"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = to_bytes(unavailable.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        assert_eq!(&body[..], br#"{"error":"kofi_unavailable"}"#);
+
+        store
+            .lock()
+            .expect("lock")
+            .record_kofi_pending_grant(
+                &KofiPendingGrantInput {
+                    transaction_id: "receipt-without-token".into(),
+                    email_hash: None,
+                    plan: KofiPendingPlan::Plus,
+                    days: 30,
+                    seats: 0,
+                    is_subscription: false,
+                },
+                NOW,
+            )
+            .expect("pending");
+        let claim = app
+            .oneshot(request(
+                "/api/link",
+                Some("Bearer valid"),
+                r#"{"code":"receipt-without-token"}"#,
+            ))
+            .await
+            .expect("claim response");
+        assert_eq!(claim.status(), StatusCode::OK);
     }
 
     #[tokio::test]
