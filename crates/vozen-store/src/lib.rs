@@ -18,6 +18,7 @@ mod guild_config;
 mod kofi_claim;
 mod kofi_delivery;
 mod kofi_pending;
+mod lang_detect;
 mod migration;
 mod premium;
 mod premium_code;
