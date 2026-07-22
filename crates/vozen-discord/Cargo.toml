@@ -6,8 +6,15 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+# Enables actual Discord voice transport. It needs libopus (and CMake/a C compiler only when
+# libopus cannot be obtained from the operating system). Kept opt-in so the control-plane and
+# parity tests remain portable on developer machines.
+voice-driver = ["songbird/driver", "songbird/tungstenite"]
+
 [dependencies]
 serenity.workspace = true
+songbird.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 vozen-contracts = { path = "../vozen-contracts" }

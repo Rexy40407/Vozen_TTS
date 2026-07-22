@@ -13,6 +13,7 @@ use serenity::{
     client::{Client, Context, EventHandler},
     model::gateway::{GatewayIntents, Ready},
 };
+use songbird::serenity::SerenityInit;
 use thiserror::Error;
 
 /// Exact gateway permissions requested by the current Node bot. `MESSAGE_CONTENT` is the only
@@ -58,6 +59,9 @@ pub enum DiscordRuntimeError {
 /// would consume Discord's global command quota and invalidate client caches.
 pub async fn run_discord_gateway(config: DiscordRuntimeConfig) -> Result<(), DiscordRuntimeError> {
     let mut client = Client::builder(config.token, vozen_gateway_intents())
+        // Registers the voice gateway/driver but never joins a call by itself. Join/rejoin
+        // policy remains behind a tested command handler in a later migration step.
+        .register_songbird()
         .event_handler(VozenGatewayHandler)
         .await
         .map_err(|error| DiscordRuntimeError::Serenity(Box::new(error)))?;
