@@ -6,7 +6,11 @@
 //! not register commands on startup, start voice sessions, or send user content until those
 //! operations have their Node parity contracts and tests.
 
-use std::{env, sync::LazyLock};
+use std::{
+    collections::BTreeSet,
+    env,
+    sync::{Arc, LazyLock, RwLock},
+};
 
 use serenity::{
     async_trait,
@@ -30,6 +34,47 @@ pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
 };
+
+/// Read-only gateway facts that other Rust adapters may use only after their own OAuth or
+/// permission checks. Guild membership is intentionally the sole fact here: it contains no user
+/// profiles, messages, tokens or voice state.
+#[derive(Clone, Default)]
+pub struct GatewayState {
+    guild_ids: Arc<RwLock<BTreeSet<String>>>,
+}
+
+impl GatewayState {
+    pub fn bot_has_guild(&self, guild_id: &str) -> bool {
+        self.guild_ids
+            .read()
+            .is_ok_and(|guild_ids| guild_ids.contains(guild_id))
+    }
+
+    pub fn guild_ids(&self) -> Vec<String> {
+        self.guild_ids
+            .read()
+            .map(|guild_ids| guild_ids.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    fn replace_guilds(&self, guild_ids: impl IntoIterator<Item = String>) {
+        if let Ok(mut current) = self.guild_ids.write() {
+            *current = guild_ids.into_iter().collect();
+        }
+    }
+
+    fn remember_guild(&self, guild_id: String) {
+        if let Ok(mut current) = self.guild_ids.write() {
+            current.insert(guild_id);
+        }
+    }
+
+    fn forget_guild(&self, guild_id: &str) {
+        if let Ok(mut current) = self.guild_ids.write() {
+            current.remove(guild_id);
+        }
+    }
+}
 
 const DISCORD_COMMANDS: &str = include_str!("../../../contracts/discord-commands.json");
 
@@ -117,11 +162,21 @@ pub enum DiscordRuntimeError {
 /// intentionally a separate future operation: doing REST registration on every gateway restart
 /// would consume Discord's global command quota and invalidate client caches.
 pub async fn run_discord_gateway(config: DiscordRuntimeConfig) -> Result<(), DiscordRuntimeError> {
+    run_discord_gateway_with_state(config, GatewayState::default()).await
+}
+
+/// Starts the gateway while keeping only current bot-guild membership synchronized for API
+/// authorization and planned call restoration. The caller owns the state handle, so no global
+/// cache can outlive the gateway process.
+pub async fn run_discord_gateway_with_state(
+    config: DiscordRuntimeConfig,
+    gateway_state: GatewayState,
+) -> Result<(), DiscordRuntimeError> {
     let mut client = Client::builder(config.token, vozen_gateway_intents())
         // Registers the voice gateway/driver but never joins a call by itself. Join/rejoin
         // policy remains behind a tested command handler in a later migration step.
         .register_songbird()
-        .event_handler(VozenGatewayHandler)
+        .event_handler(VozenGatewayHandler { gateway_state })
         .await
         .map_err(|error| DiscordRuntimeError::Serenity(Box::new(error)))?;
     client
@@ -131,26 +186,35 @@ pub async fn run_discord_gateway(config: DiscordRuntimeConfig) -> Result<(), Dis
     Ok(())
 }
 
-struct VozenGatewayHandler;
+struct VozenGatewayHandler {
+    gateway_state: GatewayState,
+}
 
 #[async_trait]
 impl EventHandler for VozenGatewayHandler {
-    async fn ready(&self, _context: Context, _ready: Ready) {}
+    async fn ready(&self, _context: Context, ready: Ready) {
+        self.gateway_state
+            .replace_guilds(ready.guilds.iter().map(|guild| guild.id.get().to_string()));
+    }
 
     async fn guild_create(
         &self,
         _context: Context,
-        _guild: serenity::model::guild::Guild,
+        guild: serenity::model::guild::Guild,
         _is_new: Option<bool>,
     ) {
+        self.gateway_state
+            .remember_guild(guild.id.get().to_string());
     }
 
     async fn guild_delete(
         &self,
         _context: Context,
-        _incomplete: serenity::model::guild::UnavailableGuild,
+        incomplete: serenity::model::guild::UnavailableGuild,
         _full: Option<serenity::model::guild::Guild>,
     ) {
+        self.gateway_state
+            .forget_guild(&incomplete.id.get().to_string());
     }
 }
 
@@ -177,6 +241,17 @@ mod tests {
             Err(DiscordRuntimeError::MissingToken)
         ));
         assert!(DiscordRuntimeConfig::from_token("not-a-real-token".into()).is_ok());
+    }
+
+    #[test]
+    fn gateway_state_exposes_only_current_bot_guild_membership() {
+        let state = GatewayState::default();
+        state.replace_guilds(["guild-b".into(), "guild-a".into()]);
+        assert!(state.bot_has_guild("guild-a"));
+        state.remember_guild("guild-c".into());
+        state.forget_guild("guild-b");
+        assert_eq!(state.guild_ids(), vec!["guild-a", "guild-c"]);
+        assert!(!state.bot_has_guild("guild-b"));
     }
 
     #[test]

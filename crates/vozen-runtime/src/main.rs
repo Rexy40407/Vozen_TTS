@@ -10,7 +10,9 @@ use std::{env, net::SocketAddr, path::PathBuf};
 
 use thiserror::Error;
 use vozen_api::{RuntimeRouterConfig, runtime_router};
-use vozen_discord::{DiscordRuntimeConfig, DiscordRuntimeError, run_discord_gateway};
+use vozen_discord::{
+    DiscordRuntimeConfig, DiscordRuntimeError, GatewayState, run_discord_gateway_with_state,
+};
 use vozen_store::SqliteStore;
 
 struct RuntimeConfig {
@@ -81,7 +83,13 @@ async fn run() -> Result<(), RuntimeError> {
     // Opening the store verifies/migrates the exact Node SQLite schema before the Rust gateway
     // does any work. Keep the handle alive for the whole process; future adapters share it.
     let _store = SqliteStore::open(&config.database_path)?;
-    let gateway = run_discord_gateway(DiscordRuntimeConfig::from_token(config.discord_token)?);
+    // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
+    // clone later; they never infer bot presence from a stale database row.
+    let gateway_state = GatewayState::default();
+    let gateway = run_discord_gateway_with_state(
+        DiscordRuntimeConfig::from_token(config.discord_token)?,
+        gateway_state,
+    );
 
     let Some(health_bind) = config.health_bind else {
         return gateway.await.map_err(RuntimeError::from);
