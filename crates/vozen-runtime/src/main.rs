@@ -7,10 +7,9 @@
 //! opt-in. Dashboard routes remain absent until their live Discord option provider has been
 //! migrated and shadow-tested.
 
-// The Piper-to-command adapter has independent tests but must not be constructed until the
-// promoted interaction sink has localized reply parity. Keeping this module staged avoids an
-// accidental live TTS path while preserving the adapter boundary for the next migration slice.
-#[allow(dead_code)]
+#[cfg(feature = "voice-driver")]
+mod core_voice_sink;
+#[cfg(any(feature = "voice-driver", test))]
 mod piper_adapter;
 mod topgg_metrics;
 
@@ -22,6 +21,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(feature = "voice-driver")]
+use std::fs;
+
 use thiserror::Error;
 use vozen_api::{
     ProviderHealth as PublicProviderHealth, PublicStatusInput, PublicStatusProvider,
@@ -32,7 +34,8 @@ use vozen_api::{
 use vozen_contracts::DiscordCommandCatalog;
 use vozen_core::parse_kofi_shop_map;
 use vozen_discord::{
-    DiscordRuntimeConfig, DiscordRuntimeError, GatewayState, run_discord_gateway_with_state,
+    CoreVoiceSettings, DiscordRuntimeConfig, DiscordRuntimeError, GatewayEventSink, GatewayState,
+    run_discord_gateway_with_state_and_sink,
 };
 use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
 
@@ -51,6 +54,7 @@ struct RuntimeConfig {
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
     topgg_metrics: Option<TopggMetricsRuntimeConfig>,
     vote_redemption_secret: Option<String>,
+    core_voice: Option<CoreVoiceRuntimeOptions>,
 }
 
 struct PublicStatusConfig {
@@ -73,6 +77,22 @@ struct TopggWebhookRuntimeConfig {
 struct TopggMetricsRuntimeConfig {
     client_id: String,
     token: String,
+}
+
+/// Explicit opt-in configuration for the first Rust-owned Discord voice commands.
+///
+/// It shares Node's established Piper values, but it is never inferred from their presence:
+/// `RUST_CORE_VOICE_ENABLED=true` is required so a normal Rust shadow process cannot claim
+/// interactions by accident.
+#[derive(Clone)]
+#[cfg_attr(not(feature = "voice-driver"), allow(dead_code))]
+struct CoreVoiceRuntimeOptions {
+    piper_path: PathBuf,
+    models_dir: PathBuf,
+    cache_dir: PathBuf,
+    piper_concurrency: usize,
+    queue_cap: usize,
+    settings: CoreVoiceSettings,
 }
 
 impl RuntimeConfig {
@@ -104,6 +124,7 @@ impl RuntimeConfig {
         let topgg_webhook = topgg_webhook_from_environment()?;
         let topgg_metrics = topgg_metrics_from_environment()?;
         let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
+        let core_voice = core_voice_from_environment()?;
         Ok(Self {
             discord_token,
             database_path,
@@ -113,8 +134,138 @@ impl RuntimeConfig {
             topgg_webhook,
             topgg_metrics,
             vote_redemption_secret,
+            core_voice,
         })
     }
+}
+
+fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, RuntimeError> {
+    if !core_voice_enabled(env::var("RUST_CORE_VOICE_ENABLED").ok().as_deref()) {
+        return Ok(None);
+    }
+    let default_voice =
+        nonempty_env("DEFAULT_VOICE").unwrap_or_else(|| "en_US-amy-medium".to_owned());
+    let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
+    let queue_cap = positive_number_from_environment("QUEUE_CAP", 20.0, true)? as usize;
+    let piper_concurrency = positive_number_from_environment(
+        "PIPER_MAX_CONCURRENCY",
+        default_piper_concurrency() as f64,
+        true,
+    )? as usize;
+    Ok(Some(CoreVoiceRuntimeOptions {
+        piper_path: nonempty_env("PIPER_PATH")
+            .unwrap_or_else(|| "piper".to_owned())
+            .into(),
+        models_dir: nonempty_env("MODELS_DIR")
+            .unwrap_or_else(|| "./models".to_owned())
+            .into(),
+        cache_dir: nonempty_env("RUST_VOICE_CACHE_DIR")
+            .unwrap_or_else(|| "./audio-cache/rust".to_owned())
+            .into(),
+        piper_concurrency,
+        queue_cap,
+        settings: CoreVoiceSettings {
+            available_models: Vec::new(),
+            default_voice,
+            default_speed,
+        },
+    }))
+}
+
+/// This deliberately matches Node's safe opt-in semantics: only literal `true` can make Rust
+/// own a Discord interaction. `1`, `yes`, missing and spelling mistakes remain shadow-only.
+fn core_voice_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn default_piper_concurrency() -> usize {
+    std::thread::available_parallelism()
+        .map(|count| count.get().saturating_sub(1).max(1))
+        .unwrap_or(1)
+}
+
+fn positive_number_from_environment(
+    name: &'static str,
+    fallback: f64,
+    integer: bool,
+) -> Result<f64, RuntimeError> {
+    parse_positive_number(nonempty_env(name).as_deref(), fallback, integer)
+        .ok_or(RuntimeError::InvalidCoreVoiceSetting(name))
+}
+
+fn parse_positive_number(raw: Option<&str>, fallback: f64, integer: bool) -> Option<f64> {
+    let Some(raw) = raw else {
+        return Some(fallback);
+    };
+    raw.parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite() && *value > 0.0 && (!integer || value.fract() == 0.0))
+}
+
+#[cfg(feature = "voice-driver")]
+fn core_voice_event_sink(
+    options: Option<CoreVoiceRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+    gateway_state: GatewayState,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    let Some(mut options) = options else {
+        return Ok(None);
+    };
+    options.settings.available_models = discover_piper_models(&options.models_dir)?;
+    if !options
+        .settings
+        .available_models
+        .iter()
+        .any(|model| model == &options.settings.default_voice)
+    {
+        return Err(RuntimeError::DefaultVoiceUnavailable);
+    }
+    Ok(Some(Arc::new(core_voice_sink::CoreVoiceGatewaySink::new(
+        store,
+        gateway_state,
+        options,
+    ))))
+}
+
+#[cfg(not(feature = "voice-driver"))]
+fn core_voice_event_sink(
+    options: Option<CoreVoiceRuntimeOptions>,
+    _store: Arc<Mutex<SqliteStore>>,
+    _gateway_state: GatewayState,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if options.is_some() {
+        return Err(RuntimeError::VoiceDriverRequired);
+    }
+    Ok(None)
+}
+
+#[cfg(feature = "voice-driver")]
+fn discover_piper_models(models_dir: &std::path::Path) -> Result<Vec<String>, RuntimeError> {
+    let entries = fs::read_dir(models_dir).map_err(|_| RuntimeError::ModelsUnavailable)?;
+    let mut models = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            (path.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|extension| extension == "onnx"))
+            .then(|| {
+                path.file_stem()
+                    .and_then(|name| name.to_str())
+                    .map(ToOwned::to_owned)
+            })
+            .flatten()
+        })
+        // Node intentionally excludes this legacy Piper model from selection/detection.
+        .filter(|model| model != "pt_PT-tugao-medium")
+        .collect::<Vec<_>>();
+    models.sort_unstable();
+    models.dedup();
+    if models.is_empty() {
+        return Err(RuntimeError::ModelsUnavailable);
+    }
+    Ok(models)
 }
 
 fn topgg_metrics_from_environment() -> Result<Option<TopggMetricsRuntimeConfig>, RuntimeError> {
@@ -195,6 +346,16 @@ enum RuntimeError {
     MissingClientId,
     #[error("VOTE_REDEMPTION_SECRET is required when TOPGG_WEBHOOK_SECRET is configured")]
     MissingVoteRedemptionSecret,
+    #[error("{0} must be a positive number (and an integer where required)")]
+    InvalidCoreVoiceSetting(&'static str),
+    #[error("RUST_CORE_VOICE_ENABLED=true requires a runtime built with --features voice-driver")]
+    VoiceDriverRequired,
+    #[cfg_attr(not(feature = "voice-driver"), allow(dead_code))]
+    #[error("RUST_CORE_VOICE_ENABLED=true requires at least one supported Piper .onnx model")]
+    ModelsUnavailable,
+    #[cfg_attr(not(feature = "voice-driver"), allow(dead_code))]
+    #[error("DEFAULT_VOICE must name a supported Piper model when Rust voice is enabled")]
+    DefaultVoiceUnavailable,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("SQLite startup failed: {0}")]
@@ -238,9 +399,12 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(topgg_metrics) = config.topgg_metrics {
         spawn_topgg_metrics(topgg_metrics, gateway_state.clone());
     }
-    let gateway = run_discord_gateway_with_state(
+    let event_sink =
+        core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?;
+    let gateway = run_discord_gateway_with_state_and_sink(
         DiscordRuntimeConfig::from_token(config.discord_token)?,
         gateway_state.clone(),
+        event_sink,
     );
 
     let Some(health_bind) = config.health_bind else {
@@ -467,6 +631,25 @@ mod tests {
         assert!(!public_status_enabled(Some("1")));
         assert!(!public_status_enabled(Some("yes")));
         assert!(!public_status_enabled(None));
+    }
+
+    #[test]
+    fn rust_voice_promotion_is_exactly_opt_in() {
+        assert!(core_voice_enabled(Some("true")));
+        assert!(core_voice_enabled(Some(" TRUE ")));
+        assert!(!core_voice_enabled(Some("1")));
+        assert!(!core_voice_enabled(Some("yes")));
+        assert!(!core_voice_enabled(None));
+    }
+
+    #[test]
+    fn rust_voice_numeric_configuration_rejects_dead_or_fractional_queue_limits() {
+        assert_eq!(parse_positive_number(None, 20.0, true), Some(20.0));
+        assert_eq!(parse_positive_number(Some("2.5"), 20.0, false), Some(2.5));
+        assert_eq!(parse_positive_number(Some("2.5"), 20.0, true), None);
+        assert_eq!(parse_positive_number(Some("0"), 20.0, true), None);
+        assert_eq!(parse_positive_number(Some("wat"), 20.0, true), None);
+        assert!(default_piper_concurrency() >= 1);
     }
 
     #[test]

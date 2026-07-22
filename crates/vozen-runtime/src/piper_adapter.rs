@@ -9,9 +9,11 @@ use std::{path::PathBuf, sync::Arc};
 use async_trait::async_trait;
 use vozen_core::SynthRequest;
 use vozen_discord::{CommandSpeechSynthesizer, CommandSynthesisError};
-use vozen_tts::{CommandPiperRunner, PiperEngine, PiperRunner};
+#[cfg(feature = "voice-driver")]
+use vozen_tts::CommandPiperRunner;
+use vozen_tts::{PiperEngine, PiperRunner};
 
-pub struct PiperCommandSynthesizer<R = CommandPiperRunner> {
+pub struct PiperCommandSynthesizer<R = vozen_tts::CommandPiperRunner> {
     engine: Arc<PiperEngine<R>>,
 }
 
@@ -22,6 +24,7 @@ impl<R> PiperCommandSynthesizer<R> {
     }
 }
 
+#[cfg(feature = "voice-driver")]
 impl PiperCommandSynthesizer<CommandPiperRunner> {
     #[must_use]
     pub fn production(
