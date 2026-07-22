@@ -1,0 +1,225 @@
+//! Testable orchestration for promoted slash commands, without owning Serenity responses.
+//!
+//! The eventual gateway sink must defer `/tts` before invoking this executor. Keeping Discord's
+//! response token outside the service means the same authorization/synthesis path is covered by
+//! unit tests and cannot be accidentally reused for an unvalidated interaction.
+
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
+
+use serenity::model::application::CommandData;
+use thiserror::Error;
+use vozen_store::SqliteStore;
+
+use crate::{
+    CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceInteractionFacts, CoreVoiceOutcome,
+    CoreVoiceResponse, CoreVoiceService, CoreVoiceSettings, GatewayState, VoiceResponseLocalizer,
+    VoiceResponseLocalizerError, VoiceSessionTransport, core_voice_response,
+    parse_promoted_core_voice,
+};
+
+#[derive(Debug, Error)]
+pub enum CoreVoiceExecutionError {
+    #[error("promoted voice command is invalid")]
+    Command,
+    #[error("voice response localisation failed: {0}")]
+    Localizer(#[from] VoiceResponseLocalizerError),
+    #[error("voice response could not be rendered")]
+    MissingResponse,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreVoiceInteractionExecution {
+    /// The caller must leave this interaction to the still-authoritative Node process.
+    NotPromoted,
+    /// The caller owns the interaction and must send this exact localized response.
+    Reply {
+        content: String,
+        /// `/tts` can wait for Piper; all other promoted commands complete immediately.
+        defer_ephemeral: bool,
+    },
+}
+
+pub struct CoreVoiceInteractionExecutor<T, S, P> {
+    store: Arc<Mutex<SqliteStore>>,
+    gateway_state: GatewayState,
+    service: CoreVoiceService<T, S, P>,
+    localizer: VoiceResponseLocalizer,
+}
+
+impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        store: Arc<Mutex<SqliteStore>>,
+        gateway_state: GatewayState,
+        transport: T,
+        synthesizer: S,
+        playback: P,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) -> Result<Self, CoreVoiceExecutionError> {
+        Ok(Self {
+            service: CoreVoiceService::new(
+                store.clone(),
+                gateway_state.clone(),
+                transport,
+                synthesizer,
+                playback,
+                settings,
+                now_ms,
+            ),
+            store,
+            gateway_state,
+            localizer: VoiceResponseLocalizer::from_generated_contract()?,
+        })
+    }
+
+    /// Checks the versioned command payload before the gateway spends an interaction response.
+    /// A malformed payload is not deferred: responding to an unknown/forged command would make
+    /// Rust claim traffic it cannot safely own.
+    pub fn requires_ephemeral_defer(
+        command: &CommandData,
+    ) -> Result<bool, CoreVoiceExecutionError> {
+        Ok(matches!(
+            parse_promoted_core_voice(command).map_err(|_| CoreVoiceExecutionError::Command)?,
+            Some(crate::CoreVoiceCommand::Tts { .. })
+        ))
+    }
+}
+
+impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P>
+where
+    T: VoiceSessionTransport,
+    S: CommandSpeechSynthesizer,
+    P: CommandVoicePlayback,
+{
+    pub async fn execute(
+        &self,
+        command: &CommandData,
+        facts: &CoreVoiceInteractionFacts,
+        interaction_locale: Option<&str>,
+        resolve_user: &dyn Fn(&str) -> String,
+        resolve_channel: &dyn Fn(&str) -> String,
+    ) -> Result<CoreVoiceInteractionExecution, CoreVoiceExecutionError> {
+        let Some(command) =
+            parse_promoted_core_voice(command).map_err(|_| CoreVoiceExecutionError::Command)?
+        else {
+            return Ok(CoreVoiceInteractionExecution::NotPromoted);
+        };
+        let defer_ephemeral = matches!(command, crate::CoreVoiceCommand::Tts { .. });
+        let outcome = self
+            .service
+            .execute(facts.invocation(resolve_user, resolve_channel), &command)
+            .await;
+        let (response, parameters, guild_locale) = self.response_context(outcome, facts);
+        let content = self
+            .localizer
+            .render(
+                response,
+                interaction_locale,
+                guild_locale.as_deref(),
+                &parameters,
+            )
+            .ok_or(CoreVoiceExecutionError::MissingResponse)?;
+        Ok(CoreVoiceInteractionExecution::Reply {
+            content,
+            defer_ephemeral,
+        })
+    }
+
+    fn response_context(
+        &self,
+        outcome: CoreVoiceOutcome,
+        facts: &CoreVoiceInteractionFacts,
+    ) -> (
+        CoreVoiceResponse,
+        BTreeMap<&'static str, String>,
+        Option<String>,
+    ) {
+        let mut response = core_voice_response(outcome);
+        let guild = self
+            .store
+            .lock()
+            .ok()
+            .and_then(|store| store.guild_config(&facts.guild_id).ok());
+        let guild_locale = guild.as_ref().map(|config| config.locale.clone());
+        let mut parameters = BTreeMap::new();
+
+        if response == CoreVoiceResponse::Joined {
+            let Some(voice_channel_id) = self
+                .gateway_state
+                .voice_channel_id(&facts.guild_id, &facts.user_id)
+            else {
+                return (
+                    CoreVoiceResponse::StoreUnavailable,
+                    parameters,
+                    guild_locale,
+                );
+            };
+            parameters.insert("channel", channel_mention(&voice_channel_id));
+            if let Some(read_channel_id) = guild.as_ref().and_then(|config| {
+                (config.autoread)
+                    .then_some(config.tts_channel_id.as_deref())
+                    .flatten()
+            }) {
+                parameters.insert("readChannel", channel_mention(read_channel_id));
+                response = CoreVoiceResponse::JoinedAutoread;
+            }
+        } else if response == CoreVoiceResponse::JoinPermissionDenied {
+            let Some(voice_channel_id) = self
+                .gateway_state
+                .voice_channel_id(&facts.guild_id, &facts.user_id)
+            else {
+                return (
+                    CoreVoiceResponse::StoreUnavailable,
+                    parameters,
+                    guild_locale,
+                );
+            };
+            parameters.insert("channel", channel_mention(&voice_channel_id));
+        }
+        (response, parameters, guild_locale)
+    }
+
+    pub fn forget_guild(&self, guild_id: &str) {
+        self.service.forget_guild(guild_id);
+    }
+}
+
+fn channel_mention(channel_id: &str) -> String {
+    format!("<#{channel_id}>")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command(payload: &str) -> CommandData {
+        serde_json::from_str(payload).expect("valid command data")
+    }
+
+    #[test]
+    fn only_tts_requires_an_ephemeral_defer_and_unpromoted_commands_stay_unclaimed() {
+        assert!(CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&command(
+            r#"{"id":"1","name":"tts","type":1,"options":[{"name":"text","type":3,"value":"hello"}]}"#
+        ))
+        .expect("tts"));
+        assert!(
+            !CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&command(
+                r#"{"id":"1","name":"join","type":1,"options":[]}"#
+            ))
+            .expect("join")
+        );
+        assert!(!CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&command(
+            r#"{"id":"1","name":"queue","type":1,"options":[{"name":"show","type":1,"options":[]}]}"#
+        ))
+        .expect("unpromoted"));
+    }
+
+    #[test]
+    fn channel_mentions_are_safe_discord_references_not_untrusted_names() {
+        assert_eq!(channel_mention("123"), "<#123>");
+    }
+}

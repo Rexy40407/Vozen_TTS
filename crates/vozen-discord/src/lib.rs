@@ -28,6 +28,7 @@ mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
 mod core_voice_command;
+mod core_voice_executor;
 mod core_voice_interaction;
 mod core_voice_response;
 mod core_voice_service;
@@ -53,6 +54,9 @@ pub use command_speech_pipeline::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline,
 };
 pub use core_voice_command::{CoreVoiceCommand, CoreVoiceCommandError, parse_promoted_core_voice};
+pub use core_voice_executor::{
+    CoreVoiceExecutionError, CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor,
+};
 pub use core_voice_interaction::CoreVoiceInteractionFacts;
 pub use core_voice_response::{CoreVoiceResponse, core_voice_response};
 pub use core_voice_service::{

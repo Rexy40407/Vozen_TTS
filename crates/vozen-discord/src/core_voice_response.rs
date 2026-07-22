@@ -13,6 +13,7 @@ use crate::{
 pub enum CoreVoiceResponse {
     JoinNeedsVoiceChannel,
     Joined,
+    JoinedAutoread,
     JoinPermissionDenied,
     VoiceUnavailable,
     JoinFailed,
@@ -45,6 +46,7 @@ impl CoreVoiceResponse {
         Some(match self {
             Self::JoinNeedsVoiceChannel => "join.needVoiceChannel",
             Self::Joined => "join.joined",
+            Self::JoinedAutoread => "join.joinedAutoread",
             Self::JoinPermissionDenied => "join.missingPerms",
             Self::VoiceUnavailable
             | Self::JoinFailed
