@@ -3,6 +3,7 @@ members = [
   "crates/vozen-contracts",
   "crates/vozen-core",
   "crates/vozen-store",
+  "crates/vozen-api",
 ]
 resolver = "3"
 
@@ -18,6 +19,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
+axum = "0.8.9"
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
+tower = { version = "0.5.3", features = ["util"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
