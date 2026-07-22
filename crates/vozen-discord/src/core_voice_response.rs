@@ -18,9 +18,11 @@ pub enum CoreVoiceResponse {
     JoinFailed,
     Left,
     LeaveFailed,
-    NotInVoice,
-    NothingPlaying,
+    SkipNotInVoice,
+    SkipNothingPlaying,
     Skipped,
+    ShutUpNotInVoice,
+    ShutUpNothingPlaying,
     Silenced,
     NotInSameVoice,
     Blocked,
@@ -32,6 +34,40 @@ pub enum CoreVoiceResponse {
     Queued,
     StoreUnavailable,
     NotPromoted,
+}
+
+impl CoreVoiceResponse {
+    /// Existing Node i18n key when a public response is appropriate. The eventual Discord
+    /// adapter supplies required placeholders such as `{channel}`; failures deliberately use the
+    /// established generic error rather than a new, untranslated string.
+    #[must_use]
+    pub const fn catalog_key(self) -> Option<&'static str> {
+        Some(match self {
+            Self::JoinNeedsVoiceChannel => "join.needVoiceChannel",
+            Self::Joined => "join.joined",
+            Self::JoinPermissionDenied => "join.missingPerms",
+            Self::VoiceUnavailable
+            | Self::JoinFailed
+            | Self::LeaveFailed
+            | Self::SynthesisFailed
+            | Self::PlaybackFailed
+            | Self::StoreUnavailable => "error.generic",
+            Self::Left => "leave.left",
+            Self::SkipNotInVoice => "skip.notInVoice",
+            Self::SkipNothingPlaying => "skip.nothing",
+            Self::Skipped => "skip.skipped",
+            Self::ShutUpNotInVoice => "shutup.notInVoice",
+            Self::ShutUpNothingPlaying => "shutup.nothing",
+            Self::Silenced => "shutup.done",
+            Self::NotInSameVoice => "tts.notInVoice",
+            Self::Blocked => "tts.blocked",
+            Self::NothingToRead => "tts.nothingAfterClean",
+            Self::RateLimited => "tts.tooFast",
+            Self::Busy => "tts.busy",
+            Self::Queued => "tts.queued",
+            Self::NotPromoted => return None,
+        })
+    }
 }
 
 #[must_use]
@@ -58,13 +94,17 @@ pub fn core_voice_response(outcome: CoreVoiceOutcome) -> CoreVoiceResponse {
         CoreVoiceOutcome::Left(LeaveVoiceOutcome::StoreUnavailable) => {
             CoreVoiceResponse::StoreUnavailable
         }
-        CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NotInVoice)
-        | CoreVoiceOutcome::Silenced(CorePlaybackControlOutcome::NotInVoice) => {
-            CoreVoiceResponse::NotInVoice
+        CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NotInVoice) => {
+            CoreVoiceResponse::SkipNotInVoice
         }
-        CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NothingPlaying)
-        | CoreVoiceOutcome::Silenced(CorePlaybackControlOutcome::NothingPlaying) => {
-            CoreVoiceResponse::NothingPlaying
+        CoreVoiceOutcome::Silenced(CorePlaybackControlOutcome::NotInVoice) => {
+            CoreVoiceResponse::ShutUpNotInVoice
+        }
+        CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NothingPlaying) => {
+            CoreVoiceResponse::SkipNothingPlaying
+        }
+        CoreVoiceOutcome::Silenced(CorePlaybackControlOutcome::NothingPlaying) => {
+            CoreVoiceResponse::ShutUpNothingPlaying
         }
         CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::Completed) => {
             CoreVoiceResponse::Skipped
@@ -112,7 +152,20 @@ mod tests {
             core_voice_response(CoreVoiceOutcome::Silenced(
                 CorePlaybackControlOutcome::NothingPlaying
             )),
-            CoreVoiceResponse::NothingPlaying
+            CoreVoiceResponse::ShutUpNothingPlaying
         );
+    }
+
+    #[test]
+    fn similar_controls_keep_their_own_existing_translation_keys() {
+        assert_eq!(
+            CoreVoiceResponse::SkipNotInVoice.catalog_key(),
+            Some("skip.notInVoice")
+        );
+        assert_eq!(
+            CoreVoiceResponse::ShutUpNotInVoice.catalog_key(),
+            Some("shutup.notInVoice")
+        );
+        assert_eq!(CoreVoiceResponse::NotPromoted.catalog_key(), None);
     }
 }
