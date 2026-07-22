@@ -6,6 +6,7 @@ mod abbreviations;
 mod kofi;
 mod speech_safety;
 mod text_cleaning;
+mod voice_selection;
 
 pub use abbreviations::{
     SlangSegment, expand_abbreviations, is_all_english_abbrev, split_english_slang,
@@ -22,6 +23,7 @@ pub use speech_safety::{
 pub use text_cleaning::{
     CleanTextOptions, MediaKind, clean_text, collect_markdown_media, collect_url_media,
 };
+pub use voice_selection::{accent_language_of_model, pick_voice, pick_voice_for_language};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueueLane {
