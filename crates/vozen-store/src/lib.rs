@@ -15,8 +15,13 @@ use serde::Deserialize;
 use thiserror::Error;
 
 mod guild_config;
+mod premium;
 
 pub use guild_config::{GuildConfig, GuildConfigPatch};
+pub use premium::{
+    ActivateResult, ActivateStatus, EntitlementGrant, EntitlementSyncResult, GuildPassOwner,
+    PremiumKind, PremiumPass, PremiumPassStatus, PremiumStatusView,
+};
 
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
 const SQLITE_SCHEMA: &str = include_str!("../../../contracts/sqlite-schema.json");
