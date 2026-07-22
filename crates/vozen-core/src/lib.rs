@@ -5,6 +5,7 @@
 mod abbreviations;
 mod accent_restoration;
 mod kofi;
+mod language_detection;
 mod message_speech_policy;
 mod play_queue;
 mod rate_limiter;
@@ -23,6 +24,7 @@ pub use kofi::{
     extract_kofi_discord_id, hash_kofi_email, map_kofi_to_grant, parse_kofi_payload,
     parse_kofi_shop_map, verify_kofi_token,
 };
+pub use language_detection::detect_language;
 pub use message_speech_policy::{
     MessageSpeechDecision, MessageSpeechDenial, MessageSpeechInput, admit_message_speech,
 };

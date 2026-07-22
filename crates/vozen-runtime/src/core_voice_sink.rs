@@ -20,6 +20,7 @@ use serenity::{
     client::Context,
     model::application::Interaction,
 };
+use vozen_core::detect_language;
 use vozen_discord::{
     CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor, CoreVoiceInteractionFacts,
     DiscordDashboardOptionsProvider, DiscordMessageFactsOwned, GatewayEventDispatchError,
@@ -234,6 +235,7 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         let media = collect_message_media(&message);
         let service = self.message_service(&context)?;
         let announce_speaker = self.announce_speaker(&facts, &message);
+        let detected_language = self.detected_language(&facts, &message.content);
         let resolve_user = |_: &str| "someone".to_owned();
         let resolve_channel = |_: &str| "a channel".to_owned();
         let outcome = service
@@ -241,7 +243,7 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 facts: facts.as_borrowed(),
                 raw: &message.content,
                 media: &media,
-                detected_language: None,
+                detected_language,
                 announce_speaker: announce_speaker.as_deref(),
                 resolve_user: &resolve_user,
                 resolve_channel: &resolve_channel,
@@ -326,6 +328,26 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
 }
 
 impl CoreVoiceGatewaySink {
+    /// Returns a detection only for members who explicitly enabled automatic language detection.
+    /// Store faults and uncertain text deliberately fall back to the configured voice.
+    fn detected_language(
+        &self,
+        facts: &DiscordMessageFactsOwned,
+        message: &str,
+    ) -> Option<&'static str> {
+        let enabled = self
+            .store
+            .lock()
+            .ok()
+            .and_then(|store| {
+                store
+                    .is_detection_on(&facts.guild_id, &facts.author_id)
+                    .ok()
+            })
+            .unwrap_or(false);
+        enabled.then(|| detect_language(message)).flatten()
+    }
+
     fn announce_speaker(
         &self,
         facts: &DiscordMessageFactsOwned,
@@ -417,5 +439,45 @@ mod tests {
             sanitize_speaker_name("Rexy’s test").as_deref(),
             Some("Rexy’s test")
         );
+    }
+
+    #[test]
+    fn language_detection_requires_the_members_opt_in() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let sink = CoreVoiceGatewaySink::new(
+            store.clone(),
+            GatewayState::default(),
+            CoreVoiceRuntimeOptions {
+                piper_path: "piper".into(),
+                models_dir: "models".into(),
+                cache_dir: "cache".into(),
+                piper_concurrency: 1,
+                queue_cap: 1,
+                message_autoread: true,
+                settings: CoreVoiceSettings {
+                    available_models: vec!["en_US-amy-medium".into()],
+                    default_voice: "en_US-amy-medium".into(),
+                    default_speed: 1.0,
+                },
+            },
+        );
+        let facts = DiscordMessageFactsOwned {
+            guild_id: "guild".into(),
+            channel_id: "text".into(),
+            author_id: "user".into(),
+            author_is_bot: false,
+            mentioned_bot: false,
+            replied_to_bot: false,
+            author_voice_channel_id: Some("voice".into()),
+            bot_voice_channel_id: Some("voice".into()),
+            member_role_ids: Some(Vec::new()),
+        };
+        assert_eq!(sink.detected_language(&facts, "Olá!"), None);
+        store
+            .lock()
+            .expect("store lock")
+            .set_detection_on("guild", "user", true)
+            .expect("enable");
+        assert_eq!(sink.detected_language(&facts, "Olá!"), Some("por"));
     }
 }
