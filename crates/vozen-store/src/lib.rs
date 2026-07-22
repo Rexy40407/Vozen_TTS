@@ -15,6 +15,7 @@ use serde::Deserialize;
 use thiserror::Error;
 
 mod guild_config;
+mod migration;
 mod premium;
 
 pub use guild_config::{GuildConfig, GuildConfigPatch};
@@ -75,6 +76,7 @@ impl SqliteStore {
             "PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;\nPRAGMA synchronous = NORMAL;",
         )?;
         install_current_schema(&connection)?;
+        migration::migrate_legacy_schema(&connection)?;
         Ok(Self { connection })
     }
 
@@ -112,9 +114,22 @@ fn install_current_schema(connection: &Connection) -> Result<(), StoreError> {
         {
             return Err(StoreError::InvalidSchemaObject(object.name));
         }
-        connection.execute_batch(&object.sql)?;
+        connection.execute_batch(&idempotent_create_sql(&object.sql)?)?;
     }
     Ok(())
+}
+
+/// `sqlite_master` normalizes away `IF NOT EXISTS` when it returns a table/index definition.
+/// The generated contract is therefore structurally exact but must be made idempotent before a
+/// Rust process opens a pre-existing production database.
+fn idempotent_create_sql(sql: &str) -> Result<String, StoreError> {
+    if let Some(rest) = sql.strip_prefix("CREATE TABLE ") {
+        return Ok(format!("CREATE TABLE IF NOT EXISTS {rest}"));
+    }
+    if let Some(rest) = sql.strip_prefix("CREATE INDEX ") {
+        return Ok(format!("CREATE INDEX IF NOT EXISTS {rest}"));
+    }
+    Err(StoreError::InvalidSchemaObject(sql.into()))
 }
 
 #[cfg(test)]
@@ -149,5 +164,18 @@ mod tests {
                 .has_schema_object("idx_pass_activation_guild")
                 .expect("query index")
         );
+    }
+
+    #[test]
+    fn schema_sql_is_made_idempotent_without_accepting_non_create_sql() {
+        assert_eq!(
+            idempotent_create_sql("CREATE TABLE guild_config (guild_id TEXT)").expect("table"),
+            "CREATE TABLE IF NOT EXISTS guild_config (guild_id TEXT)"
+        );
+        assert_eq!(
+            idempotent_create_sql("CREATE INDEX idx ON table_name (column_name)").expect("index"),
+            "CREATE INDEX IF NOT EXISTS idx ON table_name (column_name)"
+        );
+        assert!(idempotent_create_sql("DROP TABLE nope").is_err());
     }
 }
