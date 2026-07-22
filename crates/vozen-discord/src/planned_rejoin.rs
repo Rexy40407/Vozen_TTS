@@ -231,6 +231,8 @@ mod tests {
                 presence("planned", "voice-b")
             ]
         );
-        assert_eq!(plan.forget, vec!["crashed", "gone"]);
+        // `permissions` is not premium and was not covered by the marker, so it is stale before
+        // the channel permission check matters. Only an eligible `NoPermissions` row is retained.
+        assert_eq!(plan.forget, vec!["crashed", "gone", "permissions"]);
     }
 }
