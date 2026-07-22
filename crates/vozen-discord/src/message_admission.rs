@@ -8,6 +8,7 @@ use vozen_core::{MessageSpeechDecision, MessageSpeechInput, RolePolicy, admit_me
 use vozen_store::{SqliteStore, StoreError};
 
 /// Facts obtained from a single Discord message and the current gateway cache.
+#[derive(Clone, Copy)]
 pub struct DiscordMessageFacts<'a> {
     pub guild_id: &'a str,
     pub channel_id: &'a str,

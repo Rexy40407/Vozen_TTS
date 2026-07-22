@@ -49,6 +49,19 @@ impl MessageSpeechPipeline {
                 return Ok(MessagePipelineOutcome::Denied(reason));
             }
         };
+        self.prepare_after_admission(store, lane, input, now_ms)
+    }
+
+    /// Continues an admission already resolved from the current Discord message/cache facts.
+    /// Keeping the rate limiter here preserves its process-local scope while allowing a gateway
+    /// adapter to call [`crate::admit_discord_message`] exactly once.
+    pub fn prepare_after_admission(
+        &mut self,
+        store: &SqliteStore,
+        lane: QueueLane,
+        input: MessagePreparationInput<'_>,
+        now_ms: i64,
+    ) -> Result<MessagePipelineOutcome, StoreError> {
         let draft = match begin_message_speech(store, &input)? {
             Ok(draft) => draft,
             Err(MessagePreparationOutcome::Empty) => return Ok(MessagePipelineOutcome::Empty),

@@ -32,6 +32,7 @@ mod core_voice_service;
 mod interaction_dispatch;
 mod message_admission;
 mod message_pipeline;
+mod message_voice_service;
 mod planned_rejoin;
 mod rejoin_service;
 mod songbird_transport;
@@ -58,6 +59,7 @@ pub use interaction_dispatch::{
 };
 pub use message_admission::{DiscordMessageFacts, admit_discord_message};
 pub use message_pipeline::{MessagePipelineOutcome, MessageSpeechPipeline};
+pub use message_voice_service::{MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService};
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
