@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "generated_from": "src/store/db.ts",
+  "objects": [
+    {
+      "type": "table",
+      "name": "blocklist",
+      "sql": "CREATE TABLE blocklist (\n        guild_id TEXT NOT NULL,\n        word     TEXT NOT NULL,\n        PRIMARY KEY (guild_id, word)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "channel_profile",
+      "sql": "CREATE TABLE channel_profile (\n        guild_id TEXT NOT NULL,\n        channel_id TEXT NOT NULL,\n        auto_read INTEGER CHECK (auto_read IN (0, 1)),\n        translation_enabled INTEGER CHECK (translation_enabled IN (0, 1)),\n        default_voice TEXT,\n        engine TEXT,\n        speed REAL,\n        max_chars INTEGER,\n        read_bots INTEGER CHECK (read_bots IN (0, 1)),\n        voice_channel_id TEXT,\n        locale TEXT,\n        effect TEXT,\n        PRIMARY KEY (guild_id, channel_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "discord_premium_entitlement",
+      "sql": "CREATE TABLE discord_premium_entitlement (\n        kind       TEXT NOT NULL CHECK (kind IN ('guild', 'user')),\n        target_id  TEXT NOT NULL,\n        expires_at INTEGER NOT NULL,\n        PRIMARY KEY (kind, target_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "game_score",
+      "sql": "CREATE TABLE game_score (\n        guild_id TEXT NOT NULL,\n        user_id  TEXT NOT NULL,\n        points   INTEGER NOT NULL DEFAULT 0,\n        wins     INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "gcloud_daily_usage",
+      "sql": "CREATE TABLE gcloud_daily_usage (\n        day   TEXT PRIMARY KEY,\n        chars INTEGER NOT NULL DEFAULT 0\n      )"
+    },
+    {
+      "type": "table",
+      "name": "gcloud_usage",
+      "sql": "CREATE TABLE gcloud_usage (\n        scope TEXT NOT NULL,\n        key   TEXT NOT NULL,\n        month TEXT NOT NULL,\n        chars INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (scope, key, month)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "guild_config",
+      "sql": "CREATE TABLE guild_config (\n        guild_id       TEXT PRIMARY KEY,\n        tts_channel_id TEXT,\n        autoread       INTEGER NOT NULL DEFAULT 0,\n        default_voice  TEXT NOT NULL DEFAULT 'en_US-amy-medium',\n        max_chars      INTEGER NOT NULL DEFAULT 300,\n        rate_per_min   INTEGER NOT NULL DEFAULT 8,\n        enabled        INTEGER NOT NULL DEFAULT 1,\n        tts_role_id    TEXT,\n        locale         TEXT NOT NULL DEFAULT 'en',\n        xsaid          INTEGER NOT NULL DEFAULT 1,\n        autojoin       INTEGER NOT NULL DEFAULT 0,\n        read_bots      INTEGER NOT NULL DEFAULT 0,\n        text_in_voice  INTEGER NOT NULL DEFAULT 0,\n        greet_on_join  INTEGER NOT NULL DEFAULT 1,\n        greet_locale   TEXT NOT NULL DEFAULT 'en',\n        antispam       INTEGER NOT NULL DEFAULT 0,\n        stay_in_call   INTEGER NOT NULL DEFAULT 0,\n        streak_announce INTEGER NOT NULL DEFAULT 1,\n        soundboard     INTEGER NOT NULL DEFAULT 1,\n        vote_promos    INTEGER NOT NULL DEFAULT 0,\n        priority_role_id TEXT,\n        blocked_role_id  TEXT,\n        translation_enabled INTEGER NOT NULL DEFAULT 0,\n        translation_daily_char_limit INTEGER NOT NULL DEFAULT 10000,\n        translation_per_user_daily_char_limit INTEGER NOT NULL DEFAULT 2000\n      )"
+    },
+    {
+      "type": "table",
+      "name": "guild_departed",
+      "sql": "CREATE TABLE guild_departed (\n        guild_id TEXT PRIMARY KEY,\n        left_at  INTEGER NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "guild_talk_streak",
+      "sql": "CREATE TABLE guild_talk_streak (\n        guild_id    TEXT PRIMARY KEY,\n        streak      INTEGER NOT NULL DEFAULT 0,\n        best_streak INTEGER NOT NULL DEFAULT 0,\n        last_date   TEXT NOT NULL DEFAULT ''\n      )"
+    },
+    {
+      "type": "table",
+      "name": "kofi_activation_consent",
+      "sql": "CREATE TABLE kofi_activation_consent (\n        transaction_id TEXT PRIMARY KEY,\n        confirmation_id TEXT NOT NULL,\n        discord_id      TEXT NOT NULL,\n        accepted_at     INTEGER NOT NULL,\n        terms_version   TEXT NOT NULL,\n        method          TEXT NOT NULL CHECK (method IN ('discord_email', 'receipt'))\n      )"
+    },
+    {
+      "type": "table",
+      "name": "kofi_pending",
+      "sql": "CREATE TABLE kofi_pending (\n        transaction_id  TEXT PRIMARY KEY,\n        email_hash      TEXT,\n        plan            TEXT NOT NULL,\n        days            INTEGER NOT NULL,\n        seats           INTEGER NOT NULL,\n        created_at      INTEGER NOT NULL,\n        claimed_at      INTEGER,\n        -- Plan 035. Decides two things at claim time: which OTHER pending rows on the same\n        -- email get applied along with this one, and whether claiming it may rebind\n        -- email->Discord (which is what routes renewals). Only subscriptions travel together\n        -- and only they may move the binding, so a gift bought on the buyer's own email\n        -- cannot hand the buyer's renewals to the recipient.\n        is_subscription INTEGER NOT NULL DEFAULT 0\n      )"
+    },
+    {
+      "type": "table",
+      "name": "kofi_supporter",
+      "sql": "CREATE TABLE kofi_supporter (\n        email_hash TEXT PRIMARY KEY,\n        discord_id TEXT NOT NULL,\n        updated_at INTEGER NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "kofi_transaction",
+      "sql": "CREATE TABLE kofi_transaction (\n        transaction_id TEXT PRIMARY KEY,\n        processed_at   INTEGER NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "operational_daily_metric",
+      "sql": "CREATE TABLE operational_daily_metric (\n        day      TEXT NOT NULL,\n        metric   TEXT NOT NULL,\n        provider TEXT NOT NULL,\n        value    INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (day, metric, provider)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "premium_code",
+      "sql": "CREATE TABLE premium_code (\n        code        TEXT PRIMARY KEY,\n        plan        TEXT NOT NULL,\n        days        INTEGER NOT NULL,\n        seats       INTEGER NOT NULL,\n        created_by  TEXT NOT NULL,\n        created_at  INTEGER NOT NULL,\n        expires_at  INTEGER,\n        redeemed_by TEXT,\n        redeemed_at INTEGER\n      )"
+    },
+    {
+      "type": "table",
+      "name": "premium_guild",
+      "sql": "CREATE TABLE premium_guild (\n        guild_id   TEXT PRIMARY KEY,\n        expires_at INTEGER NOT NULL,\n        source     TEXT NOT NULL DEFAULT ''\n      )"
+    },
+    {
+      "type": "table",
+      "name": "premium_pass",
+      "sql": "CREATE TABLE premium_pass (\n        user_id    TEXT PRIMARY KEY,\n        seats      INTEGER NOT NULL,\n        expires_at INTEGER NOT NULL,\n        source     TEXT NOT NULL DEFAULT ''\n      )"
+    },
+    {
+      "type": "table",
+      "name": "premium_pass_activation",
+      "sql": "CREATE TABLE premium_pass_activation (\n        user_id      TEXT NOT NULL,\n        guild_id     TEXT NOT NULL,\n        activated_at INTEGER NOT NULL,\n        PRIMARY KEY (user_id, guild_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "premium_user",
+      "sql": "CREATE TABLE premium_user (\n        user_id    TEXT PRIMARY KEY,\n        expires_at INTEGER NOT NULL,\n        source     TEXT NOT NULL DEFAULT ''\n      )"
+    },
+    {
+      "type": "table",
+      "name": "pronunciation",
+      "sql": "CREATE TABLE pronunciation (\n        guild_id    TEXT NOT NULL,\n        term        TEXT NOT NULL,\n        replacement TEXT NOT NULL,\n        PRIMARY KEY (guild_id, term)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "pronunciation_user",
+      "sql": "CREATE TABLE pronunciation_user (\n        user_id     TEXT NOT NULL,\n        term        TEXT NOT NULL,\n        replacement TEXT NOT NULL,\n        PRIMARY KEY (user_id, term)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "provider_health_state",
+      "sql": "CREATE TABLE provider_health_state (\n        provider          TEXT PRIMARY KEY,\n        health            TEXT NOT NULL CHECK (health IN ('healthy', 'degraded')),\n        changed_at        INTEGER NOT NULL,\n        last_healthy_at   INTEGER,\n        last_degraded_at  INTEGER\n      )"
+    },
+    {
+      "type": "table",
+      "name": "stt_consent",
+      "sql": "CREATE TABLE stt_consent (\n        user_id    TEXT NOT NULL,\n        guild_id   TEXT NOT NULL,\n        consent_at INTEGER NOT NULL,\n        PRIMARY KEY (user_id, guild_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "talk_stats",
+      "sql": "CREATE TABLE talk_stats (\n        guild_id     TEXT NOT NULL,\n        user_id      TEXT NOT NULL,\n        spoken_count INTEGER NOT NULL DEFAULT 0,\n        streak       INTEGER NOT NULL DEFAULT 0,\n        best_streak  INTEGER NOT NULL DEFAULT 0,\n        last_date    TEXT NOT NULL DEFAULT '',\n        PRIMARY KEY (guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "talk_usage",
+      "sql": "CREATE TABLE talk_usage (\n        guild_id     TEXT NOT NULL,\n        user_id      TEXT NOT NULL,\n        language     TEXT NOT NULL,\n        engine       TEXT NOT NULL,\n        spoken_count INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (guild_id, user_id, language, engine)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "topgg_webhook_event",
+      "sql": "CREATE TABLE topgg_webhook_event (\n        event_id     TEXT PRIMARY KEY,\n        processed_at INTEGER NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "translation_daily_usage",
+      "sql": "CREATE TABLE translation_daily_usage (\n        day TEXT NOT NULL,\n        guild_id TEXT NOT NULL,\n        chars INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (day, guild_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "translation_mapping",
+      "sql": "CREATE TABLE translation_mapping (\n        guild_id TEXT NOT NULL,\n        source_channel_id TEXT NOT NULL,\n        destination_channel_id TEXT NOT NULL,\n        target_locale TEXT NOT NULL,\n        PRIMARY KEY (guild_id, source_channel_id),\n        CHECK (source_channel_id <> destination_channel_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "translation_preference",
+      "sql": "CREATE TABLE translation_preference (\n        guild_id TEXT NOT NULL,\n        user_id TEXT NOT NULL,\n        locale TEXT,\n        speak_locale TEXT,\n        opted_out INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "translation_user_daily_usage",
+      "sql": "CREATE TABLE translation_user_daily_usage (\n        day TEXT NOT NULL,\n        guild_id TEXT NOT NULL,\n        user_id TEXT NOT NULL,\n        chars INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (day, guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "tts_lang_detect_on",
+      "sql": "CREATE TABLE tts_lang_detect_on (\n      guild_id TEXT NOT NULL,\n      user_id  TEXT NOT NULL,\n      PRIMARY KEY (guild_id, user_id)\n    )"
+    },
+    {
+      "type": "table",
+      "name": "tts_optout",
+      "sql": "CREATE TABLE tts_optout (\n        guild_id TEXT NOT NULL,\n        user_id  TEXT NOT NULL,\n        PRIMARY KEY (guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "user_abbreviation",
+      "sql": "CREATE TABLE user_abbreviation (\n        user_id     TEXT NOT NULL,\n        term        TEXT NOT NULL,\n        replacement TEXT NOT NULL,\n        PRIMARY KEY (user_id, term)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "user_birthday",
+      "sql": "CREATE TABLE user_birthday (\n        guild_id TEXT NOT NULL,\n        user_id  TEXT NOT NULL,\n        month    INTEGER NOT NULL,\n        day      INTEGER NOT NULL,\n        PRIMARY KEY (guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "user_effect",
+      "sql": "CREATE TABLE user_effect (\n        guild_id TEXT NOT NULL,\n        user_id  TEXT NOT NULL,\n        effect   TEXT NOT NULL,\n        PRIMARY KEY (guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "user_nickname",
+      "sql": "CREATE TABLE user_nickname (\n        guild_id TEXT NOT NULL,\n        user_id  TEXT NOT NULL,\n        nickname TEXT NOT NULL,\n        PRIMARY KEY (guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "user_voice",
+      "sql": "CREATE TABLE user_voice (\n        guild_id    TEXT NOT NULL,\n        user_id     TEXT NOT NULL,\n        voice_model TEXT NOT NULL,\n        speed       REAL NOT NULL,\n        engine      TEXT NOT NULL DEFAULT 'google',\n        PRIMARY KEY (guild_id, user_id)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "user_voice_favorite",
+      "sql": "CREATE TABLE user_voice_favorite (\n        user_id    TEXT NOT NULL,\n        voice_model TEXT NOT NULL,\n        created_at INTEGER NOT NULL,\n        PRIMARY KEY (user_id, voice_model)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "user_voice_recent",
+      "sql": "CREATE TABLE user_voice_recent (\n        user_id    TEXT NOT NULL,\n        voice_model TEXT NOT NULL,\n        used_at    INTEGER NOT NULL,\n        PRIMARY KEY (user_id, voice_model)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "voice_presence",
+      "sql": "CREATE TABLE voice_presence (\n        guild_id   TEXT PRIMARY KEY,\n        channel_id TEXT NOT NULL,\n        updated_at INTEGER NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "vote_promo_state",
+      "sql": "CREATE TABLE vote_promo_state (\n        guild_id     TEXT PRIMARY KEY,\n        last_post_at INTEGER NOT NULL,\n        last_kind    TEXT NOT NULL DEFAULT 'vote' CHECK (last_kind IN ('vote', 'support'))\n      )"
+    },
+    {
+      "type": "table",
+      "name": "vote_redemption",
+      "sql": "CREATE TABLE vote_redemption (\n        user_hash   TEXT PRIMARY KEY,\n        redeemed_at INTEGER NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "vote_redemption_meta",
+      "sql": "CREATE TABLE vote_redemption_meta (\n        singleton          INTEGER PRIMARY KEY CHECK (singleton = 1),\n        secret_fingerprint TEXT NOT NULL\n      )"
+    },
+    {
+      "type": "table",
+      "name": "vote_reward",
+      "sql": "CREATE TABLE vote_reward (\n        user_id     TEXT PRIMARY KEY,\n        rewarded_at INTEGER NOT NULL\n      )"
+    },
+    {
+      "type": "index",
+      "name": "idx_discord_premium_entitlement_target",
+      "sql": "CREATE INDEX idx_discord_premium_entitlement_target\n        ON discord_premium_entitlement (target_id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_kofi_activation_consent_confirmation",
+      "sql": "CREATE INDEX idx_kofi_activation_consent_confirmation\n        ON kofi_activation_consent (confirmation_id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_kofi_pending_email",
+      "sql": "CREATE INDEX idx_kofi_pending_email\n        ON kofi_pending (email_hash)"
+    },
+    {
+      "type": "index",
+      "name": "idx_pass_activation_guild",
+      "sql": "CREATE INDEX idx_pass_activation_guild\n        ON premium_pass_activation (guild_id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_talk_usage_user",
+      "sql": "CREATE INDEX idx_talk_usage_user ON talk_usage (user_id)"
+    }
+  ]
+}
