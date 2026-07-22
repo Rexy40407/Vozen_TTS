@@ -342,6 +342,7 @@ fn voice_preferences_from_environment()
     if !voice_preferences_enabled(env::var("RUST_VOICE_PREFERENCES_ENABLED").ok().as_deref()) {
         return Ok(None);
     }
+    require_piper_runtime_default(env::var("TTS_ENGINE").ok().as_deref())?;
     let models_dir = nonempty_env("MODELS_DIR").unwrap_or_else(|| "./models".to_owned());
     let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
     Ok(Some(VoicePreferenceRuntimeOptions {

@@ -9,6 +9,13 @@
 const RUST_CORE_VOICE_COMMANDS = new Set(['join', 'leave', 'tts', 'skip', 'shut-up']);
 const RUST_PRIVATE_TTS_FILE_COMMANDS = new Set(['tts-file']);
 
+/** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
+ * reject startup because the shared default engine is gTTS, neural or a router. */
+function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
+  const normalized = ttsEngine?.trim().toLowerCase();
+  return !normalized || normalized === 'piper';
+}
+
 /**
  * Translation promotion is leaf-level: `/translate` also contains server mappings, opt-outs
  * and automatic-translation settings which remain Node-owned. Rust may only claim the private
@@ -48,10 +55,14 @@ export function rustVoiceOwnsCommand(
   commandName: string,
   coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
   privateFileEnabled = process.env.RUST_TTS_FILE_ENABLED,
+  ttsEngine = process.env.TTS_ENGINE,
 ): boolean {
   return (
-    (coreEnabled?.trim().toLowerCase() === 'true' && RUST_CORE_VOICE_COMMANDS.has(commandName)) ||
+    (coreEnabled?.trim().toLowerCase() === 'true' &&
+      rustPiperCompatible(ttsEngine) &&
+      RUST_CORE_VOICE_COMMANDS.has(commandName)) ||
     (privateFileEnabled?.trim().toLowerCase() === 'true' &&
+      rustPiperCompatible(ttsEngine) &&
       RUST_PRIVATE_TTS_FILE_COMMANDS.has(commandName))
   );
 }
@@ -65,9 +76,11 @@ export function rustVoicePreferencesOwnCommand(
   commandName: string,
   subcommand: string | null,
   enabled = process.env.RUST_VOICE_PREFERENCES_ENABLED,
+  ttsEngine = process.env.TTS_ENGINE,
 ): boolean {
   return (
     enabled?.trim().toLowerCase() === 'true' &&
+    rustPiperCompatible(ttsEngine) &&
     commandName === 'voice' &&
     (subcommand === 'set' ||
       subcommand === 'reset' ||
