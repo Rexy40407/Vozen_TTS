@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 
 use serde_json::Value;
-use vozen_store::{GuildConfig, GuildConfigPatch};
+use vozen_store::{ChannelProfilePatch, GuildConfig, GuildConfigPatch, UserEngine};
 
 pub const SUPPORTED_LOCALES: &[&str] = &[
     "en", "pt", "es", "fr", "de", "nl", "pl", "tr", "cs", "sv", "fi", "da", "ro", "hu", "cy", "is",
@@ -21,6 +21,12 @@ pub struct DashboardValidationOptions {
     pub role_ids: HashSet<String>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct ChannelProfileValidationOptions {
+    pub dashboard: DashboardValidationOptions,
+    pub voice_channel_ids: HashSet<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InvalidDashboardSetting {
     TtsChannelId,
@@ -33,6 +39,65 @@ pub enum InvalidDashboardSetting {
 pub enum SanitizeDashboardPatch {
     Valid(Box<GuildConfigPatch>),
     Invalid(InvalidDashboardSetting),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvalidChannelProfile {
+    AutoRead,
+    TranslationEnabled,
+    DefaultVoice,
+    Engine,
+    Speed,
+    MaxChars,
+    ReadBots,
+    VoiceChannelId,
+    Locale,
+    Effect,
+}
+
+/// An optional outer layer records whether a field was sent; an optional inner layer represents
+/// the explicit `null` value meaning "inherit". This avoids turning omitted fields into resets.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ChannelProfileUpdate {
+    pub auto_read: Option<Option<bool>>,
+    pub translation_enabled: Option<Option<bool>>,
+    pub default_voice: Option<Option<String>>,
+    pub engine: Option<Option<UserEngine>>,
+    pub speed: Option<Option<f64>>,
+    pub max_chars: Option<Option<i64>>,
+    pub read_bots: Option<Option<bool>>,
+    pub voice_channel_id: Option<Option<String>>,
+    pub locale: Option<Option<String>>,
+    pub effect: Option<Option<String>>,
+}
+
+impl ChannelProfileUpdate {
+    pub fn apply_to(self, mut current: ChannelProfilePatch) -> ChannelProfilePatch {
+        macro_rules! apply {
+            ($field:ident) => {
+                if let Some(value) = self.$field {
+                    current.$field = value;
+                }
+            };
+        }
+        apply!(auto_read);
+        apply!(translation_enabled);
+        apply!(default_voice);
+        apply!(engine);
+        apply!(speed);
+        apply!(max_chars);
+        apply!(read_bots);
+        apply!(voice_channel_id);
+        apply!(locale);
+        apply!(effect);
+        current
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SanitizeChannelProfilePatch {
+    Valid(Box<ChannelProfileUpdate>),
+    Invalid(InvalidChannelProfile),
 }
 
 /// Mirrors the legacy dashboard whitelist, including its deliberate coercion of boolean fields.
@@ -116,6 +181,126 @@ pub fn sanitize_dashboard_patch(
     }
     SanitizeDashboardPatch::Valid(Box::new(patch))
 }
+
+/// Validates a per-channel override against options derived by the server from live Discord data.
+pub fn sanitize_channel_profile_patch(
+    input: &Value,
+    options: &ChannelProfileValidationOptions,
+) -> SanitizeChannelProfilePatch {
+    let Some(source) = input.as_object() else {
+        return SanitizeChannelProfilePatch::Valid(Box::default());
+    };
+    let mut patch = ChannelProfileUpdate::default();
+    macro_rules! nullable_bool {
+        ($json:literal, $field:ident, $error:ident) => {
+            if let Some(value) = source.get($json) {
+                patch.$field = match value {
+                    Value::Null => Some(None),
+                    Value::Bool(value) => Some(Some(*value)),
+                    _ => {
+                        return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::$error);
+                    }
+                };
+            }
+        };
+    }
+    nullable_bool!("autoRead", auto_read, AutoRead);
+    nullable_bool!(
+        "translationEnabled",
+        translation_enabled,
+        TranslationEnabled
+    );
+    nullable_bool!("readBots", read_bots, ReadBots);
+
+    if let Some(value) = source.get("defaultVoice") {
+        patch.default_voice = match value {
+            Value::Null => Some(None),
+            Value::String(model) if options.dashboard.voice_ids.contains(model) => {
+                Some(Some(model.clone()))
+            }
+            _ => return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::DefaultVoice),
+        };
+    }
+    if let Some(value) = source.get("engine") {
+        patch.engine = match value {
+            Value::Null => Some(None),
+            Value::String(engine) => match engine.as_str() {
+                "google" => Some(Some(UserEngine::Google)),
+                "piper" => Some(Some(UserEngine::Piper)),
+                "kokoro" => Some(Some(UserEngine::Kokoro)),
+                "gcloud" => Some(Some(UserEngine::Gcloud)),
+                _ => return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::Engine),
+            },
+            _ => return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::Engine),
+        };
+    }
+    if let Some(value) = source.get("speed") {
+        patch.speed = match value {
+            Value::Null => Some(None),
+            Value::Number(number)
+                if number
+                    .as_f64()
+                    .is_some_and(|speed| (0.5..=2.0).contains(&speed)) =>
+            {
+                Some(number.as_f64())
+            }
+            _ => return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::Speed),
+        };
+    }
+    if let Some(value) = source.get("maxChars") {
+        patch.max_chars = match value {
+            Value::Null => Some(None),
+            Value::Number(number)
+                if number
+                    .as_i64()
+                    .is_some_and(|chars| (1..=2_000).contains(&chars)) =>
+            {
+                Some(number.as_i64())
+            }
+            _ => return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::MaxChars),
+        };
+    }
+    if let Some(value) = source.get("voiceChannelId") {
+        patch.voice_channel_id = match value {
+            Value::Null => Some(None),
+            Value::String(id) if options.voice_channel_ids.contains(id) => Some(Some(id.clone())),
+            _ => {
+                return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::VoiceChannelId);
+            }
+        };
+    }
+    if let Some(value) = source.get("locale") {
+        patch.locale = match value {
+            Value::Null => Some(None),
+            Value::String(locale) if SUPPORTED_LOCALES.contains(&locale.as_str()) => {
+                Some(Some(locale.clone()))
+            }
+            _ => return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::Locale),
+        };
+    }
+    if let Some(value) = source.get("effect") {
+        patch.effect = match value {
+            Value::Null => Some(None),
+            Value::String(effect) if VOICE_EFFECTS.contains(&effect.as_str()) => {
+                Some(Some(effect.clone()))
+            }
+            _ => return SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::Effect),
+        };
+    }
+    SanitizeChannelProfilePatch::Valid(Box::new(patch))
+}
+
+const VOICE_EFFECTS: &[&str] = &[
+    "none",
+    "robot",
+    "echo",
+    "deep",
+    "chipmunk",
+    "radio",
+    "phone",
+    "underwater",
+    "demon",
+];
 
 fn set_boolean_fields(source: &serde_json::Map<String, Value>, patch: &mut GuildConfigPatch) {
     macro_rules! bool_field {
@@ -245,6 +430,37 @@ mod tests {
                 blocked_role_id: Some(Some("blocked".into())),
                 ..GuildConfigPatch::default()
             }))
+        );
+    }
+
+    #[test]
+    fn channel_profiles_preserve_omitted_values_and_reject_forged_options() {
+        let options = ChannelProfileValidationOptions {
+            dashboard: options(),
+            voice_channel_ids: ["voice".to_owned()].into_iter().collect(),
+        };
+        let clean = sanitize_channel_profile_patch(
+            &json!({"autoRead":true,"voiceChannelId":"voice","effect":"robot"}),
+            &options,
+        );
+        let SanitizeChannelProfilePatch::Valid(update) = clean else {
+            panic!("valid")
+        };
+        let merged = update.apply_to(ChannelProfilePatch {
+            default_voice: Some("existing".into()),
+            ..ChannelProfilePatch::default()
+        });
+        assert_eq!(merged.auto_read, Some(true));
+        assert_eq!(merged.default_voice.as_deref(), Some("existing"));
+        assert_eq!(merged.voice_channel_id.as_deref(), Some("voice"));
+
+        assert_eq!(
+            sanitize_channel_profile_patch(&json!({"voiceChannelId":"forged"}), &options),
+            SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::VoiceChannelId)
+        );
+        assert_eq!(
+            sanitize_channel_profile_patch(&json!({"speed":2.1}), &options),
+            SanitizeChannelProfilePatch::Invalid(InvalidChannelProfile::Speed)
         );
     }
 }
