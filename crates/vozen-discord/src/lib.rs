@@ -18,10 +18,15 @@ use thiserror::Error;
 use vozen_contracts::{ContractError, DiscordCommandCatalog};
 
 mod command_registration;
+mod planned_rejoin;
 
 pub use command_registration::{
     CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
     CommandRegistrationOutcome, DiscordHttpCommandRegistrationClient, register_commands,
+};
+pub use planned_rejoin::{
+    MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
+    RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
 };
 
 const DISCORD_COMMANDS: &str = include_str!("../../../contracts/discord-commands.json");

@@ -28,6 +28,7 @@ mod premium_code;
 mod pronunciation;
 mod telemetry;
 mod user_voice;
+mod voice_presence;
 
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
 pub use channel_profile::{ChannelProfile, ChannelProfilePatch, MAX_CHANNEL_PROFILES_PER_GUILD};
@@ -58,6 +59,7 @@ pub use telemetry::{
     TalkUsageSource, provider_for_engine, utc_day_key, utc_day_key_from_unix_millis,
 };
 pub use user_voice::{UserEngine, UserVoice};
+pub use voice_presence::VoicePresence;
 
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
 const SQLITE_SCHEMA: &str = include_str!("../../../contracts/sqlite-schema.json");

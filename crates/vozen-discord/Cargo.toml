@@ -23,6 +23,7 @@ songbird.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 vozen-contracts = { path = "../vozen-contracts" }
+vozen-store = { path = "../vozen-store" }
 
 [lints]
 workspace = true
