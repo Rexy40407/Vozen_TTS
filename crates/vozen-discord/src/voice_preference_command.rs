@@ -17,6 +17,14 @@ pub enum VoicePreferenceCommand {
         speed: Option<f64>,
         engine: Option<String>,
     },
+    Favorite {
+        model: String,
+    },
+    Unfavorite {
+        model: String,
+    },
+    Favorites,
+    Recent,
     Reset,
     Detection {
         enabled: bool,
@@ -59,6 +67,14 @@ pub fn parse_voice_preference_command(
     let (name, options) = subcommand(&command.options)?;
     match name {
         "set" => parse_set(options).map(Some),
+        "favorite" => {
+            parse_model(options).map(|model| Some(VoicePreferenceCommand::Favorite { model }))
+        }
+        "unfavorite" => {
+            parse_model(options).map(|model| Some(VoicePreferenceCommand::Unfavorite { model }))
+        }
+        "favorites" => empty(options).map(|()| Some(VoicePreferenceCommand::Favorites)),
+        "recent" => empty(options).map(|()| Some(VoicePreferenceCommand::Recent)),
         "reset" => empty(options).map(|()| Some(VoicePreferenceCommand::Reset)),
         "detection" => parse_detection(options).map(Some),
         "opt-out" => empty(options).map(|()| Some(VoicePreferenceCommand::OptOut)),
@@ -67,6 +83,13 @@ pub fn parse_voice_preference_command(
         "effect" => parse_effect(options).map(Some),
         _ => Ok(None),
     }
+}
+
+fn parse_model(options: &[CommandDataOption]) -> Result<String, VoicePreferenceCommandError> {
+    if options.len() != 1 || options[0].name != "model" {
+        return Err(VoicePreferenceCommandError::UnexpectedOption);
+    }
+    required_string(options, "model")
 }
 
 fn subcommand(
@@ -202,6 +225,10 @@ mod tests {
         assert_eq!(
             parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"set","type":1,"options":[{"name":"model","type":3,"value":"en_US-amy-medium"},{"name":"speed","type":10,"value":1.2},{"name":"engine","type":3,"value":"piper"}]}]}"#)).expect("set"),
             Some(VoicePreferenceCommand::Set { model: "en_US-amy-medium".into(), speed: Some(1.2), engine: Some("piper".into()) })
+        );
+        assert_eq!(
+            parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"favorite","type":1,"options":[{"name":"model","type":3,"value":"en_US-amy-medium"}]}]}"#)).expect("favorite"),
+            Some(VoicePreferenceCommand::Favorite { model: "en_US-amy-medium".into() })
         );
         assert_eq!(
             parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"detection","type":1,"options":[{"name":"active","type":5,"value":true}]}]}"#)).expect("detection"),

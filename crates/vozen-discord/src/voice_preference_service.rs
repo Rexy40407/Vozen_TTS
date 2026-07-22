@@ -15,6 +15,7 @@ pub struct VoicePreferenceSettings {
     pub default_speed: f64,
 }
 
+#[derive(Clone, Copy)]
 pub struct VoicePreferenceInvocation<'a> {
     pub guild_id: Option<&'a str>,
     pub user_id: &'a str,
@@ -27,6 +28,20 @@ pub enum VoicePreferenceOutcome {
         model: String,
         speed: f64,
         engine: UserEngine,
+    },
+    FavoriteSaved {
+        model: String,
+    },
+    FavoriteLimit,
+    FavoriteRemoved {
+        model: String,
+    },
+    FavoriteNotSaved {
+        model: String,
+    },
+    VoiceLibrary {
+        favorites: bool,
+        models: Vec<String>,
     },
     Reset,
     Detection {
@@ -73,20 +88,44 @@ impl VoicePreferenceService {
         invocation: VoicePreferenceInvocation<'_>,
         command: VoicePreferenceCommand,
     ) -> VoicePreferenceOutcome {
-        let Some(guild_id) = invocation.guild_id else {
-            return VoicePreferenceOutcome::GuildRequired;
-        };
         let store = match self.store.lock() {
             Ok(store) => store,
             Err(_) => return VoicePreferenceOutcome::StoreUnavailable,
         };
+        match command {
+            VoicePreferenceCommand::Favorite { model } => {
+                self.save_favorite(&store, invocation.user_id, invocation.now_ms, model)
+            }
+            VoicePreferenceCommand::Unfavorite { model } => {
+                self.remove_favorite(&store, invocation.user_id, model)
+            }
+            VoicePreferenceCommand::Favorites => {
+                self.list_library(&store, invocation.user_id, true)
+            }
+            VoicePreferenceCommand::Recent => self.list_library(&store, invocation.user_id, false),
+            command => {
+                let Some(guild_id) = invocation.guild_id else {
+                    return VoicePreferenceOutcome::GuildRequired;
+                };
+                self.execute_guild_command(&store, invocation, guild_id, command)
+            }
+        }
+    }
+
+    fn execute_guild_command(
+        &self,
+        store: &SqliteStore,
+        invocation: VoicePreferenceInvocation<'_>,
+        guild_id: &str,
+        command: VoicePreferenceCommand,
+    ) -> VoicePreferenceOutcome {
         match command {
             VoicePreferenceCommand::Set {
                 model,
                 speed,
                 engine,
             } => self.set_voice(
-                &store,
+                store,
                 guild_id,
                 invocation.user_id,
                 invocation.now_ms,
@@ -116,15 +155,87 @@ impl VoicePreferenceService {
                 Err(_) => VoicePreferenceOutcome::StoreUnavailable,
             },
             VoicePreferenceCommand::Nickname { nickname } => {
-                self.set_nickname(&store, guild_id, invocation.user_id, nickname)
+                self.set_nickname(store, guild_id, invocation.user_id, nickname)
             }
             VoicePreferenceCommand::Effect { effect } => self.set_effect(
-                &store,
+                store,
                 guild_id,
                 invocation.user_id,
                 invocation.now_ms,
                 effect,
             ),
+            VoicePreferenceCommand::Favorite { .. }
+            | VoicePreferenceCommand::Unfavorite { .. }
+            | VoicePreferenceCommand::Favorites
+            | VoicePreferenceCommand::Recent => {
+                unreachable!("library commands are handled before guild scope")
+            }
+        }
+    }
+
+    fn save_favorite(
+        &self,
+        store: &SqliteStore,
+        user_id: &str,
+        now_ms: i64,
+        model: String,
+    ) -> VoicePreferenceOutcome {
+        if !self
+            .settings
+            .available_models
+            .iter()
+            .any(|available| available == &model)
+        {
+            return VoicePreferenceOutcome::UnknownModel;
+        }
+        match store.add_voice_favorite(user_id, &model, now_ms) {
+            Ok(true) => VoicePreferenceOutcome::FavoriteSaved { model },
+            Ok(false) => VoicePreferenceOutcome::FavoriteLimit,
+            Err(_) => VoicePreferenceOutcome::StoreUnavailable,
+        }
+    }
+
+    fn remove_favorite(
+        &self,
+        store: &SqliteStore,
+        user_id: &str,
+        model: String,
+    ) -> VoicePreferenceOutcome {
+        if !self
+            .settings
+            .available_models
+            .iter()
+            .any(|available| available == &model)
+        {
+            return VoicePreferenceOutcome::UnknownModel;
+        }
+        match store.remove_voice_favorite(user_id, &model) {
+            Ok(true) => VoicePreferenceOutcome::FavoriteRemoved { model },
+            Ok(false) => VoicePreferenceOutcome::FavoriteNotSaved { model },
+            Err(_) => VoicePreferenceOutcome::StoreUnavailable,
+        }
+    }
+
+    fn list_library(
+        &self,
+        store: &SqliteStore,
+        user_id: &str,
+        favorites: bool,
+    ) -> VoicePreferenceOutcome {
+        let models = if favorites {
+            store.list_voice_favorites(user_id)
+        } else {
+            store.list_recent_voices(user_id)
+        };
+        match models {
+            Ok(models) => VoicePreferenceOutcome::VoiceLibrary {
+                favorites,
+                models: models
+                    .into_iter()
+                    .filter(|model| self.settings.available_models.contains(model))
+                    .collect(),
+            },
+            Err(_) => VoicePreferenceOutcome::StoreUnavailable,
         }
     }
 
@@ -539,6 +650,64 @@ mod tests {
             ),
             VoicePreferenceOutcome::EffectSet {
                 effect: VoiceEffect::Robot
+            }
+        );
+    }
+
+    #[test]
+    fn voice_library_is_personal_filters_unavailable_models_and_refreshes_favorites() {
+        let (store, service) = service();
+        let direct_message = VoicePreferenceInvocation {
+            guild_id: None,
+            user_id: "user",
+            now_ms: NOW,
+        };
+        assert_eq!(
+            service.execute(
+                direct_message,
+                VoicePreferenceCommand::Favorite {
+                    model: "en_US-amy-medium".into(),
+                }
+            ),
+            VoicePreferenceOutcome::FavoriteSaved {
+                model: "en_US-amy-medium".into()
+            }
+        );
+        assert!(matches!(
+            service.execute(
+                VoicePreferenceInvocation {
+                    guild_id: None,
+                    user_id: "user",
+                    now_ms: NOW + 1,
+                },
+                VoicePreferenceCommand::Favorites,
+            ),
+            VoicePreferenceOutcome::VoiceLibrary {
+                favorites: true,
+                models
+            } if models == ["en_US-amy-medium"]
+        ));
+        store
+            .lock()
+            .expect("store")
+            .record_recent_voice("user", "stale-model", NOW)
+            .expect("stale recent");
+        assert!(matches!(
+            service.execute(direct_message, VoicePreferenceCommand::Recent),
+            VoicePreferenceOutcome::VoiceLibrary {
+                favorites: false,
+                models
+            } if models.is_empty()
+        ));
+        assert_eq!(
+            service.execute(
+                direct_message,
+                VoicePreferenceCommand::Unfavorite {
+                    model: "en_US-amy-medium".into(),
+                }
+            ),
+            VoicePreferenceOutcome::FavoriteRemoved {
+                model: "en_US-amy-medium".into()
             }
         );
     }
