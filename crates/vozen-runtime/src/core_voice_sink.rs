@@ -236,8 +236,30 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         let service = self.message_service(&context)?;
         let announce_speaker = self.announce_speaker(&facts, &message);
         let detected_language = self.detected_language(&facts, &message.content);
-        let resolve_user = |_: &str| "someone".to_owned();
-        let resolve_channel = |_: &str| "a channel".to_owned();
+        let mentioned_users = message
+            .mentions
+            .iter()
+            .map(|user| (user.id.get().to_string(), user.name.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let mentioned_channels = message
+            .mention_channels
+            .iter()
+            .map(|channel| (channel.id.get().to_string(), channel.name.clone()))
+            .collect::<BTreeMap<_, _>>();
+        // These maps are derived only from this gateway payload. They avoid a guild-wide member
+        // cache and are discarded after the message is prepared.
+        let resolve_user = |id: &str| {
+            mentioned_users
+                .get(id)
+                .cloned()
+                .unwrap_or_else(|| "someone".to_owned())
+        };
+        let resolve_channel = |id: &str| {
+            mentioned_channels
+                .get(id)
+                .cloned()
+                .unwrap_or_else(|| "a channel".to_owned())
+        };
         let outcome = service
             .execute(MessageVoiceInvocation {
                 facts: facts.as_borrowed(),
