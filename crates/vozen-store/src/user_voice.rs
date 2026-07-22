@@ -4,7 +4,7 @@ use crate::{SqliteStore, StoreError};
 
 /// User-selected synthesis engine. Unknown historical database values deliberately follow the
 /// operator-configured default (`Google`) instead of making a message unspeakable.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UserEngine {
     Google,
     Piper,

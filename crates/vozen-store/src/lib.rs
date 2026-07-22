@@ -26,6 +26,7 @@ mod optout;
 mod premium;
 mod premium_code;
 mod pronunciation;
+mod telemetry;
 mod user_voice;
 
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
@@ -50,6 +51,11 @@ pub use premium_code::{
 pub use pronunciation::{
     AddPronunciationResult, SERVER_PRON_LIMIT, SERVER_PRON_LIMIT_PREMIUM, USER_PRON_LIMIT_FREE,
     USER_PRON_LIMIT_PREMIUM,
+};
+pub use telemetry::{
+    ConfiguredEngineResolver, DailyOperationalMetric, DominantTalkUsage, DominantTalkUsageOptions,
+    OperationalMetric, OperationalProvider, ProviderHealth, ProviderHealthSnapshot,
+    TalkUsageSource, provider_for_engine, utc_day_key, utc_day_key_from_unix_millis,
 };
 pub use user_voice::{UserEngine, UserVoice};
 
@@ -81,6 +87,12 @@ pub enum StoreError {
     InvalidSchemaObject(String),
     #[error("premium code has an unsupported plan: {0}")]
     InvalidPremiumCodePlan(String),
+    #[error("operational metric value must be finite and non-negative")]
+    InvalidOperationalMetricValue,
+    #[error("operational metric day must be a UTC YYYY-MM-DD value: {0}")]
+    InvalidOperationalMetricDay(String),
+    #[error("database contains an unsupported operational telemetry value: {0}")]
+    InvalidOperationalTelemetry(String),
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 }
