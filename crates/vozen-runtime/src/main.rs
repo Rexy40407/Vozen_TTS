@@ -45,7 +45,7 @@ use vozen_core::parse_kofi_shop_map;
 use vozen_discord::{
     CoreVoiceSettings, DiscordDashboardOptionsProvider, DiscordRuntimeConfig, DiscordRuntimeError,
     GatewayEventSink, GatewayState, locale_display_options,
-    run_discord_gateway_with_state_and_sink, voice_display_options,
+    run_discord_gateway_with_state_and_sink, voice_display_options, write_planned_rejoin_marker,
 };
 use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
 
@@ -493,6 +493,9 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(topgg_metrics) = config.topgg_metrics {
         spawn_topgg_metrics(topgg_metrics, gateway_state.clone());
     }
+    // Only a runtime that owns Rust voice sessions may write the shared restart marker. A
+    // shadow process must never authorize the still-live Node process to reconnect calls.
+    let write_rejoin_marker_on_shutdown = config.core_voice.is_some();
     let event_sink =
         core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?;
     let gateway = run_discord_gateway_with_state_and_sink(
@@ -502,6 +505,15 @@ async fn run() -> Result<(), RuntimeError> {
     );
 
     let Some(health_bind) = config.health_bind else {
+        if write_rejoin_marker_on_shutdown {
+            tokio::select! {
+                result = gateway => return result.map_err(RuntimeError::from),
+                _ = wait_for_clean_shutdown_signal() => {
+                    write_current_rejoin_marker(&gateway_state);
+                    return Ok(());
+                }
+            }
+        }
         return gateway.await.map_err(RuntimeError::from);
     };
     let app = build_http_router(
@@ -510,13 +522,54 @@ async fn run() -> Result<(), RuntimeError> {
         config.topgg_webhook,
         config.public_status,
         store,
-        gateway_state,
+        gateway_state.clone(),
     )?;
     let listener = tokio::net::TcpListener::bind(health_bind).await?;
-    tokio::select! {
-        result = gateway => result.map_err(RuntimeError::from),
-        result = axum::serve(listener, app) => result.map_err(RuntimeError::from),
+    if write_rejoin_marker_on_shutdown {
+        tokio::select! {
+            result = gateway => result.map_err(RuntimeError::from),
+            result = axum::serve(listener, app) => result.map_err(RuntimeError::from),
+            _ = wait_for_clean_shutdown_signal() => {
+                write_current_rejoin_marker(&gateway_state);
+                Ok(())
+            }
+        }
+    } else {
+        tokio::select! {
+            result = gateway => result.map_err(RuntimeError::from),
+            result = axum::serve(listener, app) => result.map_err(RuntimeError::from),
+        }
     }
+}
+
+/// Waits for an administrator-initiated process stop. SIGTERM covers systemd/VPS deployments;
+/// Ctrl+C keeps the local Windows development workflow equivalent. A forced crash never reaches
+/// this function and therefore cannot authorize a normal voice-session recovery.
+async fn wait_for_clean_shutdown_signal() {
+    #[cfg(unix)]
+    {
+        if let Ok(mut terminate) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {},
+                _ = terminate.recv() => {},
+            }
+            return;
+        }
+    }
+    let _ = tokio::signal::ctrl_c().await;
+}
+
+fn write_current_rejoin_marker(gateway_state: &GatewayState) {
+    let directory = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let _ = write_planned_rejoin_marker(
+        gateway_state
+            .bot_voice_sessions()
+            .into_iter()
+            .map(|(guild_id, _)| guild_id),
+        &directory,
+    );
 }
 
 fn build_http_router(

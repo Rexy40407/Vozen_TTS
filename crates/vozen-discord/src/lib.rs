@@ -192,6 +192,29 @@ impl GatewayState {
         self.voice_channel_id(guild_id, &bot_user_id)
     }
 
+    /// Snapshots only Vozen's current guild/channel pairs for a clean shutdown marker. The
+    /// result is derived exclusively from this gateway process and never from SQLite, so a
+    /// historical row cannot turn a later restart into an unexpected rejoin.
+    pub fn bot_voice_sessions(&self) -> Vec<(String, String)> {
+        let Some(bot_user_id) = self.bot_user_id() else {
+            return Vec::new();
+        };
+        self.voice_channels
+            .read()
+            .map(|guilds| {
+                guilds
+                    .iter()
+                    .filter_map(|(guild_id, users)| {
+                        users
+                            .get(&bot_user_id)
+                            .cloned()
+                            .map(|channel_id| (guild_id.clone(), channel_id))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Current bot identity received from Discord READY. It is transient process state, never a
     /// persisted credential or application configuration value.
     pub fn bot_user_id(&self) -> Option<String> {
@@ -546,6 +569,10 @@ mod tests {
         assert_eq!(
             state.bot_voice_channel_id("guild-c").as_deref(),
             Some("voice")
+        );
+        assert_eq!(
+            state.bot_voice_sessions(),
+            vec![("guild-c".into(), "voice".into())]
         );
     }
 
