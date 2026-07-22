@@ -7,6 +7,7 @@ mod accent_restoration;
 mod kofi;
 mod message_speech_policy;
 mod play_queue;
+mod rate_limiter;
 mod speech_preparation;
 mod speech_safety;
 mod text_cleaning;
@@ -27,6 +28,9 @@ pub use message_speech_policy::{
 pub use play_queue::{
     MAX_ACCESSIBILITY_BURST, PlayQueue, PublicQueueItem, QueueEnqueueOptions, QueueSource,
     QueueWorkItem,
+};
+pub use rate_limiter::{
+    DEFAULT_RATE_LIMIT_IDLE_MS, GuildRateLimiters, MAX_RATE_LIMIT_BUCKETS, RateLimiter,
 };
 pub use speech_preparation::{
     MediaAnnouncement, MediaAnnouncementKind, PreparedSpeech, SpeechPreparationInput,
