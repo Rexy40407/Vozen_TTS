@@ -90,24 +90,14 @@ impl SqliteStore {
         &self,
         transaction_id: &str,
     ) -> Result<Option<KofiPendingGrant>, StoreError> {
-        pending_from(
-            self.connection(),
-            "SELECT transaction_id, email_hash, plan, days, seats, created_at, claimed_at, is_subscription
-             FROM kofi_pending WHERE transaction_id = ?1 AND claimed_at IS NULL",
-            [transaction_id],
-        )
+        unclaimed_kofi_pending_by_transaction_on(self.connection(), transaction_id)
     }
 
     pub fn unclaimed_kofi_pending_by_email_hash(
         &self,
         email_hash: &str,
     ) -> Result<Vec<KofiPendingGrant>, StoreError> {
-        pending_list(
-            self.connection(),
-            "SELECT transaction_id, email_hash, plan, days, seats, created_at, claimed_at, is_subscription
-             FROM kofi_pending WHERE email_hash = ?1 AND claimed_at IS NULL ORDER BY created_at",
-            [email_hash],
-        )
+        unclaimed_kofi_pending_by_email_hash_on(self.connection(), email_hash)
     }
 
     /// Bounded owner-only overview, ordered newest first. It never returns a clear-text email.
@@ -134,11 +124,7 @@ impl SqliteStore {
         transaction_id: &str,
         now: i64,
     ) -> Result<bool, StoreError> {
-        Ok(self.connection().execute(
-            "UPDATE kofi_pending SET claimed_at = ?1
-             WHERE transaction_id = ?2 AND claimed_at IS NULL",
-            params![now, transaction_id],
-        )? > 0)
+        mark_kofi_pending_claimed_on(self.connection(), transaction_id, now)
     }
 
     /// Removes claimed and unclaimed pending records before the caller-provided cutoff.
@@ -147,6 +133,42 @@ impl SqliteStore {
             .connection()
             .execute("DELETE FROM kofi_pending WHERE created_at < ?1", [cutoff])?)
     }
+}
+
+pub(crate) fn unclaimed_kofi_pending_by_transaction_on(
+    connection: &Connection,
+    transaction_id: &str,
+) -> Result<Option<KofiPendingGrant>, StoreError> {
+    pending_from(
+        connection,
+        "SELECT transaction_id, email_hash, plan, days, seats, created_at, claimed_at, is_subscription
+         FROM kofi_pending WHERE transaction_id = ?1 AND claimed_at IS NULL",
+        [transaction_id],
+    )
+}
+
+pub(crate) fn unclaimed_kofi_pending_by_email_hash_on(
+    connection: &Connection,
+    email_hash: &str,
+) -> Result<Vec<KofiPendingGrant>, StoreError> {
+    pending_list(
+        connection,
+        "SELECT transaction_id, email_hash, plan, days, seats, created_at, claimed_at, is_subscription
+         FROM kofi_pending WHERE email_hash = ?1 AND claimed_at IS NULL ORDER BY created_at",
+        [email_hash],
+    )
+}
+
+pub(crate) fn mark_kofi_pending_claimed_on(
+    connection: &Connection,
+    transaction_id: &str,
+    now: i64,
+) -> Result<bool, StoreError> {
+    Ok(connection.execute(
+        "UPDATE kofi_pending SET claimed_at = ?1
+             WHERE transaction_id = ?2 AND claimed_at IS NULL",
+        params![now, transaction_id],
+    )? > 0)
 }
 
 fn pending_from(

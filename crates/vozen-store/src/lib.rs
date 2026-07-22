@@ -15,12 +15,18 @@ use serde::Deserialize;
 use thiserror::Error;
 
 mod guild_config;
+mod kofi_claim;
 mod kofi_pending;
 mod migration;
 mod premium;
 mod premium_code;
 
 pub use guild_config::{GuildConfig, GuildConfigPatch};
+pub use kofi_claim::{
+    ACTIVATION_TERMS_VERSION, ActivationConfirmation, ActivationOutcome, ClaimOutcome,
+    ClaimedKofiItem, activate_kofi_by_email_hash, claim_kofi_pending_grant,
+    extract_kofi_receipt_code,
+};
 pub use kofi_pending::{
     KofiPendingGrant, KofiPendingGrantInput, KofiPendingPlan, PENDING_RETENTION_MS,
 };

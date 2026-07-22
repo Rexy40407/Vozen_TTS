@@ -369,12 +369,7 @@ impl SqliteStore {
         discord_id: &str,
         now: i64,
     ) -> Result<(), StoreError> {
-        self.connection().execute(
-            "INSERT INTO kofi_supporter (email_hash, discord_id, updated_at) VALUES (?1, ?2, ?3)
-             ON CONFLICT(email_hash) DO UPDATE SET discord_id = excluded.discord_id, updated_at = excluded.updated_at",
-            params![email_hash, discord_id, now],
-        )?;
-        Ok(())
+        remember_kofi_supporter_on(self.connection(), email_hash, discord_id, now)
     }
 
     pub fn kofi_supporter(&self, email_hash: &str) -> Result<Option<String>, StoreError> {
@@ -449,6 +444,20 @@ impl SqliteStore {
             revoked: stale.len(),
         })
     }
+}
+
+pub(crate) fn remember_kofi_supporter_on(
+    connection: &Connection,
+    email_hash: &str,
+    discord_id: &str,
+    now: i64,
+) -> Result<(), StoreError> {
+    connection.execute(
+            "INSERT INTO kofi_supporter (email_hash, discord_id, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(email_hash) DO UPDATE SET discord_id = excluded.discord_id, updated_at = excluded.updated_at",
+            params![email_hash, discord_id, now],
+        )?;
+    Ok(())
 }
 
 pub(crate) fn premium_pass_from(
