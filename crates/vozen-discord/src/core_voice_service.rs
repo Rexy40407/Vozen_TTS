@@ -11,7 +11,7 @@ use std::{
 
 use async_trait::async_trait;
 use thiserror::Error;
-use vozen_core::{QueueLane, SynthRequest};
+use vozen_core::{QueueEnqueueOptions, QueueLane, QueueSource, SynthRequest};
 use vozen_store::SqliteStore;
 
 use crate::{
@@ -58,7 +58,7 @@ pub trait CommandVoicePlayback: Send + Sync {
         &self,
         guild_id: &str,
         wav: &Path,
-        lane: QueueLane,
+        options: QueueEnqueueOptions<'_>,
     ) -> Result<(), CommandPlaybackError>;
     async fn cancel_reservation(
         &self,
@@ -283,7 +283,16 @@ where
         };
         match self
             .playback
-            .enqueue_reserved(invocation.guild_id, &wav, lane)
+            .enqueue_reserved(
+                invocation.guild_id,
+                &wav,
+                QueueEnqueueOptions {
+                    author_id: Some(invocation.user_id),
+                    source: QueueSource::Command,
+                    lane,
+                    created_at_ms: (self.now_ms)().max(0) as u64,
+                },
+            )
             .await
         {
             Ok(()) => CoreTtsOutcome::Queued,
@@ -408,7 +417,7 @@ mod tests {
             &self,
             _guild_id: &str,
             _wav: &Path,
-            _lane: QueueLane,
+            _options: QueueEnqueueOptions<'_>,
         ) -> Result<(), CommandPlaybackError> {
             self.enqueues.fetch_add(1, Ordering::Relaxed);
             Ok(())

@@ -7,7 +7,8 @@
 use std::path::Path;
 
 #[cfg(any(feature = "voice-driver", test))]
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
 #[cfg(feature = "voice-driver")]
 use std::sync::{Arc, Mutex};
 
@@ -15,6 +16,129 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::{CommandPlaybackError, CommandPlaybackState, CommandVoicePlayback};
+
+#[cfg(feature = "voice-driver")]
+use vozen_core::QueueEnqueueOptions;
+#[cfg(any(feature = "voice-driver", test))]
+use vozen_core::{PublicQueueItem, QueueLane, QueueSource};
+
+#[cfg(any(feature = "voice-driver", test))]
+use uuid::Uuid;
+
+/// Private track bookkeeping. It deliberately excludes synthesized text, voice model and WAV
+/// path; only the opaque values required for the existing `/queue` controls are retained.
+#[cfg(any(feature = "voice-driver", test))]
+#[derive(Clone)]
+struct QueueTrackMetadata {
+    author_id: Option<String>,
+    source: QueueSource,
+    lane: QueueLane,
+    created_at_ms: u64,
+}
+
+/// Bounded metadata mirror of Songbird's queue. Songbird is the playback authority; this only
+/// allows the public queue command to find opaque IDs and their authors without reading request
+/// text. Every read receives the live Songbird order and prunes tracks which have ended.
+#[cfg(any(feature = "voice-driver", test))]
+#[derive(Default)]
+struct QueueTrackLedger {
+    by_guild: BTreeMap<String, BTreeMap<Uuid, QueueTrackMetadata>>,
+}
+
+#[cfg(any(feature = "voice-driver", test))]
+impl QueueTrackLedger {
+    fn remember(&mut self, guild_id: &str, id: Uuid, metadata: QueueTrackMetadata) {
+        self.by_guild
+            .entry(guild_id.to_owned())
+            .or_default()
+            .insert(id, metadata);
+    }
+
+    fn snapshot(
+        &mut self,
+        guild_id: &str,
+        active_order: &[Uuid],
+        now_ms: u64,
+    ) -> Vec<PublicQueueItem> {
+        self.active_metadata(guild_id, active_order)
+            .into_iter()
+            // The first Songbird entry is currently audible. Node's `/queue show` renders only
+            // pending work, so it must never appear in this response.
+            .skip(1)
+            .map(|(id, metadata)| PublicQueueItem {
+                id: id.to_string(),
+                source: metadata.source,
+                lane: metadata.lane,
+                age_ms: now_ms.saturating_sub(metadata.created_at_ms),
+            })
+            .collect()
+    }
+
+    /// Returns the pending Songbird UUID eligible for removal. The current item is deliberately
+    /// excluded, and a non-manager can only select an item authored by that same Discord user.
+    fn removable_track(
+        &mut self,
+        guild_id: &str,
+        active_order: &[Uuid],
+        public_id: &str,
+        author_id: Option<&str>,
+    ) -> Option<Uuid> {
+        self.active_metadata(guild_id, active_order)
+            .into_iter()
+            .skip(1)
+            .find(|(id, metadata)| {
+                id.to_string() == public_id
+                    && author_id.is_none_or(|author| metadata.author_id.as_deref() == Some(author))
+            })
+            .map(|(track_id, _)| track_id)
+    }
+
+    fn remove(&mut self, guild_id: &str, id: Uuid) {
+        let Some(by_track) = self.by_guild.get_mut(guild_id) else {
+            return;
+        };
+        by_track.remove(&id);
+        if by_track.is_empty() {
+            self.by_guild.remove(guild_id);
+        }
+    }
+
+    fn clear(&mut self, guild_id: &str) {
+        self.by_guild.remove(guild_id);
+    }
+
+    fn active_metadata(
+        &mut self,
+        guild_id: &str,
+        active_order: &[Uuid],
+    ) -> Vec<(Uuid, QueueTrackMetadata)> {
+        let active = active_order.iter().copied().collect::<BTreeSet<_>>();
+        let empty = match self.by_guild.get_mut(guild_id) {
+            Some(by_track) => {
+                by_track.retain(|id, _| active.contains(id));
+                by_track.is_empty()
+            }
+            None => return Vec::new(),
+        };
+        if empty {
+            self.by_guild.remove(guild_id);
+            return Vec::new();
+        }
+        let by_track = self
+            .by_guild
+            .get(guild_id)
+            .expect("non-empty queue metadata was retained");
+        active_order
+            .iter()
+            .filter_map(|track_id| {
+                by_track
+                    .get(track_id)
+                    .cloned()
+                    .map(|metadata| (*track_id, metadata))
+            })
+            .collect()
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum VoicePlaybackError {
@@ -80,6 +204,8 @@ pub struct SongbirdCommandPlayback {
     maximum_queue_items: usize,
     #[cfg(feature = "voice-driver")]
     reservations: Arc<Mutex<QueueReservations>>,
+    #[cfg(feature = "voice-driver")]
+    queue_metadata: Arc<Mutex<QueueTrackLedger>>,
 }
 
 impl SongbirdCommandPlayback {
@@ -97,6 +223,8 @@ impl SongbirdCommandPlayback {
             maximum_queue_items: maximum_queue_items.max(1),
             #[cfg(feature = "voice-driver")]
             reservations: Arc::new(Mutex::new(QueueReservations::default())),
+            #[cfg(feature = "voice-driver")]
+            queue_metadata: Arc::new(Mutex::new(QueueTrackLedger::default())),
         }
     }
 
@@ -114,6 +242,20 @@ impl SongbirdCommandPlayback {
             .lock()
             .expect("voice queue reservation lock poisoned")
             .release(guild_id)
+    }
+
+    #[cfg(feature = "voice-driver")]
+    fn remember_track(
+        &self,
+        guild_id: &str,
+        id: Uuid,
+        metadata: QueueTrackMetadata,
+    ) -> Result<(), CommandPlaybackError> {
+        self.queue_metadata
+            .lock()
+            .map_err(|_| CommandPlaybackError)?
+            .remember(guild_id, id, metadata);
+        Ok(())
     }
 }
 
@@ -159,7 +301,7 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
         &self,
         guild_id: &str,
         wav: &Path,
-        _lane: vozen_core::QueueLane,
+        options: QueueEnqueueOptions<'_>,
     ) -> Result<(), CommandPlaybackError> {
         // Consume before acquiring Songbird. If the call disappeared during synthesis the core
         // service will invoke the idempotent cancellation path below; no reservation can leak.
@@ -173,8 +315,22 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
             .ok_or(CommandPlaybackError)?;
         let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
         let mut handler = call.lock().await;
+        let id = Uuid::new_v4();
+        self.remember_track(
+            guild_id,
+            id,
+            QueueTrackMetadata {
+                author_id: options.author_id.map(str::to_owned),
+                source: options.source,
+                lane: options.lane,
+                created_at_ms: options.created_at_ms,
+            },
+        )?;
         handler
-            .enqueue_input(songbird::input::File::new(wav).into())
+            .enqueue(songbird::tracks::Track::new_with_uuid(
+                songbird::input::File::new(wav).into(),
+                id,
+            ))
             .await;
         Ok(())
     }
@@ -210,6 +366,10 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
             .lock()
             .expect("voice queue reservation lock poisoned")
             .clear(guild_id);
+        self.queue_metadata
+            .lock()
+            .map_err(|_| CommandPlaybackError)?
+            .clear(guild_id);
         Ok(())
     }
 }
@@ -233,7 +393,7 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
         &self,
         _guild_id: &str,
         _wav: &Path,
-        _lane: vozen_core::QueueLane,
+        _options: vozen_core::QueueEnqueueOptions<'_>,
     ) -> Result<(), CommandPlaybackError> {
         Err(CommandPlaybackError)
     }
@@ -349,5 +509,72 @@ mod tests {
         assert!(!reservations.release("42"));
         assert!(reservations.release("84"));
         assert!(!reservations.release("84"));
+    }
+
+    #[test]
+    fn queue_ledger_never_exposes_current_track_or_allows_it_to_be_removed() {
+        let current = Uuid::new_v4();
+        let pending = Uuid::new_v4();
+        let mut ledger = QueueTrackLedger::default();
+        ledger.remember(
+            "guild",
+            current,
+            QueueTrackMetadata {
+                author_id: Some("author".into()),
+                source: QueueSource::Command,
+                lane: QueueLane::Standard,
+                created_at_ms: 10,
+            },
+        );
+        ledger.remember(
+            "guild",
+            pending,
+            QueueTrackMetadata {
+                author_id: Some("author".into()),
+                source: QueueSource::Message,
+                lane: QueueLane::Accessibility,
+                created_at_ms: 20,
+            },
+        );
+
+        let order = [current, pending];
+        let public = ledger.snapshot("guild", &order, 30);
+        assert_eq!(public.len(), 1);
+        assert_eq!(public[0].id, pending.to_string());
+        assert_eq!(public[0].age_ms, 10);
+        assert_eq!(
+            ledger.removable_track("guild", &order, &current.to_string(), None),
+            None
+        );
+        assert_eq!(
+            ledger.removable_track("guild", &order, &pending.to_string(), Some("other")),
+            None
+        );
+        assert_eq!(
+            ledger.removable_track("guild", &order, &pending.to_string(), Some("author")),
+            Some(pending)
+        );
+
+        ledger.remove("guild", pending);
+        assert!(ledger.snapshot("guild", &order, 30).is_empty());
+        ledger.clear("guild");
+    }
+
+    #[test]
+    fn queue_ledger_prunes_ended_tracks_before_rendering() {
+        let ended = Uuid::new_v4();
+        let mut ledger = QueueTrackLedger::default();
+        ledger.remember(
+            "guild",
+            ended,
+            QueueTrackMetadata {
+                author_id: None,
+                source: QueueSource::System,
+                lane: QueueLane::Standard,
+                created_at_ms: 0,
+            },
+        );
+        assert!(ledger.snapshot("guild", &[], 0).is_empty());
+        assert!(!ledger.by_guild.contains_key("guild"));
     }
 }

@@ -4168,6 +4168,7 @@ dependencies = [
  "songbird",
  "thiserror 2.0.19",
  "tokio",
+ "uuid",
  "vozen-contracts",
  "vozen-core",
  "vozen-store",

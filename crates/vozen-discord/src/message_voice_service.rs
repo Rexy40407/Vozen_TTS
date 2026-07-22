@@ -11,7 +11,7 @@ use std::{
 
 use vozen_core::{
     CountGate, DuplicateTracker, MediaAnnouncement, MessageSpeechDecision, MessageSpeechDenial,
-    is_repetition_spam,
+    QueueEnqueueOptions, QueueSource, is_repetition_spam,
 };
 use vozen_store::{
     OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore, UserEngine,
@@ -189,7 +189,16 @@ where
         };
         match self
             .playback
-            .enqueue_reserved(invocation.facts.guild_id, Path::new(&wav), lane)
+            .enqueue_reserved(
+                invocation.facts.guild_id,
+                Path::new(&wav),
+                QueueEnqueueOptions {
+                    author_id: Some(invocation.facts.author_id),
+                    source: QueueSource::Message,
+                    lane,
+                    created_at_ms: now_ms.max(0) as u64,
+                },
+            )
             .await
         {
             Ok(()) => {
@@ -352,7 +361,7 @@ mod tests {
             &self,
             _guild_id: &str,
             _wav: &Path,
-            _lane: QueueLane,
+            _options: QueueEnqueueOptions<'_>,
         ) -> Result<(), CommandPlaybackError> {
             self.enqueued.fetch_add(1, Ordering::Relaxed);
             Ok(())
