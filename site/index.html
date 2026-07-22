@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://cdn.discordapp.com; connect-src 'self' https://api.vozen.org; media-src 'self'; form-action 'self'"
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07070d" />
+    <title>Discord TTS Bot — 35 Languages, 38 Voices | Vozen</title>
+    <meta
+      name="description"
+      content="Vozen reads Discord chat aloud with 38 neural voices in 35 languages and 16 minigames. The core is free forever. Set up in 30 seconds."
+    />
+
+    <!-- Social + canonical. URLs ABSOLUTAS do dominio proprio (vozen.org via GitHub
+         Pages). Se algum dia mudares de dominio, troca estas 4 URLs (canonical,
+         og:url, og:image, twitter:image). -->
+    <link rel="canonical" href="https://vozen.org/" />
+    <meta property="og:site_name" content="Vozen" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://vozen.org/" />
+    <meta property="og:title" content="Vozen — Discord TTS in 35 languages and 38 voices" />
+    <meta
+      property="og:description"
+      content="Vozen reads Discord chat aloud with 38 neural voices in 35 languages and 16 minigames. Core free forever; Premium adds optional extras."
+    />
+    <meta property="og:image" content="https://vozen.org/assets/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Vozen — Discord TTS with 38 voices in 35 languages, core free forever" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Vozen — Discord TTS in 35 languages and 38 voices" />
+    <meta
+      name="twitter:description"
+      content="Reads Discord chat aloud with 38 neural voices in 35 languages and 16 minigames. Core free forever."
+    />
+    <meta name="twitter:image" content="https://vozen.org/assets/og-image.png" />
+
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+    <link rel="stylesheet" href="css/main-v42.css" />
+
+    <!-- FAQ structured data (Google rich results). Mantém em sincronia com
+         window.VOZEN_FAQ (js/i18n.js) — o JSON-LD tem de ser ESTÁTICO porque os
+         crawlers não correm o JS que renderiza o FAQ. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Is Vozen really free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes — the core is free forever: 38 Piper voices in 35 languages, auto-read, greetings, most games and every admin control. Kokoro and Google HD are Premium voice engines; Plus unlocks them personally and server Premium unlocks them for that server." } },
+        { "@type": "Question", "name": "What does Premium include?", "acceptedAnswer": { "@type": "Answer", "text": "Kokoro neural and Google HD voice engines, all 8 voice effects, 24/7 in-call, 50 personal pronunciations, /rizz and the premium games (Word Chain, Wordle, Chess). Server Premium also includes live voice transcription. €3.99/month covers 3 servers, or €7.99/month covers 8; annual saves about 20%. Vozen Plus (€1.99/month) gives the personal perks on any server." } },
+        { "@type": "Question", "name": "How do I add Vozen to my server?", "acceptedAnswer": { "@type": "Answer", "text": "Click \"Add to Discord\", pick your server (you need Manage Server), and run /setup. That's it." } },
+        { "@type": "Question", "name": "Which languages does it support?", "acceptedAnswer": { "@type": "Answer", "text": "35 languages with 38 neural voices — Portuguese, English, Spanish, French, German, Japanese, Arabic, Russian and many more, each with a native voice." } },
+        { "@type": "Question", "name": "Do I need to configure anything?", "acceptedAnswer": { "@type": "Answer", "text": "No. /setup does it in one step. After that, everything works with sensible defaults — you can fine-tune later with /config." } },
+        { "@type": "Question", "name": "Can everyone have a different voice?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Each member sets their own voice and language with /voice set. Automatic per-message language detection is optional and can be enabled with /voice detection on." } },
+        { "@type": "Question", "name": "How do I turn features off?", "acceptedAnswer": { "@type": "Answer", "text": "Everything is toggleable via /config — the greeting, auto-read, who-said announcements, the anti-spam filter, and more. There's also a full kill-switch." } }
+      ]
+    }
+    </script>
+  </head>
+  <body>
+    <!-- grain overlay -->
+    <div class="grain" aria-hidden="true"></div>
+    <!-- atmospheric glow orbs -->
+    <div class="orbs" aria-hidden="true">
+      <span class="orb orb--blurple"></span>
+      <span class="orb orb--aqua"></span>
+    </div>
+
+    <a class="skip-link" href="#hero">Skip to content</a>
+
+    <!-- ─────────────── NAVBAR ─────────────── -->
+    <header class="nav" id="nav">
+      <div class="wrap nav__inner">
+        <a class="brand" href="#hero" aria-label="Vozen home">
+          <span class="brand__mark" aria-hidden="true">
+            <span class="eq"><i></i><i></i><i></i><i></i><i></i></span>
+          </span>
+          <span class="brand__word">Vozen</span>
+        </a>
+
+        <nav class="nav__links" aria-label="Primary">
+          <a href="#features" data-i18n="nav.features">Features</a>
+          <a href="#games" data-i18n="nav.games">Games</a>
+          <a href="#commands" data-i18n="nav.commands">Commands</a>
+          <a href="#languages" data-i18n="nav.languages">Languages</a>
+          <a href="#premium" data-i18n="nav.premium">Premium</a>
+          <a href="#faq" data-i18n="nav.faq">FAQ</a>
+        </nav>
+
+        <div class="nav__actions">
+          <a
+            class="nav__gh"
+            href="https://github.com/Rexy40407/discord-bot-Vozen"
+            target="_blank"
+            rel="noopener"
+            aria-label="Vozen on GitHub (open source)"
+            title="Open source on GitHub"
+          >
+            <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          </a>
+          <div class="lang" id="langMenu">
+            <button
+              class="lang__btn"
+              id="langBtn"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Site language"
+            >
+              <span class="lang__flag" id="langBtnFlag">🇬🇧</span>
+              <span class="lang__name" id="langBtnName">English</span>
+              <svg class="lang__chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <ul class="lang__panel" id="langPanel" role="listbox" tabindex="-1" aria-label="Choose language"></ul>
+          </div>
+          <button class="btn btn--primary btn--discord-cta btn--sm nav__login" id="navLogin" type="button">
+            <svg viewBox="0 0 24 18" width="18" height="14" fill="currentColor" aria-hidden="true"><path d="M20.3 1.6A19.8 19.8 0 0 0 15.4.1a14 14 0 0 0-.6 1.3 18.3 18.3 0 0 0-5.5 0A13 13 0 0 0 8.6.1 19.7 19.7 0 0 0 3.7 1.6C.6 6.3-.3 10.8.2 15.3a19.9 19.9 0 0 0 6 3 14.7 14.7 0 0 0 1.3-2.1 12.9 12.9 0 0 1-2-1c.2-.1.3-.3.5-.4a14.2 14.2 0 0 0 12 0l.5.4a12.8 12.8 0 0 1-2 1 14.5 14.5 0 0 0 1.3 2.1 19.8 19.8 0 0 0 6-3c.6-5.2-.8-9.7-3.5-13.7ZM8 12.6c-1.2 0-2.1-1.1-2.1-2.4S6.8 7.8 8 7.8s2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm8 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg>
+            <span data-i18n="nav.login">Log in</span>
+          </button>
+          <button class="nav__burger" id="burger" aria-label="Menu" aria-expanded="false">
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- ─────────────── HERO ─────────────── -->
+      <section class="hero" id="hero">
+        <canvas id="wave" class="hero__wave" aria-hidden="true"></canvas>
+        <div class="wrap hero__grid">
+          <div class="hero__copy">
+            <span class="pill reveal" data-r="1">
+              <span class="pill__dot"></span>
+              <span data-i18n="hero.badge">Core free forever · Open source</span>
+            </span>
+
+            <h1 class="hero__title reveal" data-r="2">
+              <span data-i18n="hero.title1">Type it.</span>
+              <span class="grad" data-i18n="hero.title2">Hear it.</span>
+            </h1>
+
+            <p class="hero__sub reveal" data-r="3" data-i18n="hero.sub">
+              Vozen reads your Discord chat out loud with natural neural voices — in 35
+              languages, with games, laughter and a core that's free forever.
+            </p>
+
+            <div class="hero__cta reveal" data-r="4">
+              <a class="btn btn--primary btn--discord-cta js-invite" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
+                  <path d="M20.3 4.4A19 19 0 0 0 15.6 3l-.24.48a17.6 17.6 0 0 1 4.16 1.3 15 15 0 0 0-11.06 0A17.6 17.6 0 0 1 12.63 3.5L12.4 3A19 19 0 0 0 7.7 4.4C4.8 8.7 4 13 4.2 17.2A19 19 0 0 0 9.9 20l.4-.6a12 12 0 0 1-1.9-.9c.16-.12.32-.24.47-.37a13.6 13.6 0 0 0 11.6 0c.15.13.3.25.47.37-.6.36-1.24.66-1.9.9l.4.6a19 19 0 0 0 5.7-2.8c.28-4.9-.76-9.16-3.36-12.8ZM9.7 14.7c-1.1 0-2-1-2-2.3 0-1.24.88-2.28 2-2.28s2.02 1.04 2 2.28c0 1.26-.9 2.3-2 2.3Zm4.6 0c-1.1 0-2-1-2-2.3 0-1.24.88-2.28 2-2.28s2.02 1.04 2 2.28c0 1.26-.88 2.3-2 2.3Z"/>
+                </svg>
+                <span data-i18n="cta.add">Add to Discord</span>
+              </a>
+              <a class="btn btn--ghost js-support" href="https://discord.gg/4kYw2WUbNN" data-i18n="cta.support">Join support server</a>
+            </div>
+
+            <p class="hero__mini reveal" data-r="5">
+              <span data-i18n="hero.mini">35 languages · 38 voices · 16 minigames · free core</span>
+            </p>
+          </div>
+
+          <!-- animated Discord chat mock -->
+          <div class="hero__demo reveal" data-r="4" aria-hidden="true">
+            <div class="discord">
+              <div class="discord__bar">
+                <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
+                <span class="discord__ch"># general</span>
+              </div>
+              <div class="discord__body" id="chat">
+                <!-- messages injected by JS -->
+              </div>
+            </div>
+            <div class="demo__glow"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────── HEAR (audio demo) ─────────────── -->
+      <section class="hear" id="hear">
+        <div class="wrap hear__inner reveal">
+          <span class="eyebrow" data-i18n="hear.eyebrow">Hear it</span>
+          <h2 class="hear__title" data-i18n="hear.title">Press play. That's a real Vozen voice.</h2>
+          <p class="hear__sub" data-i18n="hear.sub">
+            Preview every engine. Piper is free; Kokoro unlocks with Vozen Plus or Premium.
+          </p>
+
+          <div class="hear__engines" id="hearEngines" role="group" aria-label="Voice engine">
+            <button class="hear__eng is-active" data-engine="google" type="button">Google</button>
+            <button class="hear__eng" data-engine="piper" type="button">Piper</button>
+            <button class="hear__eng" data-engine="kokoro" type="button">Kokoro · Premium</button>
+          </div>
+
+          <div class="hear__stage" id="hearStage">
+            <button class="hear__btn" id="hearBtn" type="button" aria-label="Play sample" aria-pressed="false">
+              <svg class="hear__ic hear__ic--play" viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              <svg class="hear__ic hear__ic--pause" viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+            </button>
+            <div class="hear__meta">
+              <div class="hear__nowrow">
+                <span class="hear__flag" id="hearFlag">🇬🇧</span>
+                <span class="hear__lang" id="hearLang">English</span>
+                <span class="hear__engtag" id="hearEngTag">Google</span>
+                <span class="eq hear__eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+              </div>
+              <p class="hear__phrase" id="hearPhrase">Hey! Welcome to the server. Type anything and I'll read it out loud.</p>
+            </div>
+          </div>
+
+          <div class="hear__chips" id="hearChips" role="group" aria-label="Choose a language sample">
+            <button class="hear__chip is-active" data-sample="en" type="button"><span>🇬🇧</span> <span class="hear__chip-name">English</span></button>
+            <button class="hear__chip" data-sample="pt" type="button"><span>🇵🇹</span> <span class="hear__chip-name">Português</span></button>
+            <button class="hear__chip" data-sample="es" type="button"><span>🇪🇸</span> <span class="hear__chip-name">Español</span></button>
+            <button class="hear__chip" data-sample="fr" type="button"><span>🇫🇷</span> <span class="hear__chip-name">Français</span></button>
+            <button class="hear__chip" data-sample="it" type="button"><span>🇮🇹</span> <span class="hear__chip-name">Italiano</span></button>
+          </div>
+          <audio id="hearAudio" preload="none"></audio>
+        </div>
+      </section>
+
+      <!-- ─────────────── STATS ─────────────── -->
+      <section class="stats">
+        <div class="wrap stats__grid">
+          <div class="stat"><b class="count" data-to="35">0</b><span data-i18n="stat.langs">languages</span></div>
+          <div class="stat"><b class="count" data-to="38">0</b><span data-i18n="stat.voices">neural voices</span></div>
+          <div class="stat"><b class="count" data-to="16">0</b><span data-i18n="stat.games">minigames</span></div>
+          <div class="stat"><b class="stat__inf">∞</b><span data-i18n="stat.free">core free forever</span></div>
+        </div>
+      </section>
+
+      <!-- ─────────────── FEATURES ─────────────── -->
+      <section class="section" id="features">
+        <div class="wrap">
+          <header class="head reveal">
+            <span class="eyebrow" data-i18n="feat.eyebrow">Features</span>
+            <h2 data-i18n="feat.title">Everything your server needs</h2>
+            <p data-i18n="feat.sub">One bot. Every voice feature you wished Discord had — and the core is free forever.</p>
+          </header>
+
+          <div class="cards">
+            <article class="card reveal">
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8h4l5-4v16l-5-4H4z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg>
+              </span>
+              <h3 data-i18n="feat.1.t">Auto-read channel</h3>
+              <p data-i18n="feat.1.d">Pick a channel and Vozen reads every message out loud. Set it up once with <code>/setup</code>.</p>
+            </article>
+
+            <article class="card reveal">
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v18"/><path d="M8 6v12M16 6v12M4 10v4M20 10v4"/></svg>
+              </span>
+              <h3 data-i18n="feat.2.t">Your voice, your language</h3>
+              <p data-i18n="feat.2.d">Every member picks their own voice from 35 languages — Google or a local neural engine.</p>
+            </article>
+
+            <article class="card reveal">
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+              </span>
+              <h3 data-i18n="feat.3.t">Speaks like a human</h3>
+              <p data-i18n="feat.3.d">Uses your chosen voice by default. Optional per-message detection is enabled with /voice detection on; ! and CAPS add emphasis.</p>
+            </article>
+
+            <article class="card reveal">
+              <span class="card__ic card__ic--amber">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 12h4M8 10v4"/><circle cx="16" cy="11" r="1"/><circle cx="18" cy="13" r="1"/><rect x="2" y="6" width="20" height="12" rx="4"/></svg>
+              </span>
+              <h3 data-i18n="feat.4.t">16 voice minigames</h3>
+              <p data-i18n="feat.4.d">Guess the language, spelling bees, Wordle, reflex duels — with a server leaderboard.</p>
+            </article>
+
+            <article class="card reveal">
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 11a4 4 0 1 0 0-.01"/><path d="M2 20a6 6 0 0 1 12 0"/><path d="M16 4a4 4 0 0 1 0 8M18 20a6 6 0 0 0-4-5.6"/></svg>
+              </span>
+              <h3 data-i18n="feat.5.t">Personality included</h3>
+              <p data-i18n="feat.5.d">Greets people who join — without repeating itself — wishes happy birthday, tells jokes, answers the magic 8-ball, and tracks your server's top speakers.</p>
+            </article>
+
+            <article class="card reveal">
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+              </span>
+              <h3 data-i18n="feat.6.t">Admin peace of mind</h3>
+              <p data-i18n="feat.6.d">Blocklists, rate limits, an anti-spam filter that mutes flooded messages, role gating, opt-out and a kill-switch. You stay in control.</p>
+            </article>
+
+            <article class="card card--accent reveal">
+              <span class="card__badge" data-i18n="feat.new">NEW</span>
+              <span class="card__ic card__ic--amber">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 12h2l2-6 3 12 3-9 2 3h6"/></svg>
+              </span>
+              <h3 data-i18n="feat.7.t">Voice effects</h3>
+              <p data-i18n="feat.7.d">Robot, echo, deep, chipmunk, radio, demon… your messages, transformed. Two effects free, all eight with Premium.</p>
+            </article>
+
+            <article class="card reveal">
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M9 3l3 6 3-6M12 21l-3-12M12 21l3-12"/></svg>
+              </span>
+              <h3 data-i18n="feat.8.t">Fair Premium</h3>
+              <p data-i18n="feat.8.d">€3.99/month unlocks Kokoro and the server-wide extras. The essential Piper-powered core stays free.</p>
+            </article>
+
+            <article class="card card--accent reveal">
+              <span class="card__badge">NEW</span>
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h16v12H8l-4 3z"/><path d="M8 9h8M8 13h5"/></svg>
+              </span>
+              <h3>Private tools, anywhere</h3>
+              <p>Use <code>/tts-file</code> and <code>/translate text</code>, or right-click a message to translate or transcribe supported Discord audio — privately, without joining a call.</p>
+            </article>
+
+            <article class="card reveal">
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 14h6"/></svg>
+              </span>
+              <h3>Channel profiles</h3>
+              <p>Give each channel its own voice, engine, language, speed, limits and voice-channel binding from the secure server dashboard.</p>
+            </article>
+
+            <article class="card reveal">
+              <span class="card__ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>
+              </span>
+              <h3>Favourite voices</h3>
+              <p>Save up to 25 favourites and jump back to your 10 most recently used voices without searching the full library again.</p>
+            </article>
+
+            <a
+              class="card card--link reveal"
+              href="https://github.com/Rexy40407/discord-bot-Vozen"
+              target="_blank"
+              rel="noopener"
+            >
+              <span class="card__ic">
+                <svg viewBox="0 0 16 16" fill="currentColor" stroke="none"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+              </span>
+              <h3 data-i18n="feat.9.t">Open source</h3>
+              <p data-i18n="feat.9.d">All of Vozen's code is public on GitHub. Audit it, learn from it, or open a PR — no secrets, no spyware.</p>
+              <span class="card__arrow" aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────── SHOWCASE A · LANGUAGES ─────────────── -->
+      <section class="section section--alt" id="languages">
+        <div class="wrap show">
+          <div class="show__copy reveal">
+            <span class="eyebrow" data-i18n="lang.eyebrow">Languages</span>
+            <h2 data-i18n="lang.title">One server, every language.</h2>
+            <p data-i18n="lang.sub">Vozen speaks 35+ languages. Everyone picks their own voice — Portuguese, English, Japanese, Arabic and more — with the names shown in their own language.</p>
+            <ul class="ticks">
+              <li data-i18n="lang.t1">35+ languages</li>
+              <li data-i18n="lang.t2">A native voice per language</li>
+              <li data-i18n="lang.t3">Voice names localized to each user</li>
+            </ul>
+          </div>
+          <div class="show__visual reveal">
+            <div class="picker">
+              <div class="picker__head"><span class="mono">/voice set</span></div>
+              <div class="picker__row is-sel"><span>🇬🇧</span> English <b>— Amy</b></div>
+              <div class="picker__row"><span>🇵🇹</span> Portuguese <b>— Faber</b></div>
+              <div class="picker__row"><span>🇩🇪</span> German <b>— Thorsten</b></div>
+              <div class="picker__row"><span>🇪🇸</span> Spanish <b>— Davefx</b></div>
+              <div class="picker__row"><span>🇯🇵</span> Japanese <b>— Nanami</b></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="marquee" aria-hidden="true">
+          <div class="marquee__track" id="marqueeTrack"></div>
+        </div>
+      </section>
+
+      <!-- ─────────────── SHOWCASE B · GAMES ─────────────── -->
+      <section class="section section--games" id="games">
+        <div class="wrap show show--rev">
+          <div class="show__visual reveal">
+            <div class="wordle">
+              <div class="wordle__rows" id="wordle"></div>
+              <div class="game-pills">
+                <span>Guess the Language</span><span>Fast Talk</span><span>Reflexes</span>
+                <span>Spelling Bee</span><span>Wordle</span><span>Vozen Says</span>
+              </div>
+            </div>
+          </div>
+          <div class="show__copy reveal">
+            <span class="eyebrow eyebrow--amber" data-i18n="games.eyebrow">Minigames</span>
+            <h2 data-i18n="games.title">Play it out loud.</h2>
+            <p data-i18n="games.sub">16 minigames built for voice: a turn-based word chain in your language (Vozen reads each word aloud), guess the spoken language, decode super-fast speech, spelling bees, reflex duels, plus Wordle, hangman, tic-tac-toe and chess on real graphical boards. Every server keeps a leaderboard.</p>
+            <ul class="ticks ticks--amber">
+              <li data-i18n="games.t1">Voice + text games, first-to-answer</li>
+              <li data-i18n="games.t2">Server leaderboard & personal stats</li>
+              <li data-i18n="games.t3">Vozen announces the winner out loud</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────── SHOWCASE C · SETUP ─────────────── -->
+      <section class="section">
+        <div class="wrap">
+          <header class="head reveal">
+            <span class="eyebrow" data-i18n="setup.eyebrow">Get started</span>
+            <h2 data-i18n="setup.title">Ready in 30 seconds</h2>
+          </header>
+          <div class="steps">
+            <div class="step reveal"><span class="step__n">1</span><h3 data-i18n="setup.1.t">Invite</h3><p data-i18n="setup.1.d">Add Vozen to your server with one click.</p></div>
+            <div class="step reveal"><span class="step__n">2</span><h3 data-i18n="setup.2.t">/join</h3><p data-i18n="setup.2.d">Vozen hops into your voice channel.</p></div>
+            <div class="step reveal"><span class="step__n">3</span><h3 data-i18n="setup.3.t">Type</h3><p data-i18n="setup.3.d">Write a message — and hear it out loud.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────── COMMANDS ─────────────── -->
+      <section class="section section--alt" id="commands">
+        <div class="wrap">
+          <header class="head reveal">
+            <span class="eyebrow" data-i18n="cmd.eyebrow">Commands</span>
+            <h2 data-i18n="cmd.title">Simple slash commands</h2>
+            <p data-i18n="cmd.sub">Use <code>/cast</code> to assign a random theme role to everyone in your voice call and hear the result.</p>
+          </header>
+          <div class="tabs reveal" id="cmdTabs">
+            <button class="is-active" data-tab="general" data-i18n="cmd.general">General</button>
+            <button data-tab="voice" data-i18n="cmd.voice">Voice</button>
+            <button data-tab="fun" data-i18n="cmd.fun">Fun</button>
+            <button data-tab="admin" data-i18n="cmd.admin">Admin</button>
+          </div>
+          <div class="cmd-list reveal" id="cmdList"></div>
+        </div>
+      </section>
+
+      <!-- ─────────────── PRICING ─────────────── -->
+      <section class="section" id="premium">
+        <div class="wrap">
+          <header class="head reveal">
+            <span class="eyebrow eyebrow--amber" data-i18n="price.eyebrow">Pricing</span>
+            <h2 data-i18n="price.choose.title">Choose who gets the upgrade.</h2>
+            <p data-i18n="price.choose.sub">Keep the core free, upgrade yourself, or unlock Premium for everyone in your server.</p>
+          </header>
+          <!-- O login/estado da conta vivem agora numa página dedicada (account.html),
+               acessível pelo botão "Log in" da navbar. -->
+          <div class="price-toolbar reveal">
+            <div class="bill-toggle" role="group" aria-label="Billing period">
+              <button type="button" class="bill-toggle__btn is-active" data-bill="month" data-i18n="price.billMonthly">Monthly</button>
+              <button type="button" class="bill-toggle__btn" data-bill="year">
+                <span data-i18n="price.billYearly">Yearly</span>
+                <span class="bill-toggle__save">−20%</span>
+              </button>
+            </div>
+          </div>
+          <div class="pricing">
+            <article class="free-plan reveal">
+              <div class="free-plan__identity">
+                <span class="free-plan__mark" aria-hidden="true">V</span>
+                <div>
+                  <span class="plan-kicker" data-i18n="price.free.per">forever</span>
+                  <h3 data-i18n="price.free.name">Free</h3>
+                </div>
+              </div>
+              <div class="free-plan__price" data-i18n="price.free.price">€0</div>
+              <p data-i18n="price.free.pitch">All the essentials. No card, no trial.</p>
+              <ul class="free-plan__highlights" aria-label="Free plan highlights">
+                <li data-i18n="price.m.1">38 Piper voices</li>
+                <li data-i18n="price.m.2">35 languages</li>
+                <li data-i18n="price.m.3">Auto-read your channel</li>
+                <li data-i18n="price.m.5">13 of the 16 games</li>
+                <li data-i18n="price.m.20">Daily talk streaks</li>
+                <li data-i18n="price.m.8">Full admin kit</li>
+              </ul>
+              <a class="free-plan__cta btn btn--ghost btn--sm btn--discord-cta js-invite" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands" target="_blank" rel="noopener" data-i18n="cta.add">Add to Discord</a>
+            </article>
+
+            <div class="paid-plans">
+            <article class="price-card price-card--plus reveal">
+              <div class="price-card__topline">
+                <span class="price-card__badge price-card__badge--plus"><span aria-hidden="true">✦</span> <span data-i18n="price.plus.badge">PERSONAL</span></span>
+              </div>
+              <h3 data-i18n="price.plus.name">Vozen Plus</h3>
+              <p class="price-card__pitch" data-i18n="price.plus.pitch">Your premium voice perks follow you into every server.</p>
+              <div class="seat-toggle plan-scope">
+                <span class="seat-toggle__btn is-active" data-i18n="price.m.17">Goes with you to any server</span>
+              </div>
+              <div class="price-card__price">
+                <span class="price-line"><b><span class="amt amt--m">€1.99</span><span class="amt amt--y">€18.99</span></b><s class="was was--y">€23.88</s></span>
+                <span class="per per--m" data-i18n="price.plus.per">/ month · per user</span>
+                <span class="per per--y" data-i18n="price.plus.perYear">/ year · per user</span>
+              </div>
+              <ul class="ticks price-card__highlights">
+                <li data-i18n="price.m.21">Kokoro neural engine</li>
+                <li data-i18n="price.m.22">Google HD voices</li>
+                <li data-i18n="price.m.9">All 8 voice effects (deep, demon, radio…)</li>
+                <li data-i18n="price.m.15">50 personal pronunciations</li>
+                <li data-i18n="price.m.11">Word Chain game</li>
+                <li data-i18n="price.m.12">Wordle game</li>
+                <li data-i18n="price.m.14">/rizz</li>
+              </ul>
+              <p class="price-card__note" data-i18n="price.plus.note">€18.99/year (save ~20%) · buy on Ko-fi</p>
+              <a class="price-card__buy js-kofi" href="https://ko-fi.com/rexy00" target="_blank" rel="noopener">Get Vozen Plus</a>
+              <p class="price-card__idnote">
+                <span data-i18n="price.idNote">⚠️ After buying on Ko-fi, activate your plan at vozen.org/account — just log in with Discord.</span>              </p>
+            </article>
+            <article class="price-card price-card--pro reveal">
+              <div class="price-card__topline">
+                <span class="price-card__badge"><span aria-hidden="true">💎</span> <span data-i18n="price.pro.badge">PREMIUM</span></span>
+                <span class="price-card__recommended" data-i18n="price.recommended">BEST FOR SERVERS</span>
+              </div>
+              <h3 data-i18n="price.pro.name">Vozen Premium</h3>
+              <p class="price-card__pitch" data-i18n="price.pro.pitch">Unlock the full Vozen experience for everyone in your community.</p>
+              <!-- Toggle de licenças: mesma tier, muda só o nº de servidores (e o preço). A
+                   classe .is-10 no cartão faz o CSS trocar preço/período/riscado/deal/nota;
+                   as variantes --s10 reutilizam as chaves i18n price.max.* (já em 10 línguas).
+                   NOTA: data-seats="10"/.is-10/--s10/seats10 são IDENTIFICADORES internos
+                   legados — o deal grande passou a 8 servidores (2026-07-11); só o TEXTO
+                   visível diz 8, para não partir main.js/CSS com renames em cascata. -->
+              <div class="seat-toggle" role="group" aria-label="Servers per subscription">
+                <button type="button" class="seat-toggle__btn is-active" data-seats="3" data-i18n="price.pro.seats3">3 servers</button>
+                <button type="button" class="seat-toggle__btn" data-seats="10" data-i18n="price.pro.seats10">8 servers</button>
+              </div>
+              <div class="price-card__price">
+                <span class="price-line"><b><span class="amt amt--m amt--s3">€3.99</span><span class="amt amt--m amt--s10">€7.99</span><span class="amt amt--y amt--s3">€37.99</span><span class="amt amt--y amt--s10">€75.99</span></b><s class="was was--y was--s3">€47.88</s><s class="was was--y was--s10">€95.88</s></span>
+                <span class="per per--m per--s3" data-i18n="price.pro.per">/ month · 3 servers</span>
+                <span class="per per--m per--s10" data-i18n="price.max.per">/ month · 8 servers</span>
+                <span class="per per--y per--s3" data-i18n="price.pro.perYear">/ year · 3 servers</span>
+                <span class="per per--y per--s10" data-i18n="price.max.perYear">/ year · 8 servers</span>
+              </div>
+              <p class="price-card__deal deal--s3" data-i18n="price.pro.deal">🎁 Three servers. One subscription.</p>
+              <p class="price-card__deal deal--s10" data-i18n="price.max.deal">🎁 Eight servers. One subscription.</p>
+              <ul class="ticks ticks--amber price-card__highlights">
+                <li data-i18n="price.m.18">Works for everyone in the server</li>
+                <li data-i18n="price.m.21">Kokoro neural engine</li>
+                <li data-i18n="price.m.22">Google HD voices</li>
+                <li data-i18n="price.m.9">All 8 voice effects (deep, demon, radio…)</li>
+                <li data-i18n="price.m.19">50 server pronunciations</li>
+                <li data-i18n="price.m.16">In the call 24/7</li>
+                <li data-i18n="price.m.23">Live voice transcription</li>
+                <li data-i18n="price.m.11">Word Chain game</li>
+              </ul>
+              <p class="price-card__note note--s3" data-i18n="price.pro.note">€37.99/year (save ~20%) · buy on Ko-fi</p>
+              <p class="price-card__note note--s10" data-i18n="price.max.note">€75.99/year (save ~20%) · buy on Ko-fi</p>
+              <a class="price-card__buy price-card__buy--pro js-kofi" href="https://ko-fi.com/rexy00" target="_blank" rel="noopener">Get Vozen Premium</a>
+              <p class="price-card__idnote">
+                <span data-i18n="price.idNote">⚠️ After buying on Ko-fi, activate your plan at vozen.org/account — just log in with Discord.</span>              </p>
+            </article>
+            </div>
+
+            <section class="plan-comparison reveal" aria-labelledby="planComparisonTitle">
+              <div class="plan-comparison__head">
+                <div>
+                  <span class="plan-kicker" data-i18n="price.eyebrow">Pricing</span>
+                  <h3 id="planComparisonTitle" data-i18n="price.compare.title">See every difference</h3>
+                  <p data-i18n="price.compare.sub">The complete plan comparison, without surprises.</p>
+                </div>
+                <span class="plan-comparison__checkout" data-i18n="price.checkout">Secure checkout on Ko-fi</span>
+              </div>
+              <div class="plan-table-wrap" tabindex="0" aria-label="Plan comparison table">
+                <!-- role=* explícitos: em mobile o CSS usa display:grid nas linhas (blocos
+                     verticais + cabeçalho sticky) e isso pode apagar a semântica de tabela
+                     nativa; os roles repõem-na para leitores de ecrã. -->
+                <table class="plan-table" role="table">
+                  <thead>
+                    <tr role="row">
+                      <th scope="col" role="columnheader" data-i18n="nav.features">Features</th>
+                      <th scope="col" role="columnheader" data-i18n="price.free.name">Free</th>
+                      <th scope="col" role="columnheader" data-i18n="price.plus.name">Vozen Plus</th>
+                      <th scope="col" role="columnheader" data-i18n="price.pro.name">Vozen Premium</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- Bloco A — base grátis: incluído nos três planos. -->
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.1">38 Piper voices</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.2">35 languages</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.3">Auto-read your channel</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.4">Jokes &amp; greetings</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.5">13 of the 16 games</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.6">Robot &amp; Echo voice effects</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.7">Weekly leaderboard</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.20">Daily talk streaks</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.8">Full admin kit</th><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <!-- Bloco B — extras pagos: iguais no Plus e no Premium. -->
+                    <tr role="row" class="group-b"><th scope="row" role="rowheader" data-i18n="price.m.21">Kokoro neural engine</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.22">Google HD voices</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.9">All 8 voice effects (deep, demon, radio…)</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.11">Word Chain game</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.12">Wordle game</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.13">Chess game</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.14">/rizz</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.15">50 personal pronunciations</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has">✓</td></tr>
+                    <!-- Bloco C — exclusivos: pessoal (Plus) vs servidor (Premium). -->
+                    <tr role="row" class="group-c"><th scope="row" role="rowheader" data-i18n="price.m.17">Goes with you to any server</th><td role="cell" class="has-not">—</td><td role="cell" class="has">✓</td><td role="cell" class="has-not">—</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.19">50 server pronunciations</th><td role="cell" class="has-not">—</td><td role="cell" class="has-not">—</td><td role="cell" class="has has--premium">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.16">In the call 24/7</th><td role="cell" class="has-not">—</td><td role="cell" class="has-not">—</td><td role="cell" class="has has--premium">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.23">Live voice transcription</th><td role="cell" class="has-not">—</td><td role="cell" class="has-not">—</td><td role="cell" class="has has--premium">✓</td></tr>
+                    <tr role="row"><th scope="row" role="rowheader" data-i18n="price.m.18">Works for everyone in the server</th><td role="cell" class="has-not">—</td><td role="cell" class="has-not">—</td><td role="cell" class="has has--premium">✓</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────── FAQ ─────────────── -->
+      <section class="section" id="faq">
+        <div class="wrap wrap--narrow">
+          <header class="head reveal">
+            <span class="eyebrow" data-i18n="faq.eyebrow">FAQ</span>
+            <h2 data-i18n="faq.title">Questions, answered</h2>
+          </header>
+          <div class="faq" id="faq-list"></div>
+        </div>
+      </section>
+
+      <!-- ─────────────── FINAL CTA ─────────────── -->
+      <section class="finale">
+        <div class="wrap finale__inner reveal">
+          <h2 data-i18n="finale.title">Give your server a voice.</h2>
+          <a class="btn btn--primary btn--discord-cta btn--lg js-invite" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">
+            <span data-i18n="cta.add">Add to Discord</span>
+          </a>
+          <p class="finale__note" data-i18n="finale.note">Core free forever · 35 languages · Set up in 30 seconds</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- ─────────────── FOOTER ─────────────── -->
+    <footer class="foot">
+      <div class="wrap foot__grid">
+        <div>
+          <a class="brand" href="#hero" aria-label="Vozen home">
+            <span class="brand__mark"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></span>
+            <span class="brand__word">Vozen</span>
+          </a>
+          <p class="foot__tag" data-i18n="foot.tag">Type it, hear it.</p>
+        </div>
+        <div>
+          <h4 data-i18n="foot.product">Product</h4>
+          <a href="#features" data-i18n="nav.features">Features</a>
+          <a href="#games" data-i18n="nav.games">Games</a>
+          <a href="#commands" data-i18n="nav.commands">Commands</a>
+          <a href="#premium" data-i18n="nav.premium">Premium</a>
+          <a href="#faq" data-i18n="nav.faq">FAQ</a>
+          <a href="/status">Status</a>
+        </div>
+        <div>
+          <h4 data-i18n="foot.community">Community</h4>
+          <a href="https://discord.gg/4kYw2WUbNN" class="js-support" data-i18n="foot.support">Support server</a>
+          <a href="#" class="js-vote" data-i18n="foot.vote">Vote on top.gg</a>
+          <a href="https://github.com/Rexy40407/discord-bot-Vozen" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+      <div class="wrap foot__base">
+        <span>© 2026 Vozen</span>
+        <span class="foot__legal">
+          <a href="/privacy" data-i18n="foot.privacy">Privacy</a>
+          <a href="/terms" data-i18n="foot.terms">Terms</a>
+        </span>
+        <span data-i18n="foot.legal">Not affiliated with Discord.</span>
+      </div>
+    </footer>
+
+    <script defer src="js/i18n-v40.js"></script>
+    <script defer src="js/main-v43.js"></script>
+  </body>
+</html>

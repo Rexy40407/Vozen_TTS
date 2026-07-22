@@ -1,0 +1,101 @@
+{
+  "_meta": {
+    "title": "Voxi — registo de defeitos de pronuncia — TEMPLATE + backlog de evidencia",
+    "purpose": "Um evento por defeito, para transformar 'nao fala bem' em tickets accionaveis ligados a alavanca. Ver docs/VOICE-EVAL-MOS-AB.md §4.",
+    "status": "template: NENHUM defeito PERCETUAL (pontuacao de ouvido) preenchido — precisa de raters/audio. Mas o 'code_evidenced_backlog' abaixo lista defeitos JA ESTABELECIDOS por analise de codigo (factos, nao pontuacoes de ouvido inventadas).",
+    "provenance_rule": "provenance='code-analysis' => facto derivado do repo (nao precisa de ouvido para EXISTIR; a gravidade percetual ainda precisa de confirmacao nativa). provenance='native-rater' => ouvido por um falante nativo (o unico que preenche score MOS/severity final).",
+    "defect_codes": {
+      "G2P": "fonema errado / grafema-para-fonema falhado",
+      "STRESS": "acentuacao/tonica na silaba errada",
+      "RHYTHM": "ritmo apressado/arrastado (come as palavras)",
+      "DIACRITIC": "diacritico mal tratado (til/cedilha/hacek)",
+      "LOANWORD": "estrangeirismo/nome proprio mal dito",
+      "INTONATION": "entoacao plana/errada (a nivel de frase)",
+      "TONE": "tom lexical errado (linguas tonais: zh, vi) — muda o significado, nao so a melodia",
+      "PAUSE": "pausas a mais/menos entre frases",
+      "TRUNCATION": "corte/omissao de fim de palavra ou frase",
+      "GARBLE": "ininteligivel — voz da lingua errada (C1: instalar modelo)",
+      "OTHER": "outro (descrever em note)"
+    },
+    "severity": { "1": "menor", "2": "notorio", "3": "quebra a inteligibilidade" },
+    "lever_hint": "G2P/GARBLE->C1/C2 ; RHYTHM->C3(VOICE_CALIBRATION) ; INTONATION/PAUSE/TONE->C4(VOICE_PARAM_OVERRIDES)/modelo ; STRESS/DIACRITIC/TRUNCATION->modelo/normalizacao"
+  },
+  "code_evidenced_backlog": [
+    {
+      "id": "D1",
+      "locale": "pt_PT",
+      "model": "pt_PT-tugao-medium",
+      "defect_code": "RHYTHM",
+      "severity_estimate": 2,
+      "provenance": "code-analysis",
+      "status": "pending-native-confirmation",
+      "evidence": "src/tts/calibration.ts + VOICE-QUALITY.md C3: mede ~53 ms/fonema vs ~75 nas vozes de referencia (~30% rapido demais). Ja MITIGADO com VOICE_CALIBRATION=1.5, mas satura ~5.5s vs 6.4s do cadu.",
+      "lever": "C3_length_scale",
+      "iteration_target": "iter-001 candidato: validar por A/B (§3) que 1.5 (ou valor re-medido) soa melhor que 1.0."
+    },
+    {
+      "id": "D2",
+      "locale": "no_NO",
+      "model": "(qualquer modelo Norueguês instalado)",
+      "defect_code": "GARBLE",
+      "severity_estimate": 3,
+      "provenance": "code-analysis",
+      "status": "pending-native-confirmation",
+      "evidence": "voiceMap.ts: 'no_NO' esta em LOCALE_NAMES mas NAO ha 'nor'->'no_' em LANG_TO_PREFIX (bug G3 em SPEECH-DATA-AUDIT.md). Texto noruegues nunca auto-seleciona a voz -> cai no fallback ingles.",
+      "lever": "C1 (alinhamento de codigo: adicionar nor->no_)",
+      "iteration_target": "correcao de codigo + verificar que texto NO passa a tocar na voz NO."
+    },
+    {
+      "id": "D3",
+      "locale": "it_IT",
+      "model": "it_IT-riccardo-x_low",
+      "defect_code": "G2P",
+      "severity_estimate": 2,
+      "provenance": "code-analysis",
+      "status": "pending-native-confirmation",
+      "evidence": "README/VOICE-QUALITY.md C2: tier x_low tem menos parametros -> voz metalica/abafada. Exemplo de tier baixo a substituir por medium.",
+      "lever": "C2_tier",
+      "iteration_target": "A/B x_low vs medium (§3)."
+    },
+    {
+      "id": "D4",
+      "locale": "en_GB",
+      "model": "en_GB-alan-low",
+      "defect_code": "G2P",
+      "severity_estimate": 1,
+      "provenance": "code-analysis",
+      "status": "pending-native-confirmation",
+      "evidence": "README/VOICE-QUALITY.md C2: tier 'low' — candidato a medium da mesma lingua.",
+      "lever": "C2_tier",
+      "iteration_target": "A/B low vs medium (§3)."
+    },
+    {
+      "id": "D5",
+      "locale": "pt_PT",
+      "model": "pt_PT-tugao-medium",
+      "defect_code": "DIACRITIC",
+      "severity_estimate": 3,
+      "provenance": "code-analysis",
+      "status": "latent-guard",
+      "evidence": "VOICE-QUALITY.md C3: armadilha de chave — VOICE_CALIBRATION usa 'pt_PT-tugao-medium' (sem til) e e procura EXATA. Se o .onnx real levasse o til ('tugão'), a calibracao nao bateria e o PT sairia 30% rapido. Hoje OK (BENCHMARKS.md resolve sem til); registado como guarda de regressao.",
+      "lever": "C3_length_scale (integridade de chave)",
+      "iteration_target": "N/A hoje — vigiar ao adicionar entradas: chave = nome byte-a-byte do .onnx."
+    }
+  ],
+  "defects": [
+    {
+      "locale": "<ex. tr_TR>",
+      "model": "<ex. tr_TR-dfki-medium>",
+      "sentence_ref": "<locale de reference-sentences.json>",
+      "clip_id": "<nome cego, ex. clip_041.wav>",
+      "defect_code": "<um dos defect_codes>",
+      "severity": null,
+      "timestamp_in_clip": "<ex. 00:02.3>",
+      "word_or_phoneme": "<a palavra/fonema afetado>",
+      "rater_id": "<anon>",
+      "native_speaker": true,
+      "provenance": "native-rater",
+      "note": "<descricao livre do que se ouviu vs esperado>"
+    }
+  ]
+}

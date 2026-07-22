@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src https://api.vozen.org; form-action 'self'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07070d" />
+    <title>Service Status — Vozen</title>
+    <meta name="description" content="Current operational status for Vozen and its voice providers." />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="css/main-v42.css" />
+    <style>
+      .status-page { min-height: 100vh; padding: 72px 22px; }
+      .status-shell { width: min(760px, 100%); margin: 0 auto; }
+      .status-back { color: var(--aqua); text-decoration: none; font-weight: 700; }
+      .status-title { margin: 34px 0 8px; font-family: var(--f-display, "Unbounded", sans-serif); font-size: clamp(32px, 7vw, 54px); }
+      .status-lead { margin: 0 0 30px; color: var(--text-2); font-size: 18px; }
+      .status-overall, .status-card { border: 1px solid var(--line); background: var(--surface); border-radius: 18px; }
+      .status-overall { display: flex; align-items: center; gap: 14px; padding: 20px; margin-bottom: 16px; font-weight: 800; font-size: 18px; }
+      .status-dot { width: 12px; height: 12px; border-radius: 999px; background: #8b93ab; box-shadow: 0 0 18px currentColor; }
+      .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .status-card { padding: 20px; }
+      .status-card strong { display: block; margin-bottom: 8px; }
+      .status-card span { color: var(--text-2); text-transform: capitalize; }
+      .is-operational .status-dot { color: #37d9b6; background: #37d9b6; }
+      .is-degraded .status-dot { color: #e8b44d; background: #e8b44d; }
+      .is-unavailable .status-dot { color: #ff5f7f; background: #ff5f7f; }
+      .status-incident { margin: 16px 0 0; padding: 18px 20px; border: 1px solid rgba(232,180,77,.35); border-radius: 16px; color: #f0d69c; background: rgba(232,180,77,.07); }
+      .status-meta { margin-top: 24px; color: var(--text-2); font-size: 14px; }
+      .status-meta a { color: var(--aqua); }
+      @media (max-width: 620px) { .status-grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <main class="status-page">
+      <div class="status-shell">
+        <a class="status-back" href="/">← Back to Vozen</a>
+        <h1 class="status-title">Vozen service status</h1>
+        <p class="status-lead">A simple, live view of the systems that make Vozen speak.</p>
+
+        <section class="status-overall" id="statusOverall" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="statusOverallText">Checking Vozen…</span>
+        </section>
+
+        <section class="status-grid" aria-label="Service components">
+          <article class="status-card"><strong>Discord bot</strong><span id="statusBot">Checking…</span></article>
+          <article class="status-card"><strong>Database</strong><span id="statusDatabase">Checking…</span></article>
+          <article class="status-card"><strong>Voice providers</strong><span id="statusProviders">Checking…</span></article>
+        </section>
+
+        <p class="status-incident" id="statusIncident" hidden></p>
+        <p class="status-meta">
+          Last checked: <span id="statusChecked">not yet</span> · Need help?
+          <a href="https://discord.gg/4kYw2WUbNN" target="_blank" rel="noopener">Join the support server</a>.
+        </p>
+      </div>
+    </main>
+    <script defer src="js/status-v1.js"></script>
+  </body>
+</html>

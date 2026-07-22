@@ -1,0 +1,14 @@
+Wordlists do minijogo "cadeia de palavras" (word-chain) do Vozen.
+
+Derivadas de:
+  hermitdave/FrequencyWords — https://github.com/hermitdave/FrequencyWords
+  (listas de frequência do OpenSubtitles)
+  Licença: Creative Commons Attribution-ShareAlike 4.0 (CC-BY-SA-4.0)
+  https://creativecommons.org/licenses/by-sa/4.0/
+
+Processamento (ver tools/build-wordlists.mjs): normalização (minúsculas + remoção
+de diacríticos), filtro a só [a-z] com >=3 letras, remoção de duplicados e de uma
+lista de profanidade, e ordenação. Estes ficheiros derivados são disponibilizados
+sob a mesma licença CC-BY-SA-4.0.
+
+Ficheiros: pt.txt, en.txt, es.txt, fr.txt (uma palavra por linha).

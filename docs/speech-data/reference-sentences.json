@@ -1,0 +1,53 @@
+{
+  "_meta": {
+    "title": "Voxi — corpus de frases de referencia (metade TRANSCRICAO de um par audio+transcricao)",
+    "purpose": "Frase de referencia por lingua, para (A) medir ms/fonema e calibrar length_scale (metodo A3 de docs/VOICE-QUALITY.md -> src/tts/calibration.ts VOICE_CALIBRATION) e (B) A/B percetual de noise_scale/noise_w/sentence_silence (A5 -> VOICE_PARAM_OVERRIDES). O AUDIO gera-se sintetizando estas frases com o Piper; este ficheiro e so o texto (a transcricao).",
+    "orthography_note": "ESTAS FRASES SAO INPUT DE SINTESE (espeak-ng/Piper), por isso levam a ORTOGRAFIA CORRETA COM DIACRITICOS. Isto e o OPOSTO do LEXICON de greetings.ts (que guarda variantes SEM acento porque e input de DETECCAO — o que os users escrevem). Nao misturar as duas convencoes.",
+    "how_to_use": [
+      "1. Escolher a lingua cujo modelo .onnx esta instalado em MODELS_DIR (so essas dao para medir).",
+      "2. Sintetizar 'sentence' com o modelo alvo E com uma voz-ancora boa (ex. en_US-amy-medium).",
+      "3. Medir duracao_wav / n_fonemes (Piper --debug reporta fonemes; WAV 22050Hz mono 16-bit => segundos = bytes_dados/(22050*2)).",
+      "4. calibracao = ms_ancora / ms_modelo. Se >1 abranda, <1 acelera. Meter em VOICE_CALIBRATION com a chave = nome EXATO do .onnx (diacriticos incluidos)."
+    ],
+    "honesty": "Frases confiantes marcadas confidence=high. As de script menos comum (ka, kk, ne, lb) ficam confidence=low e SO com saudacao-semente: precisam de revisao por falante nativo / fonte verificada ANTES de servirem de ground-truth. NENHUM valor de calibracao foi inventado (nao ha execucao de Piper neste ambiente).",
+    "coverage_note": "Deteccao/prosodia so compensa se a lingua TIVER modelo .onnx. Sem modelo, o texto cai na voz inglesa (garble) por muito boa que seja a frase — ver C1 em VOICE-QUALITY.md."
+  },
+  "sentences": [
+    { "locale": "pt_PT", "language": "Português (Portugal)", "confidence": "high", "greeting": "Bom dia", "sentence": "Bom dia, hoje o tempo está agradável e vou dar um passeio pela cidade." },
+    { "locale": "pt_BR", "language": "Português (Brasil)", "confidence": "high", "greeting": "Bom dia", "sentence": "Bom dia, hoje o tempo está agradável e vou dar uma volta pela cidade." },
+    { "locale": "en_US", "language": "English", "confidence": "high", "greeting": "Good morning", "sentence": "Good morning, the weather is pleasant today and I will take a walk through the city." },
+    { "locale": "es_ES", "language": "Español", "confidence": "high", "greeting": "Buenos días", "sentence": "Buenos días, hoy hace buen tiempo y voy a dar un paseo por la ciudad." },
+    { "locale": "fr_FR", "language": "Français", "confidence": "high", "greeting": "Bonjour", "sentence": "Bonjour, il fait beau aujourd'hui et je vais me promener dans la ville." },
+    { "locale": "de_DE", "language": "Deutsch", "confidence": "high", "greeting": "Guten Morgen", "sentence": "Guten Morgen, das Wetter ist heute angenehm und ich mache einen Spaziergang durch die Stadt." },
+    { "locale": "it_IT", "language": "Italiano", "confidence": "high", "greeting": "Buongiorno", "sentence": "Buongiorno, oggi il tempo è piacevole e farò una passeggiata per la città." },
+    { "locale": "nl_NL", "language": "Nederlands", "confidence": "high", "greeting": "Goedemorgen", "sentence": "Goedemorgen, het weer is vandaag aangenaam en ik ga een wandeling door de stad maken." },
+    { "locale": "ru_RU", "language": "Русский", "confidence": "high", "greeting": "Доброе утро", "sentence": "Доброе утро, сегодня хорошая погода, и я пойду гулять по городу." },
+    { "locale": "pl_PL", "language": "Polski", "confidence": "high", "greeting": "Dzień dobry", "sentence": "Dzień dobry, dziś jest ładna pogoda i pójdę na spacer po mieście." },
+    { "locale": "uk_UA", "language": "Українська", "confidence": "high", "greeting": "Доброго ранку", "sentence": "Доброго ранку, сьогодні гарна погода, і я піду на прогулянку містом." },
+    { "locale": "tr_TR", "language": "Türkçe", "confidence": "high", "greeting": "Günaydın", "sentence": "Günaydın, bugün hava güzel ve şehirde yürüyüşe çıkacağım." },
+    { "locale": "cs_CZ", "language": "Čeština", "confidence": "high", "greeting": "Dobrý den", "sentence": "Dobré ráno, dnes je hezké počasí a půjdu se projít po městě." },
+    { "locale": "ca_ES", "language": "Català", "confidence": "high", "greeting": "Bon dia", "sentence": "Bon dia, avui fa bon temps i faré un passeig per la ciutat." },
+    { "locale": "sv_SE", "language": "Svenska", "confidence": "high", "greeting": "God morgon", "sentence": "God morgon, vädret är trevligt idag och jag ska ta en promenad genom staden." },
+    { "locale": "fi_FI", "language": "Suomi", "confidence": "high", "greeting": "Hyvää huomenta", "sentence": "Hyvää huomenta, sää on tänään mukava ja lähden kävelylle kaupunkiin." },
+    { "locale": "da_DK", "language": "Dansk", "confidence": "high", "greeting": "Godmorgen", "sentence": "Godmorgen, vejret er behageligt i dag, og jeg går en tur gennem byen." },
+    { "locale": "ro_RO", "language": "Română", "confidence": "high", "greeting": "Bună dimineața", "sentence": "Bună dimineața, astăzi vremea este plăcută și voi face o plimbare prin oraș." },
+    { "locale": "el_GR", "language": "Ελληνικά", "confidence": "high", "greeting": "Καλημέρα", "sentence": "Καλημέρα, σήμερα ο καιρός είναι ευχάριστος και θα κάνω μια βόλτα στην πόλη." },
+    { "locale": "hu_HU", "language": "Magyar", "confidence": "high", "greeting": "Jó reggelt", "sentence": "Jó reggelt, ma kellemes az idő, és sétálni fogok a városban." },
+    { "locale": "ar_JO", "language": "العربية", "confidence": "medium", "greeting": "صباح الخير", "sentence": "صباح الخير، الطقس لطيف اليوم وسأتمشى في المدينة." },
+    { "locale": "fa_IR", "language": "فارسی", "confidence": "medium", "greeting": "سلام", "sentence": "صبح بخیر، امروز هوا خوب است و در شهر قدم می‌زنم." },
+    { "locale": "vi_VN", "language": "Tiếng Việt", "confidence": "medium", "greeting": "Xin chào", "sentence": "Chào buổi sáng, hôm nay thời tiết dễ chịu và tôi sẽ đi dạo quanh thành phố." },
+    { "locale": "zh_CN", "language": "中文", "confidence": "medium", "greeting": "你好", "sentence": "早上好，今天天气很好，我要去城里散步。" },
+    { "locale": "sk_SK", "language": "Slovenčina", "confidence": "medium", "greeting": "Dobrý deň", "sentence": "Dobré ráno, dnes je pekné počasie a pôjdem sa prejsť po meste." },
+    { "locale": "sl_SI", "language": "Slovenščina", "confidence": "medium", "greeting": "Dober dan", "sentence": "Dobro jutro, danes je lepo vreme in šel bom na sprehod po mestu." },
+    { "locale": "sr_RS", "language": "Српски", "confidence": "medium", "greeting": "Добар дан", "sentence": "Добро јутро, данас је лепо време и идем у шетњу кроз град." },
+    { "locale": "lv_LV", "language": "Latviešu", "confidence": "medium", "greeting": "Labdien", "sentence": "Labrīt, šodien ir jauks laiks un es došos pastaigā pa pilsētu." },
+    { "locale": "is_IS", "language": "Íslenska", "confidence": "medium", "greeting": "Góðan dag", "sentence": "Góðan daginn, veðrið er gott í dag og ég ætla að ganga um borgina." },
+    { "locale": "cy_GB", "language": "Cymraeg", "confidence": "medium", "greeting": "Bore da", "sentence": "Bore da, mae'r tywydd yn braf heddiw a byddaf yn mynd am dro drwy'r ddinas." },
+    { "locale": "sw_CD", "language": "Kiswahili", "confidence": "medium", "greeting": "Habari", "sentence": "Habari za asubuhi, hali ya hewa ni nzuri leo na nitatembea mjini." },
+    { "locale": "ka_GE", "language": "ქართული", "confidence": "low", "greeting": "გამარჯობა", "sentence": null, "note": "TODO: frase completa por falante nativo / fonte verificada. So a saudacao esta semeada." },
+    { "locale": "kk_KZ", "language": "Қазақ тілі", "confidence": "low", "greeting": "Сәлем", "sentence": null, "note": "TODO: frase completa por falante nativo / fonte verificada. So a saudacao esta semeada." },
+    { "locale": "ne_NP", "language": "नेपाली", "confidence": "low", "greeting": "नमस्ते", "sentence": null, "note": "TODO: frase completa por falante nativo / fonte verificada. So a saudacao esta semeada." },
+    { "locale": "lb_LU", "language": "Lëtzebuergesch", "confidence": "low", "greeting": "Moien", "sentence": null, "note": "TODO: frase completa por falante nativo / fonte verificada. So a saudacao esta semeada." },
+    { "locale": "no_NO", "language": "Norsk", "confidence": "medium", "greeting": "God morgen", "sentence": "God morgen, været er fint i dag og jeg skal gå en tur gjennom byen.", "note": "no_NO existe em LOCALE_NAMES mas NAO ha prefixo 'no_' em LANG_TO_PREFIX -> nunca e auto-selecionado. Ver bug de alinhamento G3 no relatorio." }
+  ]
+}

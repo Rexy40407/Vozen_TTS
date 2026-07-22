@@ -1,0 +1,35 @@
+node_modules
+dist
+coverage/
+.env
+cache/
+*.db
+*.db-*
+models/
+piper/
+
+# Temporary files (smoke-test scratch)
+tools/_smoke_*
+
+# Whisper STT sidecar (local Python environment and model)
+tools/whisper-venv/
+
+# Kokoro TTS sidecar (local Python environment, model, and voices)
+tools/kokoro-venv/
+tools/kokoro-v1.0.onnx
+tools/voices-v1.0.bin
+
+# Production logs and command-registration state
+logs/
+commands-state.json
+.vozen-rejoin-after-deploy
+
+# Regenerable runtime audio cache
+audio-cache/
+
+# Local agent/personal scratch files and the surrounding Obsidian vault index
+scratchpad/
+_Índice Voxi-bot.md
+
+# Generated site build output; publication happens in CI
+site-dist/

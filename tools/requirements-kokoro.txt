@@ -1,0 +1,11 @@
+# tools/requirements-kokoro.txt — deps do sidecar TTS Kokoro (kokoro-onnx, ONNX/CPU).
+# Instalado por setup-kokoro.ps1 em tools/kokoro-venv/ (gitignored). Versões PINADAS
+# para resolução determinística (falha alto se um wheel desaparecer). SEM PyTorch/GPU
+# — corre em CPU. O espeak-ng vem EMPACOTADO via espeakng-loader, por isso NÃO é
+# preciso instalar espeak-ng no sistema (necessário para o g2p de pt/es/fr/…).
+kokoro-onnx==0.5.0
+soundfile==0.14.0
+onnxruntime==1.27.0
+numpy==2.5.1
+phonemizer-fork==3.3.2
+espeakng-loader==0.2.4

@@ -1,0 +1,87 @@
+# Auto-deploy do BOT para o VPS (docs/DEPLOY-VPS.md §12). A cada push à main que
+# altere o código do bot, faz SSH ao VPS (chave dedicada ~/.ssh/deploy_key do user
+# vozen; secrets VPS_HOST/VPS_USER/VPS_SSH_KEY) e corre pull+ci+build+restart.
+# O sudoers do VPS permite `systemctl restart vozen.service` sem password (NOPASSWD
+# estreito). O site já tem o seu próprio auto-deploy (pages.yml) — este é só o bot.
+name: Deploy bot to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.github/workflows/deploy-bot.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-bot
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Pin a SHA (não a tag mutável): esta action corre com a chave SSH do VPS, logo um
+      # hijack da tag daria execução no servidor de produção. Bump deliberado via Dependabot.
+      - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        env:
+          TOPGG_WEBHOOK_SECRET: ${{ secrets.TOPGG_WEBHOOK_SECRET }}
+          VOTE_REDEMPTION_SECRET: ${{ secrets.VOTE_REDEMPTION_SECRET }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: TOPGG_WEBHOOK_SECRET,VOTE_REDEMPTION_SECRET
+          # Plan 027 (OPS-02/OPS-03): abordagem escolhida foi o gate de testes NO SCRIPT
+          # (correr `vitest` no VPS), não `workflow_run` sobre a CI. Motivo: `workflow_run`
+          # não suporta filtro `paths:`, e a CI (ci.yml) corre em todo o push à main sem
+          # filtro de paths — mudar para `workflow_run` fazia o deploy disparar também em
+          # pushes só de docs/site, e esvaziava o Step 1 (paths: scripts/**, tools/**) que
+          # é o que fecha o gap do supervisor/sidecars não fazerem deploy. `npm ci` normal
+          # instala devDependencies (o `vitest` está em devDependencies) — a service systemd
+          # define NODE_ENV=production só para o processo do bot (Environment= no unit file),
+          # não para esta sessão SSH, logo não afeta o `npm ci` aqui.
+          # `set -euo pipefail` tem de ser a PRIMEIRA linha: qualquer falha (pull/ci/build/
+          # testes) aborta ANTES do restart, deixando o serviço antigo (a funcionar) intacto
+          # em vez de reiniciar para uma árvore a meio/partida e entrar em crash-loop.
+          script: |
+            set -euo pipefail
+            cd ~/discord-bot-Vozen
+            # Sync to the remote by RESET, not `pull --ff-only`. The VPS is a pure deploy
+            # mirror (never committed to locally), so it must track origin/main even across
+            # a history rewrite. `pull --ff-only` aborts on a force-push divergence and wedges
+            # the deploy (it did — runs 29376170682/29377052289); reset is immune and re-aligns
+            # the checkout to exactly what was pushed. Untracked/ignored files (.env, the .db,
+            # audio-cache) are NOT touched by reset.
+            git fetch origin
+            git reset --hard origin/main
+            # sec(031): ver o comentário equivalente em ci.yml — só 4 pacotes nativos
+            # correm o próprio install script (rebuild explícito a seguir); os outros
+            # ~359 ficam bloqueados (--ignore-scripts) mesmo no deploy automático para
+            # produção, onde correm como o utilizador do serviço vozen no VPS.
+            npm ci --ignore-scripts
+            npm rebuild better-sqlite3 @discordjs/opus esbuild ffmpeg-static
+            # Online SQLite backup before migrations/tests/restart. The default target is
+            # ../vozen-backups, outside the Git checkout; a failed backup aborts deployment.
+            npm run backup:db
+            # The SAME gate as ci.yml (CONTRIBUTING.md's canonical one): build + typecheck +
+            # lint + format:check + vitest. Running only build+vitest here let a push
+            # that CI rejects (lint, formatting, or a test-file type error) still reach
+            # `systemctl restart` — both workflows trigger independently on push, so the
+            # deploy must carry its own full gate rather than assume CI passed.
+            npm run check
+            # Persist only the two allow-listed vote secrets from GitHub Actions. The script
+            # validates them, removes duplicate keys, writes atomically, and never logs values.
+            node scripts/sync-deploy-env.mjs
+            # One-shot, 10-minute fallback marker consumed by the NEW bot process. The old
+            # process overwrites it on SIGTERM with the exact live calls; this also covers
+            # the first rollout, whose old process cannot create that snapshot.
+            touch .vozen-rejoin-after-deploy
+            sudo -n systemctl restart vozen.service
+            sleep 20
+            systemctl is-active vozen.service

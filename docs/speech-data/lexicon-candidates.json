@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "title": "Voxi — candidatos CURADOS de lexico de texto curto para as 20 linguas sem cobertura",
+    "goal": "Fechar a lacuna C5/A4 (VOICE-QUALITY.md): hoje saudacoes destas linguas caem no franc, que erra em texto curto -> voz errada -> 'nao sabe falar'. Estes tokens sao FACTOS (saudacoes atestadas), nao invencao.",
+    "gate": "NAO fundir cegamente. Regra de greetings.ts: so entram tokens FORTEMENTE associados a UMA lingua. Antes de mover para LEXICON: (1) verificar empiricamente com franc v5 (o mesmo criterio usado no ficheiro); (2) rever colisoes contra os tokens ja existentes; (3) confirmar que o iso3 existe em LANG_TO_PREFIX (existe para todas estas).",
+    "split": {
+      "safe_unique_script": "Cirilico/Grego/Arabe/Georgiano/CJK/Devanagari nao colidem com o lexico Latin atual -> baixo risco.",
+      "needs_verification_latin": "Script Latino: pode colidir com tokens ja existentes ou entre si. Colisoes conhecidas assinaladas."
+    },
+    "important": "Isto so ajuda linguas que TENHAM modelo .onnx instalado. Sem modelo, a lingua garble na voz inglesa mesmo com deteccao perfeita (C1)."
+  },
+  "safe_unique_script": {
+    "rus": ["привет", "здравствуйте", "спасибо", "пока", "доброе утро"],
+    "ukr": ["привіт", "вітаю", "дякую", "добрий день", "доброго ранку"],
+    "ell": ["γεια", "γεια σου", "καλημέρα", "καλησπέρα", "ευχαριστώ"],
+    "ara": ["مرحبا", "السلام عليكم", "شكرا", "صباح الخير", "مساء الخير"],
+    "fas": ["سلام", "درود", "ممنون", "صبح بخیر", "خداحافظ"],
+    "kat": ["გამარჯობა", "მადლობა", "დილა მშვიდობისა"],
+    "kaz": ["сәлем", "сәлеметсіз бе", "рахмет", "қайырлы таң"],
+    "nep": ["नमस्ते", "नमस्कार", "धन्यवाद"],
+    "srp": ["здраво", "добар дан", "добро јутро", "хвала"],
+    "cmn": ["你好", "您好", "谢谢", "早上好", "晚安"]
+  },
+  "needs_verification_latin": {
+    "ces": { "tokens": ["ahoj", "dobrý den", "děkuji", "čau", "nazdar"], "collision": "'ahoj' e tambem saudacao Eslovaca (slk) -> ambiguo cs/sk; considerar deixar 'ahoj' de fora e usar so 'dobrý den'/'nazdar'." },
+    "hun": { "tokens": ["szia", "sziasztok", "jó napot", "köszönöm", "helló"], "collision": "'helló' aproxima-se de 'helo'->eng ja no LEXICON; preferir 'szia'/'sziasztok' (distintivos)." },
+    "cym": { "tokens": ["shwmae", "bore da", "diolch", "noswaith dda"], "collision": "'helo' Gales colide com 'helo'->eng ja existente -> NAO usar; 'shwmae' e distintivo." },
+    "isl": { "tokens": ["góðan dag", "góðan daginn", "takk", "sæl", "halló"], "collision": "'halló' aproxima-se de 'hallo'->deu; preferir 'góðan dag'/'takk'." },
+    "ltz": { "tokens": ["moien", "äddi"], "collision": "'merci' em Luxemburgues colide com 'merci'->fra -> NAO usar; 'moien'/'äddi' sao distintivos." },
+    "lav": { "tokens": ["sveiki", "labdien", "labrīt", "paldies"], "collision": "nenhuma obvia; verificar 'sveiki' vs lituano." },
+    "slk": { "tokens": ["ahoj", "dobrý deň", "ďakujem", "čau"], "collision": "'ahoj'/'čau' colidem com Checo (ces) -> ambiguo; usar 'dobrý deň'/'ďakujem'." },
+    "slv": { "tokens": ["živjo", "zdravo", "dober dan", "hvala"], "collision": "'zdravo'/'hvala' colidem com Servio/Croata; 'živjo'/'dober dan' mais seguros para esloveno." },
+    "swh": { "tokens": ["habari", "jambo", "asante", "karibu", "mambo"], "collision": "nenhuma obvia com o lexico atual." },
+    "vie": { "tokens": ["xin chào", "chào bạn", "cảm ơn", "chào buổi sáng"], "collision": "nenhuma obvia; os diacriticos tornam-nos distintivos." }
+  },
+  "alignment_fixes": {
+    "description": "Correcoes de ALINHAMENTO nas estruturas existentes (nao sao linguas novas — sao dados ja la que nao batem certo).",
+    "greeting_initial_missing": [
+      { "token": "buna", "lang": "ron", "reason": "esta em LEXICON mas nao em GREETING_INITIAL -> 'buna ce faci' nao e apanhado pela regra da saudacao-inicial." },
+      { "token": "bună", "lang": "ron", "reason": "idem, variante com diacritico." },
+      { "token": "hejsa", "lang": "dan", "reason": "esta em LEXICON (dan) mas nao em GREETING_INITIAL." }
+    ],
+    "voicemap_missing_prefix": [
+      { "add": "nor -> no_", "reason": "no_NO ja tem autonimo em LOCALE_NAMES; sem o prefixo de deteccao, um modelo Noruegues nunca e escolhido. Verificar que o franc emite 'nor' para Noruegues antes de confiar (bokmal/nynorsk)." }
+    ]
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "title": "Voxi — grelha MOS (ITU-T P.800 ACR) — TEMPLATE VAZIO",
+    "purpose": "Registo de pontuacoes MOS de naturalidade (1-5) por voz instalada, por falante nativo. Ver protocolo em docs/VOICE-EVAL-MOS-AB.md §2.",
+    "status": "pending — NENHUMA pontuacao preenchida (sem raters/audio neste ambiente; nao inventar).",
+    "scale": { "5": "Excelente", "4": "Boa", "3": "Razoavel", "2": "Fraca", "1": "Ma" },
+    "rules": [
+      "So vozes com .onnx instalado (nao linguas sem modelo — seria testar o fallback ingles).",
+      "Apresentacao cega e aleatorizada; ancoras hi (en_US-amy-medium) / lo (x_low ou garble) intercaladas, NAO entram na media.",
+      "Minimo >=5 raters nativos x >=2 frases por voz (piso pragmatico de self-host).",
+      "Estimulos = docs/speech-data/reference-sentences.json (nao cunhar frases novas)."
+    ],
+    "how_to_fill": "Uma entrada por (voz x rater x frase). score = 1..5. Consolidar com o bloco 'aggregate' por voz (mean, sd, ci95, n)."
+  },
+  "sessions": [
+    {
+      "voice_model": "<ex. it_IT-riccardo-medium>",
+      "locale": "<ex. it_IT>",
+      "iteration_id": "<ex. baseline | iter-003>",
+      "date": "<YYYY-MM-DD>",
+      "is_anchor": false,
+      "scores": [
+        {
+          "rater_id": "<anon, ex. R1>",
+          "native_speaker": true,
+          "sentence_ref": "<locale de reference-sentences.json>",
+          "clip_id": "<nome cego, ex. clip_017.wav>",
+          "score": null,
+          "defects_logged": []
+        }
+      ]
+    }
+  ],
+  "aggregate": [
+    {
+      "voice_model": "<ex. it_IT-riccardo-medium>",
+      "mos_mean": null,
+      "mos_sd": null,
+      "ci95": null,
+      "n_raters": null,
+      "n_ratings": null,
+      "verdict": "<pending | aceitavel(>=3.5) | fraca(<3.0) | ...>"
+    }
+  ]
+}

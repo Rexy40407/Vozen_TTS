@@ -1,0 +1,34 @@
+{
+  "_meta": {
+    "title": "Voxi — registo cumulativo de iteracoes de qualidade de voz — TEMPLATE VAZIO",
+    "purpose": "Artefacto DURAVEL que prova que cada iteracao melhorou (ou nao). Liga a alavanca alterada ao MOS antes/depois e ao A/B. Ver docs/VOICE-EVAL-MOS-AB.md §6.",
+    "status": "pending — NENHUMA iteracao real registada (sem raters/audio; nao inventar).",
+    "loop_rules": [
+      "Uma alavanca por iteracao (C2 OU C3 OU C4, nunca combinadas).",
+      "Baseline (sem alteracao) antes de tocar em qualquer alavanca.",
+      "Merge so se o A/B passar o criterio (docs/VOICE-EVAL-MOS-AB.md §3).",
+      "Prioridade C1/C2 > C3 > C4 (nao afinar noise_* numa voz ainda x_low)."
+    ]
+  },
+  "iterations": [
+    {
+      "iteration_id": "<ex. baseline | iter-001>",
+      "date": "<YYYY-MM-DD>",
+      "voice_model": "<ex. it_IT-riccardo-x_low -> it_IT-*-medium>",
+      "locale": "<ex. it_IT>",
+      "lever": "<C2_tier | C3_length_scale | C4_synth_params | C4_global_preset | none(baseline)>",
+      "change_summary": "<o que mudou exatamente, ex. trocar x_low por medium>",
+      "code_ref": "<ficheiro/chave, ex. VOICE_CALIBRATION['it_IT-...']=1.3 ; ou 'MODELS_DIR (operador)'>",
+      "mos_before": null,
+      "mos_after": null,
+      "mos_ci95_before": null,
+      "mos_ci95_after": null,
+      "ab_cmos_mean": null,
+      "ab_pct_prefer_B": null,
+      "ab_binomial_p": null,
+      "dominant_defect_before": "<defect_code de pronunciation-defects>",
+      "decision": "<pending | merged | rejected>",
+      "notes": "<observacoes>"
+    }
+  ]
+}

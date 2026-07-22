@@ -1,0 +1,60 @@
+name: Deploy site to GitHub Pages
+
+# Publica o site em GitHub Pages, MINIFICADO. O passo build:site gera site-dist/ a
+# partir de site/ (index.html + css/js minificados; privacy/terms ficam legiveis) e e
+# essa pasta que se publica. O configure-pages (enablement: true) LIGA o Pages sozinho
+# na 1a corrida. Cada push a main que altere site/ ou o script de build redeploya.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'tools/minify-site.mjs'
+      - 'tests/operationalHardening.test.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Uma so publicacao de cada vez; nao cancela um deploy a meio.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Matches package.json engines (>=22.12) and ci.yml. The site build only uses
+          # pure-JS minifiers, so 20 worked — but running below the declared floor is how
+          # a Node-22+ incompatibility in the build tooling stays hidden until it bites.
+          node-version: 22
+          cache: npm
+      # Install scripts BLOQUEADOS (mesma postura de supply-chain do ci.yml/deploy-bot.yml,
+      # plano 031) — este job tem pages:write + id-token:write, por isso não pode correr o
+      # postinstall de 363 deps. O build:site só usa html-minifier-terser/terser/clean-css
+      # (JS puro), logo não é preciso reconstruir nenhum binário nativo aqui.
+      - run: npm ci --ignore-scripts
+      - run: npm rebuild esbuild
+      - name: Verify and build site (site/ -> site-dist/)
+        run: npm run check:site
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site-dist
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

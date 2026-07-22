@@ -1,0 +1,63 @@
+{
+  "_meta": {
+    "title": "Voxi — matriz de cobertura de dados de lingua (alinhamento das 4 estruturas)",
+    "sources": [
+      "src/language/voiceMap.ts :: LANG_TO_PREFIX (deteccao -> prefixo de modelo)",
+      "src/language/voiceMap.ts :: LOCALE_NAMES (autonimo para o dropdown)",
+      "src/language/greetings.ts :: LEXICON (texto curto -> lingua)",
+      "src/language/greetings.ts :: GREETING_INITIAL (tokens que podem liderar frase curta)"
+    ],
+    "autonym_note": "O campo 'autonym' reproduz o valor de LOCALE_NAMES no codigo (com diacriticos). Onde ha varios locales por lingua, uso a forma base.",
+    "legend": {
+      "prefix": "prefixo do nome do .onnx que a deteccao procura",
+      "hasShortLexicon": "tem >=1 token em LEXICON (senao, saudacoes caem no franc -> misdeteccao -> voz errada)",
+      "inGreetingInitial": "tem >=1 token no set GREETING_INITIAL (para apanhar 'saudacao + ...' ate 4 palavras)",
+      "script": "unique = script proprio (nao colide com Latin no lexico); latin = precisa de revisao anti-colisao"
+    },
+    "counts": {
+      "mapped_languages": 34,
+      "with_short_lexicon": 14,
+      "without_short_lexicon": 20,
+      "display_only_unroutable": 1
+    }
+  },
+  "languages": [
+    { "iso3": "por", "prefix": "pt_", "locales": ["pt_PT","pt_BR"], "autonym": "Português", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "eng", "prefix": "en_", "locales": ["en_US","en_GB"], "autonym": "English", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "spa", "prefix": "es_", "locales": ["es_ES","es_MX"], "autonym": "Español", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "fra", "prefix": "fr_", "locales": ["fr_FR"], "autonym": "Français", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "deu", "prefix": "de_", "locales": ["de_DE"], "autonym": "Deutsch", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "ita", "prefix": "it_", "locales": ["it_IT"], "autonym": "Italiano", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "nld", "prefix": "nl_", "locales": ["nl_NL","nl_BE"], "autonym": "Nederlands", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "pol", "prefix": "pl_", "locales": ["pl_PL"], "autonym": "Polski", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "tur", "prefix": "tr_", "locales": ["tr_TR"], "autonym": "Türkçe", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "swe", "prefix": "sv_", "locales": ["sv_SE"], "autonym": "Svenska", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "fin", "prefix": "fi_", "locales": ["fi_FI"], "autonym": "Suomi", "hasShortLexicon": true, "inGreetingInitial": true, "script": "latin" },
+    { "iso3": "dan", "prefix": "da_", "locales": ["da_DK"], "autonym": "Dansk", "hasShortLexicon": true, "inGreetingInitial": false, "script": "latin", "note": "LEXICON tem 'hejsa'/'tak' mas NENHUM esta em GREETING_INITIAL -> 'hejsa ...' (frase curta) nao e apanhado pela regra 3." },
+    { "iso3": "ron", "prefix": "ro_", "locales": ["ro_RO"], "autonym": "Română", "hasShortLexicon": true, "inGreetingInitial": false, "script": "latin", "note": "LEXICON tem 'buna'/'bună' mas NAO estao em GREETING_INITIAL -> 'buna ce faci' nao e apanhado pela regra 3." },
+    { "iso3": "cat", "prefix": "ca_", "locales": ["ca_ES"], "autonym": "Català", "hasShortLexicon": true, "inGreetingInitial": false, "script": "latin", "note": "unica saudacao e 'bon dia' (2 tokens); GREETING_INITIAL so aceita 1 token lider, logo Catalao nao tem lider curto." },
+
+    { "iso3": "rus", "prefix": "ru_", "locales": ["ru_RU"], "autonym": "Русский", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+    { "iso3": "ukr", "prefix": "uk_", "locales": ["uk_UA"], "autonym": "Українська", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+    { "iso3": "ces", "prefix": "cs_", "locales": ["cs_CZ"], "autonym": "Čeština", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "ell", "prefix": "el_", "locales": ["el_GR"], "autonym": "Ελληνικά", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+    { "iso3": "hun", "prefix": "hu_", "locales": ["hu_HU"], "autonym": "Magyar", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "ara", "prefix": "ar_", "locales": ["ar_JO"], "autonym": "العربية", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+    { "iso3": "cym", "prefix": "cy_", "locales": ["cy_GB"], "autonym": "Cymraeg", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "fas", "prefix": "fa_", "locales": ["fa_IR"], "autonym": "فارسی", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+    { "iso3": "isl", "prefix": "is_", "locales": ["is_IS"], "autonym": "Íslenska", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "kat", "prefix": "ka_", "locales": ["ka_GE"], "autonym": "ქართული", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+    { "iso3": "kaz", "prefix": "kk_", "locales": ["kk_KZ"], "autonym": "Қазақ тілі", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+    { "iso3": "ltz", "prefix": "lb_", "locales": ["lb_LU"], "autonym": "Lëtzebuergesch", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "lav", "prefix": "lv_", "locales": ["lv_LV"], "autonym": "Latviešu", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "nep", "prefix": "ne_", "locales": ["ne_NP"], "autonym": "नेपाली", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+    { "iso3": "slk", "prefix": "sk_", "locales": ["sk_SK"], "autonym": "Slovenčina", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "slv", "prefix": "sl_", "locales": ["sl_SI"], "autonym": "Slovenščina", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "srp", "prefix": "sr_", "locales": ["sr_RS"], "autonym": "Српски", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true, "note": "servio escreve-se em Cirilico (unique) E Latino (colide); so o Cirilico e seguro." },
+    { "iso3": "swh", "prefix": "sw_", "locales": ["sw_CD"], "autonym": "Kiswahili", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "vie", "prefix": "vi_", "locales": ["vi_VN"], "autonym": "Tiếng Việt", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "gap": true },
+    { "iso3": "cmn", "prefix": "zh_", "locales": ["zh_CN"], "autonym": "中文", "hasShortLexicon": false, "inGreetingInitial": false, "script": "unique", "gap": true },
+
+    { "iso3": "nor", "prefix": null, "locales": ["no_NO"], "autonym": "Norsk", "hasShortLexicon": false, "inGreetingInitial": false, "script": "latin", "displayOnlyUnroutable": true, "note": "ALINHAMENTO QUEBRADO: 'no_NO' esta em LOCALE_NAMES mas NAO ha 'nor'->'no_' em LANG_TO_PREFIX. Um modelo Noruegues mostraria o nome certo mas nunca seria auto-selecionado -> texto Noruegues cai no fallback ingles (garble)." }
+  ]
+}

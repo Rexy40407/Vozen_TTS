@@ -1,0 +1,611 @@
+export default {
+  'error.generic': 'Něco se pokazilo. Zkuste to prosím znovu.',
+  'error.needManageGuild': 'K tomu potřebuješ oprávnění **Spravovat server**.',
+  'join.needVoiceChannel': 'Nejdřív se připoj k hlasovému kanálu a pak spusť /join.',
+  'join.missingPerms': 'V kanálu {channel} potřebuji oprávnění **Připojit se** a **Mluvit**.',
+  'join.joined':
+    '✅ Jsem v {channel}! Další krok: napiš `/tts ahoj` a přečtu to nahlas. Chceš, abych automaticky předčítal kanál? Spusť /setup.',
+  'join.joinedAutoread':
+    '✅ Jsem v {channel}! Vše je připraveno. Piš do kanálu pro automatické předčítání a já to přečtu nahlas. → {readChannel}',
+  'leave.left': 'Opustil jsem hlasový kanál. Zase někdy!',
+  'skip.notInVoice':
+    'Zatím nejsem v hlasovém kanálu — připoj se k nějakému, spusť /join a pak to zkus znovu.',
+  'skip.skipped': 'Přeskočeno.',
+  'skip.nothing': 'Právě teď nic nehraje.',
+  'tts.notInVoice':
+    'Zatím nejsem v hlasovém kanálu — připoj se k nějakému, spusť /join a pak to zkus znovu.',
+  'tts.nothingToRead': 'Není tam co číst — pošli mi nějaký text, který mám říct.',
+  'tts.nothingAfterClean':
+    'Po vyčištění už nezůstalo nic k přečtení — zkus normální text (písmena nebo slova).',
+  'tts.tooFast': 'Hola, zpomal trochu — zkus to za chviličku znovu.',
+  'tts.blocked': 'Ten text obsahuje zablokované slovo, tak jsem ho vynechal.',
+  'tts.queued': 'Mám to — je to ve frontě.',
+  'tts.busy': 'Právě mám napilno — zkus to za chviličku znovu.',
+  'voice.unknownModel': 'Ten hlas neznám — mrkni na /voice list.',
+  'voice.badSpeed':
+    'Rychlost musí být mezi 0.5 a 2.0 (1.0 je normální). Zkus `/voice set model:… speed:1.0`.',
+  'voice.set':
+    '✅ Tvůj hlas je teď **{name}** rychlostí {speed}×. Zkus `/tts ahoj` a poslechni si ho. (id: `{model}`)',
+  'voice.config.title':
+    '🎙️ **Nastavení hlasu** — vyber možnosti níže a stiskni **Uložit**. Do té doby se nic nezmění.',
+  'voice.config.summary': 'Aktuální výběr: **{voice}** · modul **{engine}** · {speed}×',
+  'voice.config.pickLanguage': 'Jazyk…',
+  'voice.config.pickVoice': 'Hlas…',
+  'voice.config.pickEngine': 'Modul…',
+  'voice.config.pickSpeed': 'Rychlost…',
+  'voice.config.more': '▼ Další jazyky',
+  'voice.config.engDefault': 'Výchozí (místní)',
+  'voice.config.save': 'Uložit',
+  'voice.config.cancel': 'Zrušit',
+  'voice.config.cancelled': 'Nastavení zrušeno — nic se nezměnilo.',
+  'voice.config.expired': 'Platnost panelu vypršela — pro pokračování znovu spusť `/voice config`.',
+  'voice.listHeader': 'Dostupné hlasy:',
+  'voice.listEmpty': '(žádné nainstalované)',
+  'voice.reset':
+    '✅ Tvůj hlas je zpět na výchozím. Kdykoliv si vyber jiný pomocí `/voice list` a `/voice set`.',
+  'voice.optout':
+    'Už tě nebudu předčítat automaticky. Spusť /voice opt-in, když to chceš zase zapnout.',
+  'voice.optin': 'Budeš zase předčítán automaticky.',
+  'voice.detection.on':
+    '✅ Automatická detekce jazyka je ZAPNUTÁ: každá zpráva se čte hlasem podle rozpoznaného jazyka (mluvčí se může měnit). Vypni ji pomocí `/voice detection active:false`.',
+  'voice.detection.off':
+    '✅ Automatická detekce jazyka je VYPNUTÁ: všechno čte tvůj jeden pevný hlas, takže zníš pořád stejně.',
+  'voice.notInVoice': 'Zatím nejsem v hlasovém kanálu — nejdřív spusť /join.',
+  'voice.previewPlaying': 'Přehrávám ukázku…',
+  'preview.sample': 'Ahoj, jsem Vozen. napiš to, poslechni si to.',
+  'laugh.playing': 'Haha! Přehrávám to tvým hlasem…',
+  'joke.playing': 'Vyprávím vtip…\n> {joke}',
+  'joke.unknownLang': 'Ten jazyk neznám. Vyber si nějaký ze seznamu.',
+  'voice.abbrev.added': 'Mám to — {term} se bude číst jako {replacement}.',
+  'voice.abbrev.removed': 'Odstranil jsem tvou zkratku pro {term}.',
+  'voice.abbrev.listHeader': 'Tvoje osobní zkratky (použito {count}/{cap}):',
+  'voice.abbrev.listEmpty': '(zatím žádné — přidej jednu pomocí /voice abbrev add)',
+  'voice.abbrev.capReached':
+    'Dosáhl jsi limitu {cap} osobních zkratek. Než přidáš další, jednu odeber.',
+  'voice.abbrev.invalidTerm':
+    'Výraz musí být jedno slovo (jen písmena a číslice), maximálně 50 znaků.',
+  'voice.abbrev.emptyReplacement': 'Čtená podoba nesmí být prázdná.',
+  'voice.abbrev.tooLong': 'Čtená podoba je příliš dlouhá (max 200 znaků).',
+  'config.wordEmpty': 'Slovo nesmí být prázdné.',
+  'config.blocked': 'Zablokováno: {word}.',
+  'config.unblocked': 'Odblokováno: {word}.',
+  'config.pronListHeader': 'Slovník výslovnosti:',
+  'config.pronEmptyValue': '(prázdné)',
+  'config.listEmpty': '(žádné)',
+  'config.termEmpty': 'Výraz nesmí být prázdný.',
+  'config.pronEmpty': 'Výslovnost nesmí být prázdná.',
+  'config.pronSet': 'Mám to — {term} se bude číst jako {replacement}.',
+  'config.pronRemoved': 'Odstranil jsem výslovnost pro {term}.',
+  'config.channelWrongType': 'Vyber textový kanál (ne hlasový kanál ani kategorii).',
+  'config.channelNoAccess': 'Nevidím {channel} — zkontroluj prosím moje oprávnění tam.',
+  'config.channelSet':
+    'Kanál pro automatické předčítání nastaven na {channel}. Dále: ujisti se, že je automatické předčítání zapnuté pomocí `/config auto-read active:true`.',
+  'config.autoreadOn': 'Automatické předčítání je nyní **zapnuté**.',
+  'config.autoreadOff': 'Automatické předčítání je nyní **vypnuté**.',
+  'config.maxCharsRange': 'Hodnota max znaků musí být mezi 1 a 2000.',
+  'config.maxCharsSet': 'Maximální počet znaků na zprávu nastaven na {value}.',
+  'config.rateLimitRange': 'Hodnota limitu rychlosti musí být mezi 1 a 120.',
+  'config.rateLimitSet': 'Limit rychlosti nastaven na {value} zpráv za minutu.',
+  'config.roleSet': 'Automatické předčítání je nyní omezeno na členy s rolí {role}.',
+  'config.roleCleared': 'Omezení role odstraněno — teď může být předčítán každý.',
+  'config.enabledOn': 'TTS je nyní **zapnuté** pro tento server.',
+  'config.enabledOff': 'TTS je nyní **vypnuté** pro tento server.',
+  'config.defaultVoiceSet':
+    '✅ Výchozí hlas serveru nastaven na **{name}**. Členové bez vlastního hlasu uslyší tento. (id: `{model}`)',
+  'config.reset':
+    'Konfigurace obnovena na výchozí. Tvůj seznam blokovaných slov a výslovnosti zůstaly zachovány.',
+  'config.showTitle': '**Konfigurace serveru**',
+  'config.showChannel': 'TTS kanál: {value}',
+  'config.showAutoread': 'Automatické předčítání: {value}',
+  'config.showRole': 'Role: {value}',
+  'config.showEnabled': 'Zapnuto: {value}',
+  'config.showVoice': 'Výchozí hlas: {value}',
+  'config.showMaxChars': 'Maximum znaků: {value}',
+  'config.showRateLimit': 'Limit rychlosti: {value}/min',
+  'config.showBlocklist': 'Seznam blokovaných: {count} slov',
+  'config.showPronunciation': 'Výslovnosti: {count} položek',
+  'config.valueNone': '(žádné)',
+  'config.valueAny': 'kdokoliv',
+  'config.valueAutoDetect': '(automatická detekce)',
+  'config.on': 'zapnuto',
+  'config.off': 'vypnuto',
+  'config.language.set': 'Jazyk rozhraní nastaven na {language}.',
+  'config.language.unsupported': 'Tento jazyk zatím není podporován.',
+  'setup.noChannel':
+    'Nepodařilo se mi zjistit, který kanál použít. Zadej textový kanál v možnosti "channel".',
+  'setup.channelWrongType':
+    'Kanál pro automatické předčítání musí být textový kanál (ne hlasový kanál ani kategorie). Zadej ho v možnosti "channel".',
+  'setup.done': '**Vše nastaveno — Vozen je připraven.**',
+  'setup.channelLine': 'Kanál pro automatické předčítání: {channel}',
+  'setup.autoreadOn': 'Automatické předčítání: zapnuto',
+  'setup.permsHeader': '**Oprávnění:**',
+  'setup.permView': 'ViewChannel (vidět textový kanál)',
+  'setup.permSend': 'SendMessages (psát do textového kanálu)',
+  'setup.permConnect': 'Connect (připojit se k hlasovému kanálu)',
+  'setup.permSpeak': 'Speak (mluvit v hlasovém kanálu)',
+  'setup.permOk': '✅ {label}',
+  'setup.permMissing': '❌ {label} — chybí',
+  'setup.permUnchecked': '⏳ {label} — zatím nezkontrolováno (ověřím to při /join)',
+  'setup.fixHint':
+    'Jak opravit chybějící: v nastavení serveru otevři roli Vozen (nebo oprávnění kanálu) a povol položky označené ❌.',
+  'setup.voiceUncheckedNote':
+    'Nejsi v hlasovém kanálu, takže jsem zatím nemohl zkontrolovat Connect/Speak — ověřím je, až spustíš /join.',
+  'setup.allGood': 'Vše je připraveno. Připoj se k hlasovému kanálu a spusť /join.',
+  'setup.joinedVoice': 'Připojil jsem se také k {channel} — /join není potřeba.',
+  'setup.readyTalk':
+    'Vše je připraveno. Piš do kanálu pro automatické předčítání a já to přečtu nahlas.',
+  'setup.membersHeader': '**Řekni svým členům (3 kroky):**',
+  'setup.membersBody':
+    '1) Připoj se k hlasovému kanálu\n2) Spusť /join, abych se k tobě přidal\n3) Piš do tohoto kanálu (nebo použij /tts) a já to přečtu nahlas\nÚplný seznam příkazů: /help',
+  'stats.title': '**Statistiky Vozen**',
+  'stats.messagesSpoken': 'Přečtené zprávy: {value}',
+  'stats.cacheHits': 'Zásahy cache: {value}',
+  'stats.cacheMisses': 'Minutí cache: {value}',
+  'stats.synthErrors': 'Chyby syntézy: {value}',
+  'stats.voiceDrops': 'Výpadky hlasu: {value}',
+  'stats.voiceReconnects': 'Znovupřipojení: {value}',
+  'stats.votes': 'Hlasy top.gg: {value}',
+  'stats.activePlayers': 'Aktivní přehrávače: {value}',
+  'stats.servers': 'Servery: {value}',
+  'stats.uptime': 'Doba běhu: {value}s',
+  'invite.noClientId':
+    'Zvací odkaz Vozen zatím není nastaven (chybí CLIENT_ID). Dej vědět správci bota.',
+  'invite.link': 'Přidej Vozen na svůj server:\n{url}',
+  'vote.noClientId':
+    'Hlasovací odkaz Vozen zatím není nastaven (chybí CLIENT_ID). Dej vědět správci bota.',
+  'vote.link':
+    'Hlasuj pro Vozen (zdarma, každých 12 h) a pomoz víc lidem ho najít:\n{url}\nPokud tento účet odměnu ještě nikdy nevyužil, získá **48 hodin Vozen Plus**, pouze jednou na účet.',
+  'help.title': 'Vozen — napiš to, poslechni si to.',
+  'help.embedTitle': 'Vozen — Příkazy',
+  'help.intro':
+    'Vozen předčítá tvůj text nahlas v hlasových kanálech — hlasy zdarma na bázi neuronových sítí, desítky jazyků.',
+  'help.quickStartTitle': 'Rychlý start (3 kroky)',
+  'help.quickStartBody':
+    '1) Připoj se k hlasovému kanálu, pak spusť /join\n2) Piš do textového kanálu (nebo použij /tts Ahoj všichni!)\n3) (volitelné) Vyber si hlas pomocí /voice set',
+  'help.groupStarted': 'Začínáme',
+  'help.groupStartedBody':
+    '• /join — připojím se k tvému hlasovému kanálu\n• /leave — opustím hlasový kanál\n• /tts <text> — přečtu text nahlas · např. /tts Ahoj všichni!\n• /skip — přeskočí, co právě čtu',
+  'help.groupVoice': 'Tvůj hlas',
+  'help.groupVoiceBody':
+    '• /voice set <model> — vyber si hlas · např. /voice set en_US-amy-medium\n• /voice list — zobrazí dostupné hlasy\n• /voice preview — poslechni si ukázku svého hlasu\n• /voice reset — vrať se k výchozímu hlasu\n• /voice opt-out · /voice opt-in — vypni / zapni automatické předčítání pro tebe\n• /voice abbrev add|remove|list — osobní slang, čtený po tvém (až 10)',
+  'help.groupFun': 'Zábava',
+  'help.groupFunBody':
+    '• /joke — řeknu krátký vtip (vyber jazyk + volitelný smích) · např. /joke English\n• /laugh — zasměju se nahlas tvým aktuálním hlasem',
+  'help.groupAdmin': 'Správa serveru (vyžaduje Spravovat server)',
+  'help.groupAdminBody':
+    '• /setup — vedená jednokroková konfigurace · spusť to jako první\n• /config — auto-read, tts-channel, language, default-voice, block-word, pronunciation,\n  rate-limit, role, max-chars, enabled · např. /config tts-channel #general\n• /stats — statistiky bota',
+  'help.groupMore': 'Více',
+  'help.groupMoreBody':
+    '• /invite — přidej Vozen na jiný server\n• /vote — hlasuj pro Vozen na top.gg\n• /help — zobrazí tuto nápovědu',
+  'help.footer': 'Jsi tu nový? Spusť {command} a začni.',
+  'welcome.title': 'Díky, že jsi přidal Vozen! 👋',
+  'welcome.description':
+    'Vozen předčítá tvůj chat nahlas v hlasových kanálech — napiš to, poslechni si to.\n\n**Začni jedním krokem:** spusť {setup} a nastavím automatické předčítání a připojím se k tvému hlasovému kanálu.\n\nPotřebuješ úplný seznam příkazů? Spusť {help}.',
+  'welcome.enginePlans':
+    'Piper neural voices stay free. 💎 Kokoro and Google HD unlock with Vozen Plus or server Premium.',
+  'welcome.stepsTitle': 'Jak to členové používají (3 kroky)',
+  'welcome.stepsBody':
+    '1) Připoj se k hlasovému kanálu\n2) Spusť /join, abych se k tobě přidal\n3) Piš do textového kanálu (nebo použij /tts) a já to přečtu nahlas\nÚplný seznam příkazů: /help',
+  'welcome.footer': 'Vozen — napiš to, poslechni si to.',
+  'welcome.tagline': 'Přirozený neuronový hlas — zdarma navždy, žádná placená zeď.',
+  'stt.guildOnly': 'Přepis funguje jen uvnitř serveru.',
+  'stt.noManage': 'Ke spuštění nebo zastavení přepisu potřebuješ oprávnění **Spravovat server**.',
+  'stt.notPremium':
+    '🎙️ Živý přepis je **Premium** funkce. Odemkni ji pro tento server přes `/premium info`.',
+  'stt.unavailable':
+    'Přepis není na této instanci dostupný (není nainstalovaný převod řeči na text).',
+  'stt.notInVoice':
+    'Nejsem v hlasovém kanálu — nejdřív se k nějakému připoj a spusť `/join`, pak spusť přepis.',
+  'stt.alreadyRunning': 'Přepis na tomto serveru už běží. Nejdřív použij `/transcribe stop`.',
+  'stt.atCapacity':
+    'Právě teď běží napříč všemi servery příliš mnoho přepisů. Zkus to prosím za chvíli.',
+  'stt.noChannel':
+    'V tomto kanálu nemůžu psát přepisy. Zkus příkaz spustit z běžného textového kanálu.',
+  'stt.started':
+    '✅ Přepis spuštěn. Každý, kdo v oznámení stiskne **Souhlasím**, bude přepisován do tohoto kanálu.',
+  'stt.startFailed':
+    'Přepis se nepodařilo spustit (nepovedlo se zveřejnit oznámení). Vše jsem vrátil zpět — nic se nenahrává. Zkus to prosím znovu.',
+  'stt.announceStart':
+    '🎙️ **Živý přepis je v tomto kanálu ZAPNUTÝ.** Přepisují se jen lidé, kteří souhlasí — stiskni tlačítko níže a povol, aby se tvoje řeč sem zapisovala. Souhlas můžeš kdykoliv odvolat pomocí `/transcribe revoke`.',
+  'stt.consentBtn': 'Souhlasím s přepisem',
+  'stt.consentThanks':
+    '✅ Díky — tvoje řeč se teď na tomto serveru bude přepisovat. Souhlas kdykoliv odvoláš pomocí `/transcribe revoke`.',
+  'stt.stopped': '🛑 Přepis zastaven.',
+  'stt.notRunning': 'Přepis na tomto serveru neběží.',
+  'stt.announceStop': '🛑 **Živý přepis je teď VYPNUTÝ.** Přestal jsem poslouchat.',
+  'stt.revoked':
+    '✅ Souhlas odvolán — na tomto serveru už tě nebudu přepisovat. (Už zveřejněné zprávy zůstávají; pokud chceš, smaž je v Discordu.)',
+  'stt.revokeNone': 'S přepisem na tomto serveru jsi nesouhlasil, takže nebylo co odvolat.',
+  'privacy.eraseConfirm':
+    '⚠️ Toto trvale smaže **všechna** tvoje data Vozenu na všech serverech: nastavení hlasu, vyslovovanou přezdívku, osobní zkratky a výslovnosti, uložené narozeniny, skóre ve hrách, statistiky mluvení a opt-out. **Toto nelze vzít zpět.** Jsi si jistý?',
+  'privacy.erasePremiumNote':
+    '_Pozn.: tvůj zaplacený Premium/Plus a historie jeho nákupu zůstávají — patří tobě a zákonem vyžadovaným finančním záznamům. Chceš-li Premium ukončit, nech ho vypršet nebo kontaktuj podporu._',
+  'privacy.eraseYes': 'Smazat vše',
+  'privacy.eraseNo': 'Zrušit',
+  'privacy.eraseCancelled': 'Zrušeno — nic nebylo smazáno.',
+  'privacy.eraseDone': '✅ Hotovo. Všechna tvoje osobní data byla trvale smazána.',
+  'shutup.notInVoice':
+    'Zatím nejsem v hlasovém kanálu — nejdřív se k nějakému připoj a spusť /join.',
+  'shutup.nothing': 'Právě teď nic nehraje.',
+  'shutup.done': '🤐 Dobře, přestanu — vyprázdnil jsem celou frontu.',
+  'voice.nickname.set': '✅ Vozen ti teď nahlas bude říkat **{name}**.',
+  'voice.nickname.cleared':
+    '✅ Vyslovovaná přezdívka odstraněna — Vozen použije tvoje jméno na serveru.',
+  'voice.nickname.invalid':
+    'To jméno nemá nic, co by šlo přečíst nahlas. Zkus písmena nebo číslice.',
+  'voice.effect.set':
+    '✅ Hlasový efekt nastaven na **{effect}** — tvoje zprávy se teď přehrávají s tímto efektem. Vypni ho pomocí `/voice effect none`.',
+  'voice.effect.cleared': '✅ Hlasový efekt odstraněn — zase čistý hlas.',
+  'voice.effect.locked':
+    '🔒 **{effect}** je Premium efekt. Efekty zdarma: 🤖 Robot a 🔊 Echo. Odemkni všechny s Vozen Premium — viz `/premium`.',
+  'voice.engine.gcloudLocked':
+    '🔒 **💎 Google HD** je Premium hlasový engine. Odemkni ho s Vozen Plus (osobní) nebo Vozen Premium (server) — viz `/premium`. Do té doby zůstává tvůj hlas na bezplatném lokálním enginu.',
+  'voice.engine.kokoroLocked':
+    '🔒 **💎 Kokoro** je Premium hlasový engine. Odemkni ho s Vozen Plus (osobní) nebo Vozen Premium (server) — viz `/premium`. Do té doby zůstává tvůj hlas na bezplatném lokálním enginu.',
+  'rizz.playing': '😏 Rozdávám balicí hlášky…\n> {line}',
+  'rizz.unknownLang': 'Ten jazyk neznám. Vyber si nějaký ze seznamu.',
+  'rizz.locked':
+    '🔒 **/rizz** je Premium výhoda. Odemkni ji s Vozen Plus (ty) nebo Premium (tento server). Viz `/premium`.',
+  'sound.playing': '🔊 Přehrávám **{name}**…',
+  'sound.unknown': 'Ten zvuk nemám. Seznam zobrazíš pomocí `/sound`.',
+  'sound.list':
+    '🔊 **Zvuky:** {sounds}\nNějaký přehraješ pomocí `/sound name:<sound>` (musím být v tvém hlasovém kanálu).',
+  'sound.disabled':
+    '🔇 Soundboard je na tomto serveru **vypnutý**. Admin ho může zapnout pomocí `/config soundboard`.',
+  'fun.eightball': '🎱 **{question}**\n> {answer}',
+  'fun.fortune': '🥠 {text}',
+  'fun.fact': '💡 {text}',
+  'fun.wyr': '🤔 {text}',
+  'birthday.set':
+    '🎂 Narozeniny uloženy: **{day}/{month}**. V ten den ti popřeju k narozeninám, až se připojíš k hlasovému kanálu!',
+  'birthday.invalid': 'To není platné datum. Zkontroluj den a měsíc.',
+  'birthday.cleared': '🎂 Narozeniny odstraněny.',
+  'birthday.show': '🎂 Tvoje narozeniny jsou nastaveny na **{day}/{month}**.',
+  'birthday.none': 'Zatím sis nenastavil narozeniny. Použij `/birthday set`.',
+  'topspeakers.title': '🗣️ **Nejaktivnější mluvčí** — koho na tomto serveru nejvíc čtu:',
+  'topspeakers.empty':
+    'Zatím jsem nikomu nečetl zprávy. Nastav si kanál pro čtení pomocí `/setup`!',
+  'topspeakers.line': '{rank}. <@{user}> — **{count}** zpráv · 🔥 série {streak} dní',
+  'serverstats.title': '📊 **Statistiky serveru**',
+  'serverstats.empty':
+    'Zatím žádné statistiky — nečetl jsem tu žádné zprávy ani nespustil žádné hry. Nastav to pomocí `/setup`!',
+  'serverstats.messages': '🗣️ **{total}** přečtených zpráv · **{speakers}** lidí',
+  'serverstats.topTalkers': '**Nejupovídanější:**',
+  'serverstats.talkerLine': '{rank}. <@{user}> — {count} zpráv · 🔥 {streak}d',
+  'serverstats.streak': '🔥 Nejdelší aktivní série: **{days}** dní',
+  'serverstats.games': '🎮 **{points}** herních bodů · **{wins}** výher · **{players}** hráčů',
+  'serverstats.topPlayers': '**Nejlepší hráči:**',
+  'serverstats.playerLine': '{rank}. <@{user}> — {points} b. · {wins} výher',
+  'serverstats.upsell':
+    '🔒 To je bezplatná ukázka. **Premium** odemkne série, herní statistiky a kompletní top 5 — viz `/premium`.',
+  'streak.day': '🔥 <@{user}> má sérii **{n} dní**! Mluv dál, ať ji udržíš.',
+  'leaderboard.autoTitle': '🏆 Nejupovídanější na tomto serveru',
+  'premium.title': '💎 **Stav Vozen Premium**',
+  'premium.lineServerActive': '🖥️ **Server:** Premium do {date}',
+  'premium.lineServerFree': '🖥️ **Server:** plán Free',
+  'premium.lineUserActive': '👤 **Ty (Plus):** aktivní do {date}',
+  'premium.lineUserFree': '👤 **Ty (Plus):** neaktivní',
+  'premium.getHint':
+    'Všechno, co používáš dnes, zůstává zdarma. Premium přidává všech 8 hlasových efektů, 24/7 v hovoru, 50 osobních výslovností, /rizz a prémiové hry. Podpora: https://ko-fi.com/',
+  'premium.enginePerks':
+    '💎 **Premium voice engines:** Kokoro neural and Google HD — unlocked personally with Plus or for everyone with server Premium.',
+  'premium.linePass':
+    '🎟️ **Tvůj Premium pass:** {used}/{total} licencí v používání · vyprší {date}',
+  'premium.passServers': '↳ Používá se na: {servers}',
+  'premium.pitch':
+    'Zatím nemáš Premium. **Vozen Premium** (€3.99/měs za 3 servery nebo €7.99/měs za 8) odemyká pro celý server: všech 8 hlasových efektů, 24/7 v hovoru, 50 osobních výslovností (oproti 3), příkaz /rizz a prémiové hry (Řetěz slov, Wordle, Šachy). **Vozen Plus** (€1.99/měs) ti dá tyhle výhody osobně, na jakémkoliv serveru.',
+  'premium.buyHint':
+    '▶ **Získej Premium:** {link}\nPo koupi spusť `/premium activate` na serveru, který chceš.',
+  'premium.confirmActivate':
+    'Použít **1 z tvých {total} Premium licencí** na **tomto serveru**? Právě teď jich máš **{used}** v používání. Můžeš ji později uvolnit pomocí `/premium deactivate` — čas passu tak jako tak běží dál.',
+  'premium.confirmYes': '💎 Použít licenci',
+  'premium.confirmNo': 'Zrušit',
+  'premium.activateOk':
+    '✅ Premium je teď aktivní na **tomto serveru** do {date}. Licence: **{used}/{total}** v používání.',
+  'premium.activateCancelled': 'Zrušeno — žádná licence nebyla použita.',
+  'premium.activateTimeout': 'Vypršel čas — žádná licence nebyla použita.',
+  'premium.noPass':
+    'Nemáš aktivní Premium pass. Pořiď si ho a přistane na tvém účtu — pak tady spusť `/premium activate`.\n▶ {link}',
+  'premium.alreadyActive': 'Tento server už jednu z tvých Premium licencí má. Není co dělat.',
+  'premium.noSeats':
+    'Všechny tvoje **{total}** Premium licence se používají ({servers}). Uvolni tam jednu pomocí `/premium deactivate` a pak to zkus tady znovu.',
+  'premium.needManageGuild':
+    'Aktivace Premium ovlivní celý server — může to udělat jen člen s oprávněním **Spravovat server**. Požádej admina.',
+  'premium.deactivateOk':
+    '✅ Uvolnil jsem Premium licenci tohoto serveru. Použij ji na jiném serveru pomocí `/premium activate`.',
+  'premium.deactivateNone': 'Tento server nemá žádnou tvou Premium licenci, kterou by šlo uvolnit.',
+  'premium.thisServer': 'tento server',
+  'grant.denied': '⛔ Tento příkaz je jen pro vlastníka bota.',
+  'grant.okPremium':
+    '✅ Přidělil jsem <@{user}> **Premium pass** ({seats} licencí) na **{days}** dní — vyprší {date}. Aktivuje ho pomocí `/premium activate`.',
+  'grant.okPlus': '✅ Přidělil jsem <@{user}> **Vozen Plus** na **{days}** dní — vyprší {date}.',
+  'gencode.done':
+    '✅ Vygenerováno **{count}** kódů {plan}, každý na **{days}** dní. Sdílej je soukromě:\n{list}',
+  'redeem.okPlus': '🎁 Uplatněno! Získal jsi **Vozen Plus** na **{days}** dní — vyprší {date}.',
+  'redeem.okPremium':
+    '🎁 Uplatněno! Získal jsi **Premium pass** ({seats} licencí) na **{days}** dní — vyprší {date}. Aktivuj ho na svém serveru pomocí `/premium activate`.',
+  'redeem.notFound': '❌ Takový kód neexistuje. Zkontroluj ho a zkus to znovu.',
+  'redeem.used': '❌ Tento kód už byl uplatněn.',
+  'redeem.expired': '❌ Platnost tohoto kódu vypršela.',
+  'config.blockLimit':
+    'Tento server už má maximum {max} zablokovaných slov. Než přidáš další, jedno odeber.',
+  'config.xsaidOn':
+    'Vozen teď před každou zprávou oznámí, **kdo mluvil** (např. „Alex řekl ahoj“). Vypni pomocí `/config x-said active:false`.',
+  'config.xsaidOff': 'Vozen **už nebude** oznamovat, kdo mluvil — přečte jen zprávu.',
+  'config.autojoinOn':
+    '✅ Automatické připojení **zapnuto** — Vozen se připojí k tvému hlasovému kanálu, když napíšeš do TTS kanálu.',
+  'config.autojoinOff':
+    'Automatické připojení **vypnuto** — použij `/join`, abys přivedl Vozen do hlasu.',
+  'config.stayOn':
+    '✅ 24/7 v hovoru **zapnuto** — Vozen zůstane v hlasovém kanálu, i když se vyprázdní, a vrátí se po restartu. 💎 Aby to fungovalo, je potřeba Premium (kup si ho nebo uplatni kód přes `/redeem`, pak `/premium activate`).',
+  'config.stayOff':
+    '24/7 v hovoru **vypnuto** — Vozen odejde, když se hlasový kanál vyprázdní (výchozí).',
+  'config.readBotsOn': '✅ Vozen teď bude číst i zprávy od **jiných botů a webhooků**.',
+  'config.readBotsOff':
+    'Vozen bude **ignorovat** jiné boty a webhooky (čtou se jen skuteční lidé).',
+  'config.textInVoiceOn': '✅ Vozen bude číst i **textový chat uvnitř svého hlasového kanálu**.',
+  'config.textInVoiceOff': 'Vozen **nebude** číst textový chat hlasového kanálu (jen TTS kanál).',
+  'config.antispamOn':
+    '✅ Anti-spam **zapnutý** — Vozen nebude číst spamované zprávy (hromadné opakování slov nebo tutéž velkou zprávu poslanou pořád dokola).',
+  'config.antispamOff': 'Anti-spam **vypnutý** — Vozen čte každou zprávu jako obvykle.',
+  'config.streaksOn':
+    '✅ Oznámení sérií **zapnutá** — Vozen ukáže zprávu se sérií 🔥 při prvním promluvení každého člověka za den.',
+  'config.streaksOff':
+    'Oznámení sérií **vypnutá** — Vozen série stále počítá (viz `/top-speakers`), ale mlčí o nich.',
+  'config.soundboardOn': 'Soundboard **zapnutý** — kdokoliv může přehrávat klipy pomocí `/sound`.',
+  'config.soundboardOff': 'Soundboard **vypnutý** — `/sound` je na tomto serveru zakázaný.',
+  'config.votePromosLabel': 'Oznámení o odměně top.gg + Vozen Support',
+  'config.greetOn': '✅ Budu lidi zdravit jménem, když se připojí k hlasovému kanálu.',
+  'config.greetOff': '🔇 **Nebudu** lidi zdravit, když se připojí k hlasovému kanálu.',
+  'config.greetLangSet': '✅ Jazyk pozdravu při připojení nastaven na **{language}**.',
+  'config.showXsaid': 'Oznamovat mluvčího (xsaid): {value}',
+  'config.showAutojoin': 'Automatické připojení: {value}',
+  'config.showReadBots': 'Číst boty/webhooky: {value}',
+  'config.showTextInVoice': 'Text v hlasu: {value}',
+  'config.showAntispam': 'Anti-spam: {value}',
+  'config.showSoundboard': 'Soundboard (/sound): {value}',
+  'config.showGreet': 'Zdravit při připojení: {value} ({language})',
+  'stats.synthLatency': 'Latence syntézy: p50 {p50} ms / p95 {p95} ms ({count} vzorků)',
+  'speak.emptyMessage': 'Tato zpráva nemá žádný text ke čtení nahlas.',
+  'uptime.text': '🟢 Vozen je online už **{uptime}**.',
+  'botstats.title': '📊 **Vozen — statistiky**',
+  'botstats.servers': 'Servery: **{value}**',
+  'botstats.voiceSessions': 'Hlasové relace nyní: **{value}**',
+  'botstats.messagesSpoken': 'Přečtené zprávy: **{value}**',
+  'botstats.uptime': 'Doba běhu: **{value}**',
+  'invite.button': 'Přidat Vozen',
+  'vote.button': 'Hlasovat na top.gg',
+  'vote.upsell':
+    '🗳️ Pokud tento účet odměnu ještě nikdy nevyužil, získá **48 hodin Vozen Plus**, pouze jednou na účet. {url}',
+  'vote.cooldownStatus':
+    '🗳️ Tento účet už jednorázovou odměnu za hlas využil. Stále můžeš hlasovat pro podporu Vozenu, ale další Plus nezískáš.',
+  'help.support': '🛟 Potřebuješ pomoc nebo chceš nahlásit problém? {url}',
+  'help.source': '📄 Otevřený zdroj (AGPL-3.0) — získej přesný zdrojový kód, který zde běží: {url}',
+  'game.start.needVoice':
+    'Tohle je **hlasová hra** — nejdřív se připoj k hlasovému kanálu, spusť /join a pak ji začni.',
+  'game.start.alreadyActive':
+    'V <#{channel}> už běží hra. Dokonči ji (nebo použij `/game stop`), než začneš další.',
+  'game.start.premiumLocked':
+    '🔒 **{game}** je Premium hra (stojí to skutečný výpočetní výkon). Viz `/premium`.',
+  'game.start.started': '🎮 Spouštím **{game}**! Sleduj kanál — hodně štěstí!',
+  'game.start.startedThread':
+    '🎮 **{game}** začala v <#{channel}> — přidej se tam! Vlákno se samo smaže, když hra skončí.',
+  'game.thread.winner': '🏆 {winner} vyhrál hru!',
+  'game.thread.ended': '🎮 Hra skončila.',
+  'game.unknownGame': 'Tuto hru neznám. Vyber si nějakou ze seznamu.',
+  'game.stop.ok': '🛑 Zastavil jsem aktuální hru.',
+  'game.stop.none': 'Právě teď neběží žádná hra.',
+  'game.list.title': '🎮 **Hry** — spusť nějakou pomocí `/game play`:',
+  'game.list.line': '• **{name}** — {desc}',
+  'game.leaderboard.title': '🏆 **Žebříček** — nejlepší hráči na tomto serveru:',
+  'game.leaderboard.empty': 'Zatím se nehrálo. Buď první — `/game play`!',
+  'game.leaderboard.line': '{rank} <@{user}> — **{points}** b. ({wins} výher)',
+  'game.finish.title': '🏁 **Konec hry!** Konečné skóre:',
+  'game.finish.line': '{rank} **{user}** — {points}',
+  'game.finish.noScores': '🏁 Konec hry — tentokrát nikdo neskóroval. Příště!',
+  'game.finish.winnerVoice': '{user} vyhrává!',
+  'game.guessLanguage.name': 'Uhodni jazyk',
+  'game.guessLanguage.desc': 'Přečtu větu v náhodném jazyce — kdo ho první pojmenuje, získává bod.',
+  'game.guessLanguage.intro':
+    '🗣️ **Uhodni jazyk** — přečtu {rounds} vět. Napiš, který jazyk slyšíš. Každé kolo vyhraje nejrychlejší správná odpověď!',
+  'game.guessLanguage.round': '🎧 Kolo {n}/{total} — poslouchej…',
+  'game.guessLanguage.correct': '✅ **{user}** to má — byla to **{language}**!',
+  'game.guessLanguage.timeout': '⏱️ Čas vypršel! Byla to **{language}**.',
+  'game.guessLanguage.noLanguages':
+    'Nemám nainstalováno dost hlasů, abych tohle mohl hrát. Požádej admina, ať přidá víc hlasů.',
+  'game.math.name': 'Počítání z hlavy',
+  'game.math.desc': 'Řeknu příklad nahlas — kdo první napíše výsledek, vyhrává.',
+  'game.math.intro':
+    '🔢 **Počítání z hlavy** — {rounds} příkladů. Poslouchej a napiš výsledek co nejrychleji!',
+  'game.math.round': '🧮 Kolo {n}/{total} — **{a} {op} {b} = ?**',
+  'game.math.correct': '✅ **{user}** to trefil — výsledek byl **{answer}**!',
+  'game.math.timeout': '⏱️ Čas vypršel! Výsledek byl **{answer}**.',
+  'game.math.plus': 'plus',
+  'game.math.minus': 'mínus',
+  'game.math.times': 'krát',
+  'game.skipCount.name': 'Chybějící číslo',
+  'game.skipCount.desc': 'Počítám nahlas, ale jedno číslo vynechám — kdo ho první chytí, vyhrává.',
+  'game.skipCount.intro':
+    '🔢 **Chybějící číslo** — počítám, ale jedno vynechám. Napiš chybějící číslo! ({rounds} kol)',
+  'game.skipCount.round': '👂 Kolo {n}/{total} — které číslo jsem vynechal?',
+  'game.skipCount.correct': '✅ **{user}** to chytil — vynechal jsem **{answer}**!',
+  'game.skipCount.timeout': '⏱️ Čas vypršel! Vynechal jsem **{answer}**.',
+  'game.spelling.name': 'Hláskování',
+  'game.spelling.desc': 'Řeknu slovo — kdo ho první správně napíše, vyhrává.',
+  'game.spelling.intro': '✍️ **Hláskování** — řeknu {rounds} slov. Napiš každé z nich správně!',
+  'game.spelling.round': '🗣️ Kolo {n}/{total} — napiš slovo, které řeknu…',
+  'game.spelling.correct': '✅ **{user}** napsal **{word}** správně!',
+  'game.spelling.timeout': '⏱️ Čas vypršel! Slovo bylo **{word}**.',
+  'game.spelling.empty': 'Zatím nemám seznam slov pro jazyk hlasu tohoto serveru.',
+  'game.spellOut.name': 'Slož slovo z písmen',
+  'game.spellOut.desc': 'Hláskuji slovo písmeno po písmenu — kdo první napíše celé slovo, vyhrává.',
+  'game.spellOut.intro':
+    '🔡 **Slož slovo z písmen** — hláskuji {rounds} slov písmeno po písmenu. Napiš celé slovo!',
+  'game.spellOut.round': '🔤 Kolo {n}/{total} — poslouchej písmena…',
+  'game.spellOut.correct': '✅ **{user}** to má — **{word}**!',
+  'game.spellOut.timeout': '⏱️ Čas vypršel! Hláskovalo se **{word}**.',
+  'game.fastSpeech.name': 'Rychlá řeč',
+  'game.fastSpeech.desc': 'Přečtu větu super rychle — kdo první napíše, co jsem řekl, vyhrává.',
+  'game.fastSpeech.intro':
+    '💨 **Rychlá řeč** — {rounds} vět neuvěřitelnou rychlostí. Napiš, co slyšíš!',
+  'game.fastSpeech.round': '⚡ Kolo {n}/{total} — už to jede, rychle!',
+  'game.fastSpeech.correct': '✅ **{user}** to rozluštil: „{phrase}“',
+  'game.fastSpeech.timeout': '⏱️ Čas vypršel! Bylo to: „{phrase}“',
+  'game.fastSpeech.empty': 'Zatím nemám fráze pro jazyk hlasu tohoto serveru.',
+  'game.accentSwap.name': 'Legrační přízvuk',
+  'game.accentSwap.desc': 'Řeknu slovo s cizím přízvukem — kdo ho první napíše, vyhrává.',
+  'game.accentSwap.intro':
+    '🎭 **Legrační přízvuk** — {rounds} slov řečených se špatným přízvukem. Napiš to slovo!',
+  'game.accentSwap.round': '🌍 Kolo {n}/{total} — jaké slovo se snažím říct?',
+  'game.accentSwap.correct': '✅ **{user}** to má — **{word}**!',
+  'game.accentSwap.timeout': '⏱️ Čas vypršel! Slovo bylo **{word}**.',
+  'game.reflexes.name': 'Reflexy',
+  'game.reflexes.desc': 'Odpočítám a pak křiknu TEĎ — kdo poté první napíše, vyhrává. Nepředbíhej!',
+  'game.reflexes.intro':
+    '⚡ **Reflexy** — {rounds} kol. Když křiknu **TEĎ**, napiš cokoliv co nejrychleji. Napíšeš-li před TEĎ, je to předčasný start!',
+  'game.reflexes.ready': '🚦 Kolo {n}/{total} — připrav se…',
+  'game.reflexes.countdown': 'tři… dva… jedna…',
+  'game.reflexes.go': '🟢 **TEĎ!!!**',
+  'game.reflexes.goVoice': 'Teď!',
+  'game.reflexes.tooSoon': '🔴 **{user}** to uspěchal — moc brzy!',
+  'game.reflexes.win': '⚡ **{user}** je nejrychlejší! Bod!',
+  'game.reflexes.tooSlow': '😴 Nikdo nezareagoval včas. Další!',
+  'game.headsOrTails.name': 'Panna nebo orel',
+  'game.headsOrTails.desc':
+    'Tipni si hod mincí — napiš pannu nebo orla, než hodím. Vyhrává, kdo hádá nejlíp!',
+  'game.headsOrTails.intro':
+    '🪙 **Panna nebo orel** — {rounds} kol. V každém kole napiš `panna` nebo `orel`, než hodím mincí. 1 bod za každý správný tip!',
+  'game.headsOrTails.introVoice': 'Pojďme hrát panna nebo orel!',
+  'game.headsOrTails.round': '🪙 Kolo {n}/{total} — panna nebo orel? Napiš svůj tip!',
+  'game.headsOrTails.roundVoice': 'Panna… nebo orel?',
+  'game.headsOrTails.heads': 'panna',
+  'game.headsOrTails.tails': 'orel',
+  'game.headsOrTails.resultVoice': 'Je to {side}!',
+  'game.headsOrTails.winners': 'Je to **{side}**! Bod pro: {users}',
+  'game.headsOrTails.noWinners': 'Je to **{side}**! Nikdo netipoval správně — žádné body.',
+  'game.vozenSays.name': 'Vozen říká',
+  'game.vozenSays.desc':
+    'Poslechni jen tehdy, když rozkaz začíná na „Vozen říká“. Naletíš na past a jsi lapen!',
+  'game.vozenSays.intro':
+    '🫡 **Vozen říká** — {rounds} rozkazů. Splň to JEN tehdy, když začnu na **„Vozen říká“**. Jinak se ani nehni!',
+  'game.vozenSays.prefix': 'Vozen říká',
+  'game.vozenSays.verb': 'napište',
+  'game.vozenSays.real': '🗣️ Kolo {n}/{total} — „{command}“',
+  'game.vozenSays.trap': '🗣️ Kolo {n}/{total} — „{command}“',
+  'game.vozenSays.obeyed': '✅ **{user}** poslechl první — bod!',
+  'game.vozenSays.caught': '🔴 **{user}** — neřekl jsem Vozen říká! Lapen!',
+  'game.vozenSays.nobody': '😴 Nikdo nesplnil **{word}** včas. Další!',
+  'game.vozenSays.trapCleared': '😌 Byla to past — dobrý postřeh, nikdo na **{word}** nenaletěl.',
+  'game.roulette.name': 'Ruleta pravda nebo úkol',
+  'game.roulette.desc':
+    'Roztočím ruletu a přečtu nahlas jednu výzvu (pravda, nebo úkol). Spusť to znovu pro další.',
+  'game.roulette.header': '🎯 **Ruleta říká…**',
+  'game.hangman.name': 'Šibenice',
+  'game.hangman.desc': 'Hádej slovo písmeno po písmenu — 6 chyb a je konec.',
+  'game.hangman.intro':
+    '🪢 **Šibenice** — hádej slovo tak, že píšeš jedno písmeno po druhém. Můžeš zkusit i celé slovo!',
+  'game.hangman.hit': '🟢 **{user}** našel **{letter}**!',
+  'game.hangman.miss': '🔴 **{user}** — žádné **{letter}**.',
+  'game.hangman.wrongLetters': 'Špatně: {letters}',
+  'game.hangman.win': '🎉 **{user}** to vyřešil — **{word}**!',
+  'game.hangman.lose': '💀 Došly pokusy! Slovo bylo **{word}**.',
+  'game.hangman.idle': '🕹️ Hra pozastavena (nikdo nehraje). Slovo bylo **{word}**.',
+  'game.wordle.name': 'Wordle',
+  'game.wordle.desc':
+    'Uhodni pětipísmenné slovo. 🟩 správné místo, 🟨 špatné místo, ⬛ není ve slově. 💎 Premium.',
+  'game.wordle.intro':
+    '🟩 **Wordle** — napiš pětipísmenné slovo. Sdílíte {max} pokusů. 🟩 správné místo · 🟨 špatné místo · ⬛ není ve slově.',
+  'game.wordle.guess': '🔤 **{user}** hádal — zbývá **{left}** pokusů',
+  'game.wordle.inWord': '🟢 ve slově: {letters}',
+  'game.wordle.out': '🚫 mimo: ~~{letters}~~',
+  'game.wordle.win': '🎉 **{user}** to uhodl na {n} — **{word}**!',
+  'game.wordle.lose': '💀 Došly pokusy! Slovo bylo **{word}**.',
+  'game.wordle.idle': '🕹️ Hra pozastavena (nikdo nehraje). Slovo bylo **{word}**.',
+  'game.tictactoe.name': 'Piškvorky',
+  'game.tictactoe.desc': 'Dva hráči — napiš číslo 1-9 a umísti svou značku. Tři v řadě vyhrávají.',
+  'game.tictactoe.intro':
+    '⭕ **Piškvorky** — první dva hráči, kteří táhnou, jsou ❌ a ⭕ (❌ začíná). Napiš číslo 1-9 a zahraj své políčko.',
+  'game.tictactoe.turn': 'Na tahu: **{mark}**',
+  'game.tictactoe.notYourTurn': '⏳ **{user}**, na tahu je **{mark}**.',
+  'game.tictactoe.taken': '🚫 Políčko {cell} je obsazené — vyber jiné.',
+  'game.tictactoe.win': '🎉 **{user}** ({mark}) vyhrává!',
+  'game.tictactoe.draw': '🤝 Remíza!',
+  'game.tictactoe.idle': '🕹️ Hra skončila (nikdo nehraje).',
+  'game.chess.name': 'Šachy',
+  'game.chess.desc':
+    'Dva hráči — skutečná šachová pravidla (šach, rošáda, proměna…). Napiš tah jako „e4“ nebo „Nf3“. 💎 Premium.',
+  'game.chess.intro':
+    '♟️ **Šachy** — první dva hráči, kteří táhnou, hrají za bílé a černé (bílý začíná). Napiš tah v algebraické notaci („e4“, „Nf3“, „O-O“) nebo souřadnicemi („e2e4“). Napiš „resign“ pro vzdání se.',
+  'game.chess.white': 'bílé',
+  'game.chess.black': 'černé',
+  'game.chess.seats': '⚪ Bílé: **{white}** · ⚫ Černé: **{black}**',
+  'game.chess.turn': '{move} — na tahu: **{color}**',
+  'game.chess.check': '♟️ Šach!',
+  'game.chess.notYourTurn': '⏳ **{user}**, na tahu jsou **{color}**.',
+  'game.chess.illegalMove': '🚫 „{move}“ není platný tah — zkus to znovu.',
+  'game.chess.checkmate': '🏆 Šach mat ({move})! **{user}** vyhrává!',
+  'game.chess.draw': '🤝 Remíza ({move})!',
+  'game.chess.resigned': '🏳️ **{user}** se vzdal — **{winner}** vyhrává!',
+  'game.chess.idle': '🕹️ Hra skončila (nikdo nehraje).',
+  'game.wordChain.name': 'Řetěz slov',
+  'game.wordChain.descr':
+    'Řetěz slov na tahy v jednom jazyce: řekni slovo začínající na poslední písmeno toho předchozího. 2 životy, bez opakování, čas se zrychluje. Jazyk vyber pomocí volby `language`. 💎 Premium.',
+  'game.wordChain.unavailable':
+    '⚠️ Řetěz slov není momentálně v **{lang}** dostupný (chybí seznam slov).',
+  'game.wordChain.lobby':
+    '🔗 **Řetěz slov** v **{lang}**! Napiš cokoliv do tohoto kanálu do **{seconds} s**, aby ses přidal.',
+  'game.wordChain.notEnough': '😴 Nepřidalo se dost hráčů (potřeba aspoň 2). Hra zrušena.',
+  'game.wordChain.begin':
+    '🚀 Začínáme! Hráči: {players}. Každé slovo musí začínat na poslední písmeno toho předchozího.',
+  'game.wordChain.turn':
+    '**{name}**, jsi na řadě! **{lang}** slovo začínající na **{letter}** — {hearts} · ⏱️ {seconds} s',
+  'game.wordChain.accepted': '✅ **{word}** — další písmeno: **{letter}**',
+  'game.wordChain.bad.letter': '↪️ Musí začínat na **{letter}**.',
+  'game.wordChain.bad.short': '📏 Moc krátké — aspoň **{min}** písmen.',
+  'game.wordChain.bad.repeated': '🔁 Tohle slovo už bylo použito.',
+  'game.wordChain.bad.word': '📖 Není to ve slovníku.',
+  'game.wordChain.bad.latin': '🔤 Počítají se jen písmena A–Z.',
+  'game.wordChain.timeout': '⏰ **{name}** došel čas! Zbývá {hearts}.',
+  'game.wordChain.eliminated': '💀 **{name}** je ze hry!',
+  'game.wordChain.winner': '🏆 **{name}** vyhrává řetěz! ({chain} slov)',
+  'game.stats.none': 'Zatím jsi nehrál žádné hry. Zkus `/game play`!',
+  'game.stats.body': '🎮 **Tvoje statistiky** — **{points}** bodů · **{wins}** výher · {rank}',
+  'game.stats.rank': 'pozice **#{rank}** z {total}',
+  'game.stats.unranked': 'zatím bez pozice',
+  'game.pickPrompt': '🎮 Kterou hru chceš hrát? Vyber si:',
+  'game.pickPlaceholder': 'Vyber hru…',
+  'game.pickTimeout': '⏰ Nevybral jsi hru — spusť `/game play` znovu, až budeš chtít.',
+  'pron.listHeader': '🗣️ **Tvoje výslovnosti** ({count}/{limit}):',
+  'pron.listEmpty': 'Zatím žádné nemáš — přidej jednu pomocí `/pronunciation add`.',
+  'pron.set': '✅ Uloženo! Když **ty** napíšeš „{term}“, řeknu „{replacement}“.',
+  'pron.removed': '🗑️ „{term}“ odstraněno.',
+  'pron.notFound':
+    'Nemáš žádnou výslovnost pro „{term}“. Své zobrazíš pomocí `/pronunciation list`.',
+  'pron.empty': 'Slovo ani způsob, jak ho říct, nesmí být prázdné.',
+  'pron.limitHit':
+    '🔒 Dosáhl jsi svého limitu **{limit}** výslovností. Odeber jednu pomocí `/pronunciation remove`.',
+  'pron.limitUpsell': '💎 Vozen Plus nebo Premium ho zvýší na **50** → {url}',
+  'pron.modalTitle': 'Nauč Vozen výslovnost',
+  'pron.modalTerm': 'Slovo (jak ho lidé píší)',
+  'pron.modalSay': 'Jak to má Vozen říct',
+  'spron.listHeader': '🗣️ **Výslovnosti serveru** ({count}/{limit}) — platí pro všechny:',
+  'spron.listEmpty': 'Zatím žádné — přidej jednu pomocí `/server-pronunciation add`.',
+  'spron.set': '✅ Uloženo pro celý server! „{term}“ → „{replacement}“.',
+  'spron.removed': '🗑️ „{term}“ odstraněno ze serveru.',
+  'spron.notFound': 'Server nemá žádnou výslovnost pro „{term}“.',
+  'spron.limitHit':
+    '🔒 Server dosáhl svého limitu **{limit}** výslovností. Odeber jednu pomocí `/server-pronunciation remove`.',
+  'spron.modalTitle': 'Výslovnost serveru',
+  'spron.modalSay': 'Jak to Vozen říká pro všechny',
+  'rand.selectPrompt': '🎲 **Randomizer** — z kolika možností mám vybírat?',
+  'rand.selectPlaceholder': 'Počet možností…',
+  'rand.selectOption': '{n} možností',
+  'rand.filling': '📝 Vyplň formulář, který se právě otevřel!',
+  'rand.modalTitle': 'Randomizer — {amount} možností',
+  'rand.modalOption': 'Možnost {n}',
+  'rand.needTwo': 'Dej mi aspoň 2 možnosti oddělené čárkami (např. „pizza, sushi“).',
+  'rand.result': 'Z {count} možností vybírám… **{winner}**!',
+  'rand.speak': 'Vybírám… {winner}!',
+  'rand.notInVoice': '_(připoj se ke mně do hlasového kanálu a příště to řeknu nahlas)_',
+  'rand.timeout': '⏰ Nic nevybráno — spusť `/randomizer` znovu, až budeš chtít.',
+};
