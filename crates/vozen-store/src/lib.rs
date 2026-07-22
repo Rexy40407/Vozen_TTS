@@ -21,6 +21,7 @@ mod kofi_pending;
 mod migration;
 mod premium;
 mod premium_code;
+mod pronunciation;
 mod user_voice;
 
 pub use guild_config::{GuildConfig, GuildConfigPatch};
@@ -39,6 +40,10 @@ pub use premium::{
 };
 pub use premium_code::{
     PremiumCode, PremiumCodeInput, PremiumCodePlan, RedeemCodeResult, RedeemCodeStatus,
+};
+pub use pronunciation::{
+    AddPronunciationResult, SERVER_PRON_LIMIT, SERVER_PRON_LIMIT_PREMIUM, USER_PRON_LIMIT_FREE,
+    USER_PRON_LIMIT_PREMIUM,
 };
 pub use user_voice::{UserEngine, UserVoice};
 
