@@ -6,7 +6,7 @@
 //! not register commands on startup, start voice sessions, or send user content until those
 //! operations have their Node parity contracts and tests.
 
-use std::env;
+use std::{env, sync::LazyLock};
 
 use serenity::{
     async_trait,
@@ -15,6 +15,13 @@ use serenity::{
 };
 use songbird::serenity::SerenityInit;
 use thiserror::Error;
+use vozen_contracts::{ContractError, DiscordCommandCatalog};
+
+const DISCORD_COMMANDS: &str = include_str!("../../../contracts/discord-commands.json");
+
+static COMMAND_CATALOG: LazyLock<DiscordCommandCatalog> = LazyLock::new(|| {
+    DiscordCommandCatalog::from_json(DISCORD_COMMANDS).expect("valid command contract")
+});
 
 /// Exact gateway permissions requested by the current Node bot. `MESSAGE_CONTENT` is the only
 /// privileged intent. Member and presence intents must not be added without a new requirement.
@@ -24,6 +31,44 @@ pub fn vozen_gateway_intents() -> GatewayIntents {
         | GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::GUILD_MESSAGE_REACTIONS
         | GatewayIntents::MESSAGE_CONTENT
+}
+
+/// Extracts only the subcommand/group chain from a Serenity interaction option tree.
+/// Leaf argument values are deliberately excluded; their validation belongs to the handler.
+pub fn command_path_from_options(
+    options: &[serenity::model::application::CommandDataOption],
+) -> Vec<&str> {
+    use serenity::model::application::CommandDataOptionValue;
+
+    let mut path = Vec::new();
+    let mut current = options;
+    loop {
+        let Some(option) = current.iter().find(|option| {
+            matches!(
+                option.value,
+                CommandDataOptionValue::SubCommand(_) | CommandDataOptionValue::SubCommandGroup(_)
+            )
+        }) else {
+            return path;
+        };
+        path.push(option.name.as_str());
+        current = match &option.value {
+            CommandDataOptionValue::SubCommand(options)
+            | CommandDataOptionValue::SubCommandGroup(options) => options,
+            _ => unreachable!("subcommand selection was matched above"),
+        };
+    }
+}
+
+/// Validates an incoming Discord command against the versioned catalog before dispatch.
+/// This has no side effects and is intentionally separate from response/handler code.
+pub fn validate_command_interaction(
+    command: &serenity::model::application::CommandData,
+) -> Result<(), ContractError> {
+    let path = command_path_from_options(&command.options);
+    COMMAND_CATALOG
+        .resolve_command(&command.name, command.kind.into(), &path)
+        .map(|_| ())
 }
 
 /// Runtime configuration. The token is intentionally private and the type does not implement
@@ -118,5 +163,25 @@ mod tests {
             Err(DiscordRuntimeError::MissingToken)
         ));
         assert!(DiscordRuntimeConfig::from_token("not-a-real-token".into()).is_ok());
+    }
+
+    #[test]
+    fn extracts_only_the_subcommand_path_from_discord_options() {
+        use serenity::model::application::CommandDataOption;
+
+        let options: Vec<CommandDataOption> = serde_json::from_str(
+            r#"[{"name":"set","type":1,"options":[{"name":"model","type":3,"value":"en_US-amy-medium"}]}]"#,
+        )
+        .expect("Discord subcommand payload");
+        assert_eq!(command_path_from_options(&options), vec!["set"]);
+
+        let grouped: Vec<CommandDataOption> = serde_json::from_str(
+            r#"[{"name":"block-word","type":2,"options":[{"name":"add","type":1,"options":[]}]}]"#,
+        )
+        .expect("Discord subcommand group payload");
+        assert_eq!(
+            command_path_from_options(&grouped),
+            vec!["block-word", "add"]
+        );
     }
 }

@@ -4127,6 +4127,7 @@ dependencies = [
 name = "vozen-discord"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "serenity",
  "songbird",
  "thiserror 2.0.19",
