@@ -34,6 +34,21 @@ export const catalog: Record<string, Entry> = {
   },
   'translation.empty': { en: 'Provide readable text to translate.' },
   'translation.unavailable': { en: 'Translation is temporarily unavailable.' },
+  'translation.guildOnly': { en: 'This translation setting is available only in a server.' },
+  'translation.invalidSpeakLocale': {
+    en: 'That locale is not supported. Use `off` to disable this preference.',
+  },
+  'translation.defaultSaved': { en: 'Your default translation language is now **{locale}**.' },
+  'translation.speakOff': { en: 'Translate-before-speaking is now off.' },
+  'translation.speakOn': {
+    en: 'Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.',
+  },
+  'translation.optedOut': {
+    en: 'You are opted out of automatic translations in this server.',
+  },
+  'translation.optedIn': {
+    en: 'You are opted back in to configured automatic translations in this server.',
+  },
   // ── generico ──────────────────────────────────────────────────────────────
   'error.generic': {
     en: 'Something went wrong. Please try again.',

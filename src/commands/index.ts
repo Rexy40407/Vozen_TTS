@@ -49,7 +49,11 @@ import {
   handleRandomizer,
 } from './handlers/personal';
 import { handlePrivacy } from './handlers/privacy';
-import { rustTranslationOwnsCommand, rustVoiceOwnsCommand } from '../migration/rustVoiceAuthority';
+import {
+  rustTranslationOwnsCommand,
+  rustTranslationPreferencesOwnCommand,
+  rustVoiceOwnsCommand,
+} from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
 import { handleTranslate } from './handlers/translation';
 import { localeForUser } from './helpers';
@@ -262,6 +266,10 @@ export async function handleInteraction(
   if (
     rustVoiceOwnsCommand(i.commandName) ||
     rustTranslationOwnsCommand(
+      i.commandName,
+      i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
+    ) ||
+    rustTranslationPreferencesOwnCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
     )

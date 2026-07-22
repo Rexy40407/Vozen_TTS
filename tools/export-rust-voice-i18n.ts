@@ -40,6 +40,13 @@ const KEYS = [
   'translation.disabled',
   'translation.empty',
   'translation.unavailable',
+  'translation.guildOnly',
+  'translation.invalidSpeakLocale',
+  'translation.defaultSaved',
+  'translation.speakOff',
+  'translation.speakOn',
+  'translation.optedOut',
+  'translation.optedIn',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };

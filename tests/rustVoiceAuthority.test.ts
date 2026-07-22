@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   rustTranslationOwnsCommand,
+  rustTranslationPreferencesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
 } from '../src/migration/rustVoiceAuthority';
@@ -33,5 +34,15 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranslationOwnsCommand('translate', 'language', 'true')).toBe(false);
     expect(rustTranslationOwnsCommand('translate', 'map-add', 'true')).toBe(false);
     expect(rustTranslationOwnsCommand('tts', 'text', 'true')).toBe(false);
+  });
+
+  it('keeps preference leaves independent from the private translation text canary', () => {
+    expect(rustTranslationPreferencesOwnCommand('translate', 'language')).toBe(false);
+    expect(rustTranslationPreferencesOwnCommand('translate', 'language', 'yes')).toBe(false);
+    expect(rustTranslationPreferencesOwnCommand('translate', 'language', 'true')).toBe(true);
+    expect(rustTranslationPreferencesOwnCommand('translate', 'speak-language', 'true')).toBe(true);
+    expect(rustTranslationPreferencesOwnCommand('translate', 'opt-out', 'true')).toBe(true);
+    expect(rustTranslationPreferencesOwnCommand('translate', 'text', 'true')).toBe(false);
+    expect(rustTranslationPreferencesOwnCommand('translate', 'map-add', 'true')).toBe(false);
   });
 });

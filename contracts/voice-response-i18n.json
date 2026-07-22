@@ -68,7 +68,14 @@
     "translation.quota",
     "translation.disabled",
     "translation.empty",
-    "translation.unavailable"
+    "translation.unavailable",
+    "translation.guildOnly",
+    "translation.invalidSpeakLocale",
+    "translation.defaultSaved",
+    "translation.speakOff",
+    "translation.speakOn",
+    "translation.optedOut",
+    "translation.optedIn"
   ],
   "messages": {
     "en": {
@@ -100,7 +107,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -131,7 +145,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -162,7 +183,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -193,7 +221,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -224,7 +259,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -255,7 +297,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -286,7 +335,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -317,7 +373,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -348,7 +411,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -379,7 +449,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -410,7 +487,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -441,7 +525,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -472,7 +563,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -503,7 +601,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -534,7 +639,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -565,7 +677,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -596,7 +715,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -627,7 +753,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -658,7 +791,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -689,7 +829,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -720,7 +867,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -751,7 +905,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -782,7 +943,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -813,7 +981,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -844,7 +1019,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -875,7 +1057,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -906,7 +1095,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -937,7 +1133,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -968,7 +1171,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -999,7 +1209,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -1030,7 +1247,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -1061,7 +1285,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -1092,7 +1323,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -1123,7 +1361,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -1154,7 +1399,14 @@
       "translation.quota": "Your rolling 30-day translation limit has been reached.",
       "translation.disabled": "Translation is temporarily unavailable because no provider is configured.",
       "translation.empty": "Provide readable text to translate.",
-      "translation.unavailable": "Translation is temporarily unavailable."
+      "translation.unavailable": "Translation is temporarily unavailable.",
+      "translation.guildOnly": "This translation setting is available only in a server.",
+      "translation.invalidSpeakLocale": "That locale is not supported. Use `off` to disable this preference.",
+      "translation.defaultSaved": "Your default translation language is now **{locale}**.",
+      "translation.speakOff": "Translate-before-speaking is now off.",
+      "translation.speakOn": "Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.",
+      "translation.optedOut": "You are opted out of automatic translations in this server.",
+      "translation.optedIn": "You are opted back in to configured automatic translations in this server."
     }
   }
 }

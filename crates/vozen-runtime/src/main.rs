@@ -12,6 +12,7 @@ mod core_voice_sink;
 mod file_export_sink;
 mod piper_adapter;
 mod topgg_metrics;
+mod translation_preference_sink;
 mod translation_provider;
 mod translation_text_sink;
 
@@ -70,6 +71,7 @@ struct RuntimeConfig {
     core_voice: Option<CoreVoiceRuntimeOptions>,
     tts_file: Option<TtsFileRuntimeOptions>,
     translation_text: Option<TranslationTextRuntimeOptions>,
+    translation_preferences: bool,
     dashboard: Option<DashboardRuntimeOptions>,
 }
 
@@ -217,6 +219,11 @@ impl RuntimeConfig {
         let core_voice = core_voice_from_environment()?;
         let tts_file = tts_file_from_environment()?;
         let translation_text = translation_text_from_environment();
+        let translation_preferences = translation_preferences_enabled(
+            env::var("RUST_TRANSLATION_PREFERENCES_ENABLED")
+                .ok()
+                .as_deref(),
+        );
         let dashboard = dashboard_from_environment()?;
         Ok(Self {
             discord_token,
@@ -230,6 +237,7 @@ impl RuntimeConfig {
             core_voice,
             tts_file,
             translation_text,
+            translation_preferences,
             dashboard,
         })
     }
@@ -321,6 +329,10 @@ fn tts_file_enabled(raw: Option<&str>) -> bool {
 }
 
 fn translation_text_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn translation_preferences_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -426,6 +438,19 @@ fn translation_text_event_sink(
     Ok(Some(Arc::new(
         translation_text_sink::TranslationTextGatewaySink::new(store, options.provider)
             .map_err(|_| RuntimeError::TranslationGateway)?,
+    )))
+}
+
+fn translation_preference_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        translation_preference_sink::TranslationPreferenceGatewaySink::new(store)
+            .map_err(|_| RuntimeError::TranslationPreferenceGateway)?,
     )))
 }
 
@@ -559,6 +584,8 @@ enum RuntimeError {
     TtsFileGateway,
     #[error("private translation gateway initialisation failed")]
     TranslationGateway,
+    #[error("translation preference gateway initialisation failed")]
+    TranslationPreferenceGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -617,6 +644,11 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = translation_text_event_sink(config.translation_text, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) =
+        translation_preference_event_sink(config.translation_preferences, store.clone())?
+    {
         event_sinks.push(sink);
     }
     let event_sink = match event_sinks.len() {
@@ -959,6 +991,15 @@ mod tests {
         assert!(!translation_text_enabled(Some("1")));
         assert!(!translation_text_enabled(Some("yes")));
         assert!(!translation_text_enabled(None));
+    }
+
+    #[test]
+    fn translation_preference_promotion_is_exactly_opt_in_and_independent_of_text() {
+        assert!(translation_preferences_enabled(Some("true")));
+        assert!(translation_preferences_enabled(Some(" TRUE ")));
+        assert!(!translation_preferences_enabled(Some("1")));
+        assert!(!translation_preferences_enabled(Some("yes")));
+        assert!(!translation_preferences_enabled(None));
     }
 
     #[test]
