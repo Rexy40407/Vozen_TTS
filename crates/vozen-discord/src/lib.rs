@@ -45,6 +45,8 @@ mod message_media;
 mod message_pipeline;
 mod message_voice_service;
 mod planned_rejoin;
+mod queue_command;
+mod queue_control;
 mod rejoin_service;
 mod songbird_transport;
 mod speech_preparation;
@@ -102,6 +104,10 @@ pub use message_voice_service::{MessageVoiceInvocation, MessageVoiceOutcome, Mes
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
+};
+pub use queue_command::{QueueCommand, QueueCommandError, parse_queue_command};
+pub use queue_control::{
+    QueueControlInvocation, QueueControlOutcome, QueueControlPlayback, QueueControlService,
 };
 pub use rejoin_service::{PlannedRejoinError, PlannedRejoinOutcome, PlannedRejoinService};
 pub use songbird_transport::SongbirdVoiceSessionTransport;
