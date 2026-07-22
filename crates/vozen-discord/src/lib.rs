@@ -25,6 +25,7 @@ mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
 mod core_voice_command;
+mod core_voice_service;
 mod interaction_dispatch;
 mod message_admission;
 mod message_pipeline;
@@ -44,6 +45,10 @@ pub use command_speech_pipeline::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline,
 };
 pub use core_voice_command::{CoreVoiceCommand, CoreVoiceCommandError, parse_promoted_core_voice};
+pub use core_voice_service::{
+    CommandPlaybackError, CommandSpeechSynthesizer, CommandSynthesisError, CommandVoicePlayback,
+    CoreTtsOutcome, CoreVoiceInvocation, CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
+};
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
 };
