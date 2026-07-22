@@ -6,6 +6,11 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+# Production-only Discord voice transport. The default runtime remains portable for shadow-mode
+# and control-plane verification; deployment must opt in deliberately.
+voice-driver = ["vozen-discord/voice-driver"]
+
 [dependencies]
 axum.workspace = true
 async-trait.workspace = true

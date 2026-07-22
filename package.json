@@ -31,7 +31,7 @@
     "check:rust-command-contract": "tsx tools/export-rust-contracts.ts --check",
     "check:rust-schema-contract": "tsx tools/export-rust-schema.ts --check",
     "check:rust": "cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
-    "check:rust-voice": "cargo test -p vozen-discord --features voice-driver && cargo clippy -p vozen-discord --features voice-driver --all-targets -- -D warnings",
+    "check:rust-voice": "cargo test -p vozen-runtime --features voice-driver && cargo clippy -p vozen-runtime --features voice-driver --all-targets -- -D warnings",
     "build:i18n": "node tools/build-i18n.mjs",
     "check:i18n": "node tools/build-i18n.mjs --check",
     "check:site-copy": "node tools/check-site-copy.mjs",
