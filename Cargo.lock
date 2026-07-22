@@ -4147,7 +4147,10 @@ dependencies = [
 name = "vozen-runtime"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
+ "reqwest",
+ "serde_json",
  "thiserror 2.0.19",
  "tokio",
  "vozen-api",

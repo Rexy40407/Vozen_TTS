@@ -7,6 +7,8 @@
 //! opt-in. Dashboard routes remain absent until their live Discord option provider has been
 //! migrated and shadow-tested.
 
+mod topgg_metrics;
+
 use std::{
     env,
     net::SocketAddr,
@@ -28,6 +30,8 @@ use vozen_discord::{
 };
 use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
 
+use crate::topgg_metrics::{ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats};
+
 struct RuntimeConfig {
     discord_token: String,
     database_path: PathBuf,
@@ -35,6 +39,7 @@ struct RuntimeConfig {
     public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
+    topgg_metrics: Option<TopggMetricsRuntimeConfig>,
     vote_redemption_secret: Option<String>,
 }
 
@@ -53,6 +58,11 @@ struct TopggWebhookRuntimeConfig {
     client_id: String,
     webhook_secret: String,
     redemption_secret: String,
+}
+
+struct TopggMetricsRuntimeConfig {
+    client_id: String,
+    token: String,
 }
 
 impl RuntimeConfig {
@@ -82,6 +92,7 @@ impl RuntimeConfig {
         let premium_http = premium_http_from_environment()?;
         let public_status = public_status_from_environment();
         let topgg_webhook = topgg_webhook_from_environment()?;
+        let topgg_metrics = topgg_metrics_from_environment()?;
         let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
         Ok(Self {
             discord_token,
@@ -90,9 +101,18 @@ impl RuntimeConfig {
             public_status,
             premium_http,
             topgg_webhook,
+            topgg_metrics,
             vote_redemption_secret,
         })
     }
+}
+
+fn topgg_metrics_from_environment() -> Result<Option<TopggMetricsRuntimeConfig>, RuntimeError> {
+    let Some(token) = nonempty_env("TOPGG_TOKEN") else {
+        return Ok(None);
+    };
+    let client_id = nonempty_env("CLIENT_ID").ok_or(RuntimeError::MissingClientId)?;
+    Ok(Some(TopggMetricsRuntimeConfig { client_id, token }))
 }
 
 /// A configured secret is an explicit request to serve this sensitive endpoint. It is never
@@ -205,6 +225,9 @@ async fn run() -> Result<(), RuntimeError> {
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
+    if let Some(topgg_metrics) = config.topgg_metrics {
+        spawn_topgg_metrics(topgg_metrics, gateway_state.clone());
+    }
     let gateway = run_discord_gateway_with_state(
         DiscordRuntimeConfig::from_token(config.discord_token)?,
         gateway_state.clone(),
@@ -360,6 +383,27 @@ fn spawn_vote_retention(store: Arc<Mutex<SqliteStore>>) {
             if let Ok(store) = store.lock() {
                 let _ = purge_vote_retention(&store, system_now_ms());
             }
+        }
+    });
+}
+
+fn spawn_topgg_metrics(config: TopggMetricsRuntimeConfig, gateway_state: GatewayState) {
+    tokio::spawn(async move {
+        let Ok(http) = ReqwestTopggMetricsHttp::new() else {
+            // The listing is optional. A local client construction failure must never block the
+            // Discord gateway or trigger a retry loop with partial configuration.
+            return;
+        };
+        let mut interval = tokio::time::interval(TOPGG_POST_INTERVAL);
+        loop {
+            interval.tick().await;
+            let _ = post_topgg_stats(
+                &http,
+                &config.client_id,
+                &config.token,
+                gateway_state.guild_count(),
+            )
+            .await;
         }
     });
 }

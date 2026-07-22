@@ -106,6 +106,15 @@ impl GatewayState {
             .unwrap_or_default()
     }
 
+    /// Current gateway membership count for observability only. It never causes an outbound
+    /// guild fetch, so startup can report zero until Discord sends READY.
+    pub fn guild_count(&self) -> usize {
+        self.guild_ids
+            .read()
+            .map(|guild_ids| guild_ids.len())
+            .unwrap_or(0)
+    }
+
     /// Returns a live gateway-cached name for a guild. This cache is intentionally best-effort:
     /// callers must tolerate `None` until Discord has supplied a Guild Create event, rather than
     /// performing a request or returning a stale persisted name.
@@ -414,6 +423,7 @@ mod tests {
         state.remember_guild("guild-c".into(), "Guild C".into());
         state.forget_guild("guild-b");
         assert_eq!(state.guild_ids(), vec!["guild-a", "guild-c"]);
+        assert_eq!(state.guild_count(), 2);
         assert_eq!(state.guild_name("guild-c").as_deref(), Some("Guild C"));
         assert_eq!(state.guild_name("guild-b"), None);
         assert!(!state.bot_has_guild("guild-b"));
