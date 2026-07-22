@@ -35,6 +35,7 @@ mod core_voice_service;
 mod dashboard_options;
 mod file_export_command;
 mod file_export_service;
+mod gateway_composite;
 mod interaction_dispatch;
 mod message_admission;
 mod message_interaction;
@@ -76,6 +77,7 @@ pub use file_export_command::{TtsFileCommand, TtsFileCommandError, parse_tts_fil
 pub use file_export_service::{
     MAX_TTS_FILE_CHARS, TtsFileExportInvocation, TtsFileExportOutcome, TtsFileExportService,
 };
+pub use gateway_composite::CompositeGatewayEventSink;
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
 };

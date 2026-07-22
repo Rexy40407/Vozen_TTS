@@ -8,6 +8,9 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoiceOwnsCommand('tts', 'true')).toBe(true);
     expect(rustVoiceOwnsCommand('join', ' TRUE ')).toBe(true);
     expect(rustVoiceOwnsCommand('shut-up', 'true')).toBe(true);
+    expect(rustVoiceOwnsCommand('tts-file', 'true')).toBe(false);
+    expect(rustVoiceOwnsCommand('tts-file', 'false', 'true')).toBe(true);
+    expect(rustVoiceOwnsCommand('tts-file', 'false', 'yes')).toBe(false);
     expect(rustVoiceOwnsCommand('voice', 'true')).toBe(false);
     expect(rustVoiceOwnsCommand('queue', 'true')).toBe(false);
   });

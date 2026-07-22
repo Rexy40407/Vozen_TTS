@@ -42,7 +42,9 @@ const entries = catalog as Record<string, CatalogEntry>;
 function message(locale: string, key: (typeof KEYS)[number]): string {
   const entry = entries[key];
   if (!entry?.en) throw new Error(`Missing canonical English i18n key: ${key}`);
-  return locales[locale]?.[key] ?? (entry as Record<string, string | undefined>)[locale] ?? entry.en;
+  return (
+    locales[locale]?.[key] ?? (entry as Record<string, string | undefined>)[locale] ?? entry.en
+  );
 }
 
 async function main(): Promise<void> {

@@ -9,7 +9,7 @@
 
 #[cfg(feature = "voice-driver")]
 mod core_voice_sink;
-#[cfg(any(feature = "voice-driver", test))]
+mod file_export_sink;
 mod piper_adapter;
 mod topgg_metrics;
 
@@ -43,9 +43,10 @@ use vozen_api::{
 use vozen_contracts::DiscordCommandCatalog;
 use vozen_core::parse_kofi_shop_map;
 use vozen_discord::{
-    CoreVoiceSettings, DiscordDashboardOptionsProvider, DiscordRuntimeConfig, DiscordRuntimeError,
-    GatewayEventSink, GatewayState, locale_display_options,
-    run_discord_gateway_with_state_and_sink, voice_display_options, write_planned_rejoin_marker,
+    CompositeGatewayEventSink, CoreVoiceSettings, DiscordDashboardOptionsProvider,
+    DiscordRuntimeConfig, DiscordRuntimeError, GatewayEventSink, GatewayState,
+    locale_display_options, run_discord_gateway_with_state_and_sink, voice_display_options,
+    write_planned_rejoin_marker,
 };
 use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
 
@@ -65,6 +66,7 @@ struct RuntimeConfig {
     topgg_metrics: Option<TopggMetricsRuntimeConfig>,
     vote_redemption_secret: Option<String>,
     core_voice: Option<CoreVoiceRuntimeOptions>,
+    tts_file: Option<TtsFileRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
 }
 
@@ -162,6 +164,18 @@ struct CoreVoiceRuntimeOptions {
     settings: CoreVoiceSettings,
 }
 
+/// File export deliberately has a separate flag from in-call playback: it never joins a call or
+/// requires Songbird, and can therefore be canaried independently while Node remains authority
+/// for every other command.
+#[derive(Clone)]
+struct TtsFileRuntimeOptions {
+    piper_path: PathBuf,
+    models_dir: PathBuf,
+    cache_dir: PathBuf,
+    piper_concurrency: usize,
+    settings: CoreVoiceSettings,
+}
+
 impl RuntimeConfig {
     fn from_environment() -> Result<Self, RuntimeError> {
         let discord_token = env::var("DISCORD_TOKEN").map_err(|_| RuntimeError::MissingToken)?;
@@ -192,6 +206,7 @@ impl RuntimeConfig {
         let topgg_metrics = topgg_metrics_from_environment()?;
         let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
         let core_voice = core_voice_from_environment()?;
+        let tts_file = tts_file_from_environment()?;
         let dashboard = dashboard_from_environment()?;
         Ok(Self {
             discord_token,
@@ -203,6 +218,7 @@ impl RuntimeConfig {
             topgg_metrics,
             vote_redemption_secret,
             core_voice,
+            tts_file,
             dashboard,
         })
     }
@@ -244,9 +260,44 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
     }))
 }
 
+fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeError> {
+    if !tts_file_enabled(env::var("RUST_TTS_FILE_ENABLED").ok().as_deref()) {
+        return Ok(None);
+    }
+    let default_voice =
+        nonempty_env("DEFAULT_VOICE").unwrap_or_else(|| "en_US-amy-medium".to_owned());
+    let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
+    let piper_concurrency = positive_number_from_environment(
+        "PIPER_MAX_CONCURRENCY",
+        default_piper_concurrency() as f64,
+        true,
+    )? as usize;
+    Ok(Some(TtsFileRuntimeOptions {
+        piper_path: nonempty_env("PIPER_PATH")
+            .unwrap_or_else(|| "piper".to_owned())
+            .into(),
+        models_dir: nonempty_env("MODELS_DIR")
+            .unwrap_or_else(|| "./models".to_owned())
+            .into(),
+        cache_dir: nonempty_env("RUST_TTS_FILE_CACHE_DIR")
+            .unwrap_or_else(|| "./audio-cache/rust-file".to_owned())
+            .into(),
+        piper_concurrency,
+        settings: CoreVoiceSettings {
+            available_models: Vec::new(),
+            default_voice,
+            default_speed,
+        },
+    }))
+}
+
 /// This deliberately matches Node's safe opt-in semantics: only literal `true` can make Rust
 /// own a Discord interaction. `1`, `yes`, missing and spelling mistakes remain shadow-only.
 fn core_voice_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn tts_file_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -318,6 +369,28 @@ fn core_voice_event_sink(
         gateway_state,
         options,
     ))))
+}
+
+fn tts_file_event_sink(
+    options: Option<TtsFileRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    let Some(mut options) = options else {
+        return Ok(None);
+    };
+    options.settings.available_models = discover_piper_models(&options.models_dir)?;
+    if !options
+        .settings
+        .available_models
+        .iter()
+        .any(|model| model == &options.settings.default_voice)
+    {
+        return Err(RuntimeError::DefaultVoiceUnavailable);
+    }
+    Ok(Some(Arc::new(
+        file_export_sink::TtsFileGatewaySink::new(store, options)
+            .map_err(|_| RuntimeError::TtsFileGateway)?,
+    )))
 }
 
 #[cfg(not(feature = "voice-driver"))]
@@ -442,12 +515,12 @@ enum RuntimeError {
     InvalidCoreVoiceSetting(&'static str),
     #[error("RUST_CORE_VOICE_ENABLED=true requires a runtime built with --features voice-driver")]
     VoiceDriverRequired,
-    #[cfg_attr(not(feature = "voice-driver"), allow(dead_code))]
-    #[error("RUST_CORE_VOICE_ENABLED=true requires at least one supported Piper .onnx model")]
+    #[error("a Rust Piper feature requires at least one supported Piper .onnx model")]
     ModelsUnavailable,
-    #[cfg_attr(not(feature = "voice-driver"), allow(dead_code))]
-    #[error("DEFAULT_VOICE must name a supported Piper model when Rust voice is enabled")]
+    #[error("DEFAULT_VOICE must name a supported Piper model when a Rust Piper feature is enabled")]
     DefaultVoiceUnavailable,
+    #[error("private TTS file gateway initialisation failed")]
+    TtsFileGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -496,8 +569,22 @@ async fn run() -> Result<(), RuntimeError> {
     // Only a runtime that owns Rust voice sessions may write the shared restart marker. A
     // shadow process must never authorize the still-live Node process to reconnect calls.
     let write_rejoin_marker_on_shutdown = config.core_voice.is_some();
-    let event_sink =
-        core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?;
+    let mut event_sinks = Vec::new();
+    if let Some(sink) =
+        core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?
+    {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = tts_file_event_sink(config.tts_file, store.clone())? {
+        event_sinks.push(sink);
+    }
+    let event_sink = match event_sinks.len() {
+        0 => None,
+        1 => event_sinks.into_iter().next(),
+        _ => {
+            Some(Arc::new(CompositeGatewayEventSink::new(event_sinks)) as Arc<dyn GatewayEventSink>)
+        }
+    };
     let gateway = run_discord_gateway_with_state_and_sink(
         DiscordRuntimeConfig::from_token(config.discord_token)?,
         gateway_state.clone(),
@@ -813,6 +900,15 @@ mod tests {
         assert!(!core_voice_enabled(Some("1")));
         assert!(!core_voice_enabled(Some("yes")));
         assert!(!core_voice_enabled(None));
+    }
+
+    #[test]
+    fn private_file_promotion_is_exactly_opt_in_and_independent_of_calls() {
+        assert!(tts_file_enabled(Some("true")));
+        assert!(tts_file_enabled(Some(" TRUE ")));
+        assert!(!tts_file_enabled(Some("1")));
+        assert!(!tts_file_enabled(Some("yes")));
+        assert!(!tts_file_enabled(None));
     }
 
     #[test]

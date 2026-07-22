@@ -15,6 +15,7 @@ voice-driver = ["vozen-discord/voice-driver"]
 axum.workspace = true
 async-trait.workspace = true
 reqwest.workspace = true
+serenity.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

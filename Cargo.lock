@@ -4181,6 +4181,7 @@ dependencies = [
  "axum",
  "reqwest",
  "serde_json",
+ "serenity",
  "thiserror 2.0.19",
  "tokio",
  "vozen-api",

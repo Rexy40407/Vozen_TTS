@@ -3,15 +3,22 @@
  *
  * Discord sends an interaction to every active gateway session for the same bot. During the
  * migration, Node must therefore yield an explicitly promoted command instead of racing Rust to
- * answer it. This stays OFF unless the operator has deliberately started the Rust voice runtime.
+ * answer it. Each promoted slice stays OFF unless the operator deliberately starts its matching
+ * Rust runtime configuration.
  */
 const RUST_CORE_VOICE_COMMANDS = new Set(['join', 'leave', 'tts', 'skip', 'shut-up']);
+const RUST_PRIVATE_TTS_FILE_COMMANDS = new Set(['tts-file']);
 
 export function rustVoiceOwnsCommand(
   commandName: string,
-  enabled = process.env.RUST_CORE_VOICE_ENABLED,
+  coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
+  privateFileEnabled = process.env.RUST_TTS_FILE_ENABLED,
 ): boolean {
-  return enabled?.trim().toLowerCase() === 'true' && RUST_CORE_VOICE_COMMANDS.has(commandName);
+  return (
+    (coreEnabled?.trim().toLowerCase() === 'true' && RUST_CORE_VOICE_COMMANDS.has(commandName)) ||
+    (privateFileEnabled?.trim().toLowerCase() === 'true' &&
+      RUST_PRIVATE_TTS_FILE_COMMANDS.has(commandName))
+  );
 }
 
 /**
@@ -24,7 +31,6 @@ export function rustVoiceOwnsAutoRead(
   messageEnabled = process.env.RUST_MESSAGE_AUTOREAD_ENABLED,
 ): boolean {
   return (
-    coreEnabled?.trim().toLowerCase() === 'true' &&
-    messageEnabled?.trim().toLowerCase() === 'true'
+    coreEnabled?.trim().toLowerCase() === 'true' && messageEnabled?.trim().toLowerCase() === 'true'
   );
 }
