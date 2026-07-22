@@ -263,6 +263,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
     if !core_voice_enabled(env::var("RUST_CORE_VOICE_ENABLED").ok().as_deref()) {
         return Ok(None);
     }
+    require_piper_runtime_default(env::var("TTS_ENGINE").ok().as_deref())?;
     let default_voice =
         nonempty_env("DEFAULT_VOICE").unwrap_or_else(|| "en_US-amy-medium".to_owned());
     let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
@@ -300,6 +301,7 @@ fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeE
     if !tts_file_enabled(env::var("RUST_TTS_FILE_ENABLED").ok().as_deref()) {
         return Ok(None);
     }
+    require_piper_runtime_default(env::var("TTS_ENGINE").ok().as_deref())?;
     let default_voice =
         nonempty_env("DEFAULT_VOICE").unwrap_or_else(|| "en_US-amy-medium".to_owned());
     let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
@@ -355,6 +357,19 @@ fn core_voice_enabled(raw: Option<&str>) -> bool {
 
 fn tts_file_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+/// The first Rust voice adapters only have a production Piper backend. The Node bot can use
+/// other default engines, but allowing the Rust canary to start in that configuration would
+/// silently change what users hear. Missing `TTS_ENGINE` keeps Node's Piper default.
+fn piper_runtime_default_compatible(raw: Option<&str>) -> bool {
+    raw.is_none_or(|value| value.trim().is_empty() || value.trim().eq_ignore_ascii_case("piper"))
+}
+
+fn require_piper_runtime_default(raw: Option<&str>) -> Result<(), RuntimeError> {
+    piper_runtime_default_compatible(raw)
+        .then_some(())
+        .ok_or(RuntimeError::RustVoiceRequiresPiperDefault)
 }
 
 fn translation_text_enabled(raw: Option<&str>) -> bool {
@@ -642,6 +657,10 @@ enum RuntimeError {
     InvalidCoreVoiceSetting(&'static str),
     #[error("RUST_CORE_VOICE_ENABLED=true requires a runtime built with --features voice-driver")]
     VoiceDriverRequired,
+    #[error(
+        "Rust voice features currently require TTS_ENGINE to be unset or set to piper; leave them disabled until that provider is ported"
+    )]
+    RustVoiceRequiresPiperDefault,
     #[error("a Rust Piper feature requires at least one supported Piper .onnx model")]
     ModelsUnavailable,
     #[error("DEFAULT_VOICE must name a supported Piper model when a Rust Piper feature is enabled")]
@@ -1060,6 +1079,21 @@ mod tests {
         assert!(!tts_file_enabled(Some("1")));
         assert!(!tts_file_enabled(Some("yes")));
         assert!(!tts_file_enabled(None));
+    }
+
+    #[test]
+    fn rust_voice_canaries_require_the_node_piper_default() {
+        assert!(piper_runtime_default_compatible(None));
+        assert!(piper_runtime_default_compatible(Some("  ")));
+        assert!(piper_runtime_default_compatible(Some("PIPER")));
+        assert!(!piper_runtime_default_compatible(Some("gtts")));
+        assert!(!piper_runtime_default_compatible(Some("neural")));
+        assert!(!piper_runtime_default_compatible(Some("router")));
+        assert!(require_piper_runtime_default(Some("piper")).is_ok());
+        assert!(matches!(
+            require_piper_runtime_default(Some("gtts")),
+            Err(RuntimeError::RustVoiceRequiresPiperDefault)
+        ));
     }
 
     #[test]
