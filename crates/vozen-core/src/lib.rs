@@ -14,6 +14,7 @@ mod speech_preparation;
 mod speech_safety;
 mod text_cleaning;
 mod topgg;
+mod translation_safety;
 mod voice_selection;
 
 pub use abbreviations::{
@@ -51,6 +52,10 @@ pub use text_cleaning::{
 pub use topgg::{
     TOPGG_SIGNATURE_TOLERANCE_MS, TopggVote, TopggWebhookDecision, TopggWebhookRejection,
     verify_topgg_webhook,
+};
+pub use translation_safety::{
+    TRANSLATION_INPUT_CAP, TRANSLATION_MARKER, TranslationInput, minimise_translation_text,
+    translation_input,
 };
 pub use voice_selection::{accent_language_of_model, pick_voice, pick_voice_for_language};
 
