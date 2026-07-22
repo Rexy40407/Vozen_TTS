@@ -15,6 +15,7 @@ pub mod dashboard_validation;
 pub mod discord_oauth;
 pub mod kofi_webhook;
 pub mod premium_api;
+pub mod topgg_webhook;
 
 use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, header};
@@ -117,6 +118,7 @@ pub struct RuntimeRouterConfig {
     pub premium: Option<premium_api::PremiumApiConfig>,
     pub dashboard: Option<dashboard_api::DashboardApiConfig>,
     pub kofi_webhook: Option<kofi_webhook::KofiWebhookConfig>,
+    pub topgg_webhook: Option<topgg_webhook::TopggWebhookConfig>,
 }
 
 #[derive(Debug, Error)]
@@ -129,6 +131,8 @@ pub enum RuntimeRouterError {
     Dashboard(#[from] dashboard_api::DashboardApiConfigError),
     #[error("Ko-fi webhook configuration: {0}")]
     KofiWebhook(#[from] kofi_webhook::KofiWebhookConfigError),
+    #[error("Top.gg webhook configuration: {0}")]
+    TopggWebhook(#[from] topgg_webhook::TopggWebhookConfigError),
 }
 
 /// Composes the independently verified API surfaces for the cutover runtime. It avoids merging
@@ -148,6 +152,9 @@ pub fn runtime_router(config: RuntimeRouterConfig) -> Result<Router, RuntimeRout
     }
     if let Some(kofi_webhook) = config.kofi_webhook {
         router = router.merge(kofi_webhook::kofi_webhook_router(kofi_webhook)?);
+    }
+    if let Some(topgg_webhook) = config.topgg_webhook {
+        router = router.merge(topgg_webhook::topgg_webhook_router(topgg_webhook)?);
     }
     Ok(router.fallback(fallback))
 }
@@ -248,6 +255,7 @@ mod tests {
             premium: None,
             dashboard: None,
             kofi_webhook: None,
+            topgg_webhook: None,
         })
         .expect("compose public-only runtime");
         let health = app

@@ -20,7 +20,7 @@ use vozen_api::{
     ProviderHealth as PublicProviderHealth, PublicStatusInput, PublicStatusProvider,
     RuntimeRouterConfig, account_api::AccountApiConfig, discord_oauth::DiscordOAuthVerifier,
     kofi_webhook::KofiWebhookConfig, map_public_status, premium_api::PremiumApiConfig,
-    runtime_router,
+    runtime_router, topgg_webhook::TopggWebhookConfig,
 };
 use vozen_core::parse_kofi_shop_map;
 use vozen_discord::{
@@ -34,6 +34,7 @@ struct RuntimeConfig {
     health_bind: Option<SocketAddr>,
     public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
+    topgg_webhook: Option<TopggWebhookRuntimeConfig>,
 }
 
 struct PublicStatusConfig {
@@ -45,6 +46,12 @@ struct PremiumHttpConfig {
     origin: String,
     kofi_webhook_token: Option<String>,
     kofi_shop_map: Option<String>,
+}
+
+struct TopggWebhookRuntimeConfig {
+    client_id: String,
+    webhook_secret: String,
+    redemption_secret: String,
 }
 
 impl RuntimeConfig {
@@ -73,14 +80,33 @@ impl RuntimeConfig {
         };
         let premium_http = premium_http_from_environment()?;
         let public_status = public_status_from_environment();
+        let topgg_webhook = topgg_webhook_from_environment()?;
         Ok(Self {
             discord_token,
             database_path,
             health_bind,
             public_status,
             premium_http,
+            topgg_webhook,
         })
     }
+}
+
+/// A configured secret is an explicit request to serve this sensitive endpoint. It is never
+/// inferred from a port or from the generic premium flag; missing companion values fail startup
+/// once the HTTP listener is enabled instead of silently resetting reward eligibility.
+fn topgg_webhook_from_environment() -> Result<Option<TopggWebhookRuntimeConfig>, RuntimeError> {
+    let Some(webhook_secret) = nonempty_env("TOPGG_WEBHOOK_SECRET") else {
+        return Ok(None);
+    };
+    let client_id = nonempty_env("CLIENT_ID").ok_or(RuntimeError::MissingClientId)?;
+    let redemption_secret =
+        nonempty_env("VOTE_REDEMPTION_SECRET").ok_or(RuntimeError::MissingVoteRedemptionSecret)?;
+    Ok(Some(TopggWebhookRuntimeConfig {
+        client_id,
+        webhook_secret,
+        redemption_secret,
+    }))
 }
 
 /// Mirrors Node's deliberately strict public-status opt-in: only `true` enables a public route.
@@ -130,8 +156,12 @@ enum RuntimeError {
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
     InvalidHealthPort,
-    #[error("CLIENT_ID is required when PREMIUM_API_ENABLED=true")]
+    #[error(
+        "CLIENT_ID is required when PREMIUM_API_ENABLED=true or TOPGG_WEBHOOK_SECRET is configured"
+    )]
     MissingClientId,
+    #[error("VOTE_REDEMPTION_SECRET is required when TOPGG_WEBHOOK_SECRET is configured")]
+    MissingVoteRedemptionSecret,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("SQLite startup failed: {0}")]
@@ -171,6 +201,7 @@ async fn run() -> Result<(), RuntimeError> {
     };
     let app = build_http_router(
         config.premium_http,
+        config.topgg_webhook,
         config.public_status,
         store,
         gateway_state,
@@ -184,6 +215,7 @@ async fn run() -> Result<(), RuntimeError> {
 
 fn build_http_router(
     premium_http: Option<PremiumHttpConfig>,
+    topgg_webhook: Option<TopggWebhookRuntimeConfig>,
     public_status: Option<PublicStatusConfig>,
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
@@ -198,6 +230,13 @@ fn build_http_router(
             premium: None,
             dashboard: None,
             kofi_webhook: None,
+            topgg_webhook: topgg_webhook.map(|config| TopggWebhookConfig {
+                webhook_secret: config.webhook_secret,
+                redemption_secret: config.redemption_secret,
+                expected_bot_id: config.client_id,
+                store,
+                now: Arc::new(system_now_ms),
+            }),
         })
         .map_err(RuntimeError::from);
     };
@@ -232,7 +271,7 @@ fn build_http_router(
         premium: Some(PremiumApiConfig {
             origin: config.origin,
             kofi_webhook_token: config.kofi_webhook_token,
-            store,
+            store: store.clone(),
             identity_verifier: verifier,
             now,
         }),
@@ -240,6 +279,13 @@ fn build_http_router(
         // cache after the same authorization check that guards every configuration request.
         dashboard: None,
         kofi_webhook,
+        topgg_webhook: topgg_webhook.map(|config| TopggWebhookConfig {
+            webhook_secret: config.webhook_secret,
+            redemption_secret: config.redemption_secret,
+            expected_bot_id: config.client_id,
+            store: store.clone(),
+            now: Arc::new(system_now_ms),
+        }),
     })
     .map_err(RuntimeError::from)
 }
