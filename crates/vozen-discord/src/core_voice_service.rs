@@ -380,6 +380,7 @@ where
         if let Ok(mut speech) = self.speech.lock() {
             speech.forget_guild(guild_id);
         }
+        self.synthesis.forget_guild(guild_id);
     }
 }
 

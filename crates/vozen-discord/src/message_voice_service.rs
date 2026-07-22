@@ -277,6 +277,7 @@ where
         if let Ok(mut pipeline) = self.pipeline.lock() {
             pipeline.forget_guild(guild_id);
         }
+        self.synthesis.forget_guild(guild_id);
     }
 
     /// Writes only fixed, identity-free operational counters. Metric persistence is strictly

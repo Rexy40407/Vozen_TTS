@@ -88,6 +88,22 @@ impl GuildSynthesisCoordinator {
         state.active_cancelled.store(true, Ordering::Release);
         true
     }
+
+    /// Cancels outstanding work and drops the guild's process-local coordination state after a
+    /// real gateway guild-delete event. A lease that already holds the removed state observes the
+    /// generation change before it can enqueue, while a future guild with the same ID starts with
+    /// a fresh state instead of inheriting cancellation.
+    pub fn forget_guild(&self, guild_id: &str) {
+        let state = self
+            .states
+            .lock()
+            .expect("guild synthesis coordinator lock poisoned")
+            .remove(guild_id);
+        if let Some(state) = state {
+            state.clear_generation.fetch_add(1, Ordering::AcqRel);
+            state.active_cancelled.store(true, Ordering::Release);
+        }
+    }
 }
 
 /// Owns one guild's serial synthesis section. Dropping it always releases the gate and clears
@@ -171,5 +187,21 @@ mod tests {
 
         drop(first);
         drop(second.await.expect("second lease"));
+    }
+
+    #[tokio::test]
+    async fn forgetting_a_guild_cancels_its_existing_lease_without_poisoning_a_future_one() {
+        let coordinator = GuildSynthesisCoordinator::default();
+        let generation = coordinator.admission_generation("guild");
+        let mut lease = coordinator.acquire("guild", generation).await;
+        lease.activate();
+
+        coordinator.forget_guild("guild");
+        assert!(lease.cancelled());
+
+        drop(lease);
+        let fresh_generation = coordinator.admission_generation("guild");
+        let fresh = coordinator.acquire("guild", fresh_generation).await;
+        assert!(!fresh.was_cleared());
     }
 }
