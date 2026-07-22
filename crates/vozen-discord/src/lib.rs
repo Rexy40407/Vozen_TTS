@@ -56,6 +56,8 @@ mod translation_command;
 mod translation_preference_command;
 mod voice_i18n;
 mod voice_playback;
+mod voice_preference_command;
+mod voice_preference_service;
 mod voice_session;
 
 pub use automatic_translation_service::{
@@ -134,6 +136,13 @@ pub use translation_preference_command::{
 pub use voice_i18n::{VoiceResponseLocalizer, VoiceResponseLocalizerError};
 pub use voice_playback::{
     SongbirdCommandPlayback, VoicePlaybackError, join_and_enqueue_wav, leave_voice,
+};
+pub use voice_preference_command::{
+    VoicePreferenceCommand, VoicePreferenceCommandError, parse_voice_preference_command,
+};
+pub use voice_preference_service::{
+    VoicePreferenceInvocation, VoicePreferenceOutcome, VoicePreferenceService,
+    VoicePreferenceSettings,
 };
 pub use voice_session::{
     JoinVoiceOutcome, LeaveVoiceOutcome, VoiceSessionService, VoiceSessionTransport,
