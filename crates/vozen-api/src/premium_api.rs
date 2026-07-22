@@ -33,6 +33,8 @@ const RATE_MAX_ENTRIES: usize = 2_048;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiscordIdentity {
     pub id: String,
+    pub username: String,
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -514,6 +516,8 @@ mod tests {
             (bearer == "valid")
                 .then(|| DiscordIdentity {
                     id: "discord-user".into(),
+                    username: "Rexy".into(),
+                    avatar: None,
                 })
                 .ok_or(())
         }

@@ -123,7 +123,11 @@ impl DiscordOAuthVerifier {
                     && oauth.scopes.iter().any(|scope| scope == "identify") =>
             {
                 match self.fetch_user(bearer).await {
-                    Ok(user) if user.id == oauth.user_id => Some(DiscordIdentity { id: user.id }),
+                    Ok(user) if user.id == oauth.user_id => Some(DiscordIdentity {
+                        id: user.id,
+                        username: user.username,
+                        avatar: user.avatar,
+                    }),
                     _ => None,
                 }
             }
@@ -226,6 +230,8 @@ struct OAuthInfo {
 
 struct DiscordUser {
     id: String,
+    username: String,
+    avatar: Option<String>,
     email: Option<String>,
     verified: bool,
 }
@@ -258,8 +264,21 @@ fn parse_oauth(value: Value) -> Option<OAuthInfo> {
 
 fn parse_user(value: Value) -> Option<DiscordUser> {
     let object = value.as_object()?;
+    let id = object.get("id")?.as_str()?.to_owned();
+    let username = object
+        .get("global_name")
+        .and_then(Value::as_str)
+        .filter(|name| !name.is_empty())
+        .or_else(|| object.get("username").and_then(Value::as_str))
+        .unwrap_or(&id)
+        .to_owned();
     Some(DiscordUser {
-        id: object.get("id")?.as_str()?.to_owned(),
+        id,
+        username,
+        avatar: object
+            .get("avatar")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         email: object
             .get("email")
             .and_then(Value::as_str)

@@ -8,6 +8,7 @@
 
 use std::sync::Arc;
 
+pub mod account_api;
 pub mod discord_oauth;
 pub mod premium_api;
 
