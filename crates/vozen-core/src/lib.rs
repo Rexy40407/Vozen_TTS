@@ -3,6 +3,7 @@
 //! Pure product policies. Adapters for Discord, SQLite and HTTP live in later crates.
 
 mod abbreviations;
+mod accent_restoration;
 mod kofi;
 mod speech_safety;
 mod text_cleaning;
@@ -11,6 +12,7 @@ mod voice_selection;
 pub use abbreviations::{
     SlangSegment, expand_abbreviations, is_all_english_abbrev, split_english_slang,
 };
+pub use accent_restoration::restore_accents;
 pub use kofi::{
     KofiEvent, KofiGrant, KofiPlan, PREMIUM_MAX_SEATS, PREMIUM_PASS_SEATS, ShopProduct,
     extract_kofi_discord_id, hash_kofi_email, map_kofi_to_grant, parse_kofi_payload,
