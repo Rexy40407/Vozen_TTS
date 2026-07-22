@@ -29,6 +29,7 @@ mod pronunciation;
 mod telemetry;
 mod user_profile;
 mod user_voice;
+mod voice_effect;
 mod voice_presence;
 
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
@@ -61,6 +62,7 @@ pub use telemetry::{
 };
 pub use user_profile::{Birthday, is_valid_birthday};
 pub use user_voice::{UserEngine, UserVoice};
+pub use voice_effect::VoiceEffect;
 pub use voice_presence::VoicePresence;
 
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
