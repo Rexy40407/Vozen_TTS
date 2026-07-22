@@ -4121,6 +4121,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "subtle",
+ "uuid",
 ]
 
 [[package]]
