@@ -12,6 +12,7 @@ mod core_voice_sink;
 mod file_export_sink;
 mod piper_adapter;
 mod topgg_metrics;
+mod translation_provider;
 
 use std::{
     env,
@@ -548,6 +549,10 @@ async fn main() {
 
 async fn run() -> Result<(), RuntimeError> {
     let config = RuntimeConfig::from_environment()?;
+    // Parse the existing Azure settings now, but retain no command/event binding until the
+    // localized `/translate` adapter is promoted. Constructing this client sends no request and
+    // cannot make the Rust shadow process claim any Discord interaction.
+    let _translation_provider = translation_provider::AzureTranslationProvider::from_environment();
     // Opening the store verifies/migrates the exact Node SQLite schema before the Rust gateway
     // does any work. Keep the handle alive for the whole process; future adapters share it.
     let store = Arc::new(Mutex::new(SqliteStore::open(&config.database_path)?));
