@@ -35,6 +35,7 @@ mod core_voice_service;
 mod interaction_dispatch;
 mod message_admission;
 mod message_interaction;
+mod message_media;
 mod message_pipeline;
 mod message_voice_service;
 mod planned_rejoin;
@@ -69,6 +70,7 @@ pub use interaction_dispatch::{
 };
 pub use message_admission::{DiscordMessageFacts, admit_discord_message};
 pub use message_interaction::DiscordMessageFactsOwned;
+pub use message_media::collect_message_media;
 pub use message_pipeline::{MessagePipelineOutcome, MessageSpeechPipeline};
 pub use message_voice_service::{MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService};
 pub use planned_rejoin::{

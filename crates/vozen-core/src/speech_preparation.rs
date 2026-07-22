@@ -27,6 +27,8 @@ pub enum MediaAnnouncementKind {
     Archive,
     Multiple,
     Sticker,
+    Spoiler,
+    Code,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -235,6 +237,8 @@ struct Phrases {
     archive: &'static str,
     multiple: &'static str,
     sticker: &'static str,
+    spoiler: &'static str,
+    code: &'static str,
 }
 
 const EN: Phrases = Phrases {
@@ -248,6 +252,8 @@ const EN: Phrases = Phrases {
     archive: "a compressed file",
     multiple: "multiple files",
     sticker: "a sticker",
+    spoiler: "spoiler",
+    code: "code",
 };
 const PT: Phrases = Phrases {
     said: "disse",
@@ -260,6 +266,8 @@ const PT: Phrases = Phrases {
     archive: "um arquivo compactado",
     multiple: "vários arquivos",
     sticker: "uma figurinha",
+    spoiler: "spoiler",
+    code: "código",
 };
 const ES: Phrases = Phrases {
     said: "dijo",
@@ -272,6 +280,8 @@ const ES: Phrases = Phrases {
     archive: "un archivo comprimido",
     multiple: "varios archivos",
     sticker: "un sticker",
+    spoiler: "spoiler",
+    code: "código",
 };
 const FR: Phrases = Phrases {
     said: "a dit",
@@ -284,6 +294,8 @@ const FR: Phrases = Phrases {
     archive: "un fichier compressé",
     multiple: "plusieurs fichiers",
     sticker: "un sticker",
+    spoiler: "spoiler",
+    code: "du code",
 };
 const DE: Phrases = Phrases {
     said: "sagt",
@@ -296,6 +308,64 @@ const DE: Phrases = Phrases {
     archive: "eine komprimierte Datei",
     multiple: "mehrere Dateien",
     sticker: "ein Sticker",
+    spoiler: "Spoiler",
+    code: "Code",
+};
+const IT: Phrases = Phrases {
+    said: "ha detto",
+    link: "un link",
+    gif: "una gif",
+    image: "un'immagine",
+    video: "un video",
+    audio: "un audio",
+    file: "un file",
+    archive: "un file compresso",
+    multiple: "più file",
+    sticker: "uno sticker",
+    spoiler: "spoiler",
+    code: "codice",
+};
+const NL: Phrases = Phrases {
+    said: "zei",
+    link: "een link",
+    gif: "een gif",
+    image: "een afbeelding",
+    video: "een video",
+    audio: "een audio",
+    file: "een bestand",
+    archive: "een gecomprimeerd bestand",
+    multiple: "meerdere bestanden",
+    sticker: "een sticker",
+    spoiler: "spoiler",
+    code: "code",
+};
+const PL: Phrases = Phrases {
+    said: "powiedział",
+    link: "link",
+    gif: "gif",
+    image: "obraz",
+    video: "wideo",
+    audio: "audio",
+    file: "plik",
+    archive: "skompresowany plik",
+    multiple: "wiele plików",
+    sticker: "naklejka",
+    spoiler: "spoiler",
+    code: "kod",
+};
+const RU: Phrases = Phrases {
+    said: "сказал",
+    link: "ссылка",
+    gif: "гиф",
+    image: "изображение",
+    video: "видео",
+    audio: "аудио",
+    file: "файл",
+    archive: "сжатый файл",
+    multiple: "несколько файлов",
+    sticker: "стикер",
+    spoiler: "спойлер",
+    code: "код",
 };
 
 fn phrases_for_model(model: &str) -> &'static Phrases {
@@ -304,6 +374,10 @@ fn phrases_for_model(model: &str) -> &'static Phrases {
         Some("es") => &ES,
         Some("fr") => &FR,
         Some("de") => &DE,
+        Some("it") => &IT,
+        Some("nl") => &NL,
+        Some("pl") => &PL,
+        Some("ru") => &RU,
         _ => &EN,
     }
 }
@@ -324,6 +398,8 @@ fn media_phrase(item: &MediaAnnouncement, phrases: &Phrases) -> String {
             .map(str::trim)
             .filter(|text| !text.is_empty())
             .unwrap_or(phrases.sticker),
+        MediaAnnouncementKind::Spoiler => phrases.spoiler,
+        MediaAnnouncementKind::Code => phrases.code,
     }
     .to_owned()
 }
@@ -413,5 +489,31 @@ mod tests {
         let prepared = prepare_speech(with_announcements);
         assert_eq!(prepared.spoken, "DIOGO disse ola um gif");
         assert_eq!(prepared.request.emphasis_source.as_deref(), Some("ola"));
+    }
+
+    #[test]
+    fn markdown_announcements_are_spoken_without_exposing_the_protected_body() {
+        let mut available = models();
+        available.push("fr_FR-siwis-medium".into());
+        let media = [
+            MediaAnnouncement {
+                kind: MediaAnnouncementKind::Spoiler,
+                text: None,
+            },
+            MediaAnnouncement {
+                kind: MediaAnnouncementKind::Code,
+                text: None,
+            },
+        ];
+        let voice = VoicePreference {
+            model: "fr_FR-siwis-medium".into(),
+            speed: 1.0,
+        };
+        let mut with_markdown = input("bonjour", &available);
+        with_markdown.user_voice = Some(&voice);
+        with_markdown.media = &media;
+        let prepared = prepare_speech(with_markdown);
+        assert_eq!(prepared.spoken, "bonjour spoiler du code");
+        assert_eq!(prepared.request.emphasis_source.as_deref(), Some("bonjour"));
     }
 }
