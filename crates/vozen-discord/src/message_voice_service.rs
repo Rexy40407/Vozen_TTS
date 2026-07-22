@@ -121,6 +121,7 @@ where
                     use_channel_profile: true,
                     user_id: invocation.facts.author_id,
                     raw: invocation.raw,
+                    max_chars_override: None,
                     available_models: &self.settings.available_models,
                     runtime_default_voice: &self.settings.default_voice,
                     runtime_default_speed: self.settings.default_speed,

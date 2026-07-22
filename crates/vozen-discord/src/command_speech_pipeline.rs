@@ -107,6 +107,7 @@ impl CommandSpeechPipeline {
                 use_channel_profile: false,
                 user_id: input.user_id,
                 raw: input.raw,
+                max_chars_override: None,
                 available_models: input.available_models,
                 runtime_default_voice: input.runtime_default_voice,
                 runtime_default_speed: input.runtime_default_speed,

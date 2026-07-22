@@ -128,6 +128,7 @@ mod tests {
             use_channel_profile: true,
             user_id: "user",
             raw,
+            max_chars_override: None,
             available_models: models,
             runtime_default_voice: "en_US-amy-medium",
             runtime_default_speed: 1.0,

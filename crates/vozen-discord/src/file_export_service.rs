@@ -1,0 +1,280 @@
+//! Private `/tts-file` preparation and synthesis, independent of a voice call.
+//!
+//! This service deliberately has no Discord response/upload code. The gateway adapter owns the
+//! ephemeral attachment lifecycle, while this layer proves that export never joins a call, obeys
+//! the existing per-scope rate limit, and only synthesizes a fully validated request.
+
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
+
+use vozen_core::{GuildRateLimiters, detect_language};
+use vozen_store::SqliteStore;
+
+use crate::{
+    CommandSpeechSynthesizer, CoreVoiceSettings, MessagePreparationInput,
+    MessagePreparationOutcome, prepare_message_speech,
+};
+
+pub const MAX_TTS_FILE_CHARS: usize = 500;
+
+/// The preference scope is the guild id in a server or the stable `@user-app` scope in a DM/user
+/// install. It is not a Discord call and must never be used to infer voice membership.
+pub struct TtsFileExportInvocation<'a> {
+    pub preference_scope: &'a str,
+    pub user_id: &'a str,
+    pub raw: &'a str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TtsFileExportOutcome {
+    TooLong,
+    Empty,
+    RateLimited,
+    FullyBlocked,
+    VoiceUnavailable,
+    SynthesisFailed,
+    Ready(PathBuf),
+    StoreUnavailable,
+}
+
+pub struct TtsFileExportService<S> {
+    store: Arc<Mutex<SqliteStore>>,
+    rate_limiters: Mutex<GuildRateLimiters>,
+    synthesizer: S,
+    settings: CoreVoiceSettings,
+    now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+}
+
+impl<S> TtsFileExportService<S> {
+    pub fn new(
+        store: Arc<Mutex<SqliteStore>>,
+        synthesizer: S,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) -> Self {
+        Self {
+            store,
+            rate_limiters: Mutex::new(GuildRateLimiters::default()),
+            synthesizer,
+            settings,
+            now_ms,
+        }
+    }
+}
+
+impl<S> TtsFileExportService<S>
+where
+    S: CommandSpeechSynthesizer,
+{
+    pub async fn execute(&self, invocation: TtsFileExportInvocation<'_>) -> TtsFileExportOutcome {
+        // Discord validates `max_length`, but the application must retain the bound for old/stale
+        // commands and forged payloads. JavaScript's existing contract counts UTF-16 code units.
+        if invocation.raw.encode_utf16().count() > MAX_TTS_FILE_CHARS {
+            return TtsFileExportOutcome::TooLong;
+        }
+        let now_ms = (self.now_ms)();
+        let prepared = {
+            let store = match self.store.lock() {
+                Ok(store) => store,
+                Err(_) => return TtsFileExportOutcome::StoreUnavailable,
+            };
+            let mut limiters = match self.rate_limiters.lock() {
+                Ok(limiters) => limiters,
+                Err(_) => return TtsFileExportOutcome::StoreUnavailable,
+            };
+            let config = match store.guild_config(invocation.preference_scope) {
+                Ok(config) => config,
+                Err(_) => return TtsFileExportOutcome::StoreUnavailable,
+            };
+            if !limiters.allow(
+                invocation.preference_scope,
+                invocation.user_id,
+                config.rate_per_min,
+                now_ms,
+            ) {
+                return TtsFileExportOutcome::RateLimited;
+            }
+            let detected_language = store
+                .is_detection_on(invocation.preference_scope, invocation.user_id)
+                .ok()
+                .filter(|enabled| *enabled)
+                .and_then(|_| detect_language(invocation.raw));
+            prepare_message_speech(
+                &store,
+                MessagePreparationInput {
+                    guild_id: invocation.preference_scope,
+                    channel_id: "@tts-file",
+                    use_channel_profile: false,
+                    user_id: invocation.user_id,
+                    raw: invocation.raw,
+                    max_chars_override: Some(MAX_TTS_FILE_CHARS),
+                    available_models: &self.settings.available_models,
+                    runtime_default_voice: &self.settings.default_voice,
+                    runtime_default_speed: self.settings.default_speed,
+                    detected_language,
+                    announce_speaker: None,
+                    media: &[],
+                    resolve_user: &|_| "someone".to_owned(),
+                    resolve_channel: &|_| "channel".to_owned(),
+                },
+            )
+        };
+
+        let request = match prepared {
+            Ok(MessagePreparationOutcome::Ready(speech)) => speech.request,
+            Ok(MessagePreparationOutcome::Empty) => return TtsFileExportOutcome::Empty,
+            Ok(MessagePreparationOutcome::FullyBlocked) => {
+                return TtsFileExportOutcome::FullyBlocked;
+            }
+            Err(_) => return TtsFileExportOutcome::StoreUnavailable,
+        };
+        if !request_models_available(&request, &self.settings.available_models) {
+            return TtsFileExportOutcome::VoiceUnavailable;
+        }
+        self.synthesizer
+            .synthesize(&request)
+            .await
+            .map(TtsFileExportOutcome::Ready)
+            .unwrap_or(TtsFileExportOutcome::SynthesisFailed)
+    }
+
+    pub fn forget_scope(&self, scope: &str) {
+        if let Ok(mut limiters) = self.rate_limiters.lock() {
+            limiters.forget_guild(scope);
+        }
+    }
+}
+
+fn request_models_available(request: &vozen_core::SynthRequest, available: &[String]) -> bool {
+    available.iter().any(|model| model == &request.model)
+        && request.segments.as_deref().is_none_or(|segments| {
+            segments
+                .iter()
+                .all(|segment| available.iter().any(|model| model == &segment.model))
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use async_trait::async_trait;
+    use vozen_store::{GuildConfigPatch, SqliteStore};
+
+    use super::*;
+    use crate::CommandSynthesisError;
+
+    #[derive(Default)]
+    struct FakeSynthesizer(AtomicUsize);
+
+    #[async_trait]
+    impl CommandSpeechSynthesizer for FakeSynthesizer {
+        async fn synthesize(
+            &self,
+            _request: &vozen_core::SynthRequest,
+        ) -> Result<PathBuf, CommandSynthesisError> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Ok(PathBuf::from("export.wav"))
+        }
+    }
+
+    fn settings() -> CoreVoiceSettings {
+        CoreVoiceSettings {
+            available_models: vec!["en_US-amy-medium".into()],
+            default_voice: "en_US-amy-medium".into(),
+            default_speed: 1.0,
+        }
+    }
+
+    #[tokio::test]
+    async fn export_never_needs_voice_state_and_enforces_the_private_cap() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let synthesizer = FakeSynthesizer::default();
+        let service = TtsFileExportService::new(store, synthesizer, settings(), Arc::new(|| 0));
+        let oversized = "a".repeat(MAX_TTS_FILE_CHARS + 1);
+        assert_eq!(
+            service
+                .execute(TtsFileExportInvocation {
+                    preference_scope: "@user-app",
+                    user_id: "user",
+                    raw: "hello",
+                })
+                .await,
+            TtsFileExportOutcome::Ready(PathBuf::from("export.wav"))
+        );
+        assert_eq!(
+            service
+                .execute(TtsFileExportInvocation {
+                    preference_scope: "@user-app",
+                    user_id: "user",
+                    raw: &oversized,
+                })
+                .await,
+            TtsFileExportOutcome::TooLong
+        );
+        assert_eq!(service.synthesizer.0.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn export_uses_the_existing_scope_rate_limit_before_synthesis() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    rate_per_min: Some(1),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("config");
+        let service = TtsFileExportService::new(
+            store,
+            FakeSynthesizer::default(),
+            settings(),
+            Arc::new(|| 0),
+        );
+        let invocation = || TtsFileExportInvocation {
+            preference_scope: "guild",
+            user_id: "user",
+            raw: "hello",
+        };
+        assert!(matches!(
+            service.execute(invocation()).await,
+            TtsFileExportOutcome::Ready(_)
+        ));
+        assert_eq!(
+            service.execute(invocation()).await,
+            TtsFileExportOutcome::RateLimited
+        );
+    }
+
+    #[tokio::test]
+    async fn export_respects_existing_blocklists_without_storing_text() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        store
+            .lock()
+            .expect("store")
+            .add_blockword("guild", "secret")
+            .expect("block");
+        let service = TtsFileExportService::new(
+            store,
+            FakeSynthesizer::default(),
+            settings(),
+            Arc::new(|| 0),
+        );
+        assert_eq!(
+            service
+                .execute(TtsFileExportInvocation {
+                    preference_scope: "guild",
+                    user_id: "user",
+                    raw: "secret",
+                })
+                .await,
+            TtsFileExportOutcome::FullyBlocked
+        );
+    }
+}

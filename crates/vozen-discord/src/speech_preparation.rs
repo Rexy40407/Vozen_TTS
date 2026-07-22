@@ -34,6 +34,9 @@ pub struct MessagePreparationInput<'a> {
     pub use_channel_profile: bool,
     pub user_id: &'a str,
     pub raw: &'a str,
+    /// Explicit tools such as `/tts-file` can use a product-specific cap. `None` retains the
+    /// inherited channel/guild max character setting.
+    pub max_chars_override: Option<usize>,
     pub available_models: &'a [String],
     pub runtime_default_voice: &'a str,
     pub runtime_default_speed: f64,
@@ -80,11 +83,13 @@ pub fn begin_message_speech(
     } else {
         None
     };
-    let max_chars = profile
-        .as_ref()
-        .and_then(|profile| profile.max_chars)
-        .unwrap_or(guild.max_chars)
-        .max(0) as usize;
+    let max_chars = input.max_chars_override.unwrap_or_else(|| {
+        profile
+            .as_ref()
+            .and_then(|profile| profile.max_chars)
+            .unwrap_or(guild.max_chars)
+            .max(0) as usize
+    });
     let cleaned = vozen_core::clean_text(
         input.raw,
         &CleanTextOptions {
@@ -220,6 +225,7 @@ mod tests {
             use_channel_profile: true,
             user_id: "user",
             raw: "hello <@42>",
+            max_chars_override: None,
             available_models: models,
             runtime_default_voice: "en_US-amy-medium",
             runtime_default_speed: 1.0,
