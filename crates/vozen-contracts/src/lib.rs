@@ -51,6 +51,14 @@ pub enum ContractError {
     EmptyCommandName,
     #[error("duplicate root command name: {0}")]
     DuplicateRootCommand(String),
+    #[error("unknown command path: {root} {segment}")]
+    UnknownCommandPath { root: String, segment: String },
+    #[error("command type mismatch for {name}: expected {expected}, received {received}")]
+    CommandTypeMismatch {
+        name: String,
+        expected: u8,
+        received: u8,
+    },
 }
 
 impl DiscordCommandCatalog {
@@ -81,6 +89,47 @@ impl DiscordCommandCatalog {
                     .map_err(|error| ContractError::InvalidJson(error.to_string()))
             })
             .collect()
+    }
+
+    /// Resolves the exact leaf selected by Discord before a handler is invoked.
+    ///
+    /// `path` contains only subcommand/subcommand-group names in order. Argument options are
+    /// intentionally not accepted here: their validation belongs to the typed command handler.
+    /// An unknown root, subcommand, or application-command type fails closed.
+    pub fn resolve_command<'a>(
+        &'a self,
+        root: &str,
+        command_type: u8,
+        path: &[&str],
+    ) -> Result<&'a DiscordCommand, ContractError> {
+        let command = self
+            .root_commands()
+            .find(|command| command.name == root)
+            .ok_or_else(|| ContractError::UnknownCommandPath {
+                root: root.to_owned(),
+                segment: root.to_owned(),
+            })?;
+        let expected = command.kind.unwrap_or(1);
+        if expected != command_type {
+            return Err(ContractError::CommandTypeMismatch {
+                name: root.to_owned(),
+                expected,
+                received: command_type,
+            });
+        }
+
+        path.iter().try_fold(command, |current, segment| {
+            current
+                .options
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .find(|option| option.name == *segment && matches!(option.kind, Some(1) | Some(2)))
+                .ok_or_else(|| ContractError::UnknownCommandPath {
+                    root: root.to_owned(),
+                    segment: (*segment).to_owned(),
+                })
+        })
     }
 
     pub fn validate(&self) -> Result<(), ContractError> {
@@ -156,5 +205,33 @@ mod tests {
             DiscordCommandCatalog::from_json(contract),
             Err(ContractError::DuplicateRootCommand("setup".into()))
         );
+    }
+
+    #[test]
+    fn resolves_only_declared_command_paths_and_types() {
+        let catalog = DiscordCommandCatalog::from_json(CURRENT_COMMANDS).expect("valid contract");
+        assert_eq!(
+            catalog
+                .resolve_command("queue", 1, &["remove"])
+                .expect("queue remove")
+                .description
+                .as_deref(),
+            Some("Remove one of your queued items (admins may remove any item)")
+        );
+        assert_eq!(
+            catalog
+                .resolve_command("Speak", 3, &[])
+                .expect("message command")
+                .name,
+            "Speak"
+        );
+        assert!(matches!(
+            catalog.resolve_command("queue", 1, &["invented"]),
+            Err(ContractError::UnknownCommandPath { .. })
+        ));
+        assert!(matches!(
+            catalog.resolve_command("Speak", 1, &[]),
+            Err(ContractError::CommandTypeMismatch { .. })
+        ));
     }
 }
