@@ -10,7 +10,10 @@ use std::{
 };
 
 use vozen_core::{MediaAnnouncement, MessageSpeechDecision, MessageSpeechDenial};
-use vozen_store::SqliteStore;
+use vozen_store::{
+    OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore,
+    utc_day_key_from_unix_millis,
+};
 
 use crate::{
     CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceSettings, DiscordMessageFacts,
@@ -140,12 +143,19 @@ where
 
         match self.playback.reserve(invocation.facts.guild_id, lane).await {
             Ok(true) => {}
-            Ok(false) => return MessageVoiceOutcome::Busy,
+            Ok(false) => {
+                self.record_metric(OperationalMetric::QueueDrop);
+                return MessageVoiceOutcome::Busy;
+            }
             Err(_) => return MessageVoiceOutcome::PlaybackFailed,
         }
         let wav = match self.synthesizer.synthesize(&request).await {
-            Ok(wav) => wav,
+            Ok(wav) => {
+                self.record_synthesis_health(true);
+                wav
+            }
             Err(_) => {
+                self.record_synthesis_health(false);
                 let _ = self
                     .playback
                     .cancel_reservation(invocation.facts.guild_id, lane)
@@ -174,6 +184,45 @@ where
             pipeline.forget_guild(guild_id);
         }
     }
+
+    /// Writes only fixed, identity-free operational counters. Metric persistence is strictly
+    /// best-effort: telemetry can never make an otherwise valid speech request fail.
+    fn record_metric(&self, metric: OperationalMetric) {
+        let now = (self.now_ms)();
+        if let Ok(store) = self.store.lock() {
+            let _ = store.add_operational_metric(
+                metric,
+                OperationalProvider::Piper,
+                1.0,
+                Some(&utc_day_key_from_unix_millis(now)),
+            );
+        }
+    }
+
+    fn record_synthesis_health(&self, success: bool) {
+        let now = (self.now_ms)();
+        if let Ok(store) = self.store.lock() {
+            let _ = store.add_operational_metric(
+                if success {
+                    OperationalMetric::SynthSuccess
+                } else {
+                    OperationalMetric::SynthFailure
+                },
+                OperationalProvider::Piper,
+                1.0,
+                Some(&utc_day_key_from_unix_millis(now)),
+            );
+            let _ = store.set_provider_health(
+                OperationalProvider::Piper,
+                if success {
+                    ProviderHealth::Healthy
+                } else {
+                    ProviderHealth::Degraded
+                },
+                now,
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -188,7 +237,7 @@ mod tests {
 
     use async_trait::async_trait;
     use vozen_core::{QueueLane, SynthRequest};
-    use vozen_store::{GuildConfigPatch, SqliteStore};
+    use vozen_store::{GuildConfigPatch, OperationalMetric, OperationalProvider, SqliteStore};
 
     use super::*;
     use crate::{CommandPlaybackError, CommandPlaybackState, CommandSynthesisError};
@@ -342,5 +391,78 @@ mod tests {
             MessageVoiceOutcome::Busy
         );
         assert_eq!(service.synthesizer.0.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn queue_and_synthesis_metrics_stay_identity_free_and_best_effort() {
+        let store = configured_store();
+        let service = MessageVoiceService::new(
+            store.clone(),
+            FakeSynthesizer::default(),
+            FakePlayback {
+                reserve: false,
+                enqueued: AtomicUsize::new(0),
+            },
+            settings(),
+            Arc::new(|| 0),
+        );
+
+        assert_eq!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Busy
+        );
+        assert!(
+            store
+                .lock()
+                .expect("store")
+                .list_daily_operational_metrics(Some("1970-01-01"))
+                .expect("metrics")
+                .iter()
+                .any(|row| {
+                    row.metric == OperationalMetric::QueueDrop
+                        && row.provider == OperationalProvider::Piper
+                        && row.value == 1
+                })
+        );
+    }
+
+    #[tokio::test]
+    async fn successful_piper_synthesis_records_health_without_message_content() {
+        let store = configured_store();
+        let service = MessageVoiceService::new(
+            store.clone(),
+            FakeSynthesizer::default(),
+            FakePlayback {
+                reserve: true,
+                enqueued: AtomicUsize::new(0),
+            },
+            settings(),
+            Arc::new(|| 0),
+        );
+
+        assert_eq!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Queued
+        );
+        let store = store.lock().expect("store");
+        assert!(
+            store
+                .list_daily_operational_metrics(Some("1970-01-01"))
+                .expect("metrics")
+                .iter()
+                .any(|row| {
+                    row.metric == OperationalMetric::SynthSuccess
+                        && row.provider == OperationalProvider::Piper
+                        && row.value == 1
+                })
+        );
+        assert!(
+            store
+                .list_provider_health()
+                .expect("health")
+                .iter()
+                .any(|row| row.provider == OperationalProvider::Piper
+                    && row.health == ProviderHealth::Healthy)
+        );
     }
 }
