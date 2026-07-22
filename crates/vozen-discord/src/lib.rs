@@ -25,6 +25,7 @@ mod command_registration;
 mod command_routing;
 mod interaction_dispatch;
 mod planned_rejoin;
+mod speech_preparation;
 mod voice_playback;
 
 pub use command_registration::{
@@ -38,6 +39,10 @@ pub use interaction_dispatch::{
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
+};
+pub use speech_preparation::{
+    MessagePreparationInput, MessagePreparationOutcome, PreparedMessageSpeech,
+    prepare_message_speech,
 };
 pub use voice_playback::{VoicePlaybackError, join_and_play_wav, leave_voice};
 
