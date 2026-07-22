@@ -32,6 +32,8 @@ pub struct MessagePreparationInput<'a> {
     pub channel_id: &'a str,
     /// Explicit commands bypass per-channel profiles; passive auto-read uses them.
     pub use_channel_profile: bool,
+    /// Private user-app tools must not inherit a server's shared pronunciation dictionary.
+    pub include_server_pronunciations: bool,
     pub user_id: &'a str,
     pub raw: &'a str,
     /// Explicit tools such as `/tts-file` can use a product-specific cap. `None` retains the
@@ -123,7 +125,11 @@ pub fn finish_message_speech(
 
     let user_voice = store.get_user_voice(input.guild_id, input.user_id)?;
     let user_pronunciations = store.get_user_pronunciations(input.user_id)?;
-    let server_pronunciations = store.get_server_pronunciations(input.guild_id)?;
+    let server_pronunciations = if input.include_server_pronunciations {
+        store.get_server_pronunciations(input.guild_id)?
+    } else {
+        Vec::new()
+    };
     let configured_voice = draft
         .profile
         .as_ref()
@@ -223,6 +229,7 @@ mod tests {
             guild_id: "guild",
             channel_id: "channel",
             use_channel_profile: true,
+            include_server_pronunciations: true,
             user_id: "user",
             raw: "hello <@42>",
             max_chars_override: None,

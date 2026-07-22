@@ -119,6 +119,7 @@ where
                     guild_id: invocation.facts.guild_id,
                     channel_id: invocation.facts.channel_id,
                     use_channel_profile: true,
+                    include_server_pronunciations: true,
                     user_id: invocation.facts.author_id,
                     raw: invocation.raw,
                     max_chars_override: None,

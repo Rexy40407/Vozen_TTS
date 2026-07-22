@@ -126,6 +126,7 @@ mod tests {
             guild_id: "guild",
             channel_id: "channel",
             use_channel_profile: true,
+            include_server_pronunciations: true,
             user_id: "user",
             raw,
             max_chars_override: None,

@@ -105,6 +105,7 @@ impl CommandSpeechPipeline {
                 channel_id: input.channel_id,
                 // `/tts` must use the guild default, never an auto-read channel profile.
                 use_channel_profile: false,
+                include_server_pronunciations: true,
                 user_id: input.user_id,
                 raw: input.raw,
                 max_chars_override: None,
