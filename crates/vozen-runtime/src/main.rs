@@ -158,6 +158,7 @@ struct CoreVoiceRuntimeOptions {
     cache_dir: PathBuf,
     piper_concurrency: usize,
     queue_cap: usize,
+    message_autoread: bool,
     settings: CoreVoiceSettings,
 }
 
@@ -232,6 +233,9 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             .into(),
         piper_concurrency,
         queue_cap,
+        message_autoread: message_autoread_enabled(
+            env::var("RUST_MESSAGE_AUTOREAD_ENABLED").ok().as_deref(),
+        ),
         settings: CoreVoiceSettings {
             available_models: Vec::new(),
             default_voice,
@@ -243,6 +247,10 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
 /// This deliberately matches Node's safe opt-in semantics: only literal `true` can make Rust
 /// own a Discord interaction. `1`, `yes`, missing and spelling mistakes remain shadow-only.
 fn core_voice_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn message_autoread_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -761,6 +769,15 @@ mod tests {
         assert!(!dashboard_enabled(Some("1")));
         assert!(!dashboard_enabled(Some("yes")));
         assert!(!dashboard_enabled(None));
+    }
+
+    #[test]
+    fn rust_message_autoread_is_exactly_opt_in() {
+        assert!(message_autoread_enabled(Some("true")));
+        assert!(message_autoread_enabled(Some(" TRUE ")));
+        assert!(!message_autoread_enabled(Some("1")));
+        assert!(!message_autoread_enabled(Some("yes")));
+        assert!(!message_autoread_enabled(None));
     }
 
     #[tokio::test]

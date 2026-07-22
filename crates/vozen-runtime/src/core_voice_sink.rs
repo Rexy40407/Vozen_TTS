@@ -18,8 +18,9 @@ use serenity::{
 };
 use vozen_discord::{
     CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor, CoreVoiceInteractionFacts,
-    GatewayEventDispatchError, GatewayEventSink, GatewayState, SongbirdCommandPlayback,
-    SongbirdVoiceSessionTransport,
+    DiscordMessageFactsOwned, GatewayEventDispatchError, GatewayEventSink, GatewayState,
+    MessageVoiceInvocation, MessageVoiceService, SongbirdCommandPlayback,
+    SongbirdVoiceSessionTransport, collect_message_media,
 };
 use vozen_store::SqliteStore;
 
@@ -30,12 +31,20 @@ type Executor = CoreVoiceInteractionExecutor<
     PiperCommandSynthesizer,
     SongbirdCommandPlayback,
 >;
+type MessageService = MessageVoiceService<PiperCommandSynthesizer, SongbirdCommandPlayback>;
+
+struct VoiceDependencies {
+    synthesizer: PiperCommandSynthesizer,
+    playback: SongbirdCommandPlayback,
+}
 
 pub struct CoreVoiceGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
     options: CoreVoiceRuntimeOptions,
+    dependencies: Mutex<Option<Arc<VoiceDependencies>>>,
     executor: Mutex<Option<Arc<Executor>>>,
+    message_service: Mutex<Option<Arc<MessageService>>>,
 }
 
 impl CoreVoiceGatewaySink {
@@ -49,8 +58,35 @@ impl CoreVoiceGatewaySink {
             store,
             gateway_state,
             options,
+            dependencies: Mutex::new(None),
             executor: Mutex::new(None),
+            message_service: Mutex::new(None),
         }
+    }
+
+    fn dependencies(
+        &self,
+        context: &Context,
+    ) -> Result<Arc<VoiceDependencies>, GatewayEventDispatchError> {
+        let mut current = self
+            .dependencies
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?;
+        if let Some(dependencies) = &*current {
+            return Ok(dependencies.clone());
+        }
+        let options = &self.options;
+        let dependencies = Arc::new(VoiceDependencies {
+            synthesizer: PiperCommandSynthesizer::production(
+                options.piper_path.clone(),
+                options.models_dir.clone(),
+                options.cache_dir.clone(),
+                options.piper_concurrency,
+            ),
+            playback: SongbirdCommandPlayback::new(context.clone(), options.queue_cap),
+        });
+        *current = Some(dependencies.clone());
+        Ok(dependencies)
     }
 
     fn executor(&self, context: &Context) -> Result<Arc<Executor>, GatewayEventDispatchError> {
@@ -62,17 +98,13 @@ impl CoreVoiceGatewaySink {
             return Ok(executor.clone());
         }
         let options = &self.options;
+        let dependencies = self.dependencies(context)?;
         let executor = CoreVoiceInteractionExecutor::new(
             self.store.clone(),
             self.gateway_state.clone(),
             SongbirdVoiceSessionTransport::new(context.clone()),
-            PiperCommandSynthesizer::production(
-                options.piper_path.clone(),
-                options.models_dir.clone(),
-                options.cache_dir.clone(),
-                options.piper_concurrency,
-            ),
-            SongbirdCommandPlayback::new(context.clone(), options.queue_cap),
+            dependencies.synthesizer.clone(),
+            dependencies.playback.clone(),
             options.settings.clone(),
             Arc::new(system_now_ms),
         )
@@ -81,17 +113,65 @@ impl CoreVoiceGatewaySink {
         *current = Some(executor.clone());
         Ok(executor)
     }
+
+    fn message_service(
+        &self,
+        context: &Context,
+    ) -> Result<Arc<MessageService>, GatewayEventDispatchError> {
+        let mut current = self
+            .message_service
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?;
+        if let Some(service) = &*current {
+            return Ok(service.clone());
+        }
+        let dependencies = self.dependencies(context)?;
+        let service = Arc::new(MessageVoiceService::new(
+            self.store.clone(),
+            dependencies.synthesizer.clone(),
+            dependencies.playback.clone(),
+            self.options.settings.clone(),
+            Arc::new(system_now_ms),
+        ));
+        *current = Some(service.clone());
+        Ok(service)
+    }
 }
 
 #[async_trait]
 impl GatewayEventSink for CoreVoiceGatewaySink {
     async fn on_message(
         &self,
-        _context: Context,
-        _message: serenity::model::channel::Message,
+        context: Context,
+        message: serenity::model::channel::Message,
     ) -> Result<(), GatewayEventDispatchError> {
-        // Auto-read is promoted only after attachment/media and optional autojoin parity are
-        // exercised against the same sink. Explicit slash commands are safe to promote first.
+        if !self.options.message_autoread
+            || self
+                .gateway_state
+                .bot_user_id()
+                .is_some_and(|bot_id| bot_id == message.author.id.get().to_string())
+        {
+            return Ok(());
+        }
+        let Some(facts) = DiscordMessageFactsOwned::from_message(&self.gateway_state, &message)
+        else {
+            return Ok(());
+        };
+        let media = collect_message_media(&message);
+        let service = self.message_service(&context)?;
+        let resolve_user = |_: &str| "someone".to_owned();
+        let resolve_channel = |_: &str| "a channel".to_owned();
+        let _ = service
+            .execute(MessageVoiceInvocation {
+                facts: facts.as_borrowed(),
+                raw: &message.content,
+                media: &media,
+                detected_language: None,
+                announce_speaker: None,
+                resolve_user: &resolve_user,
+                resolve_channel: &resolve_channel,
+            })
+            .await;
         Ok(())
     }
 
@@ -153,6 +233,11 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 executor.forget_guild(guild_id);
             }
         }
+        if let Ok(service) = self.message_service.lock() {
+            if let Some(service) = service.as_ref() {
+                service.forget_guild(guild_id);
+            }
+        }
         Ok(())
     }
 }
@@ -169,6 +254,7 @@ mod tests {
             cache_dir: "cache".into(),
             piper_concurrency: 2,
             queue_cap: 20,
+            message_autoread: false,
             settings: CoreVoiceSettings {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),

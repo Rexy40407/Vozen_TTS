@@ -13,6 +13,7 @@ use vozen_discord::{CommandSpeechSynthesizer, CommandSynthesisError};
 use vozen_tts::CommandPiperRunner;
 use vozen_tts::{PiperEngine, PiperRunner};
 
+#[derive(Clone)]
 pub struct PiperCommandSynthesizer<R = vozen_tts::CommandPiperRunner> {
     engine: Arc<PiperEngine<R>>,
 }

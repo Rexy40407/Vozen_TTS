@@ -13,3 +13,18 @@ export function rustVoiceOwnsCommand(
 ): boolean {
   return enabled?.trim().toLowerCase() === 'true' && RUST_CORE_VOICE_COMMANDS.has(commandName);
 }
+
+/**
+ * Message ownership is deliberately separate from slash-command ownership. Rust can only take
+ * auto-read after its same-call pipeline has been shadow-tested; requiring both exact flags
+ * prevents a typo from making Node drop messages while Rust is inactive.
+ */
+export function rustVoiceOwnsAutoRead(
+  coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
+  messageEnabled = process.env.RUST_MESSAGE_AUTOREAD_ENABLED,
+): boolean {
+  return (
+    coreEnabled?.trim().toLowerCase() === 'true' &&
+    messageEnabled?.trim().toLowerCase() === 'true'
+  );
+}

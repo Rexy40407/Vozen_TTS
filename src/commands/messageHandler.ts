@@ -30,6 +30,7 @@ import { log } from '../logging/logger';
 import { channelCard } from '../ui/messages';
 import { resolveQueueLane } from '../voice/queuePolicy';
 import { handleTranslationMessage } from '../translation/messageListener';
+import { rustVoiceOwnsAutoRead } from '../migration/rustVoiceAuthority';
 import { translateTextForSpeech } from '../translation/explicit';
 import { getTranslationPreference } from '../store/translation';
 import { getChannelProfile } from '../store/channelProfiles';
@@ -165,6 +166,7 @@ export async function handleMessage(message: Message, deps: BotDeps): Promise<vo
     await handleTranslationMessage(message, deps);
     // Vozen NEVER reads itself — anti-loop, regardless of read_bots.
     if (message.author.id === me.id) return;
+    if (rustVoiceOwnsAutoRead()) return;
 
     // Guild kill-switch and bot gate BEFORE the games hook. The kill-switch
     // (/config enabled:off) must stop EVERYTHING — including a running /game

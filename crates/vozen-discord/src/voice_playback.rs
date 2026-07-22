@@ -72,6 +72,7 @@ impl QueueReservations {
 /// It only sees an existing Songbird call: `/join` remains responsible for creating it and the
 /// command service remains responsible for authorization. Keeping those two concerns separate
 /// avoids a text command silently connecting the bot to a channel.
+#[derive(Clone)]
 pub struct SongbirdCommandPlayback {
     #[cfg(feature = "voice-driver")]
     context: serenity::client::Context,
