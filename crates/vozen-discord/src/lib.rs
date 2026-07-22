@@ -33,6 +33,7 @@ mod core_voice_interaction;
 mod core_voice_response;
 mod core_voice_service;
 mod dashboard_options;
+mod explicit_translation;
 mod file_export_command;
 mod file_export_service;
 mod gateway_composite;
@@ -72,6 +73,11 @@ pub use core_voice_service::{
 pub use dashboard_options::{
     DiscordDashboardOption, DiscordDashboardOptions, DiscordDashboardOptionsProvider,
     locale_display_options, voice_display_options,
+};
+pub use explicit_translation::{
+    ExplicitTranslationInvocation, ExplicitTranslationOutcome, ExplicitTranslationProvider,
+    ExplicitTranslationService, FREE_GUILD_TRANSLATION_LIMIT, FREE_USER_TRANSLATION_LIMIT,
+    PREMIUM_GUILD_TRANSLATION_LIMIT, PREMIUM_USER_TRANSLATION_LIMIT, USER_APP_TRANSLATION_SCOPE,
 };
 pub use file_export_command::{TtsFileCommand, TtsFileCommandError, parse_tts_file_command};
 pub use file_export_service::{
