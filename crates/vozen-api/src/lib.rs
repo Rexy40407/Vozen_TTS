@@ -11,6 +11,7 @@ use std::sync::Arc;
 pub mod account_api;
 pub mod admin_api;
 pub mod admin_auth;
+pub mod admin_router;
 pub mod dashboard_api;
 pub mod dashboard_oauth;
 pub mod dashboard_validation;
@@ -119,6 +120,7 @@ pub struct RuntimeRouterConfig {
     pub account: Option<account_api::AccountApiConfig>,
     pub premium: Option<premium_api::PremiumApiConfig>,
     pub dashboard: Option<dashboard_api::DashboardApiConfig>,
+    pub admin: Option<admin_router::AdminRouterConfig>,
     pub kofi_webhook: Option<kofi_webhook::KofiWebhookConfig>,
     pub topgg_webhook: Option<topgg_webhook::TopggWebhookConfig>,
 }
@@ -131,6 +133,8 @@ pub enum RuntimeRouterError {
     Premium(#[from] premium_api::PremiumApiConfigError),
     #[error("dashboard API configuration: {0}")]
     Dashboard(#[from] dashboard_api::DashboardApiConfigError),
+    #[error("admin API configuration: {0}")]
+    Admin(#[from] admin_router::AdminRouterConfigError),
     #[error("Ko-fi webhook configuration: {0}")]
     KofiWebhook(#[from] kofi_webhook::KofiWebhookConfigError),
     #[error("Top.gg webhook configuration: {0}")]
@@ -151,6 +155,9 @@ pub fn runtime_router(config: RuntimeRouterConfig) -> Result<Router, RuntimeRout
     }
     if let Some(dashboard) = config.dashboard {
         router = router.merge(dashboard_api::dashboard_router(dashboard)?);
+    }
+    if let Some(admin) = config.admin {
+        router = router.merge(admin_router::admin_router(admin)?);
     }
     if let Some(kofi_webhook) = config.kofi_webhook {
         router = router.merge(kofi_webhook::kofi_webhook_router(kofi_webhook)?);
@@ -256,6 +263,7 @@ mod tests {
             account: None,
             premium: None,
             dashboard: None,
+            admin: None,
             kofi_webhook: None,
             topgg_webhook: None,
         })

@@ -876,6 +876,7 @@ fn build_http_router(
             account: None,
             premium: None,
             dashboard: None,
+            admin: None,
             kofi_webhook: None,
             topgg_webhook: topgg_webhook.map(|config| TopggWebhookConfig {
                 webhook_secret: config.webhook_secret,
@@ -946,6 +947,7 @@ fn build_http_router(
         // OAuth audience/scope, Manage Guild and current bot presence before the options
         // provider asks Discord for the bot's current authorised channels and roles.
         dashboard,
+        admin: None,
         kofi_webhook,
         topgg_webhook: topgg_webhook.map(|config| TopggWebhookConfig {
             webhook_secret: config.webhook_secret,
