@@ -141,13 +141,13 @@ async fn run() -> Result<(), RuntimeError> {
     let gateway_state = GatewayState::default();
     let gateway = run_discord_gateway_with_state(
         DiscordRuntimeConfig::from_token(config.discord_token)?,
-        gateway_state,
+        gateway_state.clone(),
     );
 
     let Some(health_bind) = config.health_bind else {
         return gateway.await.map_err(RuntimeError::from);
     };
-    let app = build_http_router(config.premium_http, store)?;
+    let app = build_http_router(config.premium_http, store, gateway_state)?;
     let listener = tokio::net::TcpListener::bind(health_bind).await?;
     tokio::select! {
         result = gateway => result.map_err(RuntimeError::from),
@@ -158,6 +158,7 @@ async fn run() -> Result<(), RuntimeError> {
 fn build_http_router(
     premium_http: Option<PremiumHttpConfig>,
     store: Arc<Mutex<SqliteStore>>,
+    gateway_state: GatewayState,
 ) -> Result<axum::Router, RuntimeError> {
     let Some(config) = premium_http else {
         return runtime_router(RuntimeRouterConfig {
@@ -193,9 +194,9 @@ fn build_http_router(
             store: store.clone(),
             identity_verifier: verifier.clone(),
             now: now.clone(),
-            // Gateway guild names are not yet safely populated on READY. Returning null is
-            // already supported by the browser contract and avoids stale name disclosure.
-            resolve_guild_name: None,
+            // Guild names are sourced only from the current gateway process; a missing cache
+            // entry stays `null` rather than causing an outbound lookup or leaking old data.
+            resolve_guild_name: Some(Arc::new(move |guild_id| gateway_state.guild_name(guild_id))),
         }),
         premium: Some(PremiumApiConfig {
             origin: config.origin,

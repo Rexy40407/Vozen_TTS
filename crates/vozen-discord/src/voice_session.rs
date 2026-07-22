@@ -80,13 +80,22 @@ impl<T: VoiceSessionTransport> VoiceSessionService<T> {
             return JoinVoiceOutcome::NoUserVoiceChannel;
         };
         match self.transport.join(guild_id, &channel_id).await {
-            Ok(()) => match self.store.lock() {
-                Ok(store) => match store.remember_voice_presence(guild_id, &channel_id, now_ms) {
-                    Ok(()) => JoinVoiceOutcome::Joined,
+            Ok(()) => {
+                // The voice gateway update is asynchronous. Publish the local fact now so an
+                // immediately following message cannot bypass the same-call policy while the
+                // durable rejoin marker is being written.
+                self.gateway_state
+                    .set_bot_voice_channel(guild_id, Some(channel_id.clone()));
+                match self.store.lock() {
+                    Ok(store) => {
+                        match store.remember_voice_presence(guild_id, &channel_id, now_ms) {
+                            Ok(()) => JoinVoiceOutcome::Joined,
+                            Err(_) => JoinVoiceOutcome::StoreUnavailable,
+                        }
+                    }
                     Err(_) => JoinVoiceOutcome::StoreUnavailable,
-                },
-                Err(_) => JoinVoiceOutcome::StoreUnavailable,
-            },
+                }
+            }
             Err(VoiceSessionTransportError::PermissionDenied) => JoinVoiceOutcome::PermissionDenied,
             Err(VoiceSessionTransportError::Unavailable) => JoinVoiceOutcome::Unavailable,
             Err(VoiceSessionTransportError::Failed) => JoinVoiceOutcome::Failed,
@@ -97,6 +106,9 @@ impl<T: VoiceSessionTransport> VoiceSessionService<T> {
     /// already disappeared; otherwise a later clean restart could silently rejoin the channel.
     pub async fn leave_explicitly(&self, guild_id: &str) -> LeaveVoiceOutcome {
         let transport = self.transport.leave(guild_id).await;
+        // An explicit leave must immediately stop message admission even if the driver is
+        // already gone. The later gateway update merely confirms this fail-closed state.
+        self.gateway_state.set_bot_voice_channel(guild_id, None);
         let erased = self
             .store
             .lock()
@@ -166,6 +178,7 @@ mod tests {
     #[tokio::test]
     async fn join_persists_only_after_a_successful_transport_join() {
         let (service, store, state) = make_service(FakeTransport::default());
+        state.remember_bot_user("bot".into());
         state.update_voice_state("guild", "user", Some("voice".into()));
         assert_eq!(
             service.join_for_user("guild", "user", 42).await,
@@ -180,11 +193,16 @@ mod tests {
                 .channel_id,
             "voice"
         );
+        assert_eq!(
+            state.bot_voice_channel_id("guild").as_deref(),
+            Some("voice")
+        );
 
         let (failed, store, state) = make_service(FakeTransport {
             join_error: Some(VoiceSessionTransportError::PermissionDenied),
             ..FakeTransport::default()
         });
+        state.remember_bot_user("bot".into());
         store
             .lock()
             .expect("store")
@@ -208,10 +226,12 @@ mod tests {
 
     #[tokio::test]
     async fn explicit_leave_clears_rejoin_hint_even_when_driver_is_already_gone() {
-        let (service, store, _) = make_service(FakeTransport {
+        let (service, store, state) = make_service(FakeTransport {
             leave_error: Some(VoiceSessionTransportError::Unavailable),
             ..FakeTransport::default()
         });
+        state.remember_bot_user("bot".into());
+        state.set_bot_voice_channel("guild", Some("voice".into()));
         store
             .lock()
             .expect("store")
@@ -229,5 +249,6 @@ mod tests {
                 .expect("presence")
                 .is_empty()
         );
+        assert_eq!(state.bot_voice_channel_id("guild"), None);
     }
 }

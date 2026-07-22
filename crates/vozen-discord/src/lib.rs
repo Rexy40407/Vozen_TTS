@@ -62,7 +62,9 @@ pub use voice_session::{
 /// mapping required to enforce same-call speech admission without Serenity's global member cache.
 #[derive(Clone, Default)]
 pub struct GatewayState {
+    bot_user_id: Arc<RwLock<Option<String>>>,
     guild_ids: Arc<RwLock<BTreeSet<String>>>,
+    guild_names: Arc<RwLock<BTreeMap<String, String>>>,
     voice_channels: Arc<RwLock<BTreeMap<String, BTreeMap<String, String>>>>,
 }
 
@@ -80,6 +82,23 @@ impl GatewayState {
             .unwrap_or_default()
     }
 
+    /// Returns a live gateway-cached name for a guild. This cache is intentionally best-effort:
+    /// callers must tolerate `None` until Discord has supplied a Guild Create event, rather than
+    /// performing a request or returning a stale persisted name.
+    pub fn guild_name(&self, guild_id: &str) -> Option<String> {
+        self.guild_names
+            .read()
+            .ok()
+            .and_then(|guild_names| guild_names.get(guild_id).cloned())
+    }
+
+    /// Returns Vozen's current voice channel for a guild. It is absent until the READY identity
+    /// and a voice state are both known, so message admission always fails closed during startup.
+    pub fn bot_voice_channel_id(&self, guild_id: &str) -> Option<String> {
+        let bot_user_id = self.bot_user_id.read().ok()?.clone()?;
+        self.voice_channel_id(guild_id, &bot_user_id)
+    }
+
     /// Returns the current voice channel only if the gateway has seen a state for this exact
     /// guild/user pair. Missing state intentionally fails closed in the speech admission layer.
     pub fn voice_channel_id(&self, guild_id: &str, user_id: &str) -> Option<String> {
@@ -92,14 +111,36 @@ impl GatewayState {
     }
 
     fn replace_guilds(&self, guild_ids: impl IntoIterator<Item = String>) {
+        let guild_ids = guild_ids.into_iter().collect::<BTreeSet<_>>();
         if let Ok(mut current) = self.guild_ids.write() {
-            *current = guild_ids.into_iter().collect();
+            *current = guild_ids.clone();
+        }
+        if let Ok(mut guild_names) = self.guild_names.write() {
+            guild_names.retain(|guild_id, _| guild_ids.contains(guild_id));
         }
     }
 
-    fn remember_guild(&self, guild_id: String) {
+    fn remember_bot_user(&self, user_id: String) {
+        if let Ok(mut bot_user_id) = self.bot_user_id.write() {
+            *bot_user_id = Some(user_id);
+        }
+    }
+
+    /// Sets only the bot's own transient voice fact. Used by `/join` and `/leave` to close the
+    /// gap before Discord sends the subsequent voice-state gateway update.
+    fn set_bot_voice_channel(&self, guild_id: &str, channel_id: Option<String>) {
+        let Some(bot_user_id) = self.bot_user_id.read().ok().and_then(|id| id.clone()) else {
+            return;
+        };
+        self.update_voice_state(guild_id, &bot_user_id, channel_id);
+    }
+
+    fn remember_guild(&self, guild_id: String, guild_name: String) {
         if let Ok(mut current) = self.guild_ids.write() {
-            current.insert(guild_id);
+            current.insert(guild_id.clone());
+        }
+        if let Ok(mut guild_names) = self.guild_names.write() {
+            guild_names.insert(guild_id, guild_name);
         }
     }
 
@@ -138,6 +179,9 @@ impl GatewayState {
     fn forget_guild(&self, guild_id: &str) {
         if let Ok(mut current) = self.guild_ids.write() {
             current.remove(guild_id);
+        }
+        if let Ok(mut guild_names) = self.guild_names.write() {
+            guild_names.remove(guild_id);
         }
         if let Ok(mut voice_channels) = self.voice_channels.write() {
             voice_channels.remove(guild_id);
@@ -263,6 +307,8 @@ struct VozenGatewayHandler {
 impl EventHandler for VozenGatewayHandler {
     async fn ready(&self, _context: Context, ready: Ready) {
         self.gateway_state
+            .remember_bot_user(ready.user.id.get().to_string());
+        self.gateway_state
             .replace_guilds(ready.guilds.iter().map(|guild| guild.id.get().to_string()));
     }
 
@@ -273,7 +319,7 @@ impl EventHandler for VozenGatewayHandler {
         _is_new: Option<bool>,
     ) {
         self.gateway_state
-            .remember_guild(guild.id.get().to_string());
+            .remember_guild(guild.id.get().to_string(), guild.name.clone());
         self.gateway_state.replace_guild_voice_states(&guild);
     }
 
@@ -333,12 +379,20 @@ mod tests {
     #[test]
     fn gateway_state_exposes_only_current_bot_guild_membership() {
         let state = GatewayState::default();
+        state.remember_bot_user("bot".into());
         state.replace_guilds(["guild-b".into(), "guild-a".into()]);
         assert!(state.bot_has_guild("guild-a"));
-        state.remember_guild("guild-c".into());
+        state.remember_guild("guild-c".into(), "Guild C".into());
         state.forget_guild("guild-b");
         assert_eq!(state.guild_ids(), vec!["guild-a", "guild-c"]);
+        assert_eq!(state.guild_name("guild-c").as_deref(), Some("Guild C"));
+        assert_eq!(state.guild_name("guild-b"), None);
         assert!(!state.bot_has_guild("guild-b"));
+        state.set_bot_voice_channel("guild-c", Some("voice".into()));
+        assert_eq!(
+            state.bot_voice_channel_id("guild-c").as_deref(),
+            Some("voice")
+        );
     }
 
     #[test]
