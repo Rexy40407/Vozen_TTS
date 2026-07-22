@@ -45,6 +45,8 @@ mod message_media;
 mod message_pipeline;
 mod message_voice_service;
 mod planned_rejoin;
+mod pronunciation_command;
+mod pronunciation_service;
 mod queue_command;
 mod queue_control;
 mod rejoin_service;
@@ -104,6 +106,13 @@ pub use message_voice_service::{MessageVoiceInvocation, MessageVoiceOutcome, Mes
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
+};
+pub use pronunciation_command::{
+    PronunciationCommand, PronunciationCommandError, PronunciationScope,
+    parse_pronunciation_command,
+};
+pub use pronunciation_service::{
+    PronunciationInvocation, PronunciationOutcome, PronunciationService,
 };
 pub use queue_command::{QueueCommand, QueueCommandError, parse_queue_command};
 pub use queue_control::{
