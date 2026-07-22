@@ -48,6 +48,7 @@ mod rejoin_service;
 mod songbird_transport;
 mod speech_preparation;
 mod translation_command;
+mod translation_preference_command;
 mod voice_i18n;
 mod voice_playback;
 mod voice_session;
@@ -105,6 +106,10 @@ pub use speech_preparation::{
 };
 pub use translation_command::{
     TranslateTextCommand, TranslateTextCommandError, parse_translate_text_command,
+};
+pub use translation_preference_command::{
+    TranslationPreferenceCommand, TranslationPreferenceCommandError,
+    parse_translation_preference_command,
 };
 pub use voice_i18n::{VoiceResponseLocalizer, VoiceResponseLocalizerError};
 pub use voice_playback::{
