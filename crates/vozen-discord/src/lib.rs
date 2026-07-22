@@ -76,6 +76,33 @@ pub use voice_session::{
     VoiceSessionTransportError,
 };
 
+/// Optional event boundary used while command/message paths are promoted from the Node runtime.
+/// The gateway itself remains responsible only for Discord connection state; implementations own
+/// their response deadline, content handling and error accounting.
+#[async_trait]
+pub trait GatewayEventSink: Send + Sync {
+    async fn on_message(
+        &self,
+        context: Context,
+        message: serenity::model::channel::Message,
+    ) -> Result<(), GatewayEventDispatchError>;
+
+    async fn on_interaction(
+        &self,
+        context: Context,
+        interaction: serenity::model::application::Interaction,
+    ) -> Result<(), GatewayEventDispatchError>;
+
+    async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError>;
+}
+
+/// A sink error is intentionally content-free. Gateway callbacks discard it after the sink has
+/// recorded safe operational context, so a malformed message can never crash or expose text from
+/// the shard task.
+#[derive(Debug, Error)]
+#[error("promoted gateway event handler failed")]
+pub struct GatewayEventDispatchError;
+
 /// Minimal gateway facts used by the Rust adapters. It intentionally contains neither message
 /// content, profiles nor tokens: the only live voice data is a transient guild/user/channel ID
 /// mapping required to enforce same-call speech admission without Serenity's global member cache.
@@ -324,11 +351,26 @@ pub async fn run_discord_gateway_with_state(
     config: DiscordRuntimeConfig,
     gateway_state: GatewayState,
 ) -> Result<(), DiscordRuntimeError> {
+    run_discord_gateway_with_state_and_sink(config, gateway_state, None).await
+}
+
+/// Starts the gateway with an explicitly promoted event sink. Passing `None` keeps the current
+/// shadow-runtime behaviour: state is synchronized, but no message or interaction is consumed.
+/// A caller must construct and pass the sink deliberately, so merely compiling a Rust handler
+/// cannot race the still-authoritative Node bot on the same Discord application.
+pub async fn run_discord_gateway_with_state_and_sink(
+    config: DiscordRuntimeConfig,
+    gateway_state: GatewayState,
+    event_sink: Option<Arc<dyn GatewayEventSink>>,
+) -> Result<(), DiscordRuntimeError> {
     let mut client = Client::builder(config.token, vozen_gateway_intents())
         // Registers the voice gateway/driver but never joins a call by itself. Join/rejoin
         // policy remains behind a tested command handler in a later migration step.
         .register_songbird()
-        .event_handler(VozenGatewayHandler { gateway_state })
+        .event_handler(VozenGatewayHandler {
+            gateway_state,
+            event_sink,
+        })
         .await
         .map_err(|error| DiscordRuntimeError::Serenity(Box::new(error)))?;
     client
@@ -340,6 +382,7 @@ pub async fn run_discord_gateway_with_state(
 
 struct VozenGatewayHandler {
     gateway_state: GatewayState,
+    event_sink: Option<Arc<dyn GatewayEventSink>>,
 }
 
 #[async_trait]
@@ -369,8 +412,11 @@ impl EventHandler for VozenGatewayHandler {
         incomplete: serenity::model::guild::UnavailableGuild,
         _full: Option<serenity::model::guild::Guild>,
     ) {
-        self.gateway_state
-            .forget_guild(&incomplete.id.get().to_string());
+        let guild_id = incomplete.id.get().to_string();
+        self.gateway_state.forget_guild(&guild_id);
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_guild_delete(&guild_id).await;
+        }
     }
 
     async fn voice_state_update(
@@ -388,6 +434,22 @@ impl EventHandler for VozenGatewayHandler {
             new.channel_id
                 .map(|channel_id| channel_id.get().to_string()),
         );
+    }
+
+    async fn message(&self, context: Context, message: serenity::model::channel::Message) {
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_message(context, message).await;
+        }
+    }
+
+    async fn interaction_create(
+        &self,
+        context: Context,
+        interaction: serenity::model::application::Interaction,
+    ) {
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_interaction(context, interaction).await;
+        }
     }
 }
 
