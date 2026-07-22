@@ -11,6 +11,7 @@ mod rate_limiter;
 mod speech_preparation;
 mod speech_safety;
 mod text_cleaning;
+mod topgg;
 mod voice_selection;
 
 pub use abbreviations::{
@@ -42,6 +43,10 @@ pub use speech_safety::{
 };
 pub use text_cleaning::{
     CleanTextOptions, MediaKind, clean_text, collect_markdown_media, collect_url_media,
+};
+pub use topgg::{
+    TOPGG_SIGNATURE_TOLERANCE_MS, TopggVote, TopggWebhookDecision, TopggWebhookRejection,
+    verify_topgg_webhook,
 };
 pub use voice_selection::{accent_language_of_model, pick_voice, pick_voice_for_language};
 
