@@ -3,6 +3,7 @@ use rusqlite::{OptionalExtension, params};
 use crate::{SqliteStore, StoreError};
 
 pub const MAX_RECENT_VOICES: usize = 10;
+pub const MAX_VOICE_FAVORITES: usize = 25;
 
 /// User-selected synthesis engine. Unknown historical database values deliberately follow the
 /// operator-configured default (`Google`) instead of making a message unspeakable.
@@ -130,6 +131,65 @@ impl SqliteStore {
             .collect::<Result<Vec<String>, _>>()?;
         Ok(models)
     }
+
+    /// Mirrors Node's `listVoiceFavorites`, including its stable secondary sort so the same
+    /// database is rendered consistently by either runtime during migration.
+    pub fn list_voice_favorites(&self, user_id: &str) -> Result<Vec<String>, StoreError> {
+        let mut statement = self.connection().prepare(
+            "SELECT voice_model FROM user_voice_favorite WHERE user_id = ?1
+             ORDER BY created_at DESC, voice_model ASC",
+        )?;
+        let models = statement
+            .query_map(params![user_id], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        Ok(models)
+    }
+
+    /// Adds or refreshes one favorite without evicting another. Node rejects a new entry once
+    /// the library reaches 25, but refreshing an existing entry is always allowed.
+    pub fn add_voice_favorite(
+        &self,
+        user_id: &str,
+        model: &str,
+        created_at: i64,
+    ) -> Result<bool, StoreError> {
+        if !valid_voice_library_value(user_id) || !valid_voice_library_value(model) {
+            return Ok(false);
+        }
+        let existing = self
+            .connection()
+            .query_row(
+                "SELECT 1 FROM user_voice_favorite WHERE user_id = ?1 AND voice_model = ?2",
+                params![user_id, model],
+                |_| Ok(()),
+            )
+            .optional()?;
+        if existing.is_none() {
+            let count: i64 = self.connection().query_row(
+                "SELECT COUNT(*) FROM user_voice_favorite WHERE user_id = ?1",
+                params![user_id],
+                |row| row.get(0),
+            )?;
+            if count >= MAX_VOICE_FAVORITES as i64 {
+                return Ok(false);
+            }
+        }
+        self.connection().execute(
+            "INSERT INTO user_voice_favorite (user_id, voice_model, created_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(user_id, voice_model) DO UPDATE SET created_at = excluded.created_at",
+            params![user_id, model, created_at],
+        )?;
+        Ok(true)
+    }
+
+    /// Removes exactly the requested favorite. A missing value is not an error and returns the
+    /// same false result as Node's `removeVoiceFavorite`.
+    pub fn remove_voice_favorite(&self, user_id: &str, model: &str) -> Result<bool, StoreError> {
+        Ok(self.connection().execute(
+            "DELETE FROM user_voice_favorite WHERE user_id = ?1 AND voice_model = ?2",
+            params![user_id, model],
+        )? == 1)
+    }
 }
 
 fn valid_voice_library_value(value: &str) -> bool {
@@ -228,6 +288,42 @@ mod tests {
         assert_eq!(
             store.list_recent_voices("user").expect("recent voices")[0],
             "en_US-voice1-medium"
+        );
+    }
+
+    #[test]
+    fn favorite_voice_library_matches_node_capacity_refresh_and_ordering() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        for index in 0..MAX_VOICE_FAVORITES {
+            assert!(
+                store
+                    .add_voice_favorite("user", &format!("en_US-voice{index}-medium"), index as i64)
+                    .expect("favorite")
+            );
+        }
+        assert!(
+            !store
+                .add_voice_favorite("user", "en_US-overflow-medium", 100)
+                .expect("capacity")
+        );
+        assert!(
+            store
+                .add_voice_favorite("user", "en_US-voice0-medium", 100)
+                .expect("refresh")
+        );
+        assert_eq!(
+            store.list_voice_favorites("user").expect("favorites")[0],
+            "en_US-voice0-medium"
+        );
+        assert!(
+            store
+                .remove_voice_favorite("user", "en_US-voice0-medium")
+                .expect("remove")
+        );
+        assert!(
+            !store
+                .remove_voice_favorite("user", "en_US-voice0-medium")
+                .expect("missing")
         );
     }
 }

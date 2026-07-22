@@ -71,7 +71,7 @@ pub use translation::{
     TranslationReservationDenial,
 };
 pub use user_profile::{Birthday, is_valid_birthday};
-pub use user_voice::{MAX_RECENT_VOICES, UserEngine, UserVoice};
+pub use user_voice::{MAX_RECENT_VOICES, MAX_VOICE_FAVORITES, UserEngine, UserVoice};
 pub use voice_effect::VoiceEffect;
 pub use voice_presence::VoicePresence;
 pub use vote_reward::{
