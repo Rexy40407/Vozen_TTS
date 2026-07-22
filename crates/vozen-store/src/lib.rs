@@ -17,11 +17,15 @@ use thiserror::Error;
 mod guild_config;
 mod migration;
 mod premium;
+mod premium_code;
 
 pub use guild_config::{GuildConfig, GuildConfigPatch};
 pub use premium::{
     ActivateResult, ActivateStatus, EntitlementGrant, EntitlementSyncResult, GuildPassOwner,
     PremiumKind, PremiumPass, PremiumPassStatus, PremiumStatusView,
+};
+pub use premium_code::{
+    PremiumCode, PremiumCodeInput, PremiumCodePlan, RedeemCodeResult, RedeemCodeStatus,
 };
 
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
@@ -50,6 +54,8 @@ pub enum StoreError {
     UnsupportedContractVersion(u16),
     #[error("schema object is invalid: {0}")]
     InvalidSchemaObject(String),
+    #[error("premium code has an unsupported plan: {0}")]
+    InvalidPremiumCodePlan(String),
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 }

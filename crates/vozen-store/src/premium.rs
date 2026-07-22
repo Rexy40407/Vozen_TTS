@@ -208,14 +208,7 @@ impl SqliteStore {
         source: &str,
         now: i64,
     ) -> Result<i64, StoreError> {
-        let current = self.guild_premium_expiry(guild_id)?;
-        let expiry = current.filter(|value| *value > now).unwrap_or(now) + days * DAY_MS;
-        self.connection().execute(
-            "INSERT INTO premium_guild (guild_id, expires_at, source) VALUES (?1, ?2, ?3)
-             ON CONFLICT(guild_id) DO UPDATE SET expires_at = excluded.expires_at, source = excluded.source",
-            params![guild_id, expiry, source],
-        )?;
-        Ok(expiry)
+        grant_guild_premium_on(self.connection(), guild_id, days, source, now)
     }
 
     pub fn grant_user_premium(
@@ -225,21 +218,7 @@ impl SqliteStore {
         source: &str,
         now: i64,
     ) -> Result<i64, StoreError> {
-        let current: Option<i64> = self
-            .connection()
-            .query_row(
-                "SELECT expires_at FROM premium_user WHERE user_id = ?1",
-                [user_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let expiry = current.filter(|value| *value > now).unwrap_or(now) + days * DAY_MS;
-        self.connection().execute(
-            "INSERT INTO premium_user (user_id, expires_at, source) VALUES (?1, ?2, ?3)
-             ON CONFLICT(user_id) DO UPDATE SET expires_at = excluded.expires_at, source = excluded.source",
-            params![user_id, expiry, source],
-        )?;
-        Ok(expiry)
+        grant_user_premium_on(self.connection(), user_id, days, source, now)
     }
 
     pub fn premium_pass(&self, user_id: &str) -> Result<Option<PremiumPass>, StoreError> {
@@ -314,19 +293,7 @@ impl SqliteStore {
         source: &str,
         now: i64,
     ) -> Result<i64, StoreError> {
-        let current = self.premium_pass(user_id)?;
-        let expiry = current
-            .as_ref()
-            .filter(|pass| pass.expires_at > now)
-            .map_or(now, |pass| pass.expires_at)
-            + days * DAY_MS;
-        let final_seats = current.map_or(seats, |pass| pass.seats.max(seats));
-        self.connection().execute(
-            "INSERT INTO premium_pass (user_id, seats, expires_at, source) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(user_id) DO UPDATE SET seats = excluded.seats, expires_at = excluded.expires_at, source = excluded.source",
-            params![user_id, final_seats, expiry, source],
-        )?;
-        Ok(expiry)
+        grant_guild_pass_on(self.connection(), user_id, seats, days, source, now)
     }
 
     /// Atomically consumes a pass seat. The transaction preserves Node's count-and-insert
@@ -484,7 +451,7 @@ impl SqliteStore {
     }
 }
 
-fn premium_pass_from(
+pub(crate) fn premium_pass_from(
     connection: &Connection,
     user_id: &str,
 ) -> Result<Option<PremiumPass>, StoreError> {
@@ -512,6 +479,75 @@ fn active_seat_count_from(connection: &Connection, user_id: &str) -> Result<i64,
             |row| row.get(0),
         )
         .map_err(StoreError::from)
+}
+
+pub(crate) fn grant_guild_premium_on(
+    connection: &Connection,
+    guild_id: &str,
+    days: i64,
+    source: &str,
+    now: i64,
+) -> Result<i64, StoreError> {
+    let current: Option<i64> = connection
+        .query_row(
+            "SELECT expires_at FROM premium_guild WHERE guild_id = ?1",
+            [guild_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let expiry = current.filter(|value| *value > now).unwrap_or(now) + days * DAY_MS;
+    connection.execute(
+        "INSERT INTO premium_guild (guild_id, expires_at, source) VALUES (?1, ?2, ?3)
+         ON CONFLICT(guild_id) DO UPDATE SET expires_at = excluded.expires_at, source = excluded.source",
+        params![guild_id, expiry, source],
+    )?;
+    Ok(expiry)
+}
+
+pub(crate) fn grant_user_premium_on(
+    connection: &Connection,
+    user_id: &str,
+    days: i64,
+    source: &str,
+    now: i64,
+) -> Result<i64, StoreError> {
+    let current: Option<i64> = connection
+        .query_row(
+            "SELECT expires_at FROM premium_user WHERE user_id = ?1",
+            [user_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let expiry = current.filter(|value| *value > now).unwrap_or(now) + days * DAY_MS;
+    connection.execute(
+        "INSERT INTO premium_user (user_id, expires_at, source) VALUES (?1, ?2, ?3)
+         ON CONFLICT(user_id) DO UPDATE SET expires_at = excluded.expires_at, source = excluded.source",
+        params![user_id, expiry, source],
+    )?;
+    Ok(expiry)
+}
+
+pub(crate) fn grant_guild_pass_on(
+    connection: &Connection,
+    user_id: &str,
+    seats: i64,
+    days: i64,
+    source: &str,
+    now: i64,
+) -> Result<i64, StoreError> {
+    let current = premium_pass_from(connection, user_id)?;
+    let expiry = current
+        .as_ref()
+        .filter(|pass| pass.expires_at > now)
+        .map_or(now, |pass| pass.expires_at)
+        + days * DAY_MS;
+    let final_seats = current.map_or(seats, |pass| pass.seats.max(seats));
+    connection.execute(
+        "INSERT INTO premium_pass (user_id, seats, expires_at, source) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(user_id) DO UPDATE SET seats = excluded.seats, expires_at = excluded.expires_at, source = excluded.source",
+        params![user_id, final_seats, expiry, source],
+    )?;
+    Ok(expiry)
 }
 
 #[cfg(test)]
