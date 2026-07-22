@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 pub mod account_api;
 pub mod dashboard_api;
+pub mod dashboard_oauth;
 pub mod dashboard_validation;
 pub mod discord_oauth;
 pub mod kofi_webhook;
