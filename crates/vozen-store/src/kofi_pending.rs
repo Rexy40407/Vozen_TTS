@@ -70,20 +70,7 @@ impl SqliteStore {
         input: &KofiPendingGrantInput,
         now: i64,
     ) -> Result<bool, StoreError> {
-        Ok(self.connection().execute(
-            "INSERT OR IGNORE INTO kofi_pending
-             (transaction_id, email_hash, plan, days, seats, created_at, claimed_at, is_subscription)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7)",
-            params![
-                input.transaction_id,
-                input.email_hash,
-                input.plan.as_str(),
-                input.days,
-                input.seats,
-                now,
-                i64::from(input.is_subscription),
-            ],
-        )? > 0)
+        record_kofi_pending_grant_on(self.connection(), input, now)
     }
 
     pub fn unclaimed_kofi_pending_by_transaction(
@@ -133,6 +120,27 @@ impl SqliteStore {
             .connection()
             .execute("DELETE FROM kofi_pending WHERE created_at < ?1", [cutoff])?)
     }
+}
+
+pub(crate) fn record_kofi_pending_grant_on(
+    connection: &Connection,
+    input: &KofiPendingGrantInput,
+    now: i64,
+) -> Result<bool, StoreError> {
+    Ok(connection.execute(
+        "INSERT OR IGNORE INTO kofi_pending
+         (transaction_id, email_hash, plan, days, seats, created_at, claimed_at, is_subscription)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7)",
+        params![
+            input.transaction_id,
+            input.email_hash,
+            input.plan.as_str(),
+            input.days,
+            input.seats,
+            now,
+            i64::from(input.is_subscription),
+        ],
+    )? > 0)
 }
 
 pub(crate) fn unclaimed_kofi_pending_by_transaction_on(

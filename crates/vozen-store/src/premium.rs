@@ -390,10 +390,7 @@ impl SqliteStore {
         transaction_id: &str,
         now: i64,
     ) -> Result<bool, StoreError> {
-        Ok(self.connection().execute(
-            "INSERT OR IGNORE INTO kofi_transaction (transaction_id, processed_at) VALUES (?1, ?2)",
-            params![transaction_id, now],
-        )? > 0)
+        record_kofi_transaction_on(self.connection(), transaction_id, now)
     }
 
     /// Reconciles the complete current Discord entitlement set. It deliberately never mutates
@@ -444,6 +441,17 @@ impl SqliteStore {
             revoked: stale.len(),
         })
     }
+}
+
+pub(crate) fn record_kofi_transaction_on(
+    connection: &Connection,
+    transaction_id: &str,
+    now: i64,
+) -> Result<bool, StoreError> {
+    Ok(connection.execute(
+        "INSERT OR IGNORE INTO kofi_transaction (transaction_id, processed_at) VALUES (?1, ?2)",
+        params![transaction_id, now],
+    )? > 0)
 }
 
 pub(crate) fn remember_kofi_supporter_on(

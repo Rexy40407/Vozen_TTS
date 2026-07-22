@@ -16,6 +16,7 @@ use thiserror::Error;
 
 mod guild_config;
 mod kofi_claim;
+mod kofi_delivery;
 mod kofi_pending;
 mod migration;
 mod premium;
@@ -27,6 +28,7 @@ pub use kofi_claim::{
     ClaimedKofiItem, activate_kofi_by_email_hash, claim_kofi_pending_grant,
     extract_kofi_receipt_code,
 };
+pub use kofi_delivery::{KofiDelivery, KofiDeliveryOutcome, process_kofi_delivery};
 pub use kofi_pending::{
     KofiPendingGrant, KofiPendingGrantInput, KofiPendingPlan, PENDING_RETENTION_MS,
 };
