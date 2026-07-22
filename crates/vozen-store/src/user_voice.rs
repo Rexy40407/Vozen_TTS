@@ -13,7 +13,7 @@ pub enum UserEngine {
 }
 
 impl UserEngine {
-    fn from_database(value: &str) -> Self {
+    pub(crate) fn from_database(value: &str) -> Self {
         match value {
             "piper" => Self::Piper,
             "kokoro" => Self::Kokoro,
@@ -22,7 +22,7 @@ impl UserEngine {
         }
     }
 
-    fn as_database(self) -> &'static str {
+    pub(crate) fn as_database(self) -> &'static str {
         match self {
             Self::Google => "google",
             Self::Piper => "piper",

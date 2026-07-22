@@ -15,6 +15,7 @@ use serde::Deserialize;
 use thiserror::Error;
 
 mod blocklist;
+mod channel_profile;
 mod guild_config;
 mod kofi_claim;
 mod kofi_delivery;
@@ -28,6 +29,7 @@ mod pronunciation;
 mod user_voice;
 
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
+pub use channel_profile::{ChannelProfile, ChannelProfilePatch, MAX_CHANNEL_PROFILES_PER_GUILD};
 pub use guild_config::{GuildConfig, GuildConfigPatch};
 pub use kofi_claim::{
     ACTIVATION_TERMS_VERSION, ActivationConfirmation, ActivationOutcome, ClaimOutcome,
