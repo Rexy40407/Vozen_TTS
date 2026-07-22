@@ -27,6 +27,7 @@ mod optout;
 mod premium;
 mod premium_code;
 mod pronunciation;
+mod talk_stats;
 mod telemetry;
 mod translation;
 mod user_profile;
@@ -59,6 +60,7 @@ pub use pronunciation::{
     AddPronunciationResult, SERVER_PRON_LIMIT, SERVER_PRON_LIMIT_PREMIUM, USER_PRON_LIMIT_FREE,
     USER_PRON_LIMIT_PREMIUM,
 };
+pub use talk_stats::{GuildTalkStreak, TalkBump, TalkRow};
 pub use telemetry::{
     ConfiguredEngineResolver, DailyOperationalMetric, DominantTalkUsage, DominantTalkUsageOptions,
     OperationalMetric, OperationalProvider, ProviderHealth, ProviderHealthSnapshot,
@@ -123,6 +125,8 @@ pub enum StoreError {
     InvalidTranslationLimit,
     #[error("translation day must be UTC YYYY-MM-DD")]
     InvalidTranslationDay,
+    #[error("talk statistics day must be YYYY-MM-DD")]
+    InvalidTalkStatsDay,
     #[error(
         "VOTE_REDEMPTION_SECRET must contain at least {VOTE_REDEMPTION_SECRET_MIN_LENGTH} characters"
     )]
