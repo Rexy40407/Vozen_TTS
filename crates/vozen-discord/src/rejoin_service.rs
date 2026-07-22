@@ -64,6 +64,7 @@ impl<T: VoiceSessionTransport> PlannedRejoinService<T> {
     pub async fn recover(
         &self,
         scope: Option<&PlannedRejoinScope>,
+        now_ms: i64,
         channel_state: impl Fn(&str, &str) -> RejoinChannelState,
     ) -> Result<Vec<PlannedRejoinOutcome>, PlannedRejoinError> {
         let plan = {
@@ -78,10 +79,13 @@ impl<T: VoiceSessionTransport> PlannedRejoinService<T> {
                 presences,
                 scope,
                 |guild_id| {
+                    // `stay_in_call` is merely an administrator preference. It is not an
+                    // entitlement and must never keep a call alive after Premium expired.
                     store
                         .guild_config(guild_id)
                         .map(|config| config.stay_in_call)
                         .unwrap_or(false)
+                        && store.is_guild_premium(guild_id, now_ms).unwrap_or(false)
                 },
                 channel_state,
             )
@@ -187,7 +191,7 @@ mod tests {
             .remember_voice_presence("guild", "voice", 1)
             .expect("presence");
         let outcomes = service
-            .recover(Some(&PlannedRejoinScope::All), |_, _| {
+            .recover(Some(&PlannedRejoinScope::All), 1, |_, _| {
                 RejoinChannelState::Ready
             })
             .await
@@ -224,10 +228,13 @@ mod tests {
                     },
                 )
                 .expect("premium setting");
+            store_guard
+                .grant_guild_premium("premium", 1, "test", 1)
+                .expect("premium entitlement");
         }
 
         let outcomes = service
-            .recover(None, |_, _| RejoinChannelState::Ready)
+            .recover(None, 1, |_, _| RejoinChannelState::Ready)
             .await
             .expect("rejoin");
         assert_eq!(
@@ -268,7 +275,7 @@ mod tests {
             .expect("presence");
         assert_eq!(
             service
-                .recover(Some(&PlannedRejoinScope::All), |_, _| {
+                .recover(Some(&PlannedRejoinScope::All), 1, |_, _| {
                     RejoinChannelState::Ready
                 })
                 .await
@@ -286,6 +293,39 @@ mod tests {
                 .expect("presence")
                 .len(),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn expired_premium_cannot_restore_a_stay_in_call_presence() {
+        let (service, store, _) = service(FakeTransport::default());
+        {
+            let store_guard = store.lock().expect("store");
+            store_guard
+                .remember_voice_presence("guild", "voice", 1)
+                .expect("presence");
+            store_guard
+                .update_guild_config(
+                    "guild",
+                    GuildConfigPatch {
+                        stay_in_call: Some(true),
+                        ..GuildConfigPatch::default()
+                    },
+                )
+                .expect("stay in call");
+            store_guard
+                .grant_guild_premium("guild", 1, "test", 1)
+                .expect("premium entitlement");
+        }
+
+        assert_eq!(
+            service
+                .recover(None, 86_400_001, |_, _| RejoinChannelState::Ready)
+                .await
+                .expect("recover"),
+            vec![PlannedRejoinOutcome::Forgotten {
+                guild_id: "guild".into()
+            }]
         );
     }
 }
