@@ -1,0 +1,1649 @@
+{
+  "schema_version": 1,
+  "generated_from": "src/commands/definitions.ts",
+  "public_commands": [
+    {
+      "options": [],
+      "name": "invite",
+      "description": "Show the link to add Vozen to your server",
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "vote",
+      "description": "Show the link to vote for Vozen on top.gg",
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "help",
+      "description": "Show Vozen's command list",
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "join",
+      "description": "Join your voice channel",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "leave",
+      "description": "Leave the voice channel",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 3,
+          "name": "text",
+          "description": "What to read",
+          "required": true
+        }
+      ],
+      "name": "tts",
+      "description": "Vozen reads a text out loud",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 3,
+          "name": "text",
+          "description": "Short text to turn into audio",
+          "required": true,
+          "max_length": 500
+        }
+      ],
+      "name": "tts-file",
+      "description": "Create a private audio file from short text (does not join a call)",
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "skip",
+      "description": "Skip the current audio",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "show",
+          "description": "Show pending queue metadata",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "remove",
+          "description": "Remove one of your queued items (admins may remove any item)",
+          "options": [
+            {
+              "type": 3,
+              "name": "id",
+              "description": "Opaque queue item id",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "clear",
+          "description": "Manage Server: clear queued audio",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "skip",
+          "description": "Manage Server: skip current audio",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "pause",
+          "description": "Manage Server: pause audio",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "resume",
+          "description": "Manage Server: resume audio",
+          "options": []
+        }
+      ],
+      "name": "queue",
+      "description": "View or manage the privacy-safe playback queue",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "shut-up",
+      "description": "Make Vozen stop talking now (clears the whole queue)",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "laugh",
+      "description": "Vozen laughs out loud in your current voice",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "autocomplete": true,
+          "type": 3,
+          "name": "language",
+          "description": "Language of the joke",
+          "required": true
+        },
+        {
+          "name": "laughter",
+          "description": "Add laughter at the end?",
+          "required": true,
+          "type": 5
+        }
+      ],
+      "name": "joke",
+      "description": "Vozen tells a short joke in the language you pick",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "autocomplete": true,
+          "type": 3,
+          "name": "language",
+          "description": "Language of the pickup line",
+          "required": true
+        },
+        {
+          "name": "sound",
+          "description": "Add the rizz sound effect at the end?",
+          "required": true,
+          "type": 5
+        }
+      ],
+      "name": "rizz",
+      "description": "Vozen drops a pickup line in the language you pick (💎 Premium)",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 3,
+          "choices": [
+            {
+              "name": "📢 Air horn",
+              "value": "airhorn"
+            },
+            {
+              "name": "🔔 Ding",
+              "value": "ding"
+            },
+            {
+              "name": "❌ Wrong buzzer",
+              "value": "buzzer"
+            },
+            {
+              "name": "🎉 Ta-da!",
+              "value": "tada"
+            },
+            {
+              "name": "🎺 Sad trombone",
+              "value": "sad-trombone"
+            },
+            {
+              "name": "🔊 Beep",
+              "value": "beep"
+            },
+            {
+              "name": "🪙 Coin",
+              "value": "coin"
+            },
+            {
+              "name": "🫧 Pop",
+              "value": "pop"
+            },
+            {
+              "name": "🛸 Laser",
+              "value": "laser"
+            },
+            {
+              "name": "✅ Success",
+              "value": "success"
+            },
+            {
+              "name": "⛔ Error",
+              "value": "error"
+            },
+            {
+              "name": "🪀 Boing",
+              "value": "boing"
+            },
+            {
+              "name": "✨ Sparkle",
+              "value": "sparkle"
+            },
+            {
+              "name": "💨 Whoosh",
+              "value": "whoosh"
+            }
+          ],
+          "name": "name",
+          "description": "Which sound to play (leave empty to list them)",
+          "required": false
+        }
+      ],
+      "name": "sound",
+      "description": "Play a sound clip in the voice channel",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 3,
+          "name": "question",
+          "description": "Your yes/no question",
+          "required": true,
+          "max_length": 200
+        }
+      ],
+      "name": "8-ball",
+      "description": "Ask the magic 8-ball a yes/no question",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "fortune",
+      "description": "Vozen reads you a fortune",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "cast",
+      "description": "Randomly cast everyone in your voice call",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "fact",
+      "description": "Vozen tells you a random fun fact",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "wyr",
+      "description": "Vozen asks a \"would you rather\" question",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "set",
+          "description": "Set your birthday (day + month, no year)",
+          "options": [
+            {
+              "max_value": 31,
+              "min_value": 1,
+              "type": 4,
+              "name": "day",
+              "description": "Day of the month (1–31)",
+              "required": true
+            },
+            {
+              "max_value": 12,
+              "min_value": 1,
+              "type": 4,
+              "name": "month",
+              "description": "Month (1–12)",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "clear",
+          "description": "Remove your saved birthday",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "show",
+          "description": "Show your saved birthday",
+          "options": []
+        }
+      ],
+      "name": "birthday",
+      "description": "Vozen wishes you a happy birthday when you join on your day",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "erase",
+          "description": "Permanently delete all your personal data (asks you to confirm first)",
+          "options": []
+        }
+      ],
+      "name": "privacy",
+      "description": "Manage your personal data",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "text",
+          "description": "Translate text privately",
+          "options": [
+            {
+              "type": 3,
+              "name": "text",
+              "description": "Text to translate",
+              "required": true,
+              "max_length": 1000
+            },
+            {
+              "type": 3,
+              "name": "locale",
+              "description": "Target locale, for example en or pt",
+              "required": false
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "language",
+          "description": "Save your default translation language",
+          "options": [
+            {
+              "type": 3,
+              "name": "locale",
+              "description": "Target locale, for example en or pt",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "speak-language",
+          "description": "Translate your messages before Vozen reads them (opt-in)",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "locale",
+              "description": "Target locale, or off to disable",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "status",
+          "description": "Show translation status (Manage Server)",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "enable",
+          "description": "Enable configured mappings (Manage Server)",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "disable",
+          "description": "Disable automatic translation (Manage Server)",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "clear",
+          "description": "Delete mappings and member translation opt-outs (Manage Server)",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "map-add",
+          "description": "Map a source text channel to a destination (Manage Server)",
+          "options": [
+            {
+              "channel_types": [0],
+              "name": "source",
+              "description": "Source text channel",
+              "required": true,
+              "type": 7
+            },
+            {
+              "channel_types": [0],
+              "name": "destination",
+              "description": "Destination text channel",
+              "required": true,
+              "type": 7
+            },
+            {
+              "type": 3,
+              "name": "locale",
+              "description": "Target locale, for example en or pt",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "map-remove",
+          "description": "Remove a source channel mapping (Manage Server)",
+          "options": [
+            {
+              "channel_types": [0],
+              "name": "source",
+              "description": "Source text channel",
+              "required": true,
+              "type": 7
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "map-list",
+          "description": "List channel mappings (Manage Server)",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "preview",
+          "description": "Preview a translation without posting it (Manage Server)",
+          "options": [
+            {
+              "type": 3,
+              "name": "text",
+              "description": "Text to translate",
+              "required": true,
+              "max_length": 1000
+            },
+            {
+              "type": 3,
+              "name": "locale",
+              "description": "Target locale, for example en or pt",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "opt-out",
+          "description": "Opt in or out of automatic translation for your messages",
+          "options": [
+            {
+              "name": "active",
+              "description": "Turn opt-out on or off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        }
+      ],
+      "name": "translate",
+      "description": "Configure opt-in text translation (never speaks translated text)",
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "top-speakers",
+      "description": "See who Vozen has read the most — and daily streaks",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "server-stats",
+      "description": "Server stats: messages, top talkers and games (💎 Premium, free preview)",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "info",
+          "description": "See your Premium status — or what you get and how to buy",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "activate",
+          "description": "Use one of your Premium licences on this server (needs Manage Server)",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "deactivate",
+          "description": "Free this server’s Premium licence to use it elsewhere",
+          "options": []
+        }
+      ],
+      "name": "premium",
+      "description": "Vozen Premium: your status, or use/free a licence on this server",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "start",
+          "description": "Start transcribing the voice call to this channel (Manage Server, Premium)",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "language",
+              "description": "Language spoken in the call (defaults to the server language)",
+              "required": false
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "stop",
+          "description": "Stop transcribing the voice call (Manage Server)",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "revoke",
+          "description": "Withdraw your consent to be transcribed on this server",
+          "options": []
+        }
+      ],
+      "name": "transcribe",
+      "description": "Live speech-to-text: transcribe consenting speakers to this channel (Premium)",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "set",
+          "description": "Set your voice",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "model",
+              "description": "Piper model",
+              "required": true
+            },
+            {
+              "type": 10,
+              "name": "speed",
+              "description": "Speed (0.5-2.0)",
+              "required": false
+            },
+            {
+              "type": 3,
+              "choices": [
+                {
+                  "name": "Default (local Piper)",
+                  "value": "google"
+                },
+                {
+                  "name": "Piper",
+                  "value": "piper"
+                },
+                {
+                  "name": "💎 Kokoro (Premium neural)",
+                  "value": "kokoro"
+                },
+                {
+                  "name": "💎 Google HD (Premium)",
+                  "value": "gcloud"
+                }
+              ],
+              "name": "engine",
+              "description": "Voice engine: default, Piper, Kokoro or Google HD (paid)",
+              "required": false
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "config",
+          "description": "Open a panel to set up your voice (no accidental Enter)",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "list",
+          "description": "List the available models",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "favorite",
+          "description": "Add a voice to your personal favourites",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "model",
+              "description": "Voice model",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "unfavorite",
+          "description": "Remove a voice from your personal favourites",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "model",
+              "description": "Voice model",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "favorites",
+          "description": "Show your favourite voices",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "recent",
+          "description": "Show your ten recent voices",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "browse",
+          "description": "Browse the currently available voice catalog",
+          "options": [
+            {
+              "type": 3,
+              "name": "query",
+              "description": "Search by voice or language",
+              "required": false,
+              "max_length": 50
+            },
+            {
+              "type": 3,
+              "name": "locale",
+              "description": "Two-letter voice language, for example en",
+              "required": false,
+              "max_length": 2
+            },
+            {
+              "type": 3,
+              "choices": [
+                {
+                  "name": "All available voices",
+                  "value": "all"
+                },
+                {
+                  "name": "Local catalog voices",
+                  "value": "local"
+                },
+                {
+                  "name": "Google catalog voices",
+                  "value": "google"
+                }
+              ],
+              "name": "engine",
+              "description": "Catalog engine",
+              "required": false
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "reset",
+          "description": "Reset your voice to the default",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "detection",
+          "description": "Native voice per language (the speaker may change). Off by default.",
+          "options": [
+            {
+              "name": "active",
+              "description": "On = native voice per language; Off (default) = one fixed voice",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "opt-out",
+          "description": "Stop being read automatically in the auto-read channel",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "opt-in",
+          "description": "Be read automatically again in the auto-read channel",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "preview",
+          "description": "Play a sample sentence in your current voice (or a specific model)",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "model",
+              "description": "Piper model (optional)",
+              "required": false
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "nickname",
+          "description": "How Vozen should call you out loud (xsaid). Leave empty to clear.",
+          "options": [
+            {
+              "type": 3,
+              "name": "name",
+              "description": "Spoken name (empty = use your server name)",
+              "required": false,
+              "max_length": 40
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "effect",
+          "description": "Apply a voice effect to your messages (💎 = Premium)",
+          "options": [
+            {
+              "type": 3,
+              "choices": [
+                {
+                  "name": "None (normal)",
+                  "value": "none"
+                },
+                {
+                  "name": "🤖 Robot",
+                  "value": "robot"
+                },
+                {
+                  "name": "🔊 Echo",
+                  "value": "echo"
+                },
+                {
+                  "name": "💎 🕳️ Deep",
+                  "value": "deep"
+                },
+                {
+                  "name": "💎 🐿️ Chipmunk",
+                  "value": "chipmunk"
+                },
+                {
+                  "name": "💎 📻 Radio",
+                  "value": "radio"
+                },
+                {
+                  "name": "💎 📞 Phone",
+                  "value": "phone"
+                },
+                {
+                  "name": "💎 🌊 Underwater",
+                  "value": "underwater"
+                },
+                {
+                  "name": "💎 😈 Demon",
+                  "value": "demon"
+                }
+              ],
+              "name": "effect",
+              "description": "Voice effect (none = clean; 💎 needs Premium)",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "name": "voice",
+      "description": "Manage your voice",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "tts-channel",
+          "description": "Set the auto-read channel",
+          "options": [
+            {
+              "channel_types": [0],
+              "name": "channel",
+              "description": "Text channel",
+              "required": true,
+              "type": 7
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "auto-read",
+          "description": "Turn auto-read on/off",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "max-chars",
+          "description": "Maximum characters per message",
+          "options": [
+            {
+              "max_value": 2000,
+              "min_value": 1,
+              "type": 4,
+              "name": "value",
+              "description": "1-2000",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "rate-limit",
+          "description": "Messages per minute per user",
+          "options": [
+            {
+              "max_value": 120,
+              "min_value": 1,
+              "type": 4,
+              "name": "value",
+              "description": "1-120",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "role",
+          "description": "Restrict auto-read to a role (omit the role to clear the restriction)",
+          "options": [
+            {
+              "name": "role",
+              "description": "Allowed role (empty = no restriction)",
+              "required": false,
+              "type": 8
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "priority-role",
+          "description": "Accessibility queue priority role (omit to clear)",
+          "options": [
+            {
+              "name": "role",
+              "description": "Role with accessibility queue priority",
+              "required": false,
+              "type": 8
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "blocked-role",
+          "description": "Block a role from adding audio to the queue (omit to clear)",
+          "options": [
+            {
+              "name": "role",
+              "description": "Blocked role",
+              "required": false,
+              "type": 8
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "enabled",
+          "description": "Turn TTS on/off on this server (kill-switch)",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "x-said",
+          "description": "Announce who spoke before each message (\"{name} said …\")",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "auto-join",
+          "description": "Vozen joins your voice channel automatically when you type in the TTS channel",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "always-on",
+          "description": "24/7 in-call (💎 Premium): Vozen stays in the voice channel even when empty",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "read-bots",
+          "description": "Read messages from other bots and webhooks (off by default)",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "text-in-voice",
+          "description": "Also read the text chat inside the voice channel Vozen is in (off by default)",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "anti-spam",
+          "description": "Don't read spammed messages (mass word repetition or the same big message) (off by default)",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "streaks",
+          "description": "Show the 🔥 daily streak notice when someone speaks (on by default)",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "soundboard",
+          "description": "Allow /sound (play sound clips in the call) on this server (on by default)",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "vote-reminders",
+          "description": "Allow alternating Top.gg and support notices (off by default)",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "greet",
+          "description": "Greet people by name when they join the voice channel (on by default)",
+          "options": [
+            {
+              "name": "active",
+              "description": "on/off",
+              "required": true,
+              "type": 5
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "greet-language",
+          "description": "Language of the join greeting (English by default)",
+          "options": [
+            {
+              "type": 3,
+              "choices": [
+                {
+                  "name": "English",
+                  "value": "en"
+                },
+                {
+                  "name": "Português",
+                  "value": "pt"
+                },
+                {
+                  "name": "Español",
+                  "value": "es"
+                },
+                {
+                  "name": "Français",
+                  "value": "fr"
+                },
+                {
+                  "name": "Deutsch",
+                  "value": "de"
+                },
+                {
+                  "name": "Italiano",
+                  "value": "it"
+                },
+                {
+                  "name": "Nederlands",
+                  "value": "nl"
+                },
+                {
+                  "name": "Svenska",
+                  "value": "sv"
+                },
+                {
+                  "name": "Dansk",
+                  "value": "da"
+                },
+                {
+                  "name": "Suomi",
+                  "value": "fi"
+                },
+                {
+                  "name": "Polski",
+                  "value": "pl"
+                },
+                {
+                  "name": "Русский",
+                  "value": "ru"
+                },
+                {
+                  "name": "Українська",
+                  "value": "uk"
+                },
+                {
+                  "name": "Türkçe",
+                  "value": "tr"
+                },
+                {
+                  "name": "Čeština",
+                  "value": "cs"
+                },
+                {
+                  "name": "Ελληνικά",
+                  "value": "el"
+                },
+                {
+                  "name": "Română",
+                  "value": "ro"
+                },
+                {
+                  "name": "Català",
+                  "value": "ca"
+                },
+                {
+                  "name": "Magyar",
+                  "value": "hu"
+                }
+              ],
+              "name": "language",
+              "description": "Greeting language",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "default-voice",
+          "description": "Set the server's default voice (used when the user has no voice of their own)",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "model",
+              "description": "Piper model",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "language",
+          "description": "Set the interface language (English is the default)",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "locale",
+              "description": "Interface language",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "show",
+          "description": "Show the server's current configuration",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "reset",
+          "description": "Reset the server's configuration to defaults",
+          "options": []
+        },
+        {
+          "type": 2,
+          "name": "block-word",
+          "description": "Manage the blocklist",
+          "options": [
+            {
+              "type": 1,
+              "name": "add",
+              "description": "Add a word",
+              "options": [
+                {
+                  "type": 3,
+                  "name": "word",
+                  "description": "Word to block",
+                  "required": true,
+                  "max_length": 60
+                }
+              ]
+            },
+            {
+              "type": 1,
+              "name": "remove",
+              "description": "Remove a word",
+              "options": [
+                {
+                  "type": 3,
+                  "name": "word",
+                  "description": "Word to unblock",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "name": "config",
+      "description": "Server configuration (admin)",
+      "contexts": [0],
+      "default_member_permissions": "32",
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "channel_types": [0],
+          "name": "channel",
+          "description": "Auto-read channel (omit = use the current channel)",
+          "required": false,
+          "type": 7
+        },
+        {
+          "name": "test-voice",
+          "description": "Play a short local voice check after setup",
+          "required": false,
+          "type": 5
+        }
+      ],
+      "name": "setup",
+      "description": "Guided one-step configuration (admin)",
+      "contexts": [0],
+      "default_member_permissions": "32",
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "stats",
+      "description": "Bot statistics (admin)",
+      "contexts": [0],
+      "default_member_permissions": "32",
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "uptime",
+      "description": "How long Vozen has been online",
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1],
+      "type": 1
+    },
+    {
+      "options": [],
+      "name": "bot-stats",
+      "description": "Public Vozen stats: servers, voice sessions, uptime",
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "play",
+          "description": "Start a game",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "game",
+              "description": "Which game to play (leave empty to pick from a menu)",
+              "required": false
+            },
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "language",
+              "description": "Language for Word Chain (ignored by other games)",
+              "required": false
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "stop",
+          "description": "Stop the current game",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "list",
+          "description": "List the available games",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "leaderboard",
+          "description": "Show the server's game leaderboard",
+          "options": []
+        },
+        {
+          "type": 1,
+          "name": "stats",
+          "description": "Show your own game stats",
+          "options": []
+        }
+      ],
+      "name": "game",
+      "description": "Play a minigame with the server",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "add",
+          "description": "Add or edit a personal pronunciation (leave empty for a form)",
+          "options": [
+            {
+              "type": 3,
+              "name": "term",
+              "description": "The word as people type it (e.g. \"gg\")",
+              "required": false,
+              "max_length": 100
+            },
+            {
+              "type": 3,
+              "name": "say",
+              "description": "How Vozen should say it (e.g. \"good game\")",
+              "required": false,
+              "max_length": 200
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "remove",
+          "description": "Remove one of your personal pronunciations",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "term",
+              "description": "The word to remove — pick from your saved pronunciations",
+              "required": true,
+              "max_length": 100
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "list",
+          "description": "List your personal pronunciations",
+          "options": []
+        }
+      ],
+      "name": "pronunciation",
+      "description": "Teach Vozen how to say a word — only affects YOUR messages",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 1,
+          "name": "add",
+          "description": "Add or edit a server pronunciation (leave empty for a form)",
+          "options": [
+            {
+              "type": 3,
+              "name": "term",
+              "description": "The word as people type it",
+              "required": false,
+              "max_length": 100
+            },
+            {
+              "type": 3,
+              "name": "say",
+              "description": "How Vozen should say it for everyone",
+              "required": false,
+              "max_length": 200
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "remove",
+          "description": "Remove one of the server pronunciations",
+          "options": [
+            {
+              "autocomplete": true,
+              "type": 3,
+              "name": "term",
+              "description": "The word to remove — pick from the server's pronunciations",
+              "required": true,
+              "max_length": 100
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "list",
+          "description": "List the server's pronunciations",
+          "options": []
+        }
+      ],
+      "name": "server-pronunciation",
+      "description": "Server-wide pronunciations for everyone (admin, 3 · 50 with Premium)",
+      "contexts": [0],
+      "default_member_permissions": "32",
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "max_value": 5,
+          "min_value": 2,
+          "type": 4,
+          "name": "amount",
+          "description": "How many options to fill in (2–5, opens a form)",
+          "required": false
+        },
+        {
+          "type": 3,
+          "name": "options",
+          "description": "Or type them here, separated by commas (e.g. \"pizza, sushi, tacos\")",
+          "required": false,
+          "max_length": 1000
+        }
+      ],
+      "name": "randomizer",
+      "description": "Vozen picks one option at random and says it out loud",
+      "contexts": [0],
+      "integration_types": [0],
+      "type": 1
+    },
+    {
+      "name": "Speak",
+      "type": 3,
+      "contexts": [0],
+      "integration_types": [0]
+    },
+    {
+      "name": "Translate",
+      "type": 3,
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1]
+    },
+    {
+      "name": "Transcribe voice message",
+      "type": 3,
+      "contexts": [0, 1, 2],
+      "integration_types": [0, 1]
+    },
+    {
+      "options": [
+        {
+          "type": 3,
+          "name": "code",
+          "description": "Your gift code (e.g. VOZEN-XXXX-XXXX)",
+          "required": true
+        }
+      ],
+      "name": "redeem",
+      "description": "Redeem a Vozen gift code",
+      "contexts": [0, 1],
+      "integration_types": [0],
+      "type": 1
+    }
+  ],
+  "owner_commands": [
+    {
+      "options": [
+        {
+          "name": "user",
+          "description": "User to grant to",
+          "required": true,
+          "type": 6
+        },
+        {
+          "type": 3,
+          "choices": [
+            {
+              "name": "Premium (server pass — set licences below)",
+              "value": "premium"
+            },
+            {
+              "name": "Plus (personal, follows the user)",
+              "value": "plus"
+            }
+          ],
+          "name": "plan",
+          "description": "What to grant",
+          "required": true
+        },
+        {
+          "max_value": 3650,
+          "min_value": 1,
+          "type": 4,
+          "name": "days",
+          "description": "Duration in days (default 30)",
+          "required": false
+        },
+        {
+          "max_value": 50,
+          "min_value": 1,
+          "type": 4,
+          "name": "seats",
+          "description": "Premium only: number of server licences (default 3)",
+          "required": false
+        }
+      ],
+      "name": "vozen-grant",
+      "description": "Owner only — grant Vozen Premium/Plus to a user",
+      "type": 1
+    },
+    {
+      "options": [
+        {
+          "type": 3,
+          "choices": [
+            {
+              "name": "Premium (server pass)",
+              "value": "premium"
+            },
+            {
+              "name": "Plus (personal, follows the user)",
+              "value": "plus"
+            }
+          ],
+          "name": "plan",
+          "description": "What the code grants",
+          "required": true
+        },
+        {
+          "max_value": 3650,
+          "min_value": 1,
+          "type": 4,
+          "name": "days",
+          "description": "Premium duration in days (default 30)",
+          "required": false
+        },
+        {
+          "max_value": 50,
+          "min_value": 1,
+          "type": 4,
+          "name": "seats",
+          "description": "Premium only: server licences (default 3)",
+          "required": false
+        },
+        {
+          "max_value": 20,
+          "min_value": 1,
+          "type": 4,
+          "name": "amount",
+          "description": "How many codes to generate (default 1)",
+          "required": false
+        },
+        {
+          "max_value": 3650,
+          "min_value": 1,
+          "type": 4,
+          "name": "expires-days",
+          "description": "Optional: code expires after this many days",
+          "required": false
+        }
+      ],
+      "name": "generate-code",
+      "description": "Owner only — generate Vozen gift code(s)",
+      "type": 1
+    }
+  ]
+}

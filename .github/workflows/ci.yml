@@ -46,3 +46,20 @@ jobs:
       # dependency install scripts, matching the allow-list posture of the main CI job.
       - run: npm rebuild esbuild
       - run: npm run check:site
+
+  # Keep the Rust migration independently verifiable without running the same
+  # compiler work twice for the Node 22/24 compatibility matrix above.
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm rebuild esbuild
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - run: rustup component add clippy rustfmt --toolchain 1.97.1
+      - run: npm run check:rust-contracts
+      - run: npm run check:rust

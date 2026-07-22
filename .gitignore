@@ -33,3 +33,6 @@ _Índice Voxi-bot.md
 
 # Generated site build output; publication happens in CI
 site-dist/
+
+# Rust build output is recreated locally and in CI.
+/target/
