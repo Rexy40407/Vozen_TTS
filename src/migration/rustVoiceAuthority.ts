@@ -69,7 +69,8 @@ export function rustVoicePreferencesOwnCommand(
   return (
     enabled?.trim().toLowerCase() === 'true' &&
     commandName === 'voice' &&
-    (subcommand === 'reset' ||
+    (subcommand === 'set' ||
+      subcommand === 'reset' ||
       subcommand === 'detection' ||
       subcommand === 'opt-out' ||
       subcommand === 'opt-in' ||

@@ -75,7 +75,7 @@ struct RuntimeConfig {
     tts_file: Option<TtsFileRuntimeOptions>,
     translation_text: Option<TranslationTextRuntimeOptions>,
     translation_preferences: bool,
-    voice_preferences: bool,
+    voice_preferences: Option<VoicePreferenceRuntimeOptions>,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
 }
@@ -186,6 +186,14 @@ struct TtsFileRuntimeOptions {
     settings: CoreVoiceSettings,
 }
 
+/// `/voice` preference mutations do not need the audio driver, but `/voice set` must validate
+/// against the exact Piper model catalogue available to this process. Keeping that catalogue in
+/// startup configuration prevents a stale Discord option from becoming a stored preference.
+struct VoicePreferenceRuntimeOptions {
+    available_models: Vec<String>,
+    default_speed: f64,
+}
+
 /// This is separate from automatic channel translation and is disabled unless the exact flag
 /// is enabled alongside the matching Node ownership boundary.
 struct TranslationTextRuntimeOptions {
@@ -235,8 +243,7 @@ impl RuntimeConfig {
                 .ok()
                 .as_deref(),
         );
-        let voice_preferences =
-            voice_preferences_enabled(env::var("RUST_VOICE_PREFERENCES_ENABLED").ok().as_deref());
+        let voice_preferences = voice_preferences_from_environment()?;
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         Ok(Self {
@@ -327,6 +334,19 @@ fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeE
             default_speed,
             default_engine: SynthesisEngine::Piper,
         },
+    }))
+}
+
+fn voice_preferences_from_environment()
+-> Result<Option<VoicePreferenceRuntimeOptions>, RuntimeError> {
+    if !voice_preferences_enabled(env::var("RUST_VOICE_PREFERENCES_ENABLED").ok().as_deref()) {
+        return Ok(None);
+    }
+    let models_dir = nonempty_env("MODELS_DIR").unwrap_or_else(|| "./models".to_owned());
+    let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
+    Ok(Some(VoicePreferenceRuntimeOptions {
+        available_models: discover_piper_models(std::path::Path::new(&models_dir))?,
+        default_speed,
     }))
 }
 
@@ -507,15 +527,21 @@ fn translation_preference_event_sink(
 }
 
 fn voice_preference_event_sink(
-    enabled: bool,
+    options: Option<VoicePreferenceRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
-    if !enabled {
+    let Some(options) = options else {
         return Ok(None);
-    }
+    };
     Ok(Some(Arc::new(
-        voice_preference_sink::VoicePreferenceGatewaySink::new(store)
-            .map_err(|_| RuntimeError::VoicePreferenceGateway)?,
+        voice_preference_sink::VoicePreferenceGatewaySink::new(
+            store,
+            vozen_discord::VoicePreferenceSettings {
+                available_models: options.available_models,
+                default_speed: options.default_speed,
+            },
+        )
+        .map_err(|_| RuntimeError::VoicePreferenceGateway)?,
     )))
 }
 

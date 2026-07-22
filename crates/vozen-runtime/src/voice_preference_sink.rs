@@ -15,33 +15,34 @@ use serenity::{
     model::application::Interaction,
 };
 use vozen_discord::{
-    GatewayEventDispatchError, GatewayEventSink, VoicePreferenceCommand, VoicePreferenceInvocation,
-    VoicePreferenceOutcome, VoicePreferenceService, VoicePreferenceSettings,
-    VoiceResponseLocalizer, parse_voice_preference_command,
+    GatewayEventDispatchError, GatewayEventSink, VoiceDisplayCatalog, VoicePreferenceCommand,
+    VoicePreferenceInvocation, VoicePreferenceOutcome, VoicePreferenceService,
+    VoicePreferenceSettings, VoiceResponseLocalizer, parse_voice_preference_command,
 };
-use vozen_store::{SqliteStore, VoiceEffect};
+use vozen_store::{SqliteStore, UserEngine, VoiceEffect};
 
 use crate::system_now_ms;
 
 pub struct VoicePreferenceGatewaySink {
     service: VoicePreferenceService,
     localizer: VoiceResponseLocalizer,
+    displays: VoiceDisplayCatalog,
+    available_models: Vec<String>,
 }
 
 impl VoicePreferenceGatewaySink {
-    pub fn new(store: Arc<Mutex<SqliteStore>>) -> Result<Self, GatewayEventDispatchError> {
+    pub fn new(
+        store: Arc<Mutex<SqliteStore>>,
+        settings: VoicePreferenceSettings,
+    ) -> Result<Self, GatewayEventDispatchError> {
+        let available_models = settings.available_models.clone();
         Ok(Self {
-            // Promoted leaves do not select a model. An empty catalogue means an accidental
-            // future `/voice set` promotion fails closed rather than trusting stale config.
-            service: VoicePreferenceService::new(
-                store,
-                VoicePreferenceSettings {
-                    available_models: Vec::new(),
-                    default_speed: 1.0,
-                },
-            ),
+            service: VoicePreferenceService::new(store, settings),
             localizer: VoiceResponseLocalizer::from_generated_contract()
                 .map_err(|_| GatewayEventDispatchError)?,
+            displays: VoiceDisplayCatalog::from_generated_contract()
+                .map_err(|_| GatewayEventDispatchError)?,
+            available_models,
         })
     }
 
@@ -62,12 +63,22 @@ fn is_promoted(command: &VoicePreferenceCommand) -> bool {
     matches!(
         command,
         VoicePreferenceCommand::Reset
+            | VoicePreferenceCommand::Set { .. }
             | VoicePreferenceCommand::Detection { .. }
             | VoicePreferenceCommand::OptOut
             | VoicePreferenceCommand::OptIn
             | VoicePreferenceCommand::Nickname { .. }
             | VoicePreferenceCommand::Effect { .. }
     )
+}
+
+fn engine_label(engine: UserEngine) -> &'static str {
+    match engine {
+        UserEngine::Google => "google",
+        UserEngine::Piper => "piper",
+        UserEngine::Kokoro => "kokoro",
+        UserEngine::Gcloud => "gcloud",
+    }
 }
 
 fn effect_label(effect: VoiceEffect) -> &'static str {
@@ -127,6 +138,21 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
         );
         let mut parameters = BTreeMap::new();
         let key = match outcome {
+            VoicePreferenceOutcome::SavedVoice {
+                model,
+                speed,
+                engine,
+            } => {
+                parameters.insert(
+                    "name",
+                    self.displays
+                        .voice_name(Some(&command.locale), &self.available_models, &model),
+                );
+                parameters.insert("model", model);
+                parameters.insert("speed", speed.to_string());
+                parameters.insert("engine", engine_label(engine).to_owned());
+                "voice.set"
+            }
             VoicePreferenceOutcome::Reset => "voice.reset",
             VoicePreferenceOutcome::Detection { enabled: true } => "voice.detection.on",
             VoicePreferenceOutcome::Detection { enabled: false } => "voice.detection.off",
@@ -147,12 +173,17 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
                 parameters.insert("effect", effect_label(effect).to_owned());
                 "voice.effect.locked"
             }
-            // These outcomes are impossible for this promoted subset, or are a fail-closed
-            // storage/contract condition. Do not expose implementation detail.
-            VoicePreferenceOutcome::SavedVoice { .. }
-            | VoicePreferenceOutcome::UnknownModel
-            | VoicePreferenceOutcome::InvalidSpeed
-            | VoicePreferenceOutcome::InvalidEngine
+            VoicePreferenceOutcome::UnknownModel => "voice.unknownModel",
+            VoicePreferenceOutcome::InvalidSpeed => "voice.badSpeed",
+            VoicePreferenceOutcome::PremiumEngineLocked {
+                engine: UserEngine::Kokoro,
+            } => "voice.engine.kokoroLocked",
+            VoicePreferenceOutcome::PremiumEngineLocked {
+                engine: UserEngine::Gcloud,
+            } => "voice.engine.gcloudLocked",
+            // Any other condition is a malformed command or an unavailable dependency. Keep
+            // the response generic rather than leaking storage/provider detail.
+            VoicePreferenceOutcome::InvalidEngine
             | VoicePreferenceOutcome::InvalidEffect
             | VoicePreferenceOutcome::PremiumEngineLocked { .. }
             | VoicePreferenceOutcome::GuildRequired
@@ -188,13 +219,21 @@ mod tests {
     #[test]
     fn only_textual_preference_leaves_can_be_claimed() {
         assert!(is_promoted(&VoicePreferenceCommand::Reset));
-        assert!(is_promoted(&VoicePreferenceCommand::Effect {
-            effect: "robot".into()
-        }));
-        assert!(!is_promoted(&VoicePreferenceCommand::Set {
+        assert!(is_promoted(&VoicePreferenceCommand::Set {
             model: "en_US-amy-medium".into(),
             speed: None,
             engine: None,
         }));
+        assert!(is_promoted(&VoicePreferenceCommand::Effect {
+            effect: "robot".into()
+        }));
+    }
+
+    #[test]
+    fn preserves_the_node_engine_tokens_in_a_voice_set_response() {
+        assert_eq!(engine_label(UserEngine::Google), "google");
+        assert_eq!(engine_label(UserEngine::Piper), "piper");
+        assert_eq!(engine_label(UserEngine::Kokoro), "kokoro");
+        assert_eq!(engine_label(UserEngine::Gcloud), "gcloud");
     }
 }
