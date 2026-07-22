@@ -33,6 +33,7 @@ mod core_voice_interaction;
 mod core_voice_response;
 mod core_voice_service;
 mod dashboard_options;
+mod file_export_command;
 mod file_export_service;
 mod interaction_dispatch;
 mod message_admission;
@@ -71,6 +72,7 @@ pub use dashboard_options::{
     DiscordDashboardOption, DiscordDashboardOptions, DiscordDashboardOptionsProvider,
     locale_display_options, voice_display_options,
 };
+pub use file_export_command::{TtsFileCommand, TtsFileCommandError, parse_tts_file_command};
 pub use file_export_service::{
     MAX_TTS_FILE_CHARS, TtsFileExportInvocation, TtsFileExportOutcome, TtsFileExportService,
 };
