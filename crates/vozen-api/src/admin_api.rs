@@ -8,7 +8,10 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use serde::Serialize;
-use vozen_store::{AdminPassRow, AdminPassesView, AdminPlusRow, KofiPendingGrant, SqliteStore};
+use vozen_store::{
+    AdminPassRow, AdminPassesView, AdminPlusRow, DominantTalkUsageOptions, KofiPendingGrant,
+    SqliteStore, TalkUsageSource, UserEngine,
+};
 
 use crate::admin_auth::{
     DEFAULT_ADMIN_SESSION_TTL_SECONDS, sign_admin_session, verify_admin_session,
@@ -79,6 +82,56 @@ pub struct AdminPasses {
     pub pending: Vec<AdminPending>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminGuildBrief {
+    pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
+    #[serde(rename = "memberCount")]
+    pub member_count: i64,
+    #[serde(rename = "joinedTimestamp")]
+    pub joined_timestamp: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminGuildTopSpeaker {
+    #[serde(rename = "userId")]
+    pub user_id: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminGuildRow {
+    pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
+    #[serde(rename = "memberCount")]
+    pub member_count: i64,
+    #[serde(rename = "joinedTimestamp")]
+    pub joined_timestamp: Option<i64>,
+    pub messages: i64,
+    pub speakers: i64,
+    #[serde(rename = "topSpeakers")]
+    pub top_speakers: Vec<AdminGuildTopSpeaker>,
+    pub streak: i64,
+    #[serde(rename = "bestStreak")]
+    pub best_streak: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminTopTalker {
+    pub id: String,
+    pub total: i64,
+    pub username: Option<String>,
+    pub avatar: Option<String>,
+    pub language: Option<String>,
+    pub engine: Option<String>,
+    #[serde(rename = "usageSamples")]
+    pub usage_samples: i64,
+    #[serde(rename = "usageSource")]
+    pub usage_source: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdminGrant {
     Plus { id: String, days: i64 },
@@ -109,6 +162,8 @@ pub struct AdminApi {
     client_id: Option<Arc<str>>,
     ttl_seconds: i64,
     log: Arc<dyn Fn(&str) + Send + Sync>,
+    resolve_guilds: Option<Arc<dyn Fn() -> Vec<AdminGuildBrief> + Send + Sync>>,
+    local_day: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
 pub struct AdminApiConfig {
@@ -120,6 +175,8 @@ pub struct AdminApiConfig {
     pub admin_client_id: Option<String>,
     pub session_ttl_seconds: Option<i64>,
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
+    pub resolve_guilds: Option<Arc<dyn Fn() -> Vec<AdminGuildBrief> + Send + Sync>>,
+    pub local_day: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
 impl AdminApi {
@@ -149,6 +206,8 @@ impl AdminApi {
                 .session_ttl_seconds
                 .unwrap_or(DEFAULT_ADMIN_SESSION_TTL_SECONDS),
             log: config.log,
+            resolve_guilds: config.resolve_guilds,
+            local_day: config.local_day,
         }
     }
 
@@ -200,6 +259,85 @@ impl AdminApi {
             passes: passes.into_iter().map(Into::into).collect(),
             pending: pending.into_iter().map(Into::into).collect(),
         })
+    }
+
+    pub fn list_guilds(&self) -> Result<Vec<AdminGuildRow>, AdminGrantError> {
+        let Some(resolve_guilds) = &self.resolve_guilds else {
+            return Ok(Vec::new());
+        };
+        let local_day = (self.local_day)();
+        let store = self.store.lock().map_err(|_| AdminGrantError::Store)?;
+        let mut rows = resolve_guilds()
+            .into_iter()
+            .map(|guild| {
+                let stats = store
+                    .admin_guild_stats(&guild.id, &local_day, 5)
+                    .map_err(|_| AdminGrantError::Store)?;
+                Ok(AdminGuildRow {
+                    id: guild.id,
+                    name: guild.name,
+                    icon: guild.icon,
+                    member_count: guild.member_count,
+                    joined_timestamp: guild.joined_timestamp,
+                    messages: stats.messages,
+                    speakers: stats.speakers,
+                    top_speakers: stats
+                        .top_speakers
+                        .into_iter()
+                        .map(|speaker| AdminGuildTopSpeaker {
+                            user_id: speaker.user_id,
+                            count: speaker.count,
+                        })
+                        .collect(),
+                    streak: stats.streak,
+                    best_streak: stats.best_streak,
+                })
+            })
+            .collect::<Result<Vec<_>, AdminGrantError>>()?;
+        rows.sort_by(|left, right| {
+            right
+                .messages
+                .cmp(&left.messages)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        Ok(rows)
+    }
+
+    pub fn list_top_talkers(&self) -> Result<Vec<AdminTopTalker>, AdminGrantError> {
+        let store = self.store.lock().map_err(|_| AdminGrantError::Store)?;
+        let rows = store
+            .admin_top_talkers(10)
+            .map_err(|_| AdminGrantError::Store)?;
+        let ids = rows
+            .iter()
+            .map(|row| row.user_id.clone())
+            .collect::<Vec<_>>();
+        let usage = store
+            .dominant_talk_usage(&ids, DominantTalkUsageOptions::default())
+            .map_err(|_| AdminGrantError::Store)?;
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let dominant = usage.get(&row.user_id);
+                AdminTopTalker {
+                    id: row.user_id,
+                    total: row.total,
+                    username: None,
+                    avatar: None,
+                    language: dominant.and_then(|value| value.language.clone()),
+                    engine: dominant
+                        .and_then(|value| value.engine.map(|engine| engine_key(engine).to_owned())),
+                    usage_samples: dominant.map_or(0, |value| value.samples),
+                    usage_source: dominant
+                        .map_or("none", |value| match value.source {
+                            TalkUsageSource::Measured => "measured",
+                            TalkUsageSource::Configured => "configured",
+                            TalkUsageSource::None => "none",
+                        })
+                        .to_owned(),
+                }
+            })
+            .collect())
     }
 
     pub fn grant(&self, grant: AdminGrant) -> Result<i64, AdminGrantError> {
@@ -259,6 +397,15 @@ impl AdminApi {
 
 fn valid_snowflake(value: &str) -> bool {
     !value.is_empty() && value.len() <= 20 && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn engine_key(engine: UserEngine) -> &'static str {
+    match engine {
+        UserEngine::Google => "google",
+        UserEngine::Piper => "piper",
+        UserEngine::Kokoro => "kokoro",
+        UserEngine::Gcloud => "gcloud",
+    }
 }
 
 impl From<AdminPlusRow> for AdminPlus {
@@ -340,6 +487,8 @@ mod tests {
             admin_client_id: Some(CLIENT.into()),
             session_ttl_seconds: None,
             log: Arc::new(|_| {}),
+            resolve_guilds: None,
+            local_day: Arc::new(|| "2026-07-23".into()),
         })
     }
 
@@ -388,5 +537,41 @@ mod tests {
             })
             .expect("invalid")
         );
+    }
+
+    #[test]
+    fn guilds_and_top_talkers_use_only_stored_aggregates() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        {
+            let guard = store.lock().unwrap();
+            guard
+                .bump_talk("guild", "user", "2026-07-23")
+                .expect("talk");
+            guard
+                .bump_talk("guild", "user", "2026-07-23")
+                .expect("talk");
+        }
+        let api = AdminApi::new(AdminApiConfig {
+            store,
+            resolver: Arc::new(Resolver),
+            now: Arc::new(|| NOW),
+            admin_session_secret: Some(SECRET.into()),
+            owner_id: Some(OWNER.into()),
+            admin_client_id: Some(CLIENT.into()),
+            session_ttl_seconds: None,
+            log: Arc::new(|_| {}),
+            resolve_guilds: Some(Arc::new(|| {
+                vec![AdminGuildBrief {
+                    id: "guild".into(),
+                    name: "Test".into(),
+                    icon: None,
+                    member_count: 4,
+                    joined_timestamp: None,
+                }]
+            })),
+            local_day: Arc::new(|| "2026-07-23".into()),
+        });
+        assert_eq!(api.list_guilds().expect("guilds")[0].messages, 2);
+        assert_eq!(api.list_top_talkers().expect("talkers")[0].total, 2);
     }
 }

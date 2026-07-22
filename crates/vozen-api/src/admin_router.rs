@@ -64,6 +64,8 @@ pub fn admin_router(config: AdminRouterConfig) -> Result<Router, AdminRouterConf
     Ok(Router::new()
         .route("/api/admin/login", any(admin_request))
         .route("/api/admin/passes", any(admin_request))
+        .route("/api/admin/guilds", any(admin_request))
+        .route("/api/admin/toptalkers", any(admin_request))
         .route("/api/admin/grant", any(admin_request))
         .route("/api/admin/revoke", any(admin_request))
         .layer(DefaultBodyLimit::max(BODY_MAX_BYTES))
@@ -146,9 +148,32 @@ async fn admin_request(
                 &state,
             ),
         },
+        ("/api/admin/guilds", Method::GET) => match state.api.list_guilds() {
+            Ok(guilds) => response(StatusCode::OK, json!({"guilds":guilds}), &state),
+            Err(_) => response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({"error":"internal"}),
+                &state,
+            ),
+        },
+        ("/api/admin/toptalkers", Method::GET) => match state.api.list_top_talkers() {
+            Ok(talkers) => response(StatusCode::OK, json!({"talkers":talkers}), &state),
+            Err(_) => response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({"error":"internal"}),
+                &state,
+            ),
+        },
         ("/api/admin/grant", Method::POST) => grant(body, &state),
         ("/api/admin/revoke", Method::POST) => revoke(body, &state),
-        ("/api/admin/passes" | "/api/admin/grant" | "/api/admin/revoke", _) => response(
+        (
+            "/api/admin/passes"
+            | "/api/admin/guilds"
+            | "/api/admin/toptalkers"
+            | "/api/admin/grant"
+            | "/api/admin/revoke",
+            _,
+        ) => response(
             StatusCode::METHOD_NOT_ALLOWED,
             json!({"error":"method_not_allowed"}),
             &state,
@@ -371,6 +396,8 @@ mod tests {
             admin_client_id: Some(CLIENT.into()),
             session_ttl_seconds: None,
             log: Arc::new(|_| {}),
+            resolve_guilds: None,
+            local_day: Arc::new(|| "2026-07-23".into()),
         }));
         admin_router(AdminRouterConfig {
             origin: "https://panel.vozen.org".into(),
