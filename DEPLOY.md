@@ -40,8 +40,8 @@ A imagem corre em ARM64, mas **o Piper tem de ser o build `aarch64`** — **não
    ```
 3. Clona o repositório:
    ```
-   git clone https://github.com/Rexy40407/discord-bot-Vozen.git
-   cd discord-bot-Vozen
+   git clone https://github.com/Rexy40407/vozen.git
+   cd vozen
    ```
 4. **Piper ARM64** — confirma `uname -m` (deve dar `aarch64`) e extrai para `./piper/`:
    ```
@@ -69,7 +69,7 @@ Igual à Opção A, **mas com o Piper `x86_64`** (a máquina é Intel/AMD).
 
 1. Cria a VPS Linux (Ubuntu/Debian). SSH para dentro.
 2. Instala Docker + compose v2 (mesmos comandos da Opção A, passo 2).
-3. `git clone … && cd discord-bot-Vozen`.
+3. `git clone … && cd vozen`.
 4. **Piper x86_64** — confirma `uname -m` (deve dar `x86_64`):
    ```
    curl -fsSLO https://github.com/rhasspy/piper/releases/latest/download/piper_linux_x86_64.tar.gz

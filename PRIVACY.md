@@ -229,7 +229,7 @@ The **responsible party** for a Vozen instance is the **operator** who runs it. 
 > **Official public Vozen instance:**
 >
 > - Support / reports / data requests: **[support server](https://discord.gg/4kYw2WUbNN)** (`discord.gg/4kYw2WUbNN`)
-> - Source code: <https://github.com/Rexy40407/discord-bot-Vozen>
+> - Source code: <https://github.com/Rexy40407/vozen>
 >
 > **Running your own instance?** Replace the contact above with your own before making the bot public.
 

@@ -38,7 +38,7 @@ import { voteRewardStatus } from '../../store/voteReward';
 import { voteUpsellLine } from '../voteUpsell';
 
 /** Public repo (AGPL-3.0 §13: in-product Corresponding Source offer, see /help). */
-const SOURCE_URL = 'https://github.com/Rexy40407/discord-bot-Vozen';
+const SOURCE_URL = 'https://github.com/Rexy40407/vozen';
 
 /**
  * /top-speakers — public ranking of who had the most messages READ by Vozen in this guild,

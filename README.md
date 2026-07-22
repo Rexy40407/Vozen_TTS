@@ -9,7 +9,7 @@
   <a href="https://vozen.org"><img src="https://img.shields.io/badge/website-vozen.org-7c5cff" alt="Website"></a>
   <a href="https://discord.gg/4kYw2WUbNN"><img src="https://img.shields.io/badge/support-server-5865F2?logo=discord&logoColor=white" alt="Support server"></a>
   <a href="https://top.gg/bot/1523826014935842997/vote"><img src="https://img.shields.io/badge/vote-top.gg-ff3366" alt="Vote on top.gg"></a>
-  <a href="https://github.com/Rexy40407/discord-bot-Vozen/actions/workflows/ci.yml"><img src="https://github.com/Rexy40407/discord-bot-Vozen/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Rexy40407/vozen/actions/workflows/ci.yml"><img src="https://github.com/Rexy40407/vozen/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License"></a>
 </p>
 
@@ -85,7 +85,7 @@ in Discord to see what you have.
 
 Something broken, or an idea? **[Join the support server](https://discord.gg/4kYw2WUbNN)**
 — that's the fastest way to reach us. Bugs can also go in
-[GitHub issues](https://github.com/Rexy40407/discord-bot-Vozen/issues).
+[GitHub issues](https://github.com/Rexy40407/vozen/issues).
 
 ## Self-hosting
 

@@ -20,7 +20,7 @@ Already have Node (>= 22.12), the Piper binary and at least one `.onnx` voice mo
 Then the minimum to get going is:
 
 ```bash
-git clone https://github.com/Rexy40407/discord-bot-Vozen.git vozen && cd vozen
+git clone https://github.com/Rexy40407/vozen.git vozen && cd vozen
 npm install                       # deps + native bindings
 cp .env.example .env              # edit: DISCORD_TOKEN, CLIENT_ID, PIPER_PATH, MODELS_DIR; then: npm run register && npm run dev
 ```
