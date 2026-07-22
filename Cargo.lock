@@ -4160,9 +4160,12 @@ dependencies = [
 name = "vozen-store"
 version = "0.1.0"
 dependencies = [
+ "hmac",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
+ "subtle",
  "thiserror 2.0.19",
  "time",
  "uuid",

@@ -33,6 +33,7 @@ mod user_profile;
 mod user_voice;
 mod voice_effect;
 mod voice_presence;
+mod vote_reward;
 
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
 pub use channel_profile::{ChannelProfile, ChannelProfilePatch, MAX_CHANNEL_PROFILES_PER_GUILD};
@@ -71,6 +72,10 @@ pub use user_profile::{Birthday, is_valid_birthday};
 pub use user_voice::{UserEngine, UserVoice};
 pub use voice_effect::VoiceEffect;
 pub use voice_presence::VoicePresence;
+pub use vote_reward::{
+    TOPGG_EVENT_RETENTION_MS, TopggVoteRewardResult, VOTE_REDEMPTION_SECRET_MIN_LENGTH,
+    VoteRewardResult, VoteRewardStatus,
+};
 
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
 const SQLITE_SCHEMA: &str = include_str!("../../../contracts/sqlite-schema.json");
@@ -118,6 +123,16 @@ pub enum StoreError {
     InvalidTranslationLimit,
     #[error("translation day must be UTC YYYY-MM-DD")]
     InvalidTranslationDay,
+    #[error(
+        "VOTE_REDEMPTION_SECRET must contain at least {VOTE_REDEMPTION_SECRET_MIN_LENGTH} characters"
+    )]
+    InvalidVoteRedemptionSecret,
+    #[error("VOTE_REDEMPTION_SECRET does not match the key pinned to this database")]
+    VoteRedemptionSecretMismatch,
+    #[error("invalid Discord user id for vote reward")]
+    InvalidVoteUserId,
+    #[error("invalid Top.gg webhook event id")]
+    InvalidTopggEventId,
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 }
