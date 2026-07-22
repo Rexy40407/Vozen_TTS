@@ -53,11 +53,16 @@
     "shutup.nothing",
     "shutup.done",
     "tts.notInVoice",
+    "tts.nothingToRead",
     "tts.nothingAfterClean",
     "tts.tooFast",
     "tts.blocked",
     "tts.queued",
-    "tts.busy"
+    "tts.busy",
+    "ttsFile.tooLong",
+    "ttsFile.unavailable",
+    "ttsFile.ready",
+    "ttsFile.failed"
   ],
   "messages": {
     "en": {
@@ -74,11 +79,16 @@
       "shutup.nothing": "Nothing is playing right now.",
       "shutup.done": "🤐 Okay, I'll stop — cleared everything in the queue.",
       "tts.notInVoice": "I'm not in a voice channel yet — join one and run /join, then try again.",
+      "tts.nothingToRead": "There's nothing to read there — send me some text to say.",
       "tts.nothingAfterClean": "After tidying that up there was nothing left to read — try some normal text (letters or words).",
       "tts.tooFast": "Whoa, slow down a little — try again in a moment.",
       "tts.blocked": "That text contains a blocked word, so I skipped it.",
       "tts.queued": "Got it — it's in the queue.",
-      "tts.busy": "I'm busy right now — try again in a moment."
+      "tts.busy": "I'm busy right now — try again in a moment.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -94,11 +104,16 @@
       "shutup.nothing": "Não está nada a tocar de momento.",
       "shutup.done": "🤐 Está bem, calo-me — limpei tudo o que estava na fila.",
       "tts.notInVoice": "Ainda nao estou num canal de voz — entra num e corre /join, depois tenta outra vez.",
+      "tts.nothingToRead": "Nao ha nada para ler — manda-me algum texto para eu dizer.",
       "tts.nothingAfterClean": "Depois da limpeza nao sobrou nada para ler — tenta texto normal (letras ou palavras).",
       "tts.tooFast": "Calma, vai com mais calma — tenta daqui a um instante.",
       "tts.blocked": "Esse texto tem uma palavra bloqueada, por isso ignorei-o.",
       "tts.queued": "Feito — esta na fila.",
-      "tts.busy": "Estou ocupado agora — tenta daqui a um instante."
+      "tts.busy": "Estou ocupado agora — tenta daqui a um instante.",
+      "ttsFile.tooLong": "Mantem a exportaÃ§Ã£o de Ã¡udio com {max} caracteres ou menos.",
+      "ttsFile.unavailable": "A voz selecionada nÃ£o estÃ¡ disponÃ­vel nesta instÃ¢ncia. Escolhe outra voz e tenta novamente.",
+      "ttsFile.ready": "O teu ficheiro de Ã¡udio privado estÃ¡ pronto. O Vozen nÃ£o o guarda depois da entrega.",
+      "ttsFile.failed": "NÃ£o consegui criar esse ficheiro de Ã¡udio. Tenta outra vez."
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -114,11 +129,16 @@
       "shutup.nothing": "Ahora mismo no se está reproduciendo nada.",
       "shutup.done": "🤐 Vale, me callo: vacié todo lo que había en la cola.",
       "tts.notInVoice": "Aún no estoy en un canal de voz: únete a uno y ejecuta /join, luego vuelve a intentarlo.",
+      "tts.nothingToRead": "No hay nada que leer ahí: envíame algo de texto para decir.",
       "tts.nothingAfterClean": "Tras limpiar eso no quedó nada que leer: prueba con texto normal (letras o palabras).",
       "tts.tooFast": "Uy, ve un poco más despacio: inténtalo de nuevo en un momento.",
       "tts.blocked": "Ese texto contiene una palabra bloqueada, así que lo omití.",
       "tts.queued": "¡Listo! Está en la cola.",
-      "tts.busy": "Estoy ocupado ahora mismo: inténtalo de nuevo en un momento."
+      "tts.busy": "Estoy ocupado ahora mismo: inténtalo de nuevo en un momento.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -134,11 +154,16 @@
       "shutup.nothing": "Rien n'est en cours de lecture pour l'instant.",
       "shutup.done": "🤐 D'accord, j'arrête — j'ai vidé toute la file d'attente.",
       "tts.notInVoice": "Je ne suis pas encore dans un salon vocal — rejoignez-en un et lancez /join, puis réessayez.",
+      "tts.nothingToRead": "Il n'y a rien à lire ici — envoyez-moi du texte à dire.",
       "tts.nothingAfterClean": "Après nettoyage, il ne restait rien à lire — essayez du texte normal (des lettres ou des mots).",
       "tts.tooFast": "Doucement, ralentissez un peu — réessayez dans un instant.",
       "tts.blocked": "Ce texte contient un mot bloqué, je l'ai donc ignoré.",
       "tts.queued": "C'est noté — c'est dans la file d'attente.",
-      "tts.busy": "Je suis occupé pour le moment — réessayez dans un instant."
+      "tts.busy": "Je suis occupé pour le moment — réessayez dans un instant.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -154,11 +179,16 @@
       "shutup.nothing": "Gerade wird nichts abgespielt.",
       "shutup.done": "🤐 Okay, ich höre auf — habe alles in der Warteschlange geleert.",
       "tts.notInVoice": "Ich bin noch in keinem Sprachkanal — tritt einem bei und führe /join aus, dann versuche es erneut.",
+      "tts.nothingToRead": "Da gibt es nichts vorzulesen — schick mir einen Text, den ich sagen soll.",
       "tts.nothingAfterClean": "Nach dem Aufräumen blieb nichts zum Vorlesen übrig — probier es mit normalem Text (Buchstaben oder Wörter).",
       "tts.tooFast": "Hoppla, mach mal etwas langsamer — versuch es gleich noch mal.",
       "tts.blocked": "Dieser Text enthält ein blockiertes Wort, deshalb habe ich ihn übersprungen.",
       "tts.queued": "Alles klar — es ist in der Warteschlange.",
-      "tts.busy": "Ich bin gerade beschäftigt — versuch es gleich noch mal."
+      "tts.busy": "Ich bin gerade beschäftigt — versuch es gleich noch mal.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -174,11 +204,16 @@
       "shutup.nothing": "Er wordt nu niets afgespeeld.",
       "shutup.done": "🤐 Oké, ik stop — alles in de wachtrij is gewist.",
       "tts.notInVoice": "Ik zit nog niet in een spraakkanaal — sluit je bij een kanaal aan en gebruik /join, en probeer het dan opnieuw.",
+      "tts.nothingToRead": "Daar valt niets voor te lezen — stuur me wat tekst om uit te spreken.",
       "tts.nothingAfterClean": "Nadat ik dat had opgeschoond, bleef er niets over om voor te lezen — probeer wat normale tekst (letters of woorden).",
       "tts.tooFast": "Ho, rustig aan — probeer het zo meteen opnieuw.",
       "tts.blocked": "Die tekst bevat een geblokkeerd woord, dus ik heb het overgeslagen.",
       "tts.queued": "Begrepen — het staat in de wachtrij.",
-      "tts.busy": "Ik heb het nu druk — probeer het zo meteen opnieuw."
+      "tts.busy": "Ik heb het nu druk — probeer het zo meteen opnieuw.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -194,11 +229,16 @@
       "shutup.nothing": "Nic teraz nie jest odtwarzane.",
       "shutup.done": "🤐 Dobra, milknę — wyczyściłem całą kolejkę.",
       "tts.notInVoice": "Nie jestem jeszcze na kanale głosowym — dołącz do jakiegoś i użyj /join, potem spróbuj ponownie.",
+      "tts.nothingToRead": "Nie ma tam nic do przeczytania — wyślij mi jakiś tekst.",
       "tts.nothingAfterClean": "Po uporządkowaniu nie zostało nic do przeczytania — spróbuj zwykłego tekstu (litery lub słowa).",
       "tts.tooFast": "Hej, zwolnij trochę — spróbuj ponownie za chwilę.",
       "tts.blocked": "Ten tekst zawiera zablokowane słowo, więc go pominąłem.",
       "tts.queued": "Jasne — jest w kolejce.",
-      "tts.busy": "Jestem teraz zajęty — spróbuj ponownie za chwilę."
+      "tts.busy": "Jestem teraz zajęty — spróbuj ponownie za chwilę.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -214,11 +254,16 @@
       "shutup.nothing": "Şu anda hiçbir şey çalmıyor.",
       "shutup.done": "🤐 Tamam, susuyorum — sıradaki her şeyi temizledim.",
       "tts.notInVoice": "Henüz bir ses kanalında değilim — bir kanala katıl ve /join komutunu çalıştır, sonra tekrar dene.",
+      "tts.nothingToRead": "Orada okunacak bir şey yok — bana söylemem için biraz metin gönder.",
       "tts.nothingAfterClean": "Düzenledikten sonra okunacak bir şey kalmadı — normal bir metin dene (harfler veya kelimeler).",
       "tts.tooFast": "Vay, biraz yavaşla — birazdan tekrar dene.",
       "tts.blocked": "Bu metin engellenmiş bir kelime içeriyor, bu yüzden atladım.",
       "tts.queued": "Tamamdır — sıraya eklendi.",
-      "tts.busy": "Şu anda meşgulüm — birazdan tekrar dene."
+      "tts.busy": "Şu anda meşgulüm — birazdan tekrar dene.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -234,11 +279,16 @@
       "shutup.nothing": "Právě teď nic nehraje.",
       "shutup.done": "🤐 Dobře, přestanu — vyprázdnil jsem celou frontu.",
       "tts.notInVoice": "Zatím nejsem v hlasovém kanálu — připoj se k nějakému, spusť /join a pak to zkus znovu.",
+      "tts.nothingToRead": "Není tam co číst — pošli mi nějaký text, který mám říct.",
       "tts.nothingAfterClean": "Po vyčištění už nezůstalo nic k přečtení — zkus normální text (písmena nebo slova).",
       "tts.tooFast": "Hola, zpomal trochu — zkus to za chviličku znovu.",
       "tts.blocked": "Ten text obsahuje zablokované slovo, tak jsem ho vynechal.",
       "tts.queued": "Mám to — je to ve frontě.",
-      "tts.busy": "Právě mám napilno — zkus to za chviličku znovu."
+      "tts.busy": "Právě mám napilno — zkus to za chviličku znovu.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -254,11 +304,16 @@
       "shutup.nothing": "Inget spelas just nu.",
       "shutup.done": "🤐 Okej, jag slutar — rensade allt i kön.",
       "tts.notInVoice": "Jag är inte i någon röstkanal än — gå med i en och kör /join, försök sedan igen.",
+      "tts.nothingToRead": "Det finns inget att läsa där — skicka mig text att säga.",
       "tts.nothingAfterClean": "Efter att ha rensat upp det fanns inget kvar att läsa — prova med vanlig text (bokstäver eller ord).",
       "tts.tooFast": "Oj, ta det lite lugnt — försök igen om en stund.",
       "tts.blocked": "Den texten innehåller ett blockerat ord, så jag hoppade över den.",
       "tts.queued": "Uppfattat — den ligger i kön.",
-      "tts.busy": "Jag är upptagen just nu — försök igen om en stund."
+      "tts.busy": "Jag är upptagen just nu — försök igen om en stund.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -274,11 +329,16 @@
       "shutup.nothing": "Mitään ei toisteta juuri nyt.",
       "shutup.done": "🤐 Selvä, lopetan — tyhjensin koko jonon.",
       "tts.notInVoice": "En ole vielä puhekanavalla — liity kanavalle ja suorita /join, yritä sitten uudelleen.",
+      "tts.nothingToRead": "Siellä ei ole mitään luettavaa — lähetä minulle jotain tekstiä.",
       "tts.nothingAfterClean": "Siistimisen jälkeen ei jäänyt mitään luettavaa — kokeile tavallista tekstiä (kirjaimia tai sanoja).",
       "tts.tooFast": "Hei, hidasta hieman — yritä hetken kuluttua uudelleen.",
       "tts.blocked": "Teksti sisältää estetyn sanan, joten ohitin sen.",
       "tts.queued": "Selvä — se on jonossa.",
-      "tts.busy": "Olen kiireinen juuri nyt — yritä hetken kuluttua uudelleen."
+      "tts.busy": "Olen kiireinen juuri nyt — yritä hetken kuluttua uudelleen.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -294,11 +354,16 @@
       "shutup.nothing": "Der afspilles ikke noget lige nu.",
       "shutup.done": "🤐 Okay, jeg stopper — ryddede alt i køen.",
       "tts.notInVoice": "Jeg er ikke i en talekanal endnu — gå ind i en og kør /join, og prøv så igen.",
+      "tts.nothingToRead": "Der er ikke noget at læse der — send mig noget tekst, jeg kan sige.",
       "tts.nothingAfterClean": "Efter at have ryddet op i det var der intet tilbage at læse — prøv med normal tekst (bogstaver eller ord).",
       "tts.tooFast": "Hov, tag den lige med ro — prøv igen om et øjeblik.",
       "tts.blocked": "Den tekst indeholder et blokeret ord, så jeg sprang den over.",
       "tts.queued": "Forstået — det er i køen.",
-      "tts.busy": "Jeg er optaget lige nu — prøv igen om et øjeblik."
+      "tts.busy": "Jeg er optaget lige nu — prøv igen om et øjeblik.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -314,11 +379,16 @@
       "shutup.nothing": "Nu se redă nimic în acest moment.",
       "shutup.done": "🤐 Bine, mă opresc — am golit tot din coadă.",
       "tts.notInVoice": "Încă nu sunt într-un canal de voce — intră într-unul și rulează /join, apoi încearcă din nou.",
+      "tts.nothingToRead": "Nu e nimic de citit acolo — trimite-mi ceva text de rostit.",
       "tts.nothingAfterClean": "După ce am curățat textul n-a mai rămas nimic de citit — încearcă un text normal (litere sau cuvinte).",
       "tts.tooFast": "Ho, mai încet puțin — încearcă din nou peste o clipă.",
       "tts.blocked": "Textul conține un cuvânt blocat, așa că l-am ignorat.",
       "tts.queued": "Am notat — e în coadă.",
-      "tts.busy": "Sunt ocupat acum — încearcă din nou peste o clipă."
+      "tts.busy": "Sunt ocupat acum — încearcă din nou peste o clipă.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -334,11 +404,16 @@
       "shutup.nothing": "Most éppen semmi sem szól.",
       "shutup.done": "🤐 Rendben, abbahagyom — kiürítettem a sort.",
       "tts.notInVoice": "Még nem vagyok hangcsatornában — csatlakozz egyhez, futtasd a /join parancsot, majd próbáld újra.",
+      "tts.nothingToRead": "Ott nincs mit felolvasni — küldj valami szöveget, amit kimondhatok.",
       "tts.nothingAfterClean": "A tisztázás után nem maradt semmi felolvasnivaló — próbálj meg normál szöveget (betűket vagy szavakat).",
       "tts.tooFast": "Hoppá, lassíts egy kicsit — próbáld újra egy pillanat múlva.",
       "tts.blocked": "Ez a szöveg tiltott szót tartalmaz, ezért kihagytam.",
       "tts.queued": "Rendben — bekerült a sorba.",
-      "tts.busy": "Most éppen elfoglalt vagyok — próbáld újra egy pillanat múlva."
+      "tts.busy": "Most éppen elfoglalt vagyok — próbáld újra egy pillanat múlva.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -354,11 +429,16 @@
       "shutup.nothing": "Does dim byd yn chwarae ar hyn o bryd.",
       "shutup.done": "🤐 Iawn, bydda i'n stopio — clíriais bopeth yn y ciw.",
       "tts.notInVoice": "Dydw i ddim mewn sianel lais eto — ymuna ag un a rheda /join, yna rho gynnig arall arni.",
+      "tts.nothingToRead": "Does dim byd i'w ddarllen yno — anfona ychydig o destun ata i i'w ddweud.",
       "tts.nothingAfterClean": "Ar ôl tacluso hynny doedd dim byd ar ôl i'w ddarllen — rho gynnig ar destun arferol (llythrennau neu eiriau).",
       "tts.tooFast": "Wow, arafa ychydig — rho gynnig arall arni mewn eiliad.",
       "tts.blocked": "Mae'r testun yn cynnwys gair sydd wedi'i rwystro, felly gwnes i ei hepgor.",
       "tts.queued": "Iawn — mae yn y ciw.",
-      "tts.busy": "Dw i'n brysur ar hyn o bryd — rho gynnig arall arni mewn eiliad."
+      "tts.busy": "Dw i'n brysur ar hyn o bryd — rho gynnig arall arni mewn eiliad.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -374,11 +454,16 @@
       "shutup.nothing": "Ekkert er í spilun núna.",
       "shutup.done": "🤐 Allt í lagi, ég þagna — hreinsaði allt úr biðröðinni.",
       "tts.notInVoice": "Ég er ekki enn í talrás — farðu inn í eina og keyrðu /join, reyndu svo aftur.",
+      "tts.nothingToRead": "Það er ekkert að lesa þarna — sendu mér einhvern texta til að segja.",
       "tts.nothingAfterClean": "Eftir að hafa hreinsað þetta var ekkert eftir til að lesa — reyndu venjulegan texta (stafi eða orð).",
       "tts.tooFast": "Rólegur, hægðu aðeins á þér — reyndu aftur eftir smá stund.",
       "tts.blocked": "Þessi texti inniheldur bannað orð, svo ég sleppti honum.",
       "tts.queued": "Skilið — það er komið í biðröðina.",
-      "tts.busy": "Ég er upptekinn núna — reyndu aftur eftir smá stund."
+      "tts.busy": "Ég er upptekinn núna — reyndu aftur eftir smá stund.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -394,11 +479,16 @@
       "shutup.nothing": "Am Moment leeft näischt.",
       "shutup.done": "🤐 Okay, ech halen op — hunn alles an der Schlaang geläscht.",
       "tts.notInVoice": "Ech sinn nach net an engem Sproochkanal — géi an een a laf /join, probéier dann nach eng Kéier.",
+      "tts.nothingToRead": "Do ass näischt fir virzeliesen — schéck mir Text, deen ech soll soen.",
       "tts.nothingAfterClean": "Nodeems ech dat opgeraumt hunn, ass näischt méi iwwreg bliwwen fir virzeliesen — probéier normalen Text (Buschtawen oder Wierder).",
       "tts.tooFast": "Oho, méi lues — probéier an engem Moment nach eng Kéier.",
       "tts.blocked": "Dësen Text enthält e gespaart Wuert, dofir hunn ech en iwwersprongen.",
       "tts.queued": "Verstanen — et ass an der Schlaang.",
-      "tts.busy": "Ech sinn am Moment beschäftegt — probéier an engem Moment nach eng Kéier."
+      "tts.busy": "Ech sinn am Moment beschäftegt — probéier an engem Moment nach eng Kéier.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -414,11 +504,16 @@
       "shutup.nothing": "Šobrīd nekas netiek atskaņots.",
       "shutup.done": "🤐 Labi, es apklusīšu — iztīrīju visu rindā.",
       "tts.notInVoice": "Es vēl neesmu balss kanālā — pievienojies kādam un palaid /join, tad mēģini vēlreiz.",
+      "tts.nothingToRead": "Tur nav nekā, ko nolasīt — atsūti man kādu tekstu, ko pateikt.",
       "tts.nothingAfterClean": "Pēc sakārtošanas nekas nepalika, ko nolasīt — pamēģini parastu tekstu (burtus vai vārdus).",
       "tts.tooFast": "Nu nu, palēnini nedaudz — mēģini vēlreiz pēc brīža.",
       "tts.blocked": "Šajā tekstā ir bloķēts vārds, tāpēc es to izlaidu.",
       "tts.queued": "Sapratu — tas ir rindā.",
-      "tts.busy": "Šobrīd esmu aizņemts — mēģini vēlreiz pēc brīža."
+      "tts.busy": "Šobrīd esmu aizņemts — mēģini vēlreiz pēc brīža.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -434,11 +529,16 @@
       "shutup.nothing": "Práve sa nič neprehráva.",
       "shutup.done": "🤐 Dobre, prestanem — vyprázdnil som celé poradie.",
       "tts.notInVoice": "Ešte nie som v hlasovom kanáli — pripoj sa do jedného a spusti /join, potom skús znova.",
+      "tts.nothingToRead": "Nie je tam čo čítať — pošli mi nejaký text na prečítanie.",
       "tts.nothingAfterClean": "Po úprave už neostalo nič na prečítanie — skús nejaký normálny text (písmená alebo slová).",
       "tts.tooFast": "Hej, spomaľ trochu — skús to o chvíľu znova.",
       "tts.blocked": "Ten text obsahuje zablokované slovo, takže som ho preskočil.",
       "tts.queued": "Rozumiem — je to v poradí.",
-      "tts.busy": "Práve mám plné ruky práce — skús to o chvíľu znova."
+      "tts.busy": "Práve mám plné ruky práce — skús to o chvíľu znova.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -454,11 +554,16 @@
       "shutup.nothing": "Trenutno se nič ne predvaja.",
       "shutup.done": "🤐 V redu, utihnil bom — počistil sem vse v čakalni vrsti.",
       "tts.notInVoice": "Še nisem v glasovnem kanalu — pridruži se enemu in zaženi /join, nato poskusi znova.",
+      "tts.nothingToRead": "Tam ni ničesar za branje — pošlji mi besedilo, ki naj ga izgovorim.",
       "tts.nothingAfterClean": "Po čiščenju ni ostalo nič za branje — poskusi z običajnim besedilom (črke ali besede).",
       "tts.tooFast": "Počasi, ne tako hitro — poskusi znova čez trenutek.",
       "tts.blocked": "To besedilo vsebuje blokirano besedo, zato sem ga preskočil.",
       "tts.queued": "Sprejeto — je v čakalni vrsti.",
-      "tts.busy": "Trenutno sem zaseden — poskusi znova čez trenutek."
+      "tts.busy": "Trenutno sem zaseden — poskusi znova čez trenutek.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -474,11 +579,16 @@
       "shutup.nothing": "Hakuna kinachochezwa sasa hivi.",
       "shutup.done": "🤐 Sawa, nitaacha — nimefuta kila kitu kwenye foleni.",
       "tts.notInVoice": "Bado sipo kwenye kituo cha sauti — ingia kwenye kimoja na uendeshe /join, kisha jaribu tena.",
+      "tts.nothingToRead": "Hakuna chochote cha kusoma hapo — nitumie maandishi ya kusema.",
       "tts.nothingAfterClean": "Baada ya kusafisha hayo hakuna kilichobaki cha kusoma — jaribu maandishi ya kawaida (herufi au maneno).",
       "tts.tooFast": "Pole pole kidogo — jaribu tena baada ya muda mfupi.",
       "tts.blocked": "Maandishi hayo yana neno lililozuiwa, kwa hivyo niliyaruka.",
       "tts.queued": "Nimeipata — ipo kwenye foleni.",
-      "tts.busy": "Nina shughuli sasa hivi — jaribu tena baada ya muda mfupi."
+      "tts.busy": "Nina shughuli sasa hivi — jaribu tena baada ya muda mfupi.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -494,11 +604,16 @@
       "shutup.nothing": "Hiện không có gì đang phát cả.",
       "shutup.done": "🤐 Được rồi, tôi sẽ dừng — đã xóa sạch hàng đợi.",
       "tts.notInVoice": "Tôi chưa ở trong kênh thoại nào — hãy vào một kênh và chạy /join, rồi thử lại.",
+      "tts.nothingToRead": "Chẳng có gì để đọc ở đó — hãy gửi cho tôi một đoạn văn bản để đọc.",
       "tts.nothingAfterClean": "Sau khi dọn dẹp thì chẳng còn gì để đọc — hãy thử văn bản bình thường (chữ cái hoặc từ ngữ).",
       "tts.tooFast": "Ối, chậm lại một chút nào — thử lại sau giây lát nhé.",
       "tts.blocked": "Văn bản đó chứa một từ bị chặn, nên tôi đã bỏ qua.",
       "tts.queued": "Đã nhận — nó đang nằm trong hàng đợi.",
-      "tts.busy": "Tôi đang bận — thử lại sau giây lát nhé."
+      "tts.busy": "Tôi đang bận — thử lại sau giây lát nhé.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -514,11 +629,16 @@
       "shutup.nothing": "Ara mateix no s'està reproduint res.",
       "shutup.done": "🤐 D'acord, callo: he buidat tot el que hi havia a la cua.",
       "tts.notInVoice": "Encara no soc en cap canal de veu. Entra en un i executa /join, i torna-ho a provar.",
+      "tts.nothingToRead": "No hi ha res per llegir. Envia'm algun text per dir.",
       "tts.nothingAfterClean": "Després de netejar-ho no quedava res per llegir. Prova amb text normal (lletres o paraules).",
       "tts.tooFast": "Ei, ves més a poc a poc. Torna-ho a provar d'aquí a un moment.",
       "tts.blocked": "Aquest text conté una paraula bloquejada, així que l'he omès.",
       "tts.queued": "Fet, ja és a la cua.",
-      "tts.busy": "Ara mateix estic ocupat. Torna-ho a provar d'aquí a un moment."
+      "tts.busy": "Ara mateix estic ocupat. Torna-ho a provar d'aquí a un moment.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -534,11 +654,16 @@
       "shutup.nothing": "Non sto riproducendo niente al momento.",
       "shutup.done": "🤐 Va bene, mi fermo — ho svuotato tutta la coda.",
       "tts.notInVoice": "Non sono ancora in un canale vocale — entrane in uno ed esegui /join, poi riprova.",
+      "tts.nothingToRead": "Lì non c'è niente da leggere — inviami del testo da pronunciare.",
       "tts.nothingAfterClean": "Dopo aver ripulito quel testo non è rimasto niente da leggere — prova con del testo normale (lettere o parole).",
       "tts.tooFast": "Ehi, rallenta un attimo — riprova tra poco.",
       "tts.blocked": "Quel testo contiene una parola bloccata, quindi l'ho saltato.",
       "tts.queued": "Ricevuto — è in coda.",
-      "tts.busy": "Sono occupato in questo momento — riprova tra poco."
+      "tts.busy": "Sono occupato in questo momento — riprova tra poco.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -554,11 +679,16 @@
       "shutup.nothing": "Δεν παίζει τίποτα αυτή τη στιγμή.",
       "shutup.done": "🤐 Εντάξει, σταματάω — καθάρισα τα πάντα από την ουρά.",
       "tts.notInVoice": "Δεν είμαι ακόμη σε φωνητικό κανάλι — μπες σε ένα και τρέξε /join, μετά δοκίμασε ξανά.",
+      "tts.nothingToRead": "Δεν υπάρχει τίποτα να διαβάσω εκεί — στείλε μου λίγο κείμενο για να πω.",
       "tts.nothingAfterClean": "Αφού το τακτοποίησα, δεν έμεινε τίποτα να διαβάσω — δοκίμασε κανονικό κείμενο (γράμματα ή λέξεις).",
       "tts.tooFast": "Έλα, λίγο πιο αργά — δοκίμασε ξανά σε λίγο.",
       "tts.blocked": "Αυτό το κείμενο περιέχει μια αποκλεισμένη λέξη, οπότε το παρέκαμψα.",
       "tts.queued": "Έγινε — μπήκε στην ουρά.",
-      "tts.busy": "Είμαι απασχολημένος αυτή τη στιγμή — δοκίμασε ξανά σε λίγο."
+      "tts.busy": "Είμαι απασχολημένος αυτή τη στιγμή — δοκίμασε ξανά σε λίγο.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -574,11 +704,16 @@
       "shutup.nothing": "Сейчас ничего не воспроизводится.",
       "shutup.done": "🤐 Хорошо, я замолкаю — очистил всё в очереди.",
       "tts.notInVoice": "Я ещё не в голосовом канале — зайдите в него и запустите /join, затем попробуйте снова.",
+      "tts.nothingToRead": "Там нечего читать — пришлите мне текст, чтобы я его произнёс.",
       "tts.nothingAfterClean": "После обработки читать оказалось нечего — попробуйте обычный текст (буквы или слова).",
       "tts.tooFast": "Ого, помедленнее — попробуйте ещё раз через мгновение.",
       "tts.blocked": "Этот текст содержит запрещённое слово, поэтому я его пропустил.",
       "tts.queued": "Готово — добавлено в очередь.",
-      "tts.busy": "Я сейчас занят — попробуйте ещё раз через мгновение."
+      "tts.busy": "Я сейчас занят — попробуйте ещё раз через мгновение.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -594,11 +729,16 @@
       "shutup.nothing": "Зараз нічого не відтворюється.",
       "shutup.done": "🤐 Гаразд, я замовкаю — очистив усе, що було в черзі.",
       "tts.notInVoice": "Я ще не в голосовому каналі — зайдіть до нього та виконайте /join, потім спробуйте ще раз.",
+      "tts.nothingToRead": "Там немає що читати — надішліть мені текст для озвучення.",
       "tts.nothingAfterClean": "Після очищення не залишилося тексту для читання — спробуйте звичайний текст (літери або слова).",
       "tts.tooFast": "Ого, трохи повільніше — спробуйте за мить.",
       "tts.blocked": "Цей текст містить заблоковане слово, тому я його пропустив.",
       "tts.queued": "Готово — воно в черзі.",
-      "tts.busy": "Я зараз зайнятий — спробуйте за мить."
+      "tts.busy": "Я зараз зайнятий — спробуйте за мить.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -614,11 +754,16 @@
       "shutup.nothing": "Қазір ештеңе ойналып жатқан жоқ.",
       "shutup.done": "🤐 Жарайды, тоқтаймын — кезектегі барлығын тазаладым.",
       "tts.notInVoice": "Мен әлі дауыстық арнада емеспін — біреуіне кіріп, /join орындаңыз, содан кейін қайталап көріңіз.",
+      "tts.nothingToRead": "Онда оқитын ештеңе жоқ — маған айтатын мәтін жіберіңіз.",
       "tts.nothingAfterClean": "Оны тазалағаннан кейін оқитын ештеңе қалмады — қалыпты мәтін жазып көріңіз (әріптер немесе сөздер).",
       "tts.tooFast": "Тоқтай тұрыңыз, сәл жайлаңыз — сәлден соң қайталап көріңіз.",
       "tts.blocked": "Бұл мәтінде бұғатталған сөз бар, сондықтан оны өткізіп жібердім.",
       "tts.queued": "Түсіндім — ол кезекте.",
-      "tts.busy": "Қазір бос емеспін — сәлден соң қайталап көріңіз."
+      "tts.busy": "Қазір бос емеспін — сәлден соң қайталап көріңіз.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -634,11 +779,16 @@
       "shutup.nothing": "Тренутно се ништа не пушта.",
       "shutup.done": "🤐 У реду, ућуткаћу се — очистио сам све из реда.",
       "tts.notInVoice": "Још нисам у гласовном каналу — уђи у један и покрени /join, па покушај поново.",
+      "tts.nothingToRead": "Ту нема шта да се прочита — пошаљи ми неки текст да изговорим.",
       "tts.nothingAfterClean": "Након сређивања није остало ништа за читање — пробај са обичним текстом (слова или речи).",
       "tts.tooFast": "Полако, успори мало — покушај поново за тренутак.",
       "tts.blocked": "Тај текст садржи блокирану реч, па сам га прескочио.",
       "tts.queued": "Разумем — на реду је.",
-      "tts.busy": "Тренутно сам заузет — покушај поново за тренутак."
+      "tts.busy": "Тренутно сам заузет — покушај поново за тренутак.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -654,11 +804,16 @@
       "shutup.nothing": "لا شيء قيد التشغيل الآن.",
       "shutup.done": "🤐 حسناً، سأتوقف — مسحت كل شيء في قائمة الانتظار.",
       "tts.notInVoice": "لست في قناة صوتية بعد — انضم إلى واحدة وشغّل /join، ثم حاول مجدداً.",
+      "tts.nothingToRead": "لا يوجد شيء لأقرأه هناك — أرسل لي بعض النص لأقوله.",
       "tts.nothingAfterClean": "بعد تنظيف النص لم يبقَ شيء لأقرأه — جرّب نصاً عادياً (حروف أو كلمات).",
       "tts.tooFast": "مهلاً، تمهّل قليلاً — حاول مرة أخرى بعد لحظة.",
       "tts.blocked": "هذا النص يحتوي على كلمة محظورة، لذا تخطيته.",
       "tts.queued": "تمام — إنه في قائمة الانتظار.",
-      "tts.busy": "أنا مشغول الآن — حاول مرة أخرى بعد لحظة."
+      "tts.busy": "أنا مشغول الآن — حاول مرة أخرى بعد لحظة.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -674,11 +829,16 @@
       "shutup.nothing": "الان چیزی در حال پخش نیست.",
       "shutup.done": "🤐 باشه، ساکت می‌شوم — همهٔ صف را پاک کردم.",
       "tts.notInVoice": "هنوز در کانال صوتی نیستم — وارد یکی شو و /join را اجرا کن، بعد دوباره امتحان کن.",
+      "tts.nothingToRead": "چیزی برای خواندن آنجا نیست — یک متن برایم بفرست تا بگویم.",
       "tts.nothingAfterClean": "بعد از مرتب‌سازی، چیزی برای خواندن باقی نماند — یک متن معمولی امتحان کن (حروف یا کلمات).",
       "tts.tooFast": "آرام‌تر، کمی صبر کن — چند لحظهٔ دیگر دوباره امتحان کن.",
       "tts.blocked": "این متن یک کلمهٔ مسدودشده دارد، برای همین از آن رد شدم.",
       "tts.queued": "گرفتمش — در صف قرار گرفت.",
-      "tts.busy": "الان مشغولم — چند لحظهٔ دیگر دوباره امتحان کن."
+      "tts.busy": "الان مشغولم — چند لحظهٔ دیگر دوباره امتحان کن.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -694,11 +854,16 @@
       "shutup.nothing": "ახლა არაფერი უკრავს.",
       "shutup.done": "🤐 კარგი, გავჩუმდები — რიგში ყველაფერი გავასუფთავე.",
       "tts.notInVoice": "ჯერ ხმოვან არხში არ ვარ — შედით ერთ-ერთში და გაუშვით /join, შემდეგ სცადეთ ხელახლა.",
+      "tts.nothingToRead": "იქ წასაკითხი არაფერია — გამომიგზავნეთ ტექსტი, რომ წავიკითხო.",
       "tts.nothingAfterClean": "დამუშავების შემდეგ წასაკითხი აღარაფერი დარჩა — სცადეთ ჩვეულებრივი ტექსტი (ასოები ან სიტყვები).",
       "tts.tooFast": "ჰეი, ცოტა შენელდით — სცადეთ ხელახლა ერთ წამში.",
       "tts.blocked": "ეს ტექსტი შეიცავს დაბლოკილ სიტყვას, ამიტომ გამოვტოვე.",
       "tts.queued": "მიღებულია — რიგშია.",
-      "tts.busy": "ახლა დაკავებული ვარ — სცადეთ ხელახლა ერთ წამში."
+      "tts.busy": "ახლა დაკავებული ვარ — სცადეთ ხელახლა ერთ წამში.",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -714,11 +879,16 @@
       "shutup.nothing": "अहिले केही बजिरहेको छैन।",
       "shutup.done": "🤐 हुन्छ, म रोक्छु — लाममा भएको सबै खाली गरेँ।",
       "tts.notInVoice": "म अझै कुनै भ्वाइस च्यानलमा छैन — एउटामा जोडिएर /join चलाउनुहोस्, अनि फेरि प्रयास गर्नुहोस्।",
+      "tts.nothingToRead": "त्यहाँ पढ्न केही छैन — मलाई भन्नका लागि केही पाठ पठाउनुहोस्।",
       "tts.nothingAfterClean": "त्यो सफा गरेपछि पढ्न केही बाँकी रहेन — केही सामान्य पाठ (अक्षर वा शब्दहरू) प्रयास गर्नुहोस्।",
       "tts.tooFast": "ओहो, अलिकति बिस्तारै — केही क्षणपछि फेरि प्रयास गर्नुहोस्।",
       "tts.blocked": "त्यो पाठमा रोकिएको शब्द छ, त्यसैले मैले त्यसलाई छोडेँ।",
       "tts.queued": "बुझेँ — यो लाममा छ।",
-      "tts.busy": "म अहिले व्यस्त छु — केही क्षणपछि फेरि प्रयास गर्नुहोस्।"
+      "tts.busy": "म अहिले व्यस्त छु — केही क्षणपछि फेरि प्रयास गर्नुहोस्।",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -734,11 +904,16 @@
       "shutup.nothing": "现在没有在播放任何内容。",
       "shutup.done": "🤐 好的，我停下——已清空队列中的所有内容。",
       "tts.notInVoice": "我还没在语音频道里——加入一个并运行 /join，然后再试一次。",
+      "tts.nothingToRead": "那里没有可朗读的内容——发点文字给我念吧。",
       "tts.nothingAfterClean": "整理之后没剩下可朗读的内容——试试普通文字（字母或词语）。",
       "tts.tooFast": "哇，慢一点——稍后再试。",
       "tts.blocked": "这段文字包含被屏蔽的词，所以我跳过了它。",
       "tts.queued": "收到——已加入队列。",
-      "tts.busy": "我现在有点忙——稍后再试。"
+      "tts.busy": "我现在有点忙——稍后再试。",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -754,11 +929,16 @@
       "shutup.nothing": "今は何も再生していません。",
       "shutup.done": "🤐 わかりました、止めます。キューをすべてクリアしました。",
       "tts.notInVoice": "まだボイスチャンネルにいません。参加して /join を実行してから、もう一度お試しください。",
+      "tts.nothingToRead": "読み上げるものがありません。読み上げたいテキストを送ってください。",
       "tts.nothingAfterClean": "整形したら読み上げるものが残りませんでした。通常のテキスト（文字や単語）で試してください。",
       "tts.tooFast": "おっと、少しゆっくりいきましょう。少し待ってからもう一度お試しください。",
       "tts.blocked": "そのテキストにはブロックされた単語が含まれているのでスキップしました。",
       "tts.queued": "了解！キューに追加しました。",
-      "tts.busy": "今は手がふさがっています。少し待ってからもう一度お試しください。"
+      "tts.busy": "今は手がふさがっています。少し待ってからもう一度お試しください。",
+      "ttsFile.tooLong": "Keep an audio file export to {max} characters or fewer.",
+      "ttsFile.unavailable": "Your selected voice is not available on this instance. Choose another voice and try again.",
+      "ttsFile.ready": "Your private audio file is ready. It is not stored by Vozen after delivery.",
+      "ttsFile.failed": "I could not create that audio file. Please try again."
     }
   }
 }

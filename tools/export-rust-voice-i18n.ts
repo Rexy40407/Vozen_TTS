@@ -24,11 +24,16 @@ const KEYS = [
   'shutup.nothing',
   'shutup.done',
   'tts.notInVoice',
+  'tts.nothingToRead',
   'tts.nothingAfterClean',
   'tts.tooFast',
   'tts.blocked',
   'tts.queued',
   'tts.busy',
+  'ttsFile.tooLong',
+  'ttsFile.unavailable',
+  'ttsFile.ready',
+  'ttsFile.failed',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };

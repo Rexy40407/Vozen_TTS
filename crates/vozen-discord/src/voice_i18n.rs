@@ -42,6 +42,20 @@ impl VoiceResponseLocalizer {
         parameters: &BTreeMap<&str, String>,
     ) -> Option<String> {
         let key = response.catalog_key()?;
+        self.render_key(key, interaction_locale, guild_locale, parameters)
+    }
+
+    /// Renders a generated Node catalogue key for a separately promoted voice-adjacent feature.
+    /// Callers still need a typed outcome before selecting a key; this function never accepts
+    /// user-provided key material.
+    #[must_use]
+    pub fn render_key(
+        &self,
+        key: &str,
+        interaction_locale: Option<&str>,
+        guild_locale: Option<&str>,
+        parameters: &BTreeMap<&str, String>,
+    ) -> Option<String> {
         let locale = self
             .catalog
             .resolve_locale(interaction_locale, guild_locale);
@@ -110,5 +124,20 @@ mod tests {
             )
             .expect("Portuguese fallback");
         assert!(fallback.contains("{channel}"));
+    }
+
+    #[test]
+    fn localizer_renders_the_generated_private_file_messages() {
+        let localizer = VoiceResponseLocalizer::from_generated_contract().expect("catalog");
+        let mut parameters = BTreeMap::new();
+        parameters.insert("max", "500".into());
+        let french = localizer
+            .render_key("ttsFile.tooLong", Some("fr-CA"), None, &parameters)
+            .expect("French file message");
+        assert!(french.contains("500"));
+        assert_ne!(
+            french,
+            "Your text is too long for a file (max 500 characters)."
+        );
     }
 }
