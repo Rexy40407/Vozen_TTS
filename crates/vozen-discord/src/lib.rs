@@ -33,6 +33,7 @@ mod core_voice_response;
 mod core_voice_service;
 mod interaction_dispatch;
 mod message_admission;
+mod message_interaction;
 mod message_pipeline;
 mod message_voice_service;
 mod planned_rejoin;
@@ -62,6 +63,7 @@ pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
 };
 pub use message_admission::{DiscordMessageFacts, admit_discord_message};
+pub use message_interaction::DiscordMessageFactsOwned;
 pub use message_pipeline::{MessagePipelineOutcome, MessageSpeechPipeline};
 pub use message_voice_service::{MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService};
 pub use planned_rejoin::{
@@ -165,6 +167,12 @@ impl GatewayState {
     pub fn bot_voice_channel_id(&self, guild_id: &str) -> Option<String> {
         let bot_user_id = self.bot_user_id.read().ok()?.clone()?;
         self.voice_channel_id(guild_id, &bot_user_id)
+    }
+
+    /// Current bot identity received from Discord READY. It is transient process state, never a
+    /// persisted credential or application configuration value.
+    pub fn bot_user_id(&self) -> Option<String> {
+        self.bot_user_id.read().ok()?.clone()
     }
 
     /// Returns the current voice channel only if the gateway has seen a state for this exact
