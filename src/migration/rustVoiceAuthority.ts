@@ -83,6 +83,10 @@ export function rustVoicePreferencesOwnCommand(
     rustPiperCompatible(ttsEngine) &&
     commandName === 'voice' &&
     (subcommand === 'set' ||
+      subcommand === 'favorite' ||
+      subcommand === 'unfavorite' ||
+      subcommand === 'favorites' ||
+      subcommand === 'recent' ||
       subcommand === 'reset' ||
       subcommand === 'detection' ||
       subcommand === 'opt-out' ||

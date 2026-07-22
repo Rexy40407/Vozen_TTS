@@ -58,6 +58,8 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoicePreferencesOwnCommand('voice', 'detection', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('voice', 'effect', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('voice', 'set', 'true')).toBe(true);
+    expect(rustVoicePreferencesOwnCommand('voice', 'favorite', 'true')).toBe(true);
+    expect(rustVoicePreferencesOwnCommand('voice', 'favorites', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('voice', 'preview', 'true')).toBe(false);
     expect(rustVoicePreferencesOwnCommand('translate', 'reset', 'true')).toBe(false);
   });

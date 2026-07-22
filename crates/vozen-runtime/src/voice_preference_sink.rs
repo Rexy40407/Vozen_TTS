@@ -64,6 +64,10 @@ fn is_promoted(command: &VoicePreferenceCommand) -> bool {
         command,
         VoicePreferenceCommand::Reset
             | VoicePreferenceCommand::Set { .. }
+            | VoicePreferenceCommand::Favorite { .. }
+            | VoicePreferenceCommand::Unfavorite { .. }
+            | VoicePreferenceCommand::Favorites
+            | VoicePreferenceCommand::Recent
             | VoicePreferenceCommand::Detection { .. }
             | VoicePreferenceCommand::OptOut
             | VoicePreferenceCommand::OptIn
@@ -136,6 +140,78 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
             },
             parsed,
         );
+        let content = match outcome {
+            VoicePreferenceOutcome::FavoriteSaved { model } => format!(
+                "Added **{}** to your favourites.",
+                self.displays
+                    .voice_name(Some(&command.locale), &self.available_models, &model)
+            ),
+            VoicePreferenceOutcome::FavoriteLimit => {
+                "Your favourites are full. Remove one before adding another.".to_owned()
+            }
+            VoicePreferenceOutcome::FavoriteRemoved { .. } => {
+                "Voice removed from your favourites.".to_owned()
+            }
+            VoicePreferenceOutcome::FavoriteNotSaved { .. } => {
+                "That voice was not saved.".to_owned()
+            }
+            VoicePreferenceOutcome::VoiceLibrary { favorites, models } => {
+                let title = if favorites {
+                    "Favourite voices"
+                } else {
+                    "Recent voices"
+                };
+                if models.is_empty() {
+                    format!("**{title}**\nNo available voices yet.")
+                } else {
+                    let lines = models
+                        .iter()
+                        .map(|model| {
+                            format!(
+                                "â€¢ {} â€” `{model}`",
+                                self.displays.voice_name(
+                                    Some(&command.locale),
+                                    &self.available_models,
+                                    model,
+                                )
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    format!("**{title}**\n{lines}")
+                }
+            }
+            outcome => self.localized_outcome(outcome, &command.locale, guild_locale)?,
+        };
+        command
+            .edit_response(
+                &context,
+                EditInteractionResponse::new()
+                    .content(content)
+                    .allowed_mentions(
+                        CreateAllowedMentions::new()
+                            .all_users(false)
+                            .all_roles(false)
+                            .everyone(false),
+                    ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(())
+    }
+
+    async fn on_guild_delete(&self, _guild_id: &str) -> Result<(), GatewayEventDispatchError> {
+        Ok(())
+    }
+}
+
+impl VoicePreferenceGatewaySink {
+    fn localized_outcome(
+        &self,
+        outcome: VoicePreferenceOutcome,
+        interaction_locale: &str,
+        guild_locale: Option<&str>,
+    ) -> Result<String, GatewayEventDispatchError> {
         let mut parameters = BTreeMap::new();
         let key = match outcome {
             VoicePreferenceOutcome::SavedVoice {
@@ -145,8 +221,11 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
             } => {
                 parameters.insert(
                     "name",
-                    self.displays
-                        .voice_name(Some(&command.locale), &self.available_models, &model),
+                    self.displays.voice_name(
+                        Some(interaction_locale),
+                        &self.available_models,
+                        &model,
+                    ),
                 );
                 parameters.insert("model", model);
                 parameters.insert("speed", speed.to_string());
@@ -188,27 +267,15 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
             | VoicePreferenceOutcome::PremiumEngineLocked { .. }
             | VoicePreferenceOutcome::GuildRequired
             | VoicePreferenceOutcome::StoreUnavailable => "error.generic",
+            VoicePreferenceOutcome::FavoriteSaved { .. }
+            | VoicePreferenceOutcome::FavoriteLimit
+            | VoicePreferenceOutcome::FavoriteRemoved { .. }
+            | VoicePreferenceOutcome::FavoriteNotSaved { .. }
+            | VoicePreferenceOutcome::VoiceLibrary { .. } => {
+                unreachable!("voice-library outcomes render before localization")
+            }
         };
-        let content = self.message(key, &command.locale, guild_locale, &parameters)?;
-        command
-            .edit_response(
-                &context,
-                EditInteractionResponse::new()
-                    .content(content)
-                    .allowed_mentions(
-                        CreateAllowedMentions::new()
-                            .all_users(false)
-                            .all_roles(false)
-                            .everyone(false),
-                    ),
-            )
-            .await
-            .map_err(|_| GatewayEventDispatchError)?;
-        Ok(())
-    }
-
-    async fn on_guild_delete(&self, _guild_id: &str) -> Result<(), GatewayEventDispatchError> {
-        Ok(())
+        self.message(key, interaction_locale, guild_locale, &parameters)
     }
 }
 
@@ -224,6 +291,10 @@ mod tests {
             speed: None,
             engine: None,
         }));
+        assert!(is_promoted(&VoicePreferenceCommand::Favorite {
+            model: "en_US-amy-medium".into(),
+        }));
+        assert!(is_promoted(&VoicePreferenceCommand::Recent));
         assert!(is_promoted(&VoicePreferenceCommand::Effect {
             effect: "robot".into()
         }));
