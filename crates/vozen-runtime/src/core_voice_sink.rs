@@ -4,6 +4,7 @@
 //! Until the runtime explicitly installs this sink, Node remains the interaction authority.
 
 use std::{
+    collections::BTreeMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -19,7 +20,7 @@ use serenity::{
 use vozen_discord::{
     CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor, CoreVoiceInteractionFacts,
     DiscordMessageFactsOwned, GatewayEventDispatchError, GatewayEventSink, GatewayState,
-    MessageVoiceInvocation, MessageVoiceService, SongbirdCommandPlayback,
+    MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService, SongbirdCommandPlayback,
     SongbirdVoiceSessionTransport, collect_message_media,
 };
 use vozen_store::SqliteStore;
@@ -45,6 +46,7 @@ pub struct CoreVoiceGatewaySink {
     dependencies: Mutex<Option<Arc<VoiceDependencies>>>,
     executor: Mutex<Option<Arc<Executor>>>,
     message_service: Mutex<Option<Arc<MessageService>>>,
+    last_speakers: Mutex<BTreeMap<String, String>>,
 }
 
 impl CoreVoiceGatewaySink {
@@ -61,6 +63,7 @@ impl CoreVoiceGatewaySink {
             dependencies: Mutex::new(None),
             executor: Mutex::new(None),
             message_service: Mutex::new(None),
+            last_speakers: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -159,19 +162,25 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         };
         let media = collect_message_media(&message);
         let service = self.message_service(&context)?;
+        let announce_speaker = self.announce_speaker(&facts, &message);
         let resolve_user = |_: &str| "someone".to_owned();
         let resolve_channel = |_: &str| "a channel".to_owned();
-        let _ = service
+        let outcome = service
             .execute(MessageVoiceInvocation {
                 facts: facts.as_borrowed(),
                 raw: &message.content,
                 media: &media,
                 detected_language: None,
-                announce_speaker: None,
+                announce_speaker: announce_speaker.as_deref(),
                 resolve_user: &resolve_user,
                 resolve_channel: &resolve_channel,
             })
             .await;
+        if outcome == MessageVoiceOutcome::Queued
+            && let Ok(mut speakers) = self.last_speakers.lock()
+        {
+            speakers.insert(facts.guild_id, facts.author_id);
+        }
         Ok(())
     }
 
@@ -238,8 +247,69 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 service.forget_guild(guild_id);
             }
         }
+        if let Ok(mut speakers) = self.last_speakers.lock() {
+            speakers.remove(guild_id);
+        }
         Ok(())
     }
+}
+
+impl CoreVoiceGatewaySink {
+    fn announce_speaker(
+        &self,
+        facts: &DiscordMessageFactsOwned,
+        message: &serenity::model::channel::Message,
+    ) -> Option<String> {
+        let (xsaid, nickname) = self.store.lock().ok().and_then(|store| {
+            let config = store.guild_config(&facts.guild_id).ok()?;
+            let nickname = store.nickname(&facts.guild_id, &facts.author_id).ok()?;
+            Some((config.xsaid, nickname))
+        })?;
+        if !xsaid
+            || self
+                .last_speakers
+                .lock()
+                .ok()
+                .and_then(|speakers| speakers.get(&facts.guild_id).cloned())
+                .is_some_and(|last| last == facts.author_id)
+        {
+            return None;
+        }
+        let raw = nickname
+            .or_else(|| {
+                message
+                    .member
+                    .as_ref()
+                    .and_then(|member| member.nick.clone())
+            })
+            .unwrap_or_else(|| message.author.name.clone());
+        sanitize_speaker_name(&raw)
+    }
+}
+
+fn sanitize_speaker_name(raw: &str) -> Option<String> {
+    let mut output = String::with_capacity(raw.len().min(40));
+    let mut last_was_space = true;
+    for character in raw.chars() {
+        let allowed = character.is_alphanumeric() || matches!(character, '-' | '\'' | '\u{2019}');
+        if allowed {
+            output.push(character);
+            last_was_space = false;
+        } else if character.is_whitespace() || character == '_' {
+            if !last_was_space && !output.is_empty() {
+                output.push(' ');
+                last_was_space = true;
+            }
+        }
+        if output.chars().count() >= 40 {
+            break;
+        }
+    }
+    let value = output.trim();
+    value
+        .chars()
+        .any(char::is_alphanumeric)
+        .then(|| value.to_owned())
 }
 
 #[cfg(test)]
@@ -263,5 +333,18 @@ mod tests {
         };
         assert_eq!(options.piper_concurrency, 2);
         assert_eq!(options.queue_cap, 20);
+    }
+
+    #[test]
+    fn speaker_names_keep_only_pronounceable_characters() {
+        assert_eq!(
+            sanitize_speaker_name("🔥xX_Pro_Xx🔥").as_deref(),
+            Some("xX Pro Xx")
+        );
+        assert_eq!(sanitize_speaker_name("---").as_deref(), None);
+        assert_eq!(
+            sanitize_speaker_name("Rexy’s test").as_deref(),
+            Some("Rexy’s test")
+        );
     }
 }
