@@ -24,9 +24,10 @@ use vozen_core::detect_language;
 use vozen_discord::{
     CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor, CoreVoiceInteractionFacts,
     DiscordDashboardOptionsProvider, DiscordMessageFactsOwned, GatewayEventDispatchError,
-    GatewayEventSink, GatewayState, MessageVoiceInvocation, MessageVoiceOutcome,
-    MessageVoiceService, PlannedRejoinService, RejoinChannelState, SongbirdCommandPlayback,
-    SongbirdVoiceSessionTransport, collect_message_media, consume_planned_rejoin_marker,
+    GatewayEventSink, GatewayState, GuildSynthesisCoordinator, MessageVoiceInvocation,
+    MessageVoiceOutcome, MessageVoiceService, PlannedRejoinService, RejoinChannelState,
+    SongbirdCommandPlayback, SongbirdVoiceSessionTransport, collect_message_media,
+    consume_planned_rejoin_marker,
 };
 use vozen_store::SqliteStore;
 
@@ -42,6 +43,7 @@ type MessageService = MessageVoiceService<PiperCommandSynthesizer, SongbirdComma
 struct VoiceDependencies {
     synthesizer: PiperCommandSynthesizer,
     playback: SongbirdCommandPlayback,
+    synthesis: GuildSynthesisCoordinator,
 }
 
 pub struct CoreVoiceGatewaySink {
@@ -94,6 +96,7 @@ impl CoreVoiceGatewaySink {
                 options.piper_concurrency,
             ),
             playback: SongbirdCommandPlayback::new(context.clone(), options.queue_cap),
+            synthesis: GuildSynthesisCoordinator::default(),
         });
         *current = Some(dependencies.clone());
         Ok(dependencies)
@@ -109,12 +112,13 @@ impl CoreVoiceGatewaySink {
         }
         let options = &self.options;
         let dependencies = self.dependencies(context)?;
-        let executor = CoreVoiceInteractionExecutor::new(
+        let executor = CoreVoiceInteractionExecutor::new_with_synthesis_coordinator(
             self.store.clone(),
             self.gateway_state.clone(),
             SongbirdVoiceSessionTransport::new(context.clone()),
             dependencies.synthesizer.clone(),
             dependencies.playback.clone(),
+            dependencies.synthesis.clone(),
             options.settings.clone(),
             Arc::new(system_now_ms),
         )
@@ -136,10 +140,11 @@ impl CoreVoiceGatewaySink {
             return Ok(service.clone());
         }
         let dependencies = self.dependencies(context)?;
-        let service = Arc::new(MessageVoiceService::new(
+        let service = Arc::new(MessageVoiceService::new_with_synthesis_coordinator(
             self.store.clone(),
             dependencies.synthesizer.clone(),
             dependencies.playback.clone(),
+            dependencies.synthesis.clone(),
             self.options.settings.clone(),
             Arc::new(system_now_ms),
         ));

@@ -15,9 +15,9 @@ use vozen_store::SqliteStore;
 
 use crate::{
     CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceInteractionFacts, CoreVoiceOutcome,
-    CoreVoiceResponse, CoreVoiceService, CoreVoiceSettings, GatewayState, VoiceResponseLocalizer,
-    VoiceResponseLocalizerError, VoiceSessionTransport, core_voice_response,
-    parse_promoted_core_voice,
+    CoreVoiceResponse, CoreVoiceService, CoreVoiceSettings, GatewayState,
+    GuildSynthesisCoordinator, VoiceResponseLocalizer, VoiceResponseLocalizerError,
+    VoiceSessionTransport, core_voice_response, parse_promoted_core_voice,
 };
 
 #[derive(Debug, Error)]
@@ -60,13 +60,37 @@ impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P> {
         settings: CoreVoiceSettings,
         now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
     ) -> Result<Self, CoreVoiceExecutionError> {
+        Self::new_with_synthesis_coordinator(
+            store,
+            gateway_state,
+            transport,
+            synthesizer,
+            playback,
+            GuildSynthesisCoordinator::default(),
+            settings,
+            now_ms,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_synthesis_coordinator(
+        store: Arc<Mutex<SqliteStore>>,
+        gateway_state: GatewayState,
+        transport: T,
+        synthesizer: S,
+        playback: P,
+        synthesis: GuildSynthesisCoordinator,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) -> Result<Self, CoreVoiceExecutionError> {
         Ok(Self {
-            service: CoreVoiceService::new(
+            service: CoreVoiceService::new_with_synthesis_coordinator(
                 store.clone(),
                 gateway_state.clone(),
                 transport,
                 synthesizer,
                 playback,
+                synthesis,
                 settings,
                 now_ms,
             ),

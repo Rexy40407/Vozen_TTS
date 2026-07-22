@@ -20,7 +20,8 @@ use vozen_store::{
 
 use crate::{
     CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceSettings, DiscordMessageFacts,
-    MessagePipelineOutcome, MessagePreparationInput, MessageSpeechPipeline, admit_discord_message,
+    GuildSynthesisCoordinator, MessagePipelineOutcome, MessagePreparationInput,
+    MessageSpeechPipeline, admit_discord_message,
 };
 
 /// Per-message values which are never persisted. `facts` must come from the same Discord event
@@ -57,6 +58,7 @@ pub struct MessageVoiceService<S, P> {
     count_gate: Mutex<CountGate>,
     synthesizer: S,
     playback: P,
+    synthesis: GuildSynthesisCoordinator,
     settings: CoreVoiceSettings,
     now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
 }
@@ -69,6 +71,24 @@ impl<S, P> MessageVoiceService<S, P> {
         settings: CoreVoiceSettings,
         now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
     ) -> Self {
+        Self::new_with_synthesis_coordinator(
+            store,
+            synthesizer,
+            playback,
+            GuildSynthesisCoordinator::default(),
+            settings,
+            now_ms,
+        )
+    }
+
+    pub fn new_with_synthesis_coordinator(
+        store: Arc<Mutex<SqliteStore>>,
+        synthesizer: S,
+        playback: P,
+        synthesis: GuildSynthesisCoordinator,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) -> Self {
         Self {
             store,
             pipeline: Mutex::new(MessageSpeechPipeline::default()),
@@ -76,6 +96,7 @@ impl<S, P> MessageVoiceService<S, P> {
             count_gate: Mutex::new(CountGate::default()),
             synthesizer,
             playback,
+            synthesis,
             settings,
             now_ms,
         }
@@ -165,6 +186,18 @@ where
             return MessageVoiceOutcome::SpamSuppressed;
         }
 
+        let admitted_generation = self
+            .synthesis
+            .admission_generation(invocation.facts.guild_id);
+        let mut synthesis = self
+            .synthesis
+            .acquire(invocation.facts.guild_id, admitted_generation)
+            .await;
+        if synthesis.was_cleared() {
+            return MessageVoiceOutcome::PlaybackFailed;
+        }
+        synthesis.activate();
+
         match self.playback.reserve(invocation.facts.guild_id, lane).await {
             Ok(true) => {}
             Ok(false) => {
@@ -172,6 +205,13 @@ where
                 return MessageVoiceOutcome::Busy;
             }
             Err(_) => return MessageVoiceOutcome::PlaybackFailed,
+        }
+        if synthesis.cancelled() {
+            let _ = self
+                .playback
+                .cancel_reservation(invocation.facts.guild_id, lane)
+                .await;
+            return MessageVoiceOutcome::PlaybackFailed;
         }
         let wav = match self.synthesizer.synthesize(&request).await {
             Ok(wav) => {
@@ -187,6 +227,13 @@ where
                 return MessageVoiceOutcome::SynthesisFailed;
             }
         };
+        if synthesis.cancelled() {
+            let _ = self
+                .playback
+                .cancel_reservation(invocation.facts.guild_id, lane)
+                .await;
+            return MessageVoiceOutcome::PlaybackFailed;
+        }
         match self
             .playback
             .enqueue_reserved(

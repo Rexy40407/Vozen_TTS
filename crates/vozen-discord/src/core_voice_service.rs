@@ -16,7 +16,8 @@ use vozen_store::SqliteStore;
 
 use crate::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline, CoreVoiceCommand,
-    GatewayState, JoinVoiceOutcome, LeaveVoiceOutcome, VoiceSessionService, VoiceSessionTransport,
+    GatewayState, GuildSynthesisCoordinator, JoinVoiceOutcome, LeaveVoiceOutcome,
+    VoiceSessionService, VoiceSessionTransport,
 };
 
 #[derive(Debug, Error)]
@@ -129,6 +130,7 @@ pub struct CoreVoiceService<T, S, P> {
     speech: Mutex<CommandSpeechPipeline>,
     synthesizer: S,
     playback: P,
+    synthesis: GuildSynthesisCoordinator,
     settings: CoreVoiceSettings,
     now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
 }
@@ -144,6 +146,29 @@ impl<T, S, P> CoreVoiceService<T, S, P> {
         settings: CoreVoiceSettings,
         now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
     ) -> Self {
+        Self::new_with_synthesis_coordinator(
+            store,
+            gateway_state,
+            transport,
+            synthesizer,
+            playback,
+            GuildSynthesisCoordinator::default(),
+            settings,
+            now_ms,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_synthesis_coordinator(
+        store: Arc<Mutex<SqliteStore>>,
+        gateway_state: GatewayState,
+        transport: T,
+        synthesizer: S,
+        playback: P,
+        synthesis: GuildSynthesisCoordinator,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) -> Self {
         let sessions = VoiceSessionService::new(store.clone(), gateway_state.clone(), transport);
         Self {
             store,
@@ -152,6 +177,7 @@ impl<T, S, P> CoreVoiceService<T, S, P> {
             speech: Mutex::new(CommandSpeechPipeline::default()),
             synthesizer,
             playback,
+            synthesis,
             settings,
             now_ms,
         }
@@ -196,7 +222,13 @@ where
     async fn skip(&self, guild_id: &str) -> CorePlaybackControlOutcome {
         match self.playback.state(guild_id).await {
             Ok(CommandPlaybackState::NoSession) => CorePlaybackControlOutcome::NotInVoice,
-            Ok(CommandPlaybackState::Idle) => CorePlaybackControlOutcome::NothingPlaying,
+            Ok(CommandPlaybackState::Idle) => {
+                if self.synthesis.cancel_active(guild_id) {
+                    CorePlaybackControlOutcome::Completed
+                } else {
+                    CorePlaybackControlOutcome::NothingPlaying
+                }
+            }
             Ok(CommandPlaybackState::Active) => match self.playback.skip(guild_id).await {
                 Ok(()) => CorePlaybackControlOutcome::Completed,
                 Err(_) => CorePlaybackControlOutcome::PlaybackFailed,
@@ -206,9 +238,22 @@ where
     }
 
     async fn silence(&self, guild_id: &str) -> CorePlaybackControlOutcome {
+        let cancelled_synthesis = self.synthesis.clear(guild_id);
         match self.playback.state(guild_id).await {
-            Ok(CommandPlaybackState::NoSession) => CorePlaybackControlOutcome::NotInVoice,
-            Ok(CommandPlaybackState::Idle) => CorePlaybackControlOutcome::NothingPlaying,
+            Ok(CommandPlaybackState::NoSession) => {
+                if cancelled_synthesis {
+                    CorePlaybackControlOutcome::Completed
+                } else {
+                    CorePlaybackControlOutcome::NotInVoice
+                }
+            }
+            Ok(CommandPlaybackState::Idle) => {
+                if cancelled_synthesis {
+                    CorePlaybackControlOutcome::Completed
+                } else {
+                    CorePlaybackControlOutcome::NothingPlaying
+                }
+            }
             Ok(CommandPlaybackState::Active) => match self.playback.silence(guild_id).await {
                 Ok(()) => CorePlaybackControlOutcome::Completed,
                 Err(_) => CorePlaybackControlOutcome::PlaybackFailed,
@@ -266,10 +311,27 @@ where
             Ok(CommandSpeechOutcome::FullyBlocked) => return CoreTtsOutcome::FullyBlocked,
             Err(_) => return CoreTtsOutcome::StoreUnavailable,
         };
+        let admitted_generation = self.synthesis.admission_generation(invocation.guild_id);
+        let mut synthesis = self
+            .synthesis
+            .acquire(invocation.guild_id, admitted_generation)
+            .await;
+        if synthesis.was_cleared() {
+            return CoreTtsOutcome::PlaybackFailed;
+        }
+        synthesis.activate();
+
         match self.playback.reserve(invocation.guild_id, lane).await {
             Ok(true) => {}
             Ok(false) => return CoreTtsOutcome::Busy,
             Err(_) => return CoreTtsOutcome::PlaybackFailed,
+        }
+        if synthesis.cancelled() {
+            let _ = self
+                .playback
+                .cancel_reservation(invocation.guild_id, lane)
+                .await;
+            return CoreTtsOutcome::PlaybackFailed;
         }
         let wav = match self.synthesizer.synthesize(&request).await {
             Ok(wav) => wav,
@@ -281,6 +343,13 @@ where
                 return CoreTtsOutcome::SynthesisFailed;
             }
         };
+        if synthesis.cancelled() {
+            let _ = self
+                .playback
+                .cancel_reservation(invocation.guild_id, lane)
+                .await;
+            return CoreTtsOutcome::PlaybackFailed;
+        }
         match self
             .playback
             .enqueue_reserved(
