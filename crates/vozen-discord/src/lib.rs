@@ -7,7 +7,7 @@
 //! operations have their Node parity contracts and tests.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     env,
     sync::{Arc, LazyLock, RwLock},
 };
@@ -50,12 +50,13 @@ pub use speech_preparation::{
 };
 pub use voice_playback::{VoicePlaybackError, join_and_play_wav, leave_voice};
 
-/// Read-only gateway facts that other Rust adapters may use only after their own OAuth or
-/// permission checks. Guild membership is intentionally the sole fact here: it contains no user
-/// profiles, messages, tokens or voice state.
+/// Minimal gateway facts used by the Rust adapters. It intentionally contains neither message
+/// content, profiles nor tokens: the only live voice data is a transient guild/user/channel ID
+/// mapping required to enforce same-call speech admission without Serenity's global member cache.
 #[derive(Clone, Default)]
 pub struct GatewayState {
     guild_ids: Arc<RwLock<BTreeSet<String>>>,
+    voice_channels: Arc<RwLock<BTreeMap<String, BTreeMap<String, String>>>>,
 }
 
 impl GatewayState {
@@ -72,6 +73,17 @@ impl GatewayState {
             .unwrap_or_default()
     }
 
+    /// Returns the current voice channel only if the gateway has seen a state for this exact
+    /// guild/user pair. Missing state intentionally fails closed in the speech admission layer.
+    pub fn voice_channel_id(&self, guild_id: &str, user_id: &str) -> Option<String> {
+        self.voice_channels.read().ok().and_then(|guilds| {
+            guilds
+                .get(guild_id)
+                .and_then(|users| users.get(user_id))
+                .cloned()
+        })
+    }
+
     fn replace_guilds(&self, guild_ids: impl IntoIterator<Item = String>) {
         if let Ok(mut current) = self.guild_ids.write() {
             *current = guild_ids.into_iter().collect();
@@ -84,9 +96,44 @@ impl GatewayState {
         }
     }
 
+    fn replace_guild_voice_states(&self, guild: &serenity::model::guild::Guild) {
+        let voice_states = guild
+            .voice_states
+            .iter()
+            .filter_map(|(user_id, state)| {
+                state
+                    .channel_id
+                    .map(|channel_id| (user_id.get().to_string(), channel_id.get().to_string()))
+            })
+            .collect::<BTreeMap<_, _>>();
+        if let Ok(mut guilds) = self.voice_channels.write() {
+            guilds.insert(guild.id.get().to_string(), voice_states);
+        }
+    }
+
+    fn update_voice_state(&self, guild_id: &str, user_id: &str, channel_id: Option<String>) {
+        if let Ok(mut guilds) = self.voice_channels.write() {
+            let users = guilds.entry(guild_id.to_owned()).or_default();
+            match channel_id {
+                Some(channel_id) => {
+                    users.insert(user_id.to_owned(), channel_id);
+                }
+                None => {
+                    users.remove(user_id);
+                    if users.is_empty() {
+                        guilds.remove(guild_id);
+                    }
+                }
+            }
+        }
+    }
+
     fn forget_guild(&self, guild_id: &str) {
         if let Ok(mut current) = self.guild_ids.write() {
             current.remove(guild_id);
+        }
+        if let Ok(mut voice_channels) = self.voice_channels.write() {
+            voice_channels.remove(guild_id);
         }
     }
 }
@@ -220,6 +267,7 @@ impl EventHandler for VozenGatewayHandler {
     ) {
         self.gateway_state
             .remember_guild(guild.id.get().to_string());
+        self.gateway_state.replace_guild_voice_states(&guild);
     }
 
     async fn guild_delete(
@@ -230,6 +278,23 @@ impl EventHandler for VozenGatewayHandler {
     ) {
         self.gateway_state
             .forget_guild(&incomplete.id.get().to_string());
+    }
+
+    async fn voice_state_update(
+        &self,
+        _context: Context,
+        _old: Option<serenity::model::voice::VoiceState>,
+        new: serenity::model::voice::VoiceState,
+    ) {
+        let Some(guild_id) = new.guild_id else {
+            return;
+        };
+        self.gateway_state.update_voice_state(
+            &guild_id.get().to_string(),
+            &new.user_id.get().to_string(),
+            new.channel_id
+                .map(|channel_id| channel_id.get().to_string()),
+        );
     }
 }
 
@@ -267,6 +332,21 @@ mod tests {
         state.forget_guild("guild-b");
         assert_eq!(state.guild_ids(), vec!["guild-a", "guild-c"]);
         assert!(!state.bot_has_guild("guild-b"));
+    }
+
+    #[test]
+    fn gateway_state_removes_transient_voice_state_on_leave_or_guild_delete() {
+        let state = GatewayState::default();
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        assert_eq!(
+            state.voice_channel_id("guild", "user"),
+            Some("voice".into())
+        );
+        state.update_voice_state("guild", "user", None);
+        assert_eq!(state.voice_channel_id("guild", "user"), None);
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.forget_guild("guild");
+        assert_eq!(state.voice_channel_id("guild", "user"), None);
     }
 
     #[test]
