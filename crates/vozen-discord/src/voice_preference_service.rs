@@ -188,10 +188,13 @@ impl VoicePreferenceService {
             engine,
         };
         match store.set_user_voice(guild_id, user_id, &voice) {
-            Ok(()) => VoicePreferenceOutcome::SavedVoice {
-                model,
-                speed,
-                engine,
+            Ok(()) => match store.record_recent_voice(user_id, &model, now_ms) {
+                Ok(()) => VoicePreferenceOutcome::SavedVoice {
+                    model,
+                    speed,
+                    engine,
+                },
+                Err(_) => VoicePreferenceOutcome::StoreUnavailable,
             },
             Err(_) => VoicePreferenceOutcome::StoreUnavailable,
         }
@@ -403,6 +406,14 @@ mod tests {
                 speed: 1.2,
                 engine: UserEngine::Piper
             }
+        );
+        assert_eq!(
+            store
+                .lock()
+                .expect("store")
+                .list_recent_voices("user")
+                .expect("recent voices"),
+            ["pt_PT-tugao-medium"]
         );
         assert_eq!(
             service.execute(

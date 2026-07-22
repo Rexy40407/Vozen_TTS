@@ -55,6 +55,7 @@ mod songbird_transport;
 mod speech_preparation;
 mod translation_command;
 mod translation_preference_command;
+mod voice_display;
 mod voice_i18n;
 mod voice_playback;
 mod voice_preference_command;
@@ -135,6 +136,7 @@ pub use translation_preference_command::{
     TranslationPreferenceCommand, TranslationPreferenceCommandError,
     parse_translation_preference_command,
 };
+pub use voice_display::{VoiceDisplayCatalog, VoiceDisplayError};
 pub use voice_i18n::{VoiceResponseLocalizer, VoiceResponseLocalizerError};
 pub use voice_playback::{
     SongbirdCommandPlayback, VoicePlaybackError, join_and_enqueue_wav, leave_voice,
