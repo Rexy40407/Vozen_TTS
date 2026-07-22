@@ -105,6 +105,7 @@ mod tests {
         MessagePreparationInput {
             guild_id: "guild",
             channel_id: "channel",
+            use_channel_profile: true,
             user_id: "user",
             raw,
             available_models: models,

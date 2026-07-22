@@ -30,6 +30,8 @@ pub enum MessagePreparationOutcome {
 pub struct MessagePreparationInput<'a> {
     pub guild_id: &'a str,
     pub channel_id: &'a str,
+    /// Explicit commands bypass per-channel profiles; passive auto-read uses them.
+    pub use_channel_profile: bool,
     pub user_id: &'a str,
     pub raw: &'a str,
     pub available_models: &'a [String],
@@ -65,7 +67,11 @@ pub fn begin_message_speech(
     input: &MessagePreparationInput<'_>,
 ) -> Result<Result<MessageSpeechDraft, MessagePreparationOutcome>, StoreError> {
     let guild = store.guild_config(input.guild_id)?;
-    let profile = store.channel_profile(input.guild_id, input.channel_id)?;
+    let profile = if input.use_channel_profile {
+        store.channel_profile(input.guild_id, input.channel_id)?
+    } else {
+        None
+    };
     let max_chars = profile
         .as_ref()
         .and_then(|profile| profile.max_chars)
@@ -203,6 +209,7 @@ mod tests {
         MessagePreparationInput {
             guild_id: "guild",
             channel_id: "channel",
+            use_channel_profile: true,
             user_id: "user",
             raw: "hello <@42>",
             available_models: models,
