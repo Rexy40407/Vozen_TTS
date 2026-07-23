@@ -31,6 +31,13 @@ impl GatewayEventSink for CompositeGatewayEventSink {
         Ok(())
     }
 
+    async fn on_guild_create(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
+        for sink in &self.sinks {
+            sink.on_guild_create(guild_id).await?;
+        }
+        Ok(())
+    }
+
     async fn on_message(
         &self,
         context: Context,
