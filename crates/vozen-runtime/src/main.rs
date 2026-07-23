@@ -1770,6 +1770,15 @@ async fn run() -> Result<(), RuntimeError> {
     // does any work. Keep the handle alive for the whole process; future adapters share it.
     let store = Arc::new(Mutex::new(SqliteStore::open(&config.database_path)?));
     run_startup_data_hygiene(&config.database_path);
+    let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
+    match transcription_adapter::check_ffmpeg(std::path::Path::new(&ffmpeg_path)).await {
+        transcription_adapter::FfmpegHealth::Available { version } => {
+            eprintln!("[health] ffmpeg OK ({version})");
+        }
+        transcription_adapter::FfmpegHealth::Unavailable { reason } => {
+            eprintln!("[health] ffmpeg unavailable ({reason}); voice playback may fail");
+        }
+    }
     if let Some(redemption_secret) = config.vote_redemption_secret.as_deref() {
         store
             .lock()

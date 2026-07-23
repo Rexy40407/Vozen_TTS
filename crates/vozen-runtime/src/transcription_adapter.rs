@@ -68,6 +68,42 @@ pub enum TranscriptionError {
     Unavailable,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FfmpegHealth {
+    Available { version: String },
+    Unavailable { reason: String },
+}
+
+/// Performs the same early, non-fatal FFmpeg probe as the Node runtime. The caller logs the
+/// result, but a missing binary never prevents the control-plane gateway from starting.
+pub async fn check_ffmpeg(path: &Path) -> FfmpegHealth {
+    let result = timeout(
+        Duration::from_secs(5),
+        Command::new(path).arg("-version").output(),
+    )
+    .await;
+    match result {
+        Ok(Ok(output)) if output.status.success() => FfmpegHealth::Available {
+            version: output
+                .stdout
+                .split(|byte| *byte == b'\n' || *byte == b'\r')
+                .next()
+                .filter(|line| !line.is_empty())
+                .map(|line| String::from_utf8_lossy(line).into_owned())
+                .unwrap_or_else(|| "unknown".to_owned()),
+        },
+        Ok(Ok(output)) => FfmpegHealth::Unavailable {
+            reason: format!("process exited with {}", output.status),
+        },
+        Ok(Err(error)) => FfmpegHealth::Unavailable {
+            reason: error.to_string(),
+        },
+        Err(_) => FfmpegHealth::Unavailable {
+            reason: "probe timed out after 5 seconds".to_owned(),
+        },
+    }
+}
+
 /// Removes temporary STT workspaces left by a process that was killed between conversion and
 /// cleanup. Only entries created by this runtime (`vozen-stt-*`) and older than five minutes are
 /// eligible. Recent entries and symlinks are deliberately skipped so a live session or an
@@ -179,6 +215,13 @@ mod tests {
         assert_eq!(sweep_orphan_stt_temps(&root, now_ms), 0);
         assert!(root.join("vozen-stt-live").exists());
         fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn ffmpeg_health_keeps_a_missing_binary_non_fatal() {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let result = runtime.block_on(check_ffmpeg(Path::new("definitely-not-a-vozen-ffmpeg")));
+        assert!(matches!(result, FfmpegHealth::Unavailable { .. }));
     }
 }
 
