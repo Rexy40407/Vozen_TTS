@@ -59,6 +59,7 @@ pub const FULL_RUNTIME_FLAGS: &[&str] = &[
     "RUST_TRANSLATION_ADMIN_ENABLED",
     "RUST_TRANSLATION_PREFERENCES_ENABLED",
     "RUST_AUTOMATIC_TRANSLATION_ENABLED",
+    "RUST_WELCOME_ENABLED",
     "RUST_MESSAGE_AUTOREAD_ENABLED",
     "RUST_RANDOMIZER_ENABLED",
     "RUST_CAST_ENABLED",
@@ -147,5 +148,6 @@ mod tests {
     fn full_contract_includes_live_game_and_transcription_surfaces() {
         assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_GAME_PLAY_ENABLED"));
         assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_TRANSCRIBE_LIVE_ENABLED"));
+        assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_WELCOME_ENABLED"));
     }
 }

@@ -13,6 +13,7 @@ use std::{
         Arc, LazyLock, RwLock,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serenity::{
@@ -81,6 +82,7 @@ mod game_play_admission;
 mod game_score_command;
 mod game_session;
 mod gateway_composite;
+mod gateway_watch;
 mod greeting;
 mod guess_language_driver;
 mod guild_synthesis_coordinator;
@@ -981,6 +983,8 @@ pub enum DiscordRuntimeError {
     MissingToken,
     #[error("Discord gateway error: {0}")]
     Serenity(Box<serenity::Error>),
+    #[error("Discord gateway remained unavailable beyond the watchdog limit")]
+    GatewayWatchdogRestart,
 }
 
 /// Starts the Discord gateway using Discord's recommended shard count. Command registration is
@@ -1009,6 +1013,7 @@ pub async fn run_discord_gateway_with_state_and_sink(
     gateway_state: GatewayState,
     event_sink: Option<Arc<dyn GatewayEventSink>>,
 ) -> Result<(), DiscordRuntimeError> {
+    let watch_state = gateway_state.clone();
     let mut client = Client::builder(config.token, vozen_gateway_intents())
         // Registers the voice gateway/driver but never joins a call by itself. Join/rejoin
         // policy remains behind a tested command handler in a later migration step.
@@ -1020,11 +1025,72 @@ pub async fn run_discord_gateway_with_state_and_sink(
         })
         .await
         .map_err(|error| DiscordRuntimeError::Serenity(Box::new(error)))?;
-    client
-        .start_autosharded()
-        .await
-        .map_err(|error| DiscordRuntimeError::Serenity(Box::new(error)))?;
+    if gateway_watch_enabled() {
+        tokio::select! {
+            result = client.start_autosharded() => {
+                result.map_err(|error| DiscordRuntimeError::Serenity(Box::new(error)))?;
+            }
+            _ = run_gateway_watch(watch_state) => {
+                return Err(DiscordRuntimeError::GatewayWatchdogRestart);
+            }
+        }
+    } else {
+        client
+            .start_autosharded()
+            .await
+            .map_err(|error| DiscordRuntimeError::Serenity(Box::new(error)))?;
+    }
     Ok(())
+}
+
+fn gateway_watch_enabled() -> bool {
+    env::var("RUST_RUNTIME_MODE")
+        .ok()
+        .is_some_and(|mode| mode.trim().eq_ignore_ascii_case("full"))
+}
+
+fn system_now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().try_into().unwrap_or(i64::MAX))
+        .unwrap_or_default()
+}
+
+async fn run_gateway_watch(gateway_state: GatewayState) {
+    let mut interval = tokio::time::interval(std::time::Duration::from_millis(
+        gateway_watch::CHECK_INTERVAL_MS as u64,
+    ));
+    let mut unhealthy_since_ms = None;
+    let mut healthy_ticks = 0_u32;
+    loop {
+        interval.tick().await;
+        let decision = gateway_watch::evaluate_gateway(
+            gateway_state.is_ready(),
+            unhealthy_since_ms,
+            system_now_ms(),
+            gateway_watch::MAX_DOWN_MS,
+        );
+        unhealthy_since_ms = decision.unhealthy_since_ms;
+        if decision.healthy {
+            if healthy_ticks.is_multiple_of(5) {
+                eprintln!(
+                    "[gateway] healthy: Ready, {} guild(s)",
+                    gateway_state.guild_count()
+                );
+            }
+            healthy_ticks = healthy_ticks.saturating_add(1);
+            continue;
+        }
+        healthy_ticks = 0;
+        eprintln!(
+            "[gateway] NOT-Ready for {}s",
+            decision.down_ms.saturating_div(1_000)
+        );
+        if decision.should_restart {
+            eprintln!("[gateway] unavailable beyond watchdog limit; requesting supervisor restart");
+            return;
+        }
+    }
 }
 
 struct VozenGatewayHandler {
