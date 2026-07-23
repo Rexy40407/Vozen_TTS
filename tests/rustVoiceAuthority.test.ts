@@ -296,6 +296,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoicePreferencesOwnCommand('voice', 'list', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('voice', 'browse', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('voice', 'preview', 'true')).toBe(false);
+    expect(rustVoicePreferencesOwnCommand('voice', 'preview', undefined, 'piper', 'true')).toBe(
+      true,
+    );
+    expect(rustVoicePreferencesOwnCommand('voice', 'preview', undefined, 'router', 'true')).toBe(
+      false,
+    );
     expect(rustVoicePreferencesOwnCommand('voice', 'config', 'true')).toBe(false);
     expect(rustVoicePreferencesOwnCommand('translate', 'reset', 'true')).toBe(false);
   });

@@ -1,8 +1,8 @@
 //! Strict parser for the textual preference subset of `/voice`.
 //!
-//! Previews and the interactive configuration panel still require audio/UI adapters, so they
-//! deliberately remain with Node. The read-only browser and preference mutations have complete
-//! contracts and can be proven independently before ownership is switched.
+//! Preview playback is handled by the core voice service so it can share admission and Songbird
+//! queue state. The interactive configuration panel remains Node-owned; the read-only browser
+//! and preference mutations have complete contracts and can be promoted independently.
 
 use serenity::model::application::{CommandData, CommandDataOption, CommandDataOptionValue};
 use thiserror::Error;

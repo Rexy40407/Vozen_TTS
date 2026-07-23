@@ -11,8 +11,11 @@ use std::{
 
 use async_trait::async_trait;
 use thiserror::Error;
-use vozen_core::{QueueEnqueueOptions, QueueLane, QueueSource, SynthRequest, SynthesisEngine};
-use vozen_store::SqliteStore;
+use vozen_core::{
+    GuildRateLimiters, QueueEnqueueOptions, QueueLane, QueueSource, RolePolicy, SynthRequest,
+    SynthesisEngine, UserSpeechAdmission, admit_user_speech,
+};
+use vozen_store::{SqliteStore, UserEngine};
 
 use crate::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline, CoreVoiceCommand,
@@ -96,10 +99,24 @@ pub enum CoreTtsOutcome {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CorePreviewOutcome {
+    NotInPlayer,
+    NotInSameVoice,
+    RateLimited,
+    Busy,
+    UnknownModel,
+    Queued,
+    SynthesisFailed,
+    PlaybackFailed,
+    StoreUnavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreVoiceOutcome {
     Joined(JoinVoiceOutcome),
     Left(LeaveVoiceOutcome),
     Tts(CoreTtsOutcome),
+    Preview(CorePreviewOutcome),
     Skipped(CorePlaybackControlOutcome),
     Silenced(CorePlaybackControlOutcome),
     /// A contract-valid but not-yet-promoted command must remain with the Node runtime.
@@ -130,6 +147,7 @@ pub struct CoreVoiceService<T, S, P> {
     gateway_state: GatewayState,
     sessions: VoiceSessionService<T>,
     speech: Mutex<CommandSpeechPipeline>,
+    preview_limiters: Mutex<GuildRateLimiters>,
     synthesizer: S,
     playback: P,
     synthesis: GuildSynthesisCoordinator,
@@ -177,6 +195,7 @@ impl<T, S, P> CoreVoiceService<T, S, P> {
             gateway_state,
             sessions,
             speech: Mutex::new(CommandSpeechPipeline::default()),
+            preview_limiters: Mutex::new(GuildRateLimiters::default()),
             synthesizer,
             playback,
             synthesis,
@@ -217,6 +236,191 @@ where
             }
             CoreVoiceCommand::Tts { text } => {
                 CoreVoiceOutcome::Tts(self.execute_tts(invocation, text).await)
+            }
+            CoreVoiceCommand::VoicePreview { model } => CoreVoiceOutcome::Preview(
+                self.execute_preview(
+                    invocation,
+                    model.as_deref(),
+                    "Hi, I'm Vozen. type it, hear it.",
+                )
+                .await,
+            ),
+        }
+    }
+
+    /// Executes a deliberately selected voice sample. The gateway supplies the localized sample
+    /// phrase; this keeps the semantic service independent from Discord's locale catalog while
+    /// preserving the Node precedence of explicit model, saved model, guild default and runtime
+    /// default.
+    pub async fn execute_preview(
+        &self,
+        invocation: CoreVoiceInvocation<'_>,
+        explicit_model: Option<&str>,
+        sample: &str,
+    ) -> CorePreviewOutcome {
+        if let Some(model) = explicit_model
+            && !self
+                .settings
+                .available_models
+                .iter()
+                .any(|available| available == model)
+        {
+            return CorePreviewOutcome::UnknownModel;
+        }
+
+        let playback_state = match self.playback.state(invocation.guild_id).await {
+            Ok(state) => state,
+            Err(_) => return CorePreviewOutcome::NotInPlayer,
+        };
+        if matches!(playback_state, CommandPlaybackState::NoSession) {
+            return CorePreviewOutcome::NotInPlayer;
+        }
+
+        let roles = invocation
+            .member_role_ids
+            .map(|roles| roles.iter().map(String::as_str).collect::<Vec<_>>());
+        let (model, speed, engine, lane) = {
+            let store = match self.store.lock() {
+                Ok(store) => store,
+                Err(_) => return CorePreviewOutcome::StoreUnavailable,
+            };
+            let config = match store.guild_config(invocation.guild_id) {
+                Ok(config) => config,
+                Err(_) => return CorePreviewOutcome::StoreUnavailable,
+            };
+            let policy = RolePolicy {
+                priority_role_id: config.priority_role_id.as_deref(),
+                blocked_role_id: config.blocked_role_id.as_deref(),
+            };
+            let lane = match admit_user_speech(
+                self.gateway_state
+                    .voice_channel_id(invocation.guild_id, invocation.user_id)
+                    .as_deref(),
+                self.gateway_state
+                    .bot_voice_channel_id(invocation.guild_id)
+                    .as_deref(),
+                roles.as_deref(),
+                policy,
+            ) {
+                UserSpeechAdmission::Allowed { lane } => lane,
+                // Node intentionally uses the same not-in-voice response for blocked preview
+                // requests; do not expose role-policy state through this sample command.
+                UserSpeechAdmission::Denied { .. } => {
+                    return CorePreviewOutcome::NotInSameVoice;
+                }
+            };
+            let allowed = match self.preview_limiters.lock() {
+                Ok(mut limiters) => limiters.allow(
+                    invocation.guild_id,
+                    invocation.user_id,
+                    config.rate_per_min,
+                    (self.now_ms)(),
+                ),
+                Err(_) => return CorePreviewOutcome::StoreUnavailable,
+            };
+            if !allowed {
+                return CorePreviewOutcome::RateLimited;
+            }
+
+            let stored = match store.get_user_voice(invocation.guild_id, invocation.user_id) {
+                Ok(stored) => stored,
+                Err(_) => return CorePreviewOutcome::StoreUnavailable,
+            };
+            let model = explicit_model
+                .map(str::to_owned)
+                .or_else(|| {
+                    stored
+                        .as_ref()
+                        .map(|voice| voice.model.clone())
+                        .filter(|model| !model.trim().is_empty())
+                })
+                .or_else(|| {
+                    (!config.default_voice.trim().is_empty()).then(|| config.default_voice.clone())
+                })
+                .unwrap_or_else(|| self.settings.default_voice.clone());
+            let speed = stored
+                .as_ref()
+                .map(|voice| voice.speed)
+                .filter(|speed| speed.is_finite())
+                .unwrap_or(self.settings.default_speed);
+            let engine = resolve_preview_engine(
+                &store,
+                invocation.guild_id,
+                invocation.user_id,
+                stored.map(|voice| voice.engine),
+                (self.now_ms)(),
+            );
+            (model, speed, engine, lane)
+        };
+
+        let admitted_generation = self.synthesis.admission_generation(invocation.guild_id);
+        let mut synthesis = self
+            .synthesis
+            .acquire(invocation.guild_id, admitted_generation)
+            .await;
+        if synthesis.was_cleared() {
+            return CorePreviewOutcome::PlaybackFailed;
+        }
+        synthesis.activate();
+        match self.playback.reserve(invocation.guild_id, lane).await {
+            Ok(true) => {}
+            Ok(false) => return CorePreviewOutcome::Busy,
+            Err(_) => return CorePreviewOutcome::PlaybackFailed,
+        }
+        let request = SynthRequest {
+            text: sample.to_owned(),
+            model,
+            speed,
+            engine,
+            segments: None,
+            single_voice: Some(true),
+            emphasis_source: None,
+        };
+        if synthesis.cancelled() {
+            let _ = self
+                .playback
+                .cancel_reservation(invocation.guild_id, lane)
+                .await;
+            return CorePreviewOutcome::PlaybackFailed;
+        }
+        let wav = match self.synthesizer.synthesize(&request).await {
+            Ok(wav) => wav,
+            Err(_) => {
+                let _ = self
+                    .playback
+                    .cancel_reservation(invocation.guild_id, lane)
+                    .await;
+                return CorePreviewOutcome::SynthesisFailed;
+            }
+        };
+        if synthesis.cancelled() {
+            let _ = self
+                .playback
+                .cancel_reservation(invocation.guild_id, lane)
+                .await;
+            return CorePreviewOutcome::PlaybackFailed;
+        }
+        match self
+            .playback
+            .enqueue_reserved(
+                invocation.guild_id,
+                &wav,
+                QueueEnqueueOptions {
+                    author_id: Some(invocation.user_id),
+                    source: QueueSource::Command,
+                    lane,
+                    created_at_ms: (self.now_ms)().max(0) as u64,
+                },
+            )
+            .await
+        {
+            Ok(()) => CorePreviewOutcome::Queued,
+            Err(_) => {
+                let _ = self
+                    .playback
+                    .cancel_reservation(invocation.guild_id, lane)
+                    .await;
+                CorePreviewOutcome::PlaybackFailed
             }
         }
     }
@@ -384,6 +588,51 @@ where
             speech.forget_guild(guild_id);
         }
         self.synthesis.forget_guild(guild_id);
+        if let Ok(mut limiters) = self.preview_limiters.lock() {
+            limiters.forget_guild(guild_id);
+        }
+    }
+}
+
+fn resolve_preview_engine(
+    store: &SqliteStore,
+    guild_id: &str,
+    user_id: &str,
+    stored: Option<UserEngine>,
+    now_ms: i64,
+) -> SynthesisEngine {
+    match stored.unwrap_or(UserEngine::Google) {
+        UserEngine::Google => SynthesisEngine::Default,
+        UserEngine::Piper => SynthesisEngine::Piper,
+        UserEngine::Kokoro => {
+            if store
+                .is_user_premium(user_id, now_ms)
+                .and_then(|user| {
+                    store
+                        .is_guild_premium(guild_id, now_ms)
+                        .map(|guild| user || guild)
+                })
+                .unwrap_or(false)
+            {
+                SynthesisEngine::Kokoro
+            } else {
+                SynthesisEngine::Default
+            }
+        }
+        UserEngine::Gcloud => {
+            let unlocked = store.is_user_premium(user_id, now_ms).unwrap_or(false)
+                || store
+                    .resolve_guild_pass_owner(guild_id, now_ms)
+                    .ok()
+                    .flatten()
+                    .is_some()
+                || store.is_guild_premium(guild_id, now_ms).unwrap_or(false);
+            if unlocked {
+                SynthesisEngine::Gcloud
+            } else {
+                SynthesisEngine::Default
+            }
+        }
     }
 }
 
@@ -593,6 +842,53 @@ mod tests {
             CoreVoiceOutcome::Tts(CoreTtsOutcome::NotInSameVoice)
         );
         assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn preview_requires_live_same_call_before_synthesis() {
+        let (service, _, state) = service(true);
+        state.update_voice_state("guild", "user", Some("other".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::VoicePreview { model: None },
+                )
+                .await,
+            CoreVoiceOutcome::Preview(CorePreviewOutcome::NotInSameVoice)
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn preview_uses_the_same_bounded_queue_and_rejects_unknown_explicit_models() {
+        let (service, _, state) = service(true);
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::VoicePreview {
+                        model: Some("missing-model".into()),
+                    },
+                )
+                .await,
+            CoreVoiceOutcome::Preview(CorePreviewOutcome::UnknownModel)
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
+
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::VoicePreview { model: None },
+                )
+                .await,
+            CoreVoiceOutcome::Preview(CorePreviewOutcome::Queued)
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 1);
     }
 
     #[tokio::test]

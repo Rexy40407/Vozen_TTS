@@ -22,6 +22,11 @@ pub enum CoreVoiceCommand {
     Tts {
         text: String,
     },
+    /// `/voice preview` is an explicitly requested sample and therefore uses the same-call
+    /// admission, bounded queue and synthesis path as `/tts`.
+    VoicePreview {
+        model: Option<String>,
+    },
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -43,7 +48,14 @@ pub fn parse_promoted_core_voice(
     command: &CommandData,
 ) -> Result<Option<CoreVoiceCommand>, CoreVoiceCommandError> {
     let path = command_path_from_options(&command.options);
-    if route_command(&command.name, command.kind.into(), &path)? != CommandArea::CoreVoice {
+    let area = route_command(&command.name, command.kind.into(), &path)?;
+    if command.name == "voice" && path == ["preview"] {
+        if area != CommandArea::Personal {
+            return Ok(None);
+        }
+        return parse_voice_preview(&command.options).map(Some);
+    }
+    if area != CommandArea::CoreVoice {
         return Ok(None);
     }
     match command.name.as_str() {
@@ -69,6 +81,33 @@ pub fn parse_promoted_core_voice(
         }
         _ => Ok(None),
     }
+}
+
+fn parse_voice_preview(
+    options: &[serenity::model::application::CommandDataOption],
+) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
+    if options.iter().any(|option| option.name != "preview") || options.len() != 1 {
+        return Err(CoreVoiceCommandError::UnexpectedOption);
+    }
+    let serenity::model::application::CommandDataOptionValue::SubCommand(options) =
+        &options[0].value
+    else {
+        return Err(CoreVoiceCommandError::UnexpectedOption);
+    };
+    if options.len() > 1 || options.iter().any(|option| option.name != "model") {
+        return Err(CoreVoiceCommandError::UnexpectedOption);
+    }
+    let model = options
+        .first()
+        .map(|option| {
+            let serenity::model::application::CommandDataOptionValue::String(model) = &option.value
+            else {
+                return Err(CoreVoiceCommandError::InvalidText);
+            };
+            Ok(model.clone())
+        })
+        .transpose()?;
+    Ok(CoreVoiceCommand::VoicePreview { model })
 }
 
 #[cfg(test)]
@@ -119,6 +158,15 @@ mod tests {
             })
         );
         assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"voice","type":1,"options":[{"name":"preview","type":1,"options":[{"name":"model","type":3,"value":"en_US-amy-medium"}]}]}"#,
+            ))
+            .expect("voice preview"),
+            Some(CoreVoiceCommand::VoicePreview {
+                model: Some("en_US-amy-medium".into())
+            })
+        );
+        assert_eq!(
             parse_promoted_core_voice(&command(r#"{"id":"1","name":"queue","type":1,"options":[{"name":"show","type":1,"options":[]}]}"#))
                 .expect("other area"),
             None
@@ -150,5 +198,11 @@ mod tests {
             )),
             Err(CoreVoiceCommandError::UnexpectedOption)
         ));
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"voice","type":1,"options":[{"name":"preview","type":1,"options":[{"name":"model","type":4,"value":42}]}]}"#,
+            )),
+            Err(CoreVoiceCommandError::InvalidText)
+        );
     }
 }

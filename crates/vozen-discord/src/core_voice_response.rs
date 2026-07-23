@@ -5,8 +5,8 @@
 //! downgrading command responses to English.
 
 use crate::{
-    CorePlaybackControlOutcome, CoreTtsOutcome, CoreVoiceOutcome, JoinVoiceOutcome,
-    LeaveVoiceOutcome,
+    CorePlaybackControlOutcome, CorePreviewOutcome, CoreTtsOutcome, CoreVoiceOutcome,
+    JoinVoiceOutcome, LeaveVoiceOutcome,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +33,14 @@ pub enum CoreVoiceResponse {
     SynthesisFailed,
     PlaybackFailed,
     Queued,
+    PreviewNotInPlayer,
+    PreviewNotInSameVoice,
+    PreviewRateLimited,
+    PreviewBusy,
+    PreviewUnknownModel,
+    PreviewQueued,
+    PreviewSynthesisFailed,
+    PreviewPlaybackFailed,
     StoreUnavailable,
     NotPromoted,
 }
@@ -67,6 +75,13 @@ impl CoreVoiceResponse {
             Self::RateLimited => "tts.tooFast",
             Self::Busy => "tts.busy",
             Self::Queued => "tts.queued",
+            Self::PreviewNotInPlayer => "voice.notInVoice",
+            Self::PreviewNotInSameVoice => "tts.notInVoice",
+            Self::PreviewRateLimited => "tts.tooFast",
+            Self::PreviewBusy => "tts.busy",
+            Self::PreviewUnknownModel => "voice.unknownModel",
+            Self::PreviewQueued => "voice.previewPlaying",
+            Self::PreviewSynthesisFailed | Self::PreviewPlaybackFailed => "error.generic",
             Self::NotPromoted => return None,
         })
     }
@@ -132,6 +147,29 @@ pub fn core_voice_response(outcome: CoreVoiceOutcome) -> CoreVoiceResponse {
         CoreVoiceOutcome::Tts(CoreTtsOutcome::StoreUnavailable) => {
             CoreVoiceResponse::StoreUnavailable
         }
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::NotInPlayer) => {
+            CoreVoiceResponse::PreviewNotInPlayer
+        }
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::NotInSameVoice) => {
+            CoreVoiceResponse::PreviewNotInSameVoice
+        }
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::RateLimited) => {
+            CoreVoiceResponse::PreviewRateLimited
+        }
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::Busy) => CoreVoiceResponse::PreviewBusy,
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::UnknownModel) => {
+            CoreVoiceResponse::PreviewUnknownModel
+        }
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::Queued) => CoreVoiceResponse::PreviewQueued,
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::SynthesisFailed) => {
+            CoreVoiceResponse::PreviewSynthesisFailed
+        }
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::PlaybackFailed) => {
+            CoreVoiceResponse::PreviewPlaybackFailed
+        }
+        CoreVoiceOutcome::Preview(CorePreviewOutcome::StoreUnavailable) => {
+            CoreVoiceResponse::StoreUnavailable
+        }
         CoreVoiceOutcome::NotPromoted => CoreVoiceResponse::NotPromoted,
     }
 }
@@ -155,6 +193,10 @@ mod tests {
                 CorePlaybackControlOutcome::NothingPlaying
             )),
             CoreVoiceResponse::ShutUpNothingPlaying
+        );
+        assert_eq!(
+            core_voice_response(CoreVoiceOutcome::Preview(CorePreviewOutcome::Queued)),
+            CoreVoiceResponse::PreviewQueued
         );
     }
 

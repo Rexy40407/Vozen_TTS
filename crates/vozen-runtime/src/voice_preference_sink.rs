@@ -1,9 +1,8 @@
 //! Opt-in ephemeral adapter for the textual preference leaves of `/voice`.
 //!
-//! The mixed `/voice` surface also contains a model browser, preview playback and an interactive
-//! panel. Those remain Node-owned. The read-only list and preference leaves are safe to promote
-//! independently without
-//! consuming a command whose UI contract Rust does not yet implement.
+//! The mixed `/voice` surface also contains the interactive configuration panel. Preview playback
+//! is owned by the core voice sink so it shares the live Songbird queue; this sink owns only the
+//! browser and durable preference leaves.
 
 use std::{
     collections::{BTreeMap, BTreeSet},

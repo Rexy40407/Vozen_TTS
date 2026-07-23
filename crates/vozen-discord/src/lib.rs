@@ -195,8 +195,8 @@ pub use core_voice_interaction::CoreVoiceInteractionFacts;
 pub use core_voice_response::{CoreVoiceResponse, core_voice_response};
 pub use core_voice_service::{
     CommandPlaybackError, CommandPlaybackState, CommandSpeechSynthesizer, CommandSynthesisError,
-    CommandVoicePlayback, CorePlaybackControlOutcome, CoreTtsOutcome, CoreVoiceInvocation,
-    CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
+    CommandVoicePlayback, CorePlaybackControlOutcome, CorePreviewOutcome, CoreTtsOutcome,
+    CoreVoiceInvocation, CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
 };
 pub use dashboard_options::{
     DiscordDashboardOption, DiscordDashboardOptions, DiscordDashboardOptionsProvider,

@@ -108,7 +108,9 @@ impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P> {
     ) -> Result<bool, CoreVoiceExecutionError> {
         Ok(matches!(
             parse_promoted_core_voice(command).map_err(|_| CoreVoiceExecutionError::Command)?,
-            Some(crate::CoreVoiceCommand::Tts { .. })
+            Some(
+                crate::CoreVoiceCommand::Tts { .. } | crate::CoreVoiceCommand::VoicePreview { .. },
+            )
         ))
     }
 }
@@ -132,11 +134,35 @@ where
         else {
             return Ok(CoreVoiceInteractionExecution::NotPromoted);
         };
-        let defer_ephemeral = matches!(command, crate::CoreVoiceCommand::Tts { .. });
-        let outcome = self
-            .service
-            .execute(facts.invocation(resolve_user, resolve_channel), &command)
-            .await;
+        let defer_ephemeral = matches!(
+            command,
+            crate::CoreVoiceCommand::Tts { .. } | crate::CoreVoiceCommand::VoicePreview { .. }
+        );
+        let outcome = if let crate::CoreVoiceCommand::VoicePreview { model } = &command {
+            let guild_locale = self.guild_locale(facts);
+            let sample = self
+                .localizer
+                .render_key(
+                    "preview.sample",
+                    interaction_locale,
+                    guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )
+                .ok_or(CoreVoiceExecutionError::MissingResponse)?;
+            CoreVoiceOutcome::Preview(
+                self.service
+                    .execute_preview(
+                        facts.invocation(resolve_user, resolve_channel),
+                        model.as_deref(),
+                        &sample,
+                    )
+                    .await,
+            )
+        } else {
+            self.service
+                .execute(facts.invocation(resolve_user, resolve_channel), &command)
+                .await
+        };
         let (response, parameters, guild_locale) = self.response_context(outcome, facts);
         let content = self
             .localizer
@@ -207,6 +233,14 @@ where
         (response, parameters, guild_locale)
     }
 
+    fn guild_locale(&self, facts: &CoreVoiceInteractionFacts) -> Option<String> {
+        self.store
+            .lock()
+            .ok()
+            .and_then(|store| store.guild_config(&facts.guild_id).ok())
+            .map(|config| config.locale)
+    }
+
     pub fn forget_guild(&self, guild_id: &str) {
         self.service.forget_guild(guild_id);
     }
@@ -225,11 +259,22 @@ mod tests {
     }
 
     #[test]
-    fn only_tts_requires_an_ephemeral_defer_and_unpromoted_commands_stay_unclaimed() {
+    fn speech_commands_require_an_ephemeral_defer_and_unpromoted_commands_stay_unclaimed() {
         assert!(CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&command(
             r#"{"id":"1","name":"tts","type":1,"options":[{"name":"text","type":3,"value":"hello"}]}"#
         ))
         .expect("tts"));
+        let preview = command(
+            r#"{"id":"1","name":"voice","type":1,"options":[{"name":"preview","type":1,"options":[]}] }"#,
+        );
+        assert_eq!(
+            crate::parse_promoted_core_voice(&preview).expect("preview parse"),
+            Some(crate::CoreVoiceCommand::VoicePreview { model: None })
+        );
+        assert!(
+            CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&preview)
+                .expect("voice preview")
+        );
         assert!(
             !CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&command(
                 r#"{"id":"1","name":"join","type":1,"options":[]}"#

@@ -401,34 +401,37 @@ export function rustVoiceOwnsCommand(
 }
 
 /**
- * `/voice` is a mixed surface.  Rust may claim only the preference leaves with a complete
- * localised response contract; the model picker, preview and interactive panel stay Node-owned
- * until their display and playback contracts have parity. The read-only browser has its own
- * bounded Rust session and is safe to share this canary.
+ * `/voice` is a mixed surface. Rust's audio core owns `preview` only when the same Piper voice
+ * runtime that owns `/tts` is explicitly enabled; the remaining preference leaves use their own
+ * canary. The interactive panel stays Node-owned.
  */
 export function rustVoicePreferencesOwnCommand(
   commandName: string,
   subcommand: string | null,
   enabled = process.env.RUST_VOICE_PREFERENCES_ENABLED,
   ttsEngine = process.env.TTS_ENGINE,
+  coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
 ): boolean {
+  const previewEnabled =
+    coreEnabled?.trim().toLowerCase() === 'true' && rustPiperCompatible(ttsEngine);
   return (
-    enabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine) &&
     commandName === 'voice' &&
-    (subcommand === 'list' ||
-      subcommand === 'browse' ||
-      subcommand === 'set' ||
-      subcommand === 'favorite' ||
-      subcommand === 'unfavorite' ||
-      subcommand === 'favorites' ||
-      subcommand === 'recent' ||
-      subcommand === 'reset' ||
-      subcommand === 'detection' ||
-      subcommand === 'opt-out' ||
-      subcommand === 'opt-in' ||
-      subcommand === 'nickname' ||
-      subcommand === 'effect')
+    ((previewEnabled && subcommand === 'preview') ||
+      (enabled?.trim().toLowerCase() === 'true' &&
+        rustPiperCompatible(ttsEngine) &&
+        (subcommand === 'list' ||
+          subcommand === 'browse' ||
+          subcommand === 'set' ||
+          subcommand === 'favorite' ||
+          subcommand === 'unfavorite' ||
+          subcommand === 'favorites' ||
+          subcommand === 'recent' ||
+          subcommand === 'reset' ||
+          subcommand === 'detection' ||
+          subcommand === 'opt-out' ||
+          subcommand === 'opt-in' ||
+          subcommand === 'nickname' ||
+          subcommand === 'effect')))
   );
 }
 
