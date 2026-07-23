@@ -1,8 +1,8 @@
 //! Opt-in ephemeral adapter for the textual preference leaves of `/voice`.
 //!
 //! The mixed `/voice` surface also contains the interactive configuration panel. Preview playback
-//! is owned by the core voice sink so it shares the live Songbird queue; this sink owns only the
-//! browser and durable preference leaves.
+//! is owned by the core voice sink so it shares the live Songbird queue; this sink owns the
+//! browser, configuration panel and durable preference leaves.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -13,10 +13,13 @@ use std::{
 use serenity::{
     builder::{
         CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed,
-        CreateInteractionResponse, CreateInteractionResponseMessage, EditInteractionResponse,
+        CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
+        CreateSelectMenuKind, CreateSelectMenuOption, EditInteractionResponse,
     },
     client::Context,
-    model::application::{ButtonStyle, ComponentInteraction, Interaction},
+    model::application::{
+        ButtonStyle, ComponentInteraction, ComponentInteractionDataKind, Interaction,
+    },
 };
 use vozen_discord::{
     GatewayEventDispatchError, GatewayEventSink, VoiceDisplayCatalog, VoicePreferenceCommand,
@@ -30,6 +33,10 @@ use crate::system_now_ms;
 const BROWSE_PAGE_SIZE: usize = 8;
 const BROWSE_TTL_SECONDS: i64 = 120;
 const MAX_BROWSE_SESSIONS: usize = 512;
+const CONFIG_TTL_MS: i64 = 120_000;
+const MAX_CONFIG_SESSIONS: usize = 256;
+const CONFIG_LANG_PAGE_SIZE: usize = 24;
+const CONFIG_SPEEDS: [f64; 6] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct BrowseVoice {
@@ -49,13 +56,31 @@ struct BrowseSession {
     expires_at: i64,
 }
 
+#[derive(Clone, Debug)]
+struct VoiceConfigSession {
+    owner_user_id: String,
+    guild_id: String,
+    channel_id: String,
+    locale: String,
+    guild_locale: Option<String>,
+    models: Vec<String>,
+    locales: Vec<String>,
+    model: String,
+    engine: String,
+    speed: f64,
+    language_page: usize,
+    issued_at_ms: i64,
+}
+
 pub struct VoicePreferenceGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
     service: VoicePreferenceService,
     localizer: VoiceResponseLocalizer,
     displays: VoiceDisplayCatalog,
     available_models: Vec<String>,
+    default_speed: f64,
     browse_sessions: Arc<Mutex<BTreeMap<String, BrowseSession>>>,
+    config_sessions: Arc<Mutex<BTreeMap<String, VoiceConfigSession>>>,
 }
 
 impl VoicePreferenceGatewaySink {
@@ -64,6 +89,7 @@ impl VoicePreferenceGatewaySink {
         settings: VoicePreferenceSettings,
     ) -> Result<Self, GatewayEventDispatchError> {
         let available_models = settings.available_models.clone();
+        let default_speed = settings.default_speed;
         Ok(Self {
             store: store.clone(),
             service: VoicePreferenceService::new(store, settings),
@@ -72,7 +98,9 @@ impl VoicePreferenceGatewaySink {
             displays: VoiceDisplayCatalog::from_generated_contract()
                 .map_err(|_| GatewayEventDispatchError)?,
             available_models,
+            default_speed,
             browse_sessions: Arc::new(Mutex::new(BTreeMap::new())),
+            config_sessions: Arc::new(Mutex::new(BTreeMap::new())),
         })
     }
 
@@ -86,6 +114,549 @@ impl VoicePreferenceGatewaySink {
         self.localizer
             .render_key(key, Some(interaction_locale), guild_locale, parameters)
             .ok_or(GatewayEventDispatchError)
+    }
+
+    fn prune_config_sessions(&self, now_ms: i64) {
+        if let Ok(mut sessions) = self.config_sessions.lock() {
+            sessions
+                .retain(|_, session| now_ms.saturating_sub(session.issued_at_ms) <= CONFIG_TTL_MS);
+            if sessions.len() > MAX_CONFIG_SESSIONS {
+                let mut oldest = sessions
+                    .iter()
+                    .map(|(id, session)| (id.clone(), session.issued_at_ms))
+                    .collect::<Vec<_>>();
+                oldest.sort_by_key(|(_, issued_at)| *issued_at);
+                for (id, _) in oldest
+                    .into_iter()
+                    .take(sessions.len() - MAX_CONFIG_SESSIONS)
+                {
+                    sessions.remove(&id);
+                }
+            }
+        }
+    }
+
+    fn config_locales(&self) -> Vec<String> {
+        let mut locales = self
+            .available_models
+            .iter()
+            .map(|model| model.split('-').next().unwrap_or(model).to_owned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        locales.sort_by(|left, right| {
+            let left_model = self
+                .available_models
+                .iter()
+                .find(|model| model.starts_with(&format!("{left}-")))
+                .map(String::as_str)
+                .unwrap_or(left);
+            let right_model = self
+                .available_models
+                .iter()
+                .find(|model| model.starts_with(&format!("{right}-")))
+                .map(String::as_str)
+                .unwrap_or(right);
+            self.displays
+                .language_name(Some("en"), &self.available_models, left_model)
+                .cmp(
+                    &self
+                        .displays
+                        .language_name(Some("en"), &self.available_models, right_model),
+                )
+        });
+        locales
+    }
+
+    fn models_for_locale<'a>(&'a self, models: &'a [String], locale: &str) -> Vec<&'a String> {
+        models
+            .iter()
+            .filter(|model| model.split('-').next().unwrap_or(model) == locale)
+            .collect()
+    }
+
+    fn config_summary(
+        &self,
+        session: &VoiceConfigSession,
+    ) -> Result<String, GatewayEventDispatchError> {
+        let mut parameters = BTreeMap::new();
+        parameters.insert(
+            "voice",
+            self.displays
+                .voice_name(Some(&session.locale), &session.models, &session.model),
+        );
+        parameters.insert("engine", config_engine_label(&session.engine).to_owned());
+        parameters.insert("speed", session.speed.to_string());
+        let title = self.message(
+            "voice.config.title",
+            &session.locale,
+            session.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?;
+        let summary = self.message(
+            "voice.config.summary",
+            &session.locale,
+            session.guild_locale.as_deref(),
+            &parameters,
+        )?;
+        Ok(format!("{title}\n{summary}"))
+    }
+
+    fn config_components(
+        &self,
+        session_id: &str,
+        session: &VoiceConfigSession,
+    ) -> Result<Vec<CreateActionRow>, GatewayEventDispatchError> {
+        let page_count = session.locales.len().div_ceil(CONFIG_LANG_PAGE_SIZE).max(1);
+        let page = session.language_page % page_count;
+        let start = page * CONFIG_LANG_PAGE_SIZE;
+        let mut language_options = session.locales
+            [start..(start + CONFIG_LANG_PAGE_SIZE).min(session.locales.len())]
+            .iter()
+            .map(|locale| {
+                let model = self
+                    .models_for_locale(&session.models, locale)
+                    .first()
+                    .map(|model| model.as_str())
+                    .unwrap_or(locale);
+                CreateSelectMenuOption::new(
+                    self.displays
+                        .language_name(Some(&session.locale), &session.models, model),
+                    locale,
+                )
+                .default_selection(
+                    session.model.split('-').next().unwrap_or(&session.model) == locale,
+                )
+            })
+            .collect::<Vec<_>>();
+        if page_count > 1 {
+            language_options.push(CreateSelectMenuOption::new(
+                self.message(
+                    "voice.config.more",
+                    &session.locale,
+                    session.guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?,
+                "__more__",
+            ));
+        }
+        let language = CreateSelectMenu::new(
+            format!("vcfg:lang:{session_id}"),
+            CreateSelectMenuKind::String {
+                options: language_options,
+            },
+        )
+        .placeholder(self.message(
+            "voice.config.pickLanguage",
+            &session.locale,
+            session.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?)
+        .min_values(1)
+        .max_values(1);
+        let mut rows = vec![CreateActionRow::SelectMenu(language)];
+
+        let current_locale = session.model.split('-').next().unwrap_or(&session.model);
+        let voices = self.models_for_locale(&session.models, current_locale);
+        if voices.len() > 1 {
+            let voice_options = voices
+                .into_iter()
+                .map(|model| {
+                    CreateSelectMenuOption::new(
+                        self.displays
+                            .voice_name(Some(&session.locale), &session.models, model),
+                        model,
+                    )
+                    .default_selection(model == &session.model)
+                })
+                .collect();
+            rows.push(CreateActionRow::SelectMenu(
+                CreateSelectMenu::new(
+                    format!("vcfg:voice:{session_id}"),
+                    CreateSelectMenuKind::String {
+                        options: voice_options,
+                    },
+                )
+                .placeholder(self.message(
+                    "voice.config.pickVoice",
+                    &session.locale,
+                    session.guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?)
+                .min_values(1)
+                .max_values(1),
+            ));
+        }
+
+        let engines = ["google", "piper", "kokoro", "gcloud"]
+            .into_iter()
+            .map(|engine| {
+                let label = if matches!(engine, "kokoro" | "gcloud") {
+                    format!("💎 {}", config_engine_label(engine))
+                } else {
+                    config_engine_label(engine).to_owned()
+                };
+                CreateSelectMenuOption::new(label, engine)
+                    .default_selection(engine == session.engine)
+            })
+            .collect();
+        rows.push(CreateActionRow::SelectMenu(
+            CreateSelectMenu::new(
+                format!("vcfg:engine:{session_id}"),
+                CreateSelectMenuKind::String { options: engines },
+            )
+            .placeholder(self.message(
+                "voice.config.pickEngine",
+                &session.locale,
+                session.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?)
+            .min_values(1)
+            .max_values(1),
+        ));
+
+        let speeds = CONFIG_SPEEDS
+            .into_iter()
+            .map(|speed| {
+                CreateSelectMenuOption::new(format!("{speed}×"), speed.to_string())
+                    .default_selection((speed - session.speed).abs() < f64::EPSILON)
+            })
+            .collect();
+        rows.push(CreateActionRow::SelectMenu(
+            CreateSelectMenu::new(
+                format!("vcfg:speed:{session_id}"),
+                CreateSelectMenuKind::String { options: speeds },
+            )
+            .placeholder(self.message(
+                "voice.config.pickSpeed",
+                &session.locale,
+                session.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?)
+            .min_values(1)
+            .max_values(1),
+        ));
+        let save = self.message(
+            "voice.config.save",
+            &session.locale,
+            session.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?;
+        let cancel = self.message(
+            "voice.config.cancel",
+            &session.locale,
+            session.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?;
+        rows.push(CreateActionRow::Buttons(vec![
+            CreateButton::new(format!("vcfg:save:{session_id}"))
+                .label(save)
+                .style(ButtonStyle::Success)
+                .emoji('💾'),
+            CreateButton::new(format!("vcfg:cancel:{session_id}"))
+                .label(cancel)
+                .style(ButtonStyle::Secondary)
+                .emoji('✖'),
+        ]));
+        Ok(rows)
+    }
+
+    async fn config_command(
+        &self,
+        context: &Context,
+        command: serenity::model::application::CommandInteraction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let Some(guild_id) = command.guild_id else {
+            return Ok(());
+        };
+        if self.available_models.is_empty() {
+            let content = self.message(
+                "voice.listEmpty",
+                &command.locale,
+                command.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?;
+            command
+                .create_response(
+                    context,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(content)
+                            .ephemeral(true),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        }
+        let guild_id = guild_id.get().to_string();
+        let user_id = command.user.id.get().to_string();
+        let (guild_config, current_voice) = {
+            let store = self.store.lock().map_err(|_| GatewayEventDispatchError)?;
+            (
+                store
+                    .guild_config(&guild_id)
+                    .map_err(|_| GatewayEventDispatchError)?,
+                store
+                    .get_user_voice(&guild_id, &user_id)
+                    .map_err(|_| GatewayEventDispatchError)?,
+            )
+        };
+        let default_model = if self.available_models.contains(&guild_config.default_voice) {
+            guild_config.default_voice
+        } else {
+            self.available_models[0].clone()
+        };
+        let model = current_voice
+            .as_ref()
+            .map(|voice| voice.model.clone())
+            .filter(|model| self.available_models.contains(model))
+            .unwrap_or(default_model);
+        let speed = current_voice
+            .as_ref()
+            .map(|voice| voice.speed)
+            .filter(|speed| speed.is_finite() && CONFIG_SPEEDS.contains(speed))
+            .unwrap_or(self.default_speed);
+        let engine = current_voice
+            .as_ref()
+            .map(|voice| engine_label(voice.engine))
+            .unwrap_or("google")
+            .to_owned();
+        let session_id = command.id.get().to_string();
+        let session = VoiceConfigSession {
+            owner_user_id: user_id,
+            guild_id,
+            channel_id: command.channel_id.get().to_string(),
+            locale: command.locale.clone(),
+            guild_locale: command.guild_locale.clone(),
+            models: self.available_models.clone(),
+            locales: self.config_locales(),
+            model,
+            engine,
+            speed,
+            language_page: 0,
+            issued_at_ms: system_now_ms(),
+        };
+        let content = self.config_summary(&session)?;
+        let rows = self.config_components(&session_id, &session)?;
+        self.prune_config_sessions(session.issued_at_ms);
+        self.config_sessions
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .insert(session_id, session);
+        command
+            .create_response(
+                context,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(content)
+                        .ephemeral(true)
+                        .components(rows),
+                ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(())
+    }
+
+    async fn config_component(
+        &self,
+        context: &Context,
+        component: ComponentInteraction,
+    ) -> Result<bool, GatewayEventDispatchError> {
+        let Some((action, session_id)) = parse_config_component(&component.data.custom_id) else {
+            return Ok(false);
+        };
+        let now_ms = system_now_ms();
+        self.prune_config_sessions(now_ms);
+        let session = self
+            .config_sessions
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .get(session_id)
+            .cloned();
+        let Some(mut session) = session else {
+            return Ok(true);
+        };
+        let guild_id = component.guild_id.map(|id| id.get().to_string());
+        if session.owner_user_id != component.user.id.get().to_string()
+            || session.guild_id != guild_id.unwrap_or_default()
+            || session.channel_id != component.channel_id.get().to_string()
+        {
+            return Ok(true);
+        }
+
+        if now_ms.saturating_sub(session.issued_at_ms) > CONFIG_TTL_MS {
+            self.config_sessions
+                .lock()
+                .map_err(|_| GatewayEventDispatchError)?
+                .remove(session_id);
+            let content = self.message(
+                "voice.config.expired",
+                &session.locale,
+                session.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?;
+            component
+                .create_response(
+                    context,
+                    CreateInteractionResponse::UpdateMessage(
+                        CreateInteractionResponseMessage::new()
+                            .content(content)
+                            .components(Vec::new()),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(true);
+        }
+
+        self.config_sessions
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .remove(session_id);
+
+        if action == "cancel" {
+            let content = self.message(
+                "voice.config.cancelled",
+                &session.locale,
+                session.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?;
+            component
+                .create_response(
+                    context,
+                    CreateInteractionResponse::UpdateMessage(
+                        CreateInteractionResponseMessage::new()
+                            .content(content)
+                            .components(Vec::new()),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(true);
+        }
+
+        if action == "save" {
+            let outcome = self.service.execute(
+                VoicePreferenceInvocation {
+                    guild_id: Some(&session.guild_id),
+                    user_id: &session.owner_user_id,
+                    now_ms,
+                },
+                VoicePreferenceCommand::Set {
+                    model: session.model.clone(),
+                    speed: Some(session.speed),
+                    engine: Some(session.engine.clone()),
+                },
+            );
+            if matches!(outcome, VoicePreferenceOutcome::SavedVoice { .. }) {
+                let content = self.localized_outcome(
+                    outcome,
+                    &session.locale,
+                    session.guild_locale.as_deref(),
+                )?;
+                component
+                    .create_response(
+                        context,
+                        CreateInteractionResponse::UpdateMessage(
+                            CreateInteractionResponseMessage::new()
+                                .content(content)
+                                .components(Vec::new()),
+                        ),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                return Ok(true);
+            }
+            let content =
+                self.localized_outcome(outcome, &session.locale, session.guild_locale.as_deref())?;
+            self.config_sessions
+                .lock()
+                .map_err(|_| GatewayEventDispatchError)?
+                .insert(session_id.to_owned(), session);
+            component
+                .create_response(
+                    context,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(content)
+                            .ephemeral(true),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(true);
+        }
+
+        let selected = match &component.data.kind {
+            ComponentInteractionDataKind::StringSelect { values } if values.len() == 1 => {
+                values.first().cloned()
+            }
+            _ => None,
+        };
+        let Some(selected) = selected else {
+            self.config_sessions
+                .lock()
+                .map_err(|_| GatewayEventDispatchError)?
+                .insert(session_id.to_owned(), session);
+            return Ok(true);
+        };
+        let valid = match action {
+            "lang" if selected == "__more__" => {
+                let pages = session.locales.len().div_ceil(CONFIG_LANG_PAGE_SIZE).max(1);
+                session.language_page = (session.language_page + 1) % pages;
+                true
+            }
+            "lang" if session.locales.iter().any(|locale| locale == &selected) => self
+                .models_for_locale(&session.models, &selected)
+                .first()
+                .map(|model| session.model = (*model).clone())
+                .is_some(),
+            "voice" if session.models.iter().any(|model| model == &selected) => {
+                let selected_locale = selected.split('-').next().unwrap_or(&selected);
+                selected_locale == session.model.split('-').next().unwrap_or(&session.model) && {
+                    session.model = selected;
+                    true
+                }
+            }
+            "engine" if matches!(selected.as_str(), "google" | "piper" | "kokoro" | "gcloud") => {
+                session.engine = selected;
+                true
+            }
+            "speed" => selected
+                .parse::<f64>()
+                .ok()
+                .filter(|speed| CONFIG_SPEEDS.contains(speed))
+                .map(|speed| session.speed = speed)
+                .is_some(),
+            _ => false,
+        };
+        if !valid {
+            self.config_sessions
+                .lock()
+                .map_err(|_| GatewayEventDispatchError)?
+                .insert(session_id.to_owned(), session);
+            return Ok(true);
+        }
+        let content = self.config_summary(&session)?;
+        let rows = self.config_components(session_id, &session)?;
+        self.config_sessions
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .insert(session_id.to_owned(), session);
+        component
+            .create_response(
+                context,
+                CreateInteractionResponse::UpdateMessage(
+                    CreateInteractionResponseMessage::new()
+                        .content(content)
+                        .components(rows),
+                ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(true)
     }
 
     async fn browse_command(
@@ -364,7 +935,8 @@ impl VoicePreferenceGatewaySink {
 fn is_promoted(command: &VoicePreferenceCommand) -> bool {
     matches!(
         command,
-        VoicePreferenceCommand::List
+        VoicePreferenceCommand::Config
+            | VoicePreferenceCommand::List
             | VoicePreferenceCommand::Browse { .. }
             | VoicePreferenceCommand::Reset
             | VoicePreferenceCommand::Set { .. }
@@ -474,6 +1046,19 @@ fn parse_browse_component(custom_id: &str) -> Option<(&str, &str)> {
     remainder.split_once(':')
 }
 
+fn parse_config_component(custom_id: &str) -> Option<(&str, &str)> {
+    let remainder = custom_id.strip_prefix("vcfg:")?;
+    let (action, session_id) = remainder.split_once(':')?;
+    if session_id.is_empty() || !session_id.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    matches!(
+        action,
+        "lang" | "voice" | "engine" | "speed" | "save" | "cancel"
+    )
+    .then_some((action, session_id))
+}
+
 fn now_seconds() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -529,6 +1114,15 @@ fn engine_label(engine: UserEngine) -> &'static str {
     }
 }
 
+fn config_engine_label(engine: &str) -> &'static str {
+    match engine {
+        "piper" => "Piper",
+        "kokoro" => "Kokoro",
+        "gcloud" => "Google HD",
+        _ => "Google",
+    }
+}
+
 fn effect_label(effect: VoiceEffect) -> &'static str {
     match effect {
         VoiceEffect::None => "None (normal)",
@@ -559,6 +1153,9 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
         interaction: Interaction,
     ) -> Result<(), GatewayEventDispatchError> {
         if let Interaction::Component(component) = interaction {
+            if self.config_component(&context, component.clone()).await? {
+                return Ok(());
+            }
             return self.browse_component(&context, component).await;
         }
         let Interaction::Command(command) = interaction else {
@@ -571,6 +1168,9 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
         };
         if !is_promoted(&parsed) {
             return Ok(());
+        }
+        if matches!(parsed, VoicePreferenceCommand::Config) {
+            return self.config_command(&context, command).await;
         }
         if let VoicePreferenceCommand::Browse {
             query,
@@ -783,6 +1383,7 @@ mod tests {
 
     #[test]
     fn only_textual_preference_leaves_can_be_claimed() {
+        assert!(is_promoted(&VoicePreferenceCommand::Config));
         assert!(is_promoted(&VoicePreferenceCommand::List));
         assert!(is_promoted(&VoicePreferenceCommand::Browse {
             query: None,
@@ -855,6 +1456,22 @@ mod tests {
         );
         assert_eq!(parse_browse_component("vbr:next"), None);
         assert_eq!(parse_browse_component("other:next:123"), None);
+    }
+
+    #[test]
+    fn config_session_controls_are_strict_and_action_bound() {
+        assert_eq!(
+            parse_config_component("vcfg:lang:123"),
+            Some(("lang", "123"))
+        );
+        assert_eq!(
+            parse_config_component("vcfg:save:987654"),
+            Some(("save", "987654"))
+        );
+        assert_eq!(parse_config_component("vcfg:delete:123"), None);
+        assert_eq!(parse_config_component("vcfg:lang:123:extra"), None);
+        assert_eq!(parse_config_component("vcfg:lang:abc"), None);
+        assert_eq!(parse_config_component("other:lang:123"), None);
     }
 
     #[test]

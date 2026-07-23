@@ -1,8 +1,8 @@
 //! Strict parser for the textual preference subset of `/voice`.
 //!
 //! Preview playback is handled by the core voice service so it can share admission and Songbird
-//! queue state. The interactive configuration panel remains Node-owned; the read-only browser
-//! and preference mutations have complete contracts and can be promoted independently.
+//! queue state. The interactive configuration panel is represented as a separate Rust session
+//! flow so it can be promoted without claiming any unparsed component interaction.
 
 use serenity::model::application::{CommandData, CommandDataOption, CommandDataOptionValue};
 use thiserror::Error;
@@ -12,6 +12,7 @@ use crate::{CommandArea, command_path_from_options, route_command};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VoicePreferenceCommand {
+    Config,
     List,
     Browse {
         query: Option<String>,
@@ -72,6 +73,7 @@ pub fn parse_voice_preference_command(
     }
     let (name, options) = subcommand(&command.options)?;
     match name {
+        "config" => empty(options).map(|()| Some(VoicePreferenceCommand::Config)),
         "list" => empty(options).map(|()| Some(VoicePreferenceCommand::List)),
         "browse" => parse_browse(options).map(Some),
         "set" => parse_set(options).map(Some),
@@ -249,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_the_mutation_subset_without_claiming_ui_commands() {
+    fn parses_preference_commands_and_the_config_panel_root() {
         assert_eq!(
             parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"set","type":1,"options":[{"name":"model","type":3,"value":"en_US-amy-medium"},{"name":"speed","type":10,"value":1.2},{"name":"engine","type":3,"value":"piper"}]}]}"#)).expect("set"),
             Some(VoicePreferenceCommand::Set { model: "en_US-amy-medium".into(), speed: Some(1.2), engine: Some("piper".into()) })
@@ -275,8 +277,8 @@ mod tests {
             Some(VoicePreferenceCommand::Detection { enabled: true })
         );
         assert_eq!(
-            parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"config","type":1,"options":[]}]}"#)).expect("ui stays Node"),
-            None
+            parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"config","type":1,"options":[]}]}"#)).expect("config"),
+            Some(VoicePreferenceCommand::Config)
         );
     }
 

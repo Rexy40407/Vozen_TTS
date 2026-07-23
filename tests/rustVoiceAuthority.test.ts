@@ -343,7 +343,7 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoicePreferencesOwnCommand('voice', 'preview', undefined, 'router', 'true')).toBe(
       false,
     );
-    expect(rustVoicePreferencesOwnCommand('voice', 'config', 'true')).toBe(false);
+    expect(rustVoicePreferencesOwnCommand('voice', 'config', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('translate', 'reset', 'true')).toBe(false);
   });
 

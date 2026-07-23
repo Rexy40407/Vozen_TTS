@@ -164,7 +164,8 @@ impl VoicePreferenceService {
                 invocation.now_ms,
                 effect,
             ),
-            VoicePreferenceCommand::Favorite { .. }
+            VoicePreferenceCommand::Config
+            | VoicePreferenceCommand::Favorite { .. }
             | VoicePreferenceCommand::Unfavorite { .. }
             | VoicePreferenceCommand::Favorites
             | VoicePreferenceCommand::Recent

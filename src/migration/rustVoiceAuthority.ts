@@ -475,8 +475,8 @@ export function rustVoiceOwnsCommand(
 
 /**
  * `/voice` is a mixed surface. Rust's audio core owns `preview` only when the same Piper voice
- * runtime that owns `/tts` is explicitly enabled; the remaining preference leaves use their own
- * canary. The interactive panel stays Node-owned.
+ * runtime that owns `/tts` is explicitly enabled; the preference browser, config panel and
+ * mutation leaves use their own canary. Other unpromoted voice behavior remains Node-owned.
  */
 export function rustVoicePreferencesOwnCommand(
   commandName: string,
@@ -494,6 +494,7 @@ export function rustVoicePreferencesOwnCommand(
         rustPiperCompatible(ttsEngine) &&
         (subcommand === 'list' ||
           subcommand === 'browse' ||
+          subcommand === 'config' ||
           subcommand === 'set' ||
           subcommand === 'favorite' ||
           subcommand === 'unfavorite' ||
