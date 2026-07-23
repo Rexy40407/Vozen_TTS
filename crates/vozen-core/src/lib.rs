@@ -5,6 +5,7 @@
 mod abbreviations;
 mod accent_restoration;
 mod automatic_translation_policy;
+mod game_heads_or_tails;
 mod kofi;
 mod language_detection;
 mod message_guard;
@@ -26,6 +27,9 @@ pub use accent_restoration::restore_accents;
 pub use automatic_translation_policy::{
     AutomaticTranslationDecision, AutomaticTranslationDenial, AutomaticTranslationFacts,
     admit_automatic_translation,
+};
+pub use game_heads_or_tails::{
+    CoinReveal, CoinSide, GameWinner, GuessResult, HeadsOrTailsGame, parse_coin_side,
 };
 pub use kofi::{
     KofiEvent, KofiGrant, KofiPlan, PREMIUM_MAX_SEATS, PREMIUM_PASS_SEATS, ShopProduct,
