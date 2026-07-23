@@ -77,6 +77,7 @@ mod guess_language_driver;
 mod guild_synthesis_coordinator;
 mod hangman_driver;
 mod heads_or_tails_coordinator;
+mod heads_or_tails_driver;
 mod heads_or_tails_session;
 mod help_command;
 mod interaction_dispatch;
@@ -274,6 +275,9 @@ pub use guild_synthesis_coordinator::GuildSynthesisCoordinator;
 pub use hangman_driver::{HangmanDriver, HangmanDriverAction, HangmanGameDriver};
 pub use heads_or_tails_coordinator::{
     GUESS_WINDOW_MS, HeadsOrTailsAction, HeadsOrTailsCoordinator, NEXT_ROUND_DELAY_MS,
+};
+pub use heads_or_tails_driver::{
+    HeadsOrTailsDriver, HeadsOrTailsDriverAction, HeadsOrTailsGameDriver,
 };
 pub use heads_or_tails_session::{HeadsOrTailsMessage, HeadsOrTailsSession, HeadsOrTailsStart};
 pub use help_command::{HelpCommand, HelpCommandError, parse_help_command};
