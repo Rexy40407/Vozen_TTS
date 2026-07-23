@@ -133,7 +133,11 @@
     "config.greetOn",
     "config.greetOff",
     "config.on",
-    "config.off"
+    "config.off",
+    "config.maxCharsRange",
+    "config.maxCharsSet",
+    "config.rateLimitRange",
+    "config.rateLimitSet"
   ],
   "messages": {
     "en": {
@@ -230,7 +234,11 @@
       "config.greetOn": "✅ I'll greet people by name when they join the voice channel.",
       "config.greetOff": "🔇 I **won't** greet people when they join the voice channel.",
       "config.on": "on",
-      "config.off": "off"
+      "config.off": "off",
+      "config.maxCharsRange": "The max-chars value has to be between 1 and 2000.",
+      "config.maxCharsSet": "Max characters per message set to {value}.",
+      "config.rateLimitRange": "The rate-limit value has to be between 1 and 120.",
+      "config.rateLimitSet": "Rate limit set to {value} messages per minute."
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -326,7 +334,11 @@
       "config.greetOn": "✅ Vou saudar as pessoas pelo nome quando entrarem no canal de voz.",
       "config.greetOff": "🔇 **Não** vou saudar as pessoas quando entrarem no canal de voz.",
       "config.on": "on",
-      "config.off": "off"
+      "config.off": "off",
+      "config.maxCharsRange": "O valor de max-chars tem de estar entre 1 e 2000.",
+      "config.maxCharsSet": "Max chars: {value}.",
+      "config.rateLimitRange": "O valor de rate-limit tem de estar entre 1 e 120.",
+      "config.rateLimitSet": "Rate-limit: {value}/min."
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -422,7 +434,11 @@
       "config.greetOn": "✅ Saludaré a la gente por su nombre cuando entre en el canal de voz.",
       "config.greetOff": "🔇 **No** saludaré a la gente cuando entre en el canal de voz.",
       "config.on": "activado",
-      "config.off": "desactivado"
+      "config.off": "desactivado",
+      "config.maxCharsRange": "El valor de máximo de caracteres tiene que estar entre 1 y 2000.",
+      "config.maxCharsSet": "Máximo de caracteres por mensaje configurado en {value}.",
+      "config.rateLimitRange": "El valor del límite de frecuencia tiene que estar entre 1 y 120.",
+      "config.rateLimitSet": "Límite de frecuencia configurado en {value} mensajes por minuto."
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -518,7 +534,11 @@
       "config.greetOn": "✅ Je saluerai les gens par leur nom quand ils rejoindront le salon vocal.",
       "config.greetOff": "🔇 Je **ne saluerai pas** les gens quand ils rejoindront le salon vocal.",
       "config.on": "activé",
-      "config.off": "désactivé"
+      "config.off": "désactivé",
+      "config.maxCharsRange": "La valeur du nombre max. de caractères doit être comprise entre 1 et 2000.",
+      "config.maxCharsSet": "Nombre maximal de caractères par message défini sur {value}.",
+      "config.rateLimitRange": "La valeur de la limite de débit doit être comprise entre 1 et 120.",
+      "config.rateLimitSet": "Limite de débit définie sur {value} messages par minute."
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -614,7 +634,11 @@
       "config.greetOn": "✅ Ich begrüße Leute mit Namen, wenn sie dem Sprachkanal beitreten.",
       "config.greetOff": "🔇 Ich begrüße Leute **nicht**, wenn sie dem Sprachkanal beitreten.",
       "config.on": "an",
-      "config.off": "aus"
+      "config.off": "aus",
+      "config.maxCharsRange": "Der Wert für Max-Zeichen muss zwischen 1 und 2000 liegen.",
+      "config.maxCharsSet": "Maximale Zeichen pro Nachricht auf {value} gesetzt.",
+      "config.rateLimitRange": "Der Wert für das Ratenlimit muss zwischen 1 und 120 liegen.",
+      "config.rateLimitSet": "Ratenlimit auf {value} Nachrichten pro Minute gesetzt."
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -710,7 +734,11 @@
       "config.greetOn": "✅ Ik begroet mensen bij naam wanneer ze bij het spraakkanaal aansluiten.",
       "config.greetOff": "🔇 Ik begroet mensen **niet** wanneer ze bij het spraakkanaal aansluiten.",
       "config.on": "aan",
-      "config.off": "uit"
+      "config.off": "uit",
+      "config.maxCharsRange": "De waarde voor max. tekens moet tussen 1 en 2000 liggen.",
+      "config.maxCharsSet": "Max. aantal tekens per bericht ingesteld op {value}.",
+      "config.rateLimitRange": "De waarde voor de snelheidslimiet moet tussen 1 en 120 liggen.",
+      "config.rateLimitSet": "Snelheidslimiet ingesteld op {value} berichten per minuut."
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -806,7 +834,11 @@
       "config.greetOn": "✅ Będę witał ludzi po imieniu, gdy dołączą do kanału głosowego.",
       "config.greetOff": "🔇 **Nie** będę witał ludzi, gdy dołączą do kanału głosowego.",
       "config.on": "włączone",
-      "config.off": "wyłączone"
+      "config.off": "wyłączone",
+      "config.maxCharsRange": "Wartość maks. znaków musi mieścić się w przedziale od 1 do 2000.",
+      "config.maxCharsSet": "Maksymalna liczba znaków na wiadomość ustawiona na {value}.",
+      "config.rateLimitRange": "Wartość limitu tempa musi mieścić się w przedziale od 1 do 120.",
+      "config.rateLimitSet": "Limit tempa ustawiony na {value} wiadomości na minutę."
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -902,7 +934,11 @@
       "config.greetOn": "✅ Ses kanalına katıldıklarında insanları adlarıyla selamlayacağım.",
       "config.greetOff": "🔇 Ses kanalına katıldıklarında insanları **selamlamayacağım**.",
       "config.on": "açık",
-      "config.off": "kapalı"
+      "config.off": "kapalı",
+      "config.maxCharsRange": "Maksimum karakter değeri 1 ile 2000 arasında olmalı.",
+      "config.maxCharsSet": "Mesaj başına maksimum karakter {value} olarak ayarlandı.",
+      "config.rateLimitRange": "Hız sınırı değeri 1 ile 120 arasında olmalı.",
+      "config.rateLimitSet": "Hız sınırı dakikada {value} mesaj olarak ayarlandı."
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -998,7 +1034,11 @@
       "config.greetOn": "✅ Budu lidi zdravit jménem, když se připojí k hlasovému kanálu.",
       "config.greetOff": "🔇 **Nebudu** lidi zdravit, když se připojí k hlasovému kanálu.",
       "config.on": "zapnuto",
-      "config.off": "vypnuto"
+      "config.off": "vypnuto",
+      "config.maxCharsRange": "Hodnota max znaků musí být mezi 1 a 2000.",
+      "config.maxCharsSet": "Maximální počet znaků na zprávu nastaven na {value}.",
+      "config.rateLimitRange": "Hodnota limitu rychlosti musí být mezi 1 a 120.",
+      "config.rateLimitSet": "Limit rychlosti nastaven na {value} zpráv za minutu."
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -1094,7 +1134,11 @@
       "config.greetOn": "✅ Jag hälsar folk vid namn när de går med i röstkanalen.",
       "config.greetOff": "🔇 Jag hälsar **inte** folk när de går med i röstkanalen.",
       "config.on": "på",
-      "config.off": "av"
+      "config.off": "av",
+      "config.maxCharsRange": "Värdet för max antal tecken måste vara mellan 1 och 2000.",
+      "config.maxCharsSet": "Max antal tecken per meddelande satt till {value}.",
+      "config.rateLimitRange": "Värdet för hastighetsgränsen måste vara mellan 1 och 120.",
+      "config.rateLimitSet": "Hastighetsgräns satt till {value} meddelanden per minut."
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -1190,7 +1234,11 @@
       "config.greetOn": "✅ Tervehdin ihmisiä nimeltä, kun he liittyvät puhekanavalle.",
       "config.greetOff": "🔇 **En** tervehdi ihmisiä, kun he liittyvät puhekanavalle.",
       "config.on": "päällä",
-      "config.off": "pois päältä"
+      "config.off": "pois päältä",
+      "config.maxCharsRange": "Merkkien enimmäismäärän on oltava välillä 1 ja 2000.",
+      "config.maxCharsSet": "Merkkien enimmäismääräksi viestiä kohden asetettu {value}.",
+      "config.rateLimitRange": "Nopeusrajan arvon on oltava välillä 1 ja 120.",
+      "config.rateLimitSet": "Nopeusrajaksi asetettu {value} viestiä minuutissa."
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -1286,7 +1334,11 @@
       "config.greetOn": "✅ Jeg hilser på folk ved navn, når de går ind i talekanalen.",
       "config.greetOff": "🔇 Jeg **hilser ikke** på folk, når de går ind i talekanalen.",
       "config.on": "til",
-      "config.off": "fra"
+      "config.off": "fra",
+      "config.maxCharsRange": "Værdien for maks. tegn skal være mellem 1 og 2000.",
+      "config.maxCharsSet": "Maks. antal tegn pr. besked sat til {value}.",
+      "config.rateLimitRange": "Værdien for hastighedsgrænse skal være mellem 1 og 120.",
+      "config.rateLimitSet": "Hastighedsgrænse sat til {value} beskeder i minuttet."
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -1382,7 +1434,11 @@
       "config.greetOn": "✅ Voi saluta oamenii pe nume când intră în canalul de voce.",
       "config.greetOff": "🔇 **Nu** voi saluta oamenii când intră în canalul de voce.",
       "config.on": "activ",
-      "config.off": "oprit"
+      "config.off": "oprit",
+      "config.maxCharsRange": "Valoarea pentru numărul maxim de caractere trebuie să fie între 1 și 2000.",
+      "config.maxCharsSet": "Numărul maxim de caractere per mesaj setat la {value}.",
+      "config.rateLimitRange": "Valoarea limitei de rată trebuie să fie între 1 și 120.",
+      "config.rateLimitSet": "Limita de rată setată la {value} mesaje pe minut."
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -1478,7 +1534,11 @@
       "config.greetOn": "✅ Néven köszöntöm az embereket, amikor csatlakoznak a hangcsatornához.",
       "config.greetOff": "🔇 **Nem** köszöntöm az embereket, amikor csatlakoznak a hangcsatornához.",
       "config.on": "be",
-      "config.off": "ki"
+      "config.off": "ki",
+      "config.maxCharsRange": "A maximális karakterszám értékének 1 és 2000 között kell lennie.",
+      "config.maxCharsSet": "Üzenetenkénti maximális karakterszám beállítva: {value}.",
+      "config.rateLimitRange": "A sebességkorlát értékének 1 és 120 között kell lennie.",
+      "config.rateLimitSet": "Sebességkorlát beállítva: {value} üzenet percenként."
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -1574,7 +1634,11 @@
       "config.greetOn": "✅ Bydda i'n cyfarch pobl wrth eu henw pan ymunan nhw â'r sianel lais.",
       "config.greetOff": "🔇 **Ni fydda i'n** cyfarch pobl pan ymunan nhw â'r sianel lais.",
       "config.on": "ymlaen",
-      "config.off": "i ffwrdd"
+      "config.off": "i ffwrdd",
+      "config.maxCharsRange": "Rhaid i'r gwerth uchafswm-nodau fod rhwng 1 a 2000.",
+      "config.maxCharsSet": "Uchafswm y nodau fesul neges wedi'i osod i {value}.",
+      "config.rateLimitRange": "Rhaid i'r gwerth terfyn-cyfradd fod rhwng 1 a 120.",
+      "config.rateLimitSet": "Terfyn cyfradd wedi'i osod i {value} neges y funud."
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -1670,7 +1734,11 @@
       "config.greetOn": "✅ Ég mun heilsa fólki með nafni þegar það fer inn í talrásina.",
       "config.greetOff": "🔇 Ég mun **ekki** heilsa fólki þegar það fer inn í talrásina.",
       "config.on": "kveikt",
-      "config.off": "slökkt"
+      "config.off": "slökkt",
+      "config.maxCharsRange": "Hámarksfjöldi stafa verður að vera á milli 1 og 2000.",
+      "config.maxCharsSet": "Hámarksfjöldi stafa á hverja skilaboð stilltur á {value}.",
+      "config.rateLimitRange": "Tíðnitakmarkið verður að vera á milli 1 og 120.",
+      "config.rateLimitSet": "Tíðnitakmark stillt á {value} skilaboð á mínútu."
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -1766,7 +1834,11 @@
       "config.greetOn": "✅ Ech begréissen d'Leit mam Numm, wann si an de Sproochkanal erakommen.",
       "config.greetOff": "🔇 Ech begréissen d'Leit **net**, wann si an de Sproochkanal erakommen.",
       "config.on": "un",
-      "config.off": "aus"
+      "config.off": "aus",
+      "config.maxCharsRange": "De Wäert fir max. Zeechen muss tëscht 1 an 2000 leien.",
+      "config.maxCharsSet": "Max. Zeeche pro Message op {value} gesat.",
+      "config.rateLimitRange": "De Wäert fir d'Ratelimitt muss tëscht 1 an 120 leien.",
+      "config.rateLimitSet": "Ratelimitt op {value} Messagen d'Minutt gesat."
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -1862,7 +1934,11 @@
       "config.greetOn": "✅ Es sveikšu cilvēkus vārdā, kad viņi pievienosies balss kanālam.",
       "config.greetOff": "🔇 Es **nesveikšu** cilvēkus, kad viņi pievienojas balss kanālam.",
       "config.on": "ieslēgts",
-      "config.off": "izslēgts"
+      "config.off": "izslēgts",
+      "config.maxCharsRange": "Maksimālo rakstzīmju vērtībai jābūt no 1 līdz 2000.",
+      "config.maxCharsSet": "Maksimālais rakstzīmju skaits vienā ziņā iestatīts uz {value}.",
+      "config.rateLimitRange": "Ātruma ierobežojuma vērtībai jābūt no 1 līdz 120.",
+      "config.rateLimitSet": "Ātruma ierobežojums iestatīts uz {value} ziņām minūtē."
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -1958,7 +2034,11 @@
       "config.greetOn": "✅ Budem ľudí zdraviť menom, keď sa pripoja do hlasového kanála.",
       "config.greetOff": "🔇 **Nebudem** ľudí zdraviť, keď sa pripoja do hlasového kanála.",
       "config.on": "zapnuté",
-      "config.off": "vypnuté"
+      "config.off": "vypnuté",
+      "config.maxCharsRange": "Hodnota max-znakov musí byť medzi 1 a 2000.",
+      "config.maxCharsSet": "Maximálny počet znakov na správu nastavený na {value}.",
+      "config.rateLimitRange": "Hodnota limitu rýchlosti musí byť medzi 1 a 120.",
+      "config.rateLimitSet": "Limit rýchlosti nastavený na {value} správ za minútu."
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -2054,7 +2134,11 @@
       "config.greetOn": "✅ Ob prihodu v glasovni kanal bom ljudi pozdravil po imenu.",
       "config.greetOff": "🔇 Ljudi ob prihodu v glasovni kanal **ne bom** pozdravljal.",
       "config.on": "vklopljeno",
-      "config.off": "izklopljeno"
+      "config.off": "izklopljeno",
+      "config.maxCharsRange": "Vrednost največjega števila znakov mora biti med 1 in 2000.",
+      "config.maxCharsSet": "Največje število znakov na sporočilo je nastavljeno na {value}.",
+      "config.rateLimitRange": "Vrednost omejitve hitrosti mora biti med 1 in 120.",
+      "config.rateLimitSet": "Omejitev hitrosti je nastavljena na {value} sporočil na minuto."
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -2150,7 +2234,11 @@
       "config.greetOn": "✅ Nitawasalimia watu kwa majina yao wanapojiunga na kituo cha sauti.",
       "config.greetOff": "🔇 **Sitawasalimia** watu wanapojiunga na kituo cha sauti.",
       "config.on": "washwa",
-      "config.off": "zimwa"
+      "config.off": "zimwa",
+      "config.maxCharsRange": "Thamani ya herufi za juu lazima iwe kati ya 1 na 2000.",
+      "config.maxCharsSet": "Herufi za juu kwa kila ujumbe zimewekwa kuwa {value}.",
+      "config.rateLimitRange": "Thamani ya kikomo cha kasi lazima iwe kati ya 1 na 120.",
+      "config.rateLimitSet": "Kikomo cha kasi kimewekwa kuwa ujumbe {value} kwa dakika."
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -2246,7 +2334,11 @@
       "config.greetOn": "✅ Tôi sẽ chào mọi người theo tên khi họ vào kênh thoại.",
       "config.greetOff": "🔇 Tôi sẽ **không** chào mọi người khi họ vào kênh thoại.",
       "config.on": "bật",
-      "config.off": "tắt"
+      "config.off": "tắt",
+      "config.maxCharsRange": "Giá trị số ký tự tối đa phải nằm trong khoảng 1 đến 2000.",
+      "config.maxCharsSet": "Đã đặt số ký tự tối đa mỗi tin nhắn là {value}.",
+      "config.rateLimitRange": "Giá trị giới hạn tần suất phải nằm trong khoảng 1 đến 120.",
+      "config.rateLimitSet": "Đã đặt giới hạn tần suất là {value} tin nhắn mỗi phút."
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -2342,7 +2434,11 @@
       "config.greetOn": "✅ Saludaré la gent pel seu nom quan entrin al canal de veu.",
       "config.greetOff": "🔇 **No** saludaré la gent quan entrin al canal de veu.",
       "config.on": "activat",
-      "config.off": "desactivat"
+      "config.off": "desactivat",
+      "config.maxCharsRange": "El valor de màxim de caràcters ha d'estar entre 1 i 2000.",
+      "config.maxCharsSet": "Màxim de caràcters per missatge establert a {value}.",
+      "config.rateLimitRange": "El valor del límit de freqüència ha d'estar entre 1 i 120.",
+      "config.rateLimitSet": "Límit de freqüència establert a {value} missatges per minut."
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -2438,7 +2534,11 @@
       "config.greetOn": "✅ Saluterò le persone per nome quando entrano nel canale vocale.",
       "config.greetOff": "🔇 **Non** saluterò le persone quando entrano nel canale vocale.",
       "config.on": "attivo",
-      "config.off": "disattivato"
+      "config.off": "disattivato",
+      "config.maxCharsRange": "Il valore di caratteri massimi deve essere tra 1 e 2000.",
+      "config.maxCharsSet": "Caratteri massimi per messaggio impostati su {value}.",
+      "config.rateLimitRange": "Il valore del limite di frequenza deve essere tra 1 e 120.",
+      "config.rateLimitSet": "Limite di frequenza impostato su {value} messaggi al minuto."
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -2534,7 +2634,11 @@
       "config.greetOn": "✅ Θα χαιρετάω τους ανθρώπους με το όνομά τους όταν μπαίνουν στο φωνητικό κανάλι.",
       "config.greetOff": "🔇 **Δεν** θα χαιρετάω τους ανθρώπους όταν μπαίνουν στο φωνητικό κανάλι.",
       "config.on": "ενεργό",
-      "config.off": "ανενεργό"
+      "config.off": "ανενεργό",
+      "config.maxCharsRange": "Η τιμή μέγιστων χαρακτήρων πρέπει να είναι μεταξύ 1 και 2000.",
+      "config.maxCharsSet": "Οι μέγιστοι χαρακτήρες ανά μήνυμα ορίστηκαν σε {value}.",
+      "config.rateLimitRange": "Η τιμή του ορίου ρυθμού πρέπει να είναι μεταξύ 1 και 120.",
+      "config.rateLimitSet": "Το όριο ρυθμού ορίστηκε σε {value} μηνύματα ανά λεπτό."
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -2630,7 +2734,11 @@
       "config.greetOn": "✅ Я буду приветствовать людей по имени, когда они заходят в голосовой канал.",
       "config.greetOff": "🔇 Я **не** буду приветствовать людей, когда они заходят в голосовой канал.",
       "config.on": "вкл",
-      "config.off": "выкл"
+      "config.off": "выкл",
+      "config.maxCharsRange": "Значение максимального числа символов должно быть от 1 до 2000.",
+      "config.maxCharsSet": "Максимум символов на сообщение установлен на {value}.",
+      "config.rateLimitRange": "Значение ограничения частоты должно быть от 1 до 120.",
+      "config.rateLimitSet": "Ограничение частоты установлено на {value} сообщений в минуту."
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -2726,7 +2834,11 @@
       "config.greetOn": "✅ Я вітатиму людей на ім'я, коли вони заходять до голосового каналу.",
       "config.greetOff": "🔇 Я **не** вітатиму людей, коли вони заходять до голосового каналу.",
       "config.on": "увімкнено",
-      "config.off": "вимкнено"
+      "config.off": "вимкнено",
+      "config.maxCharsRange": "Значення макс. символів має бути від 1 до 2000.",
+      "config.maxCharsSet": "Максимум символів на повідомлення встановлено на {value}.",
+      "config.rateLimitRange": "Значення ліміту частоти має бути від 1 до 120.",
+      "config.rateLimitSet": "Ліміт частоти встановлено на {value} повідомлень за хвилину."
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -2822,7 +2934,11 @@
       "config.greetOn": "✅ Адамдар дауыстық арнаға кіргенде оларды атымен сәлемдесемін.",
       "config.greetOff": "🔇 Адамдар дауыстық арнаға кіргенде оларды **сәлемдеспеймін**.",
       "config.on": "қосулы",
-      "config.off": "өшірулі"
+      "config.off": "өшірулі",
+      "config.maxCharsRange": "Ең көп таңба мәні 1 мен 2000 аралығында болуы керек.",
+      "config.maxCharsSet": "Хабарламаға ең көп таңба саны {value} болып орнатылды.",
+      "config.rateLimitRange": "Жиілік шегінің мәні 1 мен 120 аралығында болуы керек.",
+      "config.rateLimitSet": "Жиілік шегі минутына {value} хабарлама болып орнатылды."
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -2918,7 +3034,11 @@
       "config.greetOn": "✅ Поздрављаћу људе по имену када уђу у гласовни канал.",
       "config.greetOff": "🔇 **Нећу** поздрављати људе када уђу у гласовни канал.",
       "config.on": "укључено",
-      "config.off": "искључено"
+      "config.off": "искључено",
+      "config.maxCharsRange": "Вредност максималног броја знакова мора бити између 1 и 2000.",
+      "config.maxCharsSet": "Максималан број знакова по поруци постављен на {value}.",
+      "config.rateLimitRange": "Вредност ограничења брзине мора бити између 1 и 120.",
+      "config.rateLimitSet": "Ограничење брзине постављено на {value} порука у минути."
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -3014,7 +3134,11 @@
       "config.greetOn": "✅ سأحيّي الأشخاص بأسمائهم عندما ينضمون إلى القناة الصوتية.",
       "config.greetOff": "🔇 **لن** أحيّي الأشخاص عندما ينضمون إلى القناة الصوتية.",
       "config.on": "مفعّل",
-      "config.off": "معطّل"
+      "config.off": "معطّل",
+      "config.maxCharsRange": "يجب أن تكون قيمة الحد الأقصى للأحرف بين 1 و2000.",
+      "config.maxCharsSet": "تم تعيين الحد الأقصى للأحرف لكل رسالة إلى {value}.",
+      "config.rateLimitRange": "يجب أن تكون قيمة حد المعدل بين 1 و120.",
+      "config.rateLimitSet": "تم تعيين حد المعدل إلى {value} رسالة في الدقيقة."
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -3110,7 +3234,11 @@
       "config.greetOn": "✅ وقتی افراد وارد کانال صوتی شوند، آن‌ها را با نام خوش‌آمد می‌گویم.",
       "config.greetOff": "🔇 وقتی افراد وارد کانال صوتی شوند، به آن‌ها خوش‌آمد **نمی‌گویم**.",
       "config.on": "روشن",
-      "config.off": "خاموش"
+      "config.off": "خاموش",
+      "config.maxCharsRange": "مقدار حداکثر نویسه باید بین 1 و 2000 باشد.",
+      "config.maxCharsSet": "حداکثر نویسه در هر پیام روی {value} تنظیم شد.",
+      "config.rateLimitRange": "مقدار محدودیت نرخ باید بین 1 و 120 باشد.",
+      "config.rateLimitSet": "محدودیت نرخ روی {value} پیام در دقیقه تنظیم شد."
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -3206,7 +3334,11 @@
       "config.greetOn": "✅ ხმოვან არხში შესვლისას ადამიანებს სახელით მივესალმები.",
       "config.greetOff": "🔇 ხმოვან არხში შესვლისას ადამიანებს **არ** მივესალმები.",
       "config.on": "ჩართული",
-      "config.off": "გამორთული"
+      "config.off": "გამორთული",
+      "config.maxCharsRange": "სიმბოლოების მაქსიმალური მნიშვნელობა უნდა იყოს 1-სა და 2000-ს შორის.",
+      "config.maxCharsSet": "ერთ შეტყობინებაზე მაქსიმალური სიმბოლოები დაყენდა {value}-ზე.",
+      "config.rateLimitRange": "სიხშირის ლიმიტის მნიშვნელობა უნდა იყოს 1-სა და 120-ს შორის.",
+      "config.rateLimitSet": "სიხშირის ლიმიტი დაყენდა {value} შეტყობინებაზე წუთში."
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -3302,7 +3434,11 @@
       "config.greetOn": "✅ मानिसहरू भ्वाइस च्यानलमा जोडिँदा म तिनलाई नामले अभिवादन गर्नेछु।",
       "config.greetOff": "🔇 मानिसहरू भ्वाइस च्यानलमा जोडिँदा म तिनलाई अभिवादन **गर्दिनँ**।",
       "config.on": "सक्रिय",
-      "config.off": "निष्क्रिय"
+      "config.off": "निष्क्रिय",
+      "config.maxCharsRange": "अधिकतम-अक्षर मान १ र २००० बीचमा हुनुपर्छ।",
+      "config.maxCharsSet": "प्रति सन्देश अधिकतम अक्षर {value} मा सेट भयो।",
+      "config.rateLimitRange": "दर-सीमा मान १ र १२० बीचमा हुनुपर्छ।",
+      "config.rateLimitSet": "दर सीमा प्रति मिनेट {value} सन्देश मा सेट भयो।"
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -3398,7 +3534,11 @@
       "config.greetOn": "✅ 当有人加入语音频道时，我会称名字问候他们。",
       "config.greetOff": "🔇 当有人加入语音频道时，我 **不会** 问候他们。",
       "config.on": "开",
-      "config.off": "关"
+      "config.off": "关",
+      "config.maxCharsRange": "最大字符数必须在 1 到 2000 之间。",
+      "config.maxCharsSet": "每条消息的最大字符数已设为 {value}。",
+      "config.rateLimitRange": "速率限制值必须在 1 到 120 之间。",
+      "config.rateLimitSet": "速率限制已设为每分钟 {value} 条消息。"
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -3494,7 +3634,11 @@
       "config.greetOn": "✅ 人がボイスチャンネルに参加したら、名前で挨拶します。",
       "config.greetOff": "🔇 人がボイスチャンネルに参加しても挨拶し**ません**。",
       "config.on": "有効",
-      "config.off": "無効"
+      "config.off": "無効",
+      "config.maxCharsRange": "最大文字数は 1 から 2000 の間で指定してください。",
+      "config.maxCharsSet": "1メッセージあたりの最大文字数を {value} に設定しました。",
+      "config.rateLimitRange": "レート制限は 1 から 120 の間で指定してください。",
+      "config.rateLimitSet": "レート制限を1分あたり {value} メッセージに設定しました。"
     }
   }
 }

@@ -30,6 +30,8 @@ mod command_routing;
 mod command_speech_pipeline;
 mod config_language_command;
 mod config_language_service;
+mod config_numeric_command;
+mod config_numeric_service;
 mod config_toggle_command;
 mod config_toggle_service;
 mod core_voice_command;
@@ -83,6 +85,13 @@ pub use config_language_command::{
 };
 pub use config_language_service::{
     ConfigLanguageInvocation, ConfigLanguageOutcome, ConfigLanguageService,
+};
+pub use config_numeric_command::{
+    ConfigNumericCommand, ConfigNumericCommandError, ConfigNumericSetting,
+    parse_config_numeric_command,
+};
+pub use config_numeric_service::{
+    ConfigNumericFailure, ConfigNumericInvocation, ConfigNumericOutcome, ConfigNumericService,
 };
 pub use config_toggle_command::{
     ConfigToggle, ConfigToggleCommand, ConfigToggleCommandError, parse_config_toggle_command,

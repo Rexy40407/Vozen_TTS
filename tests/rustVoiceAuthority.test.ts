@@ -6,6 +6,7 @@ import {
   rustQueueOwnsCommand,
   rustPronunciationOwnsCommand,
   rustConfigLanguageOwnsCommand,
+  rustConfigNumericOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -60,6 +61,15 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigTogglesOwnCommand('config', 'language', 'true')).toBe(false);
     expect(rustConfigTogglesOwnCommand('config', 'show', 'true')).toBe(false);
     expect(rustConfigTogglesOwnCommand('voice', 'auto-read', 'true')).toBe(false);
+  });
+
+  it('promotes only numeric config limits behind their own canary', () => {
+    expect(rustConfigNumericOwnsCommand('config', 'max-chars')).toBe(false);
+    expect(rustConfigNumericOwnsCommand('config', 'max-chars', 'true')).toBe(true);
+    expect(rustConfigNumericOwnsCommand('config', 'rate-limit', 'true')).toBe(true);
+    expect(rustConfigNumericOwnsCommand('config', 'language', 'true')).toBe(false);
+    expect(rustConfigNumericOwnsCommand('config', 'show', 'true')).toBe(false);
+    expect(rustConfigNumericOwnsCommand('voice', 'max-chars', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

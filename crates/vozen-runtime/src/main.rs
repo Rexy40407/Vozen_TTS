@@ -8,6 +8,7 @@
 
 mod automatic_translation_sink;
 mod config_language_sink;
+mod config_numeric_sink;
 mod config_toggle_sink;
 #[cfg(feature = "voice-driver")]
 mod core_voice_sink;
@@ -83,6 +84,7 @@ struct RuntimeConfig {
     pronunciation: bool,
     config_language: bool,
     config_toggles: bool,
+    config_numeric: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -268,6 +270,8 @@ impl RuntimeConfig {
             config_language_enabled(env::var("RUST_CONFIG_LANGUAGE_ENABLED").ok().as_deref());
         let config_toggles =
             config_toggles_enabled(env::var("RUST_CONFIG_TOGGLES_ENABLED").ok().as_deref());
+        let config_numeric =
+            config_numeric_enabled(env::var("RUST_CONFIG_NUMERIC_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -288,6 +292,7 @@ impl RuntimeConfig {
             pronunciation,
             config_language,
             config_toggles,
+            config_numeric,
             automatic_translation,
             dashboard,
             admin,
@@ -444,6 +449,10 @@ fn config_language_enabled(raw: Option<&str>) -> bool {
 }
 
 fn config_toggles_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn config_numeric_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -651,6 +660,19 @@ fn config_toggle_event_sink(
     )))
 }
 
+fn config_numeric_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        config_numeric_sink::ConfigNumericGatewaySink::new(store)
+            .map_err(|_| RuntimeError::ConfigNumericGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -811,6 +833,8 @@ enum RuntimeError {
     ConfigLanguageGateway,
     #[error("config toggle gateway initialisation failed")]
     ConfigToggleGateway,
+    #[error("config numeric gateway initialisation failed")]
+    ConfigNumericGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -888,6 +912,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = config_toggle_event_sink(config.config_toggles, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = config_numeric_event_sink(config.config_numeric, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(

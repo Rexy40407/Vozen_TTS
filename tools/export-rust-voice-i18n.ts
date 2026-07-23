@@ -105,6 +105,10 @@ const KEYS = [
   'config.greetOff',
   'config.on',
   'config.off',
+  'config.maxCharsRange',
+  'config.maxCharsSet',
+  'config.rateLimitRange',
+  'config.rateLimitSet',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };
