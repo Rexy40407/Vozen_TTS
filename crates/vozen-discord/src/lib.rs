@@ -18,7 +18,7 @@ use std::{
 use serenity::{
     async_trait,
     client::{Client, Context, EventHandler},
-    gateway::ActivityData,
+    gateway::{ActivityData, ConnectionStage, ShardStageUpdateEvent},
     model::{
         gateway::{GatewayIntents, Ready},
         user::OnlineStatus,
@@ -528,6 +528,7 @@ pub struct GatewayState {
     guild_snapshots: Arc<RwLock<BTreeMap<String, GatewayGuildSnapshot>>>,
     voice_channels: Arc<RwLock<BTreeMap<String, BTreeMap<String, String>>>>,
     voice_bots: Arc<RwLock<BTreeMap<String, BTreeMap<String, bool>>>>,
+    shard_stages: Arc<RwLock<BTreeMap<u64, ConnectionStage>>>,
     voice_drops_pending_reconnect: Arc<RwLock<BTreeSet<String>>>,
     /// HTTP is retained after READY only for low-frequency, authorized dashboard option lookups.
     /// It contains no message content or cached guild/member state.
@@ -722,7 +723,30 @@ impl GatewayState {
     }
 
     fn mark_ready(&self) {
-        self.ready.store(true, Ordering::Release);
+        let ready = self
+            .shard_stages
+            .read()
+            .map(|stages| {
+                stages.is_empty()
+                    || stages
+                        .values()
+                        .all(|stage| matches!(stage, ConnectionStage::Connected))
+            })
+            .unwrap_or(false);
+        self.ready.store(ready, Ordering::Release);
+    }
+
+    fn mark_shard_stage(&self, shard_id: u64, stage: ConnectionStage) {
+        let all_connected = if let Ok(mut stages) = self.shard_stages.write() {
+            stages.insert(shard_id, stage);
+            !stages.is_empty()
+                && stages
+                    .values()
+                    .all(|current| matches!(current, ConnectionStage::Connected))
+        } else {
+            false
+        };
+        self.ready.store(all_connected, Ordering::Release);
     }
 
     /// Sets only the bot's own transient voice fact. Used by `/join` and `/leave` to close the
@@ -1027,6 +1051,11 @@ impl EventHandler for VozenGatewayHandler {
         }
     }
 
+    async fn shard_stage_update(&self, _context: Context, event: ShardStageUpdateEvent) {
+        self.gateway_state
+            .mark_shard_stage(event.shard_id.get() as u64, event.new);
+    }
+
     async fn entitlement_create(
         &self,
         context: Context,
@@ -1223,6 +1252,24 @@ mod tests {
         state.record_message_spoken();
         state.record_message_spoken();
         assert_eq!(state.messages_spoken(), 2);
+    }
+
+    #[test]
+    fn gateway_readiness_tracks_known_shard_stage_changes() {
+        let state = GatewayState::default();
+        state.mark_ready();
+        assert!(state.is_ready());
+
+        state.mark_shard_stage(0, ConnectionStage::Disconnected);
+        assert!(!state.is_ready());
+        state.mark_shard_stage(0, ConnectionStage::Connected);
+        assert!(state.is_ready());
+
+        state.mark_shard_stage(1, ConnectionStage::Connected);
+        state.mark_shard_stage(0, ConnectionStage::Resuming);
+        assert!(!state.is_ready());
+        state.mark_shard_stage(0, ConnectionStage::Connected);
+        assert!(state.is_ready());
     }
 
     #[test]
