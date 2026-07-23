@@ -100,6 +100,7 @@ mod queue_command;
 mod queue_control;
 mod randomizer;
 mod redeem_command;
+mod reflexes_driver;
 mod rejoin_service;
 mod roulette_driver;
 mod server_stats_command;
@@ -316,6 +317,7 @@ pub use randomizer::{
     parse_modal_options, parse_randomizer_command, pick_option,
 };
 pub use redeem_command::{RedeemCommand, RedeemCommandError, parse_redeem_command};
+pub use reflexes_driver::{ReflexesDriver, ReflexesDriverAction, ReflexesGameDriver};
 pub use rejoin_service::{PlannedRejoinError, PlannedRejoinOutcome, PlannedRejoinService};
 pub use roulette_driver::{RouletteDriverAction, RouletteGameDriver};
 pub use server_stats_command::{

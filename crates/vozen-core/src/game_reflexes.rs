@@ -103,6 +103,33 @@ impl ReflexesGame {
 
     #[must_use]
     pub fn play(&mut self, user_id: &str, name: &str) -> ReflexesEvent {
+        self.play_at(user_id, name, self.deadline_ms)
+    }
+
+    #[must_use]
+    pub fn is_finished(&self) -> bool {
+        self.phase.is_none() && self.round >= ROUNDS
+    }
+
+    #[must_use]
+    pub fn scores(&self) -> &[ReflexesScore] {
+        &self.scores
+    }
+
+    #[must_use]
+    pub fn round(&self) -> u8 {
+        self.round
+    }
+
+    #[must_use]
+    pub fn deadline_ms(&self) -> i64 {
+        self.deadline_ms
+    }
+
+    /// Clock-aware play hook. The old `play` method remains as a compatibility wrapper for
+    /// callers that do not supply a clock.
+    #[must_use]
+    pub fn play_at(&mut self, user_id: &str, name: &str, now_ms: i64) -> ReflexesEvent {
         if self.phase.is_none() || self.done {
             return ReflexesEvent::Ignored;
         }
@@ -122,19 +149,9 @@ impl ReflexesGame {
         if self.round >= ROUNDS {
             self.phase = None;
         } else {
-            let _ = self.next_round(self.deadline_ms);
+            let _ = self.next_round(now_ms);
         }
         event
-    }
-
-    #[must_use]
-    pub fn is_finished(&self) -> bool {
-        self.phase.is_none() && self.round >= ROUNDS
-    }
-
-    #[must_use]
-    pub fn scores(&self) -> &[ReflexesScore] {
-        &self.scores
     }
 
     fn next_round(&mut self, now_ms: i64) -> Option<ReflexesEvent> {

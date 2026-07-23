@@ -32,6 +32,7 @@ pub enum GameDriverAction {
     Chess(crate::chess_driver::ChessDriverAction),
     NumericQuiz(crate::numeric_quiz_driver::NumericQuizAction),
     GuessLanguage(crate::guess_language_driver::GuessLanguageDriverAction),
+    Reflexes(crate::reflexes_driver::ReflexesDriverAction),
 }
 
 /// A single game implementation behind the lifecycle boundary.
