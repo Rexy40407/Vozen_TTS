@@ -341,6 +341,7 @@ pub struct GatewayState {
     guild_names: Arc<RwLock<BTreeMap<String, String>>>,
     guild_snapshots: Arc<RwLock<BTreeMap<String, GatewayGuildSnapshot>>>,
     voice_channels: Arc<RwLock<BTreeMap<String, BTreeMap<String, String>>>>,
+    voice_drops_pending_reconnect: Arc<RwLock<BTreeSet<String>>>,
     /// HTTP is retained after READY only for low-frequency, authorized dashboard option lookups.
     /// It contains no message content or cached guild/member state.
     http: Arc<RwLock<Option<Arc<serenity::http::Http>>>>,
@@ -540,14 +541,30 @@ impl GatewayState {
     }
 
     fn update_voice_state(&self, guild_id: &str, user_id: &str, channel_id: Option<String>) {
+        let is_bot = self.bot_user_id().as_deref() == Some(user_id);
         if let Ok(mut guilds) = self.voice_channels.write() {
             let users = guilds.entry(guild_id.to_owned()).or_default();
             match channel_id {
                 Some(channel_id) => {
+                    if is_bot
+                        && !users.contains_key(user_id)
+                        && self
+                            .voice_drops_pending_reconnect
+                            .write()
+                            .is_ok_and(|mut pending| pending.remove(guild_id))
+                    {
+                        self.metrics.record_voice_reconnect();
+                    }
                     users.insert(user_id.to_owned(), channel_id);
                 }
                 None => {
-                    users.remove(user_id);
+                    let was_present = users.remove(user_id).is_some();
+                    if is_bot && was_present {
+                        if let Ok(mut pending) = self.voice_drops_pending_reconnect.write() {
+                            pending.insert(guild_id.to_owned());
+                        }
+                        self.metrics.record_voice_drop();
+                    }
                     if users.is_empty() {
                         guilds.remove(guild_id);
                     }
@@ -568,6 +585,9 @@ impl GatewayState {
         }
         if let Ok(mut voice_channels) = self.voice_channels.write() {
             voice_channels.remove(guild_id);
+        }
+        if let Ok(mut pending) = self.voice_drops_pending_reconnect.write() {
+            pending.remove(guild_id);
         }
     }
 }
@@ -853,6 +873,21 @@ mod tests {
         state.record_message_spoken();
         state.record_message_spoken();
         assert_eq!(state.messages_spoken(), 2);
+    }
+
+    #[test]
+    fn gateway_state_counts_only_bot_voice_drops_and_reconnects() {
+        let state = GatewayState::default();
+        state.remember_bot_user("bot".into());
+        state.update_voice_state("guild", "human", Some("voice".into()));
+        state.update_voice_state("guild", "bot", Some("voice".into()));
+        state.update_voice_state("guild", "bot", None);
+        assert_eq!(state.metrics().snapshot().voice_drops, 1);
+        assert_eq!(state.metrics().snapshot().voice_reconnects, 0);
+        state.update_voice_state("guild", "bot", Some("voice".into()));
+        let snapshot = state.metrics().snapshot();
+        assert_eq!(snapshot.voice_drops, 1);
+        assert_eq!(snapshot.voice_reconnects, 1);
     }
 
     #[test]
