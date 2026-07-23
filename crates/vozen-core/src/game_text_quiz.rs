@@ -102,6 +102,31 @@ impl TextQuizGame {
 
     #[must_use]
     pub fn answer(&mut self, user_id: &str, name: &str, raw: &str) -> TextQuizEvent {
+        self.answer_if(user_id, name, raw, |answer, expected| answer == expected)
+    }
+
+    /// Fast Speech accepts an exact answer or a word-level Jaccard similarity above the supplied
+    /// threshold. Other games should use `answer`, which remains exact after normalization.
+    #[must_use]
+    pub fn answer_with_jaccard(
+        &mut self,
+        user_id: &str,
+        name: &str,
+        raw: &str,
+        threshold: f64,
+    ) -> TextQuizEvent {
+        self.answer_if(user_id, name, raw, |answer, expected| {
+            answer == expected || jaccard_similarity(answer, expected) >= threshold
+        })
+    }
+
+    fn answer_if(
+        &mut self,
+        user_id: &str,
+        name: &str,
+        raw: &str,
+        accepts: impl FnOnce(&str, &str) -> bool,
+    ) -> TextQuizEvent {
         if !self.open {
             return TextQuizEvent::Closed;
         }
@@ -110,7 +135,9 @@ impl TextQuizGame {
             return TextQuizEvent::Invalid;
         }
         let expected = &self.prompts[self.round - 1].1;
-        if normalize_game_answer(trimmed) != normalize_game_answer(expected) {
+        let normalized = normalize_game_answer(trimmed);
+        let normalized_expected = normalize_game_answer(expected);
+        if !accepts(&normalized, &normalized_expected) {
             return TextQuizEvent::Wrong;
         }
         self.open = false;
@@ -157,6 +184,25 @@ pub fn normalize_game_answer(input: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Word-level Jaccard similarity, matching the Node Fast Speech helper. Empty token sets have no
+/// similarity so an empty message can never win a round.
+#[must_use]
+pub fn jaccard_similarity(left: &str, right: &str) -> f64 {
+    let left = normalize_game_answer(left)
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect::<std::collections::BTreeSet<_>>();
+    let right = normalize_game_answer(right)
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect::<std::collections::BTreeSet<_>>();
+    if left.is_empty() || right.is_empty() {
+        return 0.0;
+    }
+    let intersection = left.intersection(&right).count() as f64;
+    intersection / (left.len() as f64 + right.len() as f64 - intersection)
 }
 
 fn is_combining_mark(character: char) -> bool {
@@ -224,5 +270,19 @@ mod tests {
             matches!(empty.begin_round(), TextQuizEvent::Finished { scores } if scores.is_empty())
         );
         assert!(empty.is_finished());
+    }
+
+    #[test]
+    fn fast_speech_accepts_a_single_word_difference_at_the_node_threshold() {
+        let mut game = TextQuizGame::new(vec![(
+            "the cat sat on the mat".into(),
+            "the cat sat on the mat".into(),
+        )]);
+        let _ = game.begin_round();
+        assert!(jaccard_similarity("the cat sat on mat", "the cat sat on the mat") >= 0.7);
+        assert!(matches!(
+            game.answer_with_jaccard("u", "Rexy", "the cat sat on mat", 0.7),
+            TextQuizEvent::Accepted { .. }
+        ));
     }
 }
