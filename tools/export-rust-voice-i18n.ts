@@ -11,6 +11,12 @@ const check = process.argv.includes('--check');
 // These are the only current Rust-promoted voice responses.  Keeping the list here makes adding
 // a new semantic Rust outcome a deliberate review of the existing Node public copy.
 const KEYS = [
+  'birthday.set',
+  'birthday.invalid',
+  'birthday.cleared',
+  'birthday.show',
+  'birthday.none',
+  'birthday.guildOnly',
   'error.generic',
   'error.needManageGuild',
   'join.needVoiceChannel',

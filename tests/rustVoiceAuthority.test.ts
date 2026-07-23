@@ -21,6 +21,7 @@ import {
   rustVoteOwnsCommand,
   rustTopSpeakersOwnsCommand,
   rustPrivacyOwnsCommand,
+  rustBirthdayOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -184,6 +185,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustPrivacyOwnsCommand('privacy', 'erase', 'true')).toBe(true);
     expect(rustPrivacyOwnsCommand('privacy', null, 'true')).toBe(false);
     expect(rustPrivacyOwnsCommand('help', 'erase', 'true')).toBe(false);
+  });
+
+  it('promotes only birthday leaves behind its own canary', () => {
+    expect(rustBirthdayOwnsCommand('birthday', 'set')).toBe(false);
+    expect(rustBirthdayOwnsCommand('birthday', 'show', 'true')).toBe(true);
+    expect(rustBirthdayOwnsCommand('birthday', 'clear', ' TRUE ')).toBe(true);
+    expect(rustBirthdayOwnsCommand('birthday', null, 'true')).toBe(false);
+    expect(rustBirthdayOwnsCommand('joke', 'show', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

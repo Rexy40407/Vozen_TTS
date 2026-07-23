@@ -7,6 +7,7 @@
 //! adapters are individually opt-in. Voice/message ownership still requires its own canary flag.
 
 mod automatic_translation_sink;
+mod birthday_sink;
 mod config_blockword_sink;
 mod config_channel_sink;
 mod config_default_voice_sink;
@@ -115,6 +116,7 @@ struct RuntimeConfig {
     vote: bool,
     vote_client_id: Option<String>,
     top_speakers: bool,
+    birthday: bool,
     privacy: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
@@ -335,6 +337,7 @@ impl RuntimeConfig {
         let vote_client_id = nonempty_env("CLIENT_ID");
         let top_speakers =
             top_speakers_enabled(env::var("RUST_TOP_SPEAKERS_ENABLED").ok().as_deref());
+        let birthday = birthday_enabled(env::var("RUST_BIRTHDAY_ENABLED").ok().as_deref());
         let privacy = privacy_enabled(env::var("RUST_PRIVACY_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
@@ -373,6 +376,7 @@ impl RuntimeConfig {
             vote,
             vote_client_id,
             top_speakers,
+            birthday,
             privacy,
             automatic_translation,
             dashboard,
@@ -602,6 +606,10 @@ fn vote_enabled(raw: Option<&str>) -> bool {
 }
 
 fn top_speakers_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn birthday_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1008,6 +1016,19 @@ fn privacy_event_sink(
     )))
 }
 
+fn birthday_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        birthday_sink::BirthdayGatewaySink::new(store)
+            .map_err(|_| RuntimeError::BirthdayGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -1186,6 +1207,8 @@ enum RuntimeError {
     VoteGateway,
     #[error("top-speakers gateway initialisation failed")]
     TopSpeakersGateway,
+    #[error("birthday gateway initialisation failed")]
+    BirthdayGateway,
     #[error("privacy gateway initialisation failed")]
     PrivacyGateway,
     #[error("config default voice gateway initialisation failed")]
@@ -1325,6 +1348,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = top_speakers_event_sink(config.top_speakers, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = birthday_event_sink(config.birthday, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = privacy_event_sink(config.privacy, store.clone())? {
@@ -1911,6 +1937,15 @@ mod tests {
         assert!(!privacy_enabled(Some("1")));
         assert!(!privacy_enabled(Some("yes")));
         assert!(!privacy_enabled(None));
+    }
+
+    #[test]
+    fn birthday_promotion_is_exactly_opt_in() {
+        assert!(birthday_enabled(Some("true")));
+        assert!(birthday_enabled(Some(" TRUE ")));
+        assert!(!birthday_enabled(Some("1")));
+        assert!(!birthday_enabled(Some("yes")));
+        assert!(!birthday_enabled(None));
     }
 
     #[test]

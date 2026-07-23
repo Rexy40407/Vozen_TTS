@@ -520,6 +520,10 @@ export const catalog: Record<string, Entry> = {
     en: "You haven't set a birthday yet. Use `/birthday set`.",
     pt: 'Ainda não definiste um aniversário. Usa `/birthday set`.',
   },
+  'birthday.guildOnly': {
+    en: 'This command is only available in a server.',
+    pt: 'Este comando só está disponível num servidor.',
+  },
 
   // ── /top-speakers (tagarelas do servidor) ───────────────────────────────────
   'topspeakers.title': {
