@@ -30,6 +30,7 @@ pub enum GameDriverAction {
     TicTacToe(crate::tictactoe_driver::TicTacToeDriverAction),
     Roulette(crate::roulette_driver::RouletteDriverAction),
     Chess(crate::chess_driver::ChessDriverAction),
+    NumericQuiz(crate::numeric_quiz_driver::NumericQuizAction),
 }
 
 /// A single game implementation behind the lifecycle boundary.
