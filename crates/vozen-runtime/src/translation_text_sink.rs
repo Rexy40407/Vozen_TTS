@@ -17,7 +17,7 @@ use serenity::{
     client::Context,
     model::{
         Permissions,
-        application::{CommandInteraction, Interaction},
+        application::{CommandInteraction, CommandType, Interaction},
         channel::ChannelType,
         id::ChannelId,
     },
@@ -25,8 +25,8 @@ use serenity::{
 use vozen_discord::{
     ExplicitTranslationInvocation, ExplicitTranslationOutcome, ExplicitTranslationProvider,
     ExplicitTranslationService, GatewayEventDispatchError, GatewayEventSink,
-    TranslationAdminCommand, VoiceResponseLocalizer, parse_translate_preview_command,
-    parse_translate_text_command, parse_translation_admin_command,
+    TranslationAdminCommand, VoiceResponseLocalizer, parse_translate_message_command,
+    parse_translate_preview_command, parse_translate_text_command, parse_translation_admin_command,
 };
 use vozen_store::{GuildConfigPatch, SqliteStore, StoreError, TranslationMapping};
 
@@ -41,6 +41,7 @@ pub struct TranslationTextGatewaySink {
     localizer: VoiceResponseLocalizer,
     text_enabled: bool,
     admin_enabled: bool,
+    context_enabled: bool,
     provider_enabled: bool,
 }
 
@@ -50,6 +51,7 @@ impl TranslationTextGatewaySink {
         provider: RuntimeTranslationProvider,
         text_enabled: bool,
         admin_enabled: bool,
+        context_enabled: bool,
     ) -> Result<Self, GatewayEventDispatchError> {
         let localizer = VoiceResponseLocalizer::from_generated_contract()
             .map_err(|_| GatewayEventDispatchError)?;
@@ -64,6 +66,7 @@ impl TranslationTextGatewaySink {
             localizer,
             text_enabled,
             admin_enabled,
+            context_enabled,
             provider_enabled,
         })
     }
@@ -301,6 +304,113 @@ impl TranslationTextGatewaySink {
                 .contains(Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES))
     }
 
+    async fn handle_message_context(
+        &self,
+        context: &Context,
+        command: &CommandInteraction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let Some(parsed) = parse_translate_message_command(&command.data)
+            .map_err(|_| GatewayEventDispatchError)?
+        else {
+            return Ok(());
+        };
+        command
+            .defer_ephemeral(context)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let raw = parsed.message.content.trim();
+        let guild_id = command.guild_id.map(|id| id.get().to_string());
+        let preference_scope = guild_id.as_deref().unwrap_or(USER_APP_TRANSLATION_SCOPE);
+        let user_id = command.user.id.get().to_string();
+        let guild_locale = command.guild_locale.as_deref();
+        let empty_parameters = BTreeMap::new();
+        let content = if raw.is_empty() {
+            self.message(
+                "translation.empty",
+                &command.locale,
+                guild_locale,
+                &empty_parameters,
+            )?
+        } else {
+            match self.target_locale(None, preference_scope, &user_id, &command.locale) {
+                Err(_) => self.message(
+                    "translation.unavailable",
+                    &command.locale,
+                    guild_locale,
+                    &empty_parameters,
+                )?,
+                Ok(target_locale) if !self.localizer.supports_explicit_locale(&target_locale) => {
+                    self.message(
+                        "translation.invalidLocale",
+                        &command.locale,
+                        guild_locale,
+                        &empty_parameters,
+                    )?
+                }
+                Ok(target_locale) => match self
+                    .service
+                    .execute(ExplicitTranslationInvocation {
+                        guild_id: guild_id.as_deref(),
+                        user_id: &user_id,
+                        text: raw,
+                        target_locale: &target_locale,
+                    })
+                    .await
+                {
+                    ExplicitTranslationOutcome::Ready { text, .. } => {
+                        let mut parameters = BTreeMap::new();
+                        parameters.insert("locale", target_locale);
+                        parameters.insert(
+                            "text",
+                            truncate_utf16(&text, MAX_TRANSLATION_RESPONSE_UTF16),
+                        );
+                        self.message(
+                            "translation.ready",
+                            &command.locale,
+                            guild_locale,
+                            &parameters,
+                        )?
+                    }
+                    ExplicitTranslationOutcome::Empty => self.message(
+                        "translation.empty",
+                        &command.locale,
+                        guild_locale,
+                        &empty_parameters,
+                    )?,
+                    ExplicitTranslationOutcome::Disabled => self.message(
+                        "translation.disabled",
+                        &command.locale,
+                        guild_locale,
+                        &empty_parameters,
+                    )?,
+                    ExplicitTranslationOutcome::QuotaExceeded => self.message(
+                        "translation.quota",
+                        &command.locale,
+                        guild_locale,
+                        &empty_parameters,
+                    )?,
+                    ExplicitTranslationOutcome::Unavailable
+                    | ExplicitTranslationOutcome::StoreUnavailable => self.message(
+                        "translation.unavailable",
+                        &command.locale,
+                        guild_locale,
+                        &empty_parameters,
+                    )?,
+                },
+            }
+        };
+        command
+            .edit_response(
+                context,
+                EditInteractionResponse::new()
+                    .content(content)
+                    .allowed_mentions(no_mentions()),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(())
+    }
+
     async fn handle_admin(
         &self,
         context: &Context,
@@ -403,6 +513,12 @@ impl GatewayEventSink for TranslationTextGatewaySink {
         let Interaction::Command(command) = interaction else {
             return Ok(());
         };
+        if self.context_enabled
+            && command.data.kind == CommandType::Message
+            && command.data.name == vozen_discord::TRANSLATE_MESSAGE_COMMAND
+        {
+            return self.handle_message_context(&context, &command).await;
+        }
         if self.admin_enabled {
             let parsed_admin = parse_translation_admin_command(&command.data)
                 .map_err(|_| GatewayEventDispatchError)?;
@@ -666,6 +782,7 @@ mod tests {
             RuntimeTranslationProvider::Disabled,
             false,
             true,
+            false,
         )
         .expect("sink")
     }

@@ -30,6 +30,7 @@ import { makeTemporaryMediaCopy } from '../../media/temporaryMedia';
 import { admitUserSpeech } from '../../voice/admission';
 import {
   rustSpeakContextOwnsCommand,
+  rustTranslateContextOwnsCommand,
   rustTranscriptionOwnsCommand,
 } from '../../migration/rustVoiceAuthority';
 
@@ -365,6 +366,7 @@ export async function handleMessageContextMenu(
     // Rust replies to promoted context menus only when their explicit canary is on. Returning
     // before defer prevents two gateway sessions from racing the same interaction.
     if (rustSpeakContextOwnsCommand(i.commandName)) return;
+    if (rustTranslateContextOwnsCommand(i.commandName)) return;
     if (rustTranscriptionOwnsCommand(i.commandName)) return;
     if (i.commandName === 'Translate') {
       await handleTranslateMessage(i, deps);

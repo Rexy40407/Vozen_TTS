@@ -281,6 +281,7 @@ struct TranslationTextRuntimeOptions {
     provider: translation_provider::RuntimeTranslationProvider,
     text_enabled: bool,
     admin_enabled: bool,
+    context_enabled: bool,
 }
 
 /// Automatic channel translation is a separate, explicitly promoted message path. It has no
@@ -576,10 +577,13 @@ fn translation_text_from_environment() -> Option<TranslationTextRuntimeOptions> 
         translation_text_enabled(env::var("RUST_TRANSLATE_TEXT_ENABLED").ok().as_deref());
     let admin_enabled =
         translation_admin_enabled(env::var("RUST_TRANSLATION_ADMIN_ENABLED").ok().as_deref());
-    (text_enabled || admin_enabled).then(|| TranslationTextRuntimeOptions {
+    let context_enabled =
+        translation_context_enabled(env::var("RUST_TRANSLATE_CONTEXT_ENABLED").ok().as_deref());
+    (text_enabled || admin_enabled || context_enabled).then(|| TranslationTextRuntimeOptions {
         provider: translation_provider::RuntimeTranslationProvider::from_environment(),
         text_enabled,
         admin_enabled,
+        context_enabled,
     })
 }
 
@@ -626,6 +630,10 @@ fn translation_text_enabled(raw: Option<&str>) -> bool {
 }
 
 fn translation_admin_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn translation_context_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -885,6 +893,7 @@ fn translation_text_event_sink(
             options.provider,
             options.text_enabled,
             options.admin_enabled,
+            options.context_enabled,
         )
         .map_err(|_| RuntimeError::TranslationGateway)?,
     )))
@@ -2372,6 +2381,15 @@ mod tests {
         assert!(!speak_context_enabled(Some("1")));
         assert!(!speak_context_enabled(Some("yes")));
         assert!(!speak_context_enabled(None));
+    }
+
+    #[test]
+    fn rust_translate_context_is_exactly_opt_in() {
+        assert!(translation_context_enabled(Some("true")));
+        assert!(translation_context_enabled(Some(" TRUE ")));
+        assert!(!translation_context_enabled(Some("1")));
+        assert!(!translation_context_enabled(Some("yes")));
+        assert!(!translation_context_enabled(None));
     }
 
     #[test]

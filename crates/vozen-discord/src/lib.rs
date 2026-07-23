@@ -99,6 +99,7 @@ mod speech_preparation;
 mod stats_command;
 mod top_speakers_command;
 mod transcribe_message_command;
+mod translate_message_command;
 mod translation_command;
 mod translation_preference_command;
 mod uptime_command;
@@ -300,6 +301,10 @@ pub use top_speakers_command::{
 pub use transcribe_message_command::{
     TRANSCRIBE_MESSAGE_COMMAND, TranscribeMessageCommand, TranscribeMessageCommandError,
     parse_transcribe_message_command,
+};
+pub use translate_message_command::{
+    TRANSLATE_MESSAGE_COMMAND, TranslateMessageCommand, TranslateMessageCommandError,
+    parse_translate_message_command,
 };
 pub use translation_command::{
     TranslatePreviewCommand, TranslatePreviewCommandError, TranslateTextCommand,

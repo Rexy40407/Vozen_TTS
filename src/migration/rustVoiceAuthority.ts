@@ -54,6 +54,17 @@ export function rustSpeakContextOwnsCommand(
   );
 }
 
+/** The Translate message context menu reuses the explicit translation quota/provider service. */
+export function rustTranslateContextOwnsCommand(
+  commandName: string,
+  commandType = 3,
+  enabled = process.env.RUST_TRANSLATE_CONTEXT_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' && commandType === 3 && commandName === 'Translate'
+  );
+}
+
 /** `/randomizer` owns a short-lived menu/modal flow inside the Rust voice sink. */
 export function rustRandomizerOwnsCommand(
   commandName: string,

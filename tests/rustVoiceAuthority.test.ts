@@ -39,6 +39,7 @@ import {
   rustVoicePreferencesOwnCommand,
   rustTranscriptionOwnsCommand,
   rustSpeakContextOwnsCommand,
+  rustTranslateContextOwnsCommand,
   rustRandomizerOwnsCommand,
   rustCastOwnsCommand,
 } from '../src/migration/rustVoiceAuthority';
@@ -58,6 +59,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustSpeakContextOwnsCommand('Speak', 2, 'true', 'true', 'piper')).toBe(false);
     expect(rustSpeakContextOwnsCommand('Translate', 3, 'true', 'true', 'piper')).toBe(false);
     expect(rustSpeakContextOwnsCommand('Speak', 3, 'true', 'true', 'piper')).toBe(true);
+  });
+
+  it('keeps the Translate context menu behind its exact canary', () => {
+    expect(rustTranslateContextOwnsCommand('Translate', 3, 'false')).toBe(false);
+    expect(rustTranslateContextOwnsCommand('Translate', 2, 'true')).toBe(false);
+    expect(rustTranslateContextOwnsCommand('Speak', 3, 'true')).toBe(false);
+    expect(rustTranslateContextOwnsCommand('Translate', 3, 'true')).toBe(true);
   });
 
   it('keeps randomizer behind the core Piper canary', () => {
