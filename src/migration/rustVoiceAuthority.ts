@@ -313,6 +313,19 @@ export function rustGameListOwnsCommand(
   );
 }
 
+/** Read-only game scores are promoted independently from the live game manager. */
+export function rustGameScoresOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_GAME_SCORES_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'game' &&
+    (subcommand === 'leaderboard' || subcommand === 'stats')
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

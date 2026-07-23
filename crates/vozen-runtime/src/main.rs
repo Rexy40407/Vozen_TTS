@@ -24,6 +24,7 @@ mod core_voice_sink;
 mod engine_router;
 mod file_export_sink;
 mod game_list_sink;
+mod game_score_sink;
 mod help_sink;
 mod invite_sink;
 mod piper_adapter;
@@ -126,6 +127,7 @@ struct RuntimeConfig {
     redeem: bool,
     privacy: bool,
     game_list: bool,
+    game_scores: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -352,6 +354,7 @@ impl RuntimeConfig {
         let redeem = redeem_enabled(env::var("RUST_REDEEM_ENABLED").ok().as_deref());
         let privacy = privacy_enabled(env::var("RUST_PRIVACY_ENABLED").ok().as_deref());
         let game_list = game_list_enabled(env::var("RUST_GAME_LIST_ENABLED").ok().as_deref());
+        let game_scores = game_scores_enabled(env::var("RUST_GAME_SCORES_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -395,6 +398,7 @@ impl RuntimeConfig {
             redeem,
             privacy,
             game_list,
+            game_scores,
             automatic_translation,
             dashboard,
             admin,
@@ -647,6 +651,10 @@ fn privacy_enabled(raw: Option<&str>) -> bool {
 }
 
 fn game_list_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn game_scores_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1086,6 +1094,19 @@ fn game_list_event_sink(enabled: bool) -> Result<Option<Arc<dyn GatewayEventSink
     )))
 }
 
+fn game_scores_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        game_score_sink::GameScoreGatewaySink::new(store)
+            .map_err(|_| RuntimeError::GameScoresGateway)?,
+    )))
+}
+
 fn premium_event_sink(
     enabled: bool,
     store: Arc<Mutex<SqliteStore>>,
@@ -1312,6 +1333,8 @@ enum RuntimeError {
     PrivacyGateway,
     #[error("game-list gateway initialisation failed")]
     GameListGateway,
+    #[error("game-scores gateway initialisation failed")]
+    GameScoresGateway,
     #[error("config default voice gateway initialisation failed")]
     ConfigDefaultVoiceGateway,
     #[error("config channel gateway initialisation failed")]
@@ -1477,6 +1500,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = game_list_event_sink(config.game_list)? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = game_scores_event_sink(config.game_scores, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -2087,6 +2113,15 @@ mod tests {
         assert!(!game_list_enabled(Some("1")));
         assert!(!game_list_enabled(Some("yes")));
         assert!(!game_list_enabled(None));
+    }
+
+    #[test]
+    fn game_scores_promotion_is_exactly_opt_in() {
+        assert!(game_scores_enabled(Some("true")));
+        assert!(game_scores_enabled(Some(" TRUE ")));
+        assert!(!game_scores_enabled(Some("1")));
+        assert!(!game_scores_enabled(Some("yes")));
+        assert!(!game_scores_enabled(None));
     }
 
     #[test]

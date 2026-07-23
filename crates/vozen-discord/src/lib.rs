@@ -61,6 +61,7 @@ mod explicit_translation;
 mod file_export_command;
 mod file_export_service;
 mod game_list_command;
+mod game_score_command;
 mod gateway_composite;
 mod guild_synthesis_coordinator;
 mod help_command;
@@ -207,6 +208,7 @@ pub use file_export_service::{
     MAX_TTS_FILE_CHARS, TtsFileExportInvocation, TtsFileExportOutcome, TtsFileExportService,
 };
 pub use game_list_command::{GameListCommand, GameListCommandError, parse_game_list_command};
+pub use game_score_command::{GameScoreCommand, GameScoreCommandError, parse_game_score_command};
 pub use gateway_composite::CompositeGatewayEventSink;
 pub use guild_synthesis_coordinator::GuildSynthesisCoordinator;
 pub use help_command::{HelpCommand, HelpCommandError, parse_help_command};

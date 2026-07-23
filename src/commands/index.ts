@@ -77,6 +77,7 @@ import {
   rustPremiumMutationOwnsCommand,
   rustRedeemOwnsCommand,
   rustGameListOwnsCommand,
+  rustGameScoresOwnsCommand,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
@@ -373,6 +374,10 @@ export async function handleInteraction(
     ) ||
     rustRedeemOwnsCommand(i.commandName) ||
     rustGameListOwnsCommand(
+      i.commandName,
+      i.commandName === 'game' ? i.options.getSubcommand(false) : null,
+    ) ||
+    rustGameScoresOwnsCommand(
       i.commandName,
       i.commandName === 'game' ? i.options.getSubcommand(false) : null,
     ) ||

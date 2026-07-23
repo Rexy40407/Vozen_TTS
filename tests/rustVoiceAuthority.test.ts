@@ -27,6 +27,7 @@ import {
   rustPremiumMutationOwnsCommand,
   rustRedeemOwnsCommand,
   rustGameListOwnsCommand,
+  rustGameScoresOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -231,6 +232,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustGameListOwnsCommand('game', 'play', 'true')).toBe(false);
     expect(rustGameListOwnsCommand('game', 'leaderboard', 'true')).toBe(false);
     expect(rustGameListOwnsCommand('help', 'list', 'true')).toBe(false);
+  });
+
+  it('promotes only read-only game scores behind their own canary', () => {
+    expect(rustGameScoresOwnsCommand('game', 'leaderboard')).toBe(false);
+    expect(rustGameScoresOwnsCommand('game', 'leaderboard', 'true')).toBe(true);
+    expect(rustGameScoresOwnsCommand('game', 'stats', 'true')).toBe(true);
+    expect(rustGameScoresOwnsCommand('game', 'play', 'true')).toBe(false);
+    expect(rustGameScoresOwnsCommand('game', 'stop', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {
