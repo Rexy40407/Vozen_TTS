@@ -14,6 +14,7 @@ mod game_skip_count;
 mod game_text_quiz;
 mod game_tictactoe;
 mod game_vozen_says;
+mod game_wordle;
 mod kofi;
 mod language_detection;
 mod message_guard;
@@ -47,6 +48,7 @@ pub use game_skip_count::{NumberSequence, SkipCountGame, SkipCountGuessResult};
 pub use game_text_quiz::{TextQuizEvent, TextQuizGame, TextQuizScore, normalize_game_answer};
 pub use game_tictactoe::{Mark, TicTacToeGame, TicTacToeMove};
 pub use game_vozen_says::{VozenSaysEvent, VozenSaysGame, VozenSaysScore};
+pub use game_wordle::{CellState, WordleEvent, WordleGame, WordleRow};
 pub use kofi::{
     KofiEvent, KofiGrant, KofiPlan, PREMIUM_MAX_SEATS, PREMIUM_PASS_SEATS, ShopProduct,
     extract_kofi_discord_id, hash_kofi_email, map_kofi_to_grant, parse_kofi_payload,
