@@ -21,7 +21,9 @@ use vozen_core::{RuntimeMetrics, SynthRequest};
 
 mod wav_concat;
 
-pub use wav_concat::{WavError, WavFormat, concat_wavs, parse_wav, silence_wav};
+pub use wav_concat::{
+    WavError, WavFormat, concat_wavs, parse_wav, prepend_silence_wav, silence_wav,
+};
 
 pub const PIPER_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -208,9 +210,9 @@ impl<R: PiperRunner> PiperEngine<R> {
             return self.synth_single(request).await;
         };
         if segments.len() == 1 {
-            return self
-                .synth_single(&single_segment_request(request, &segments[0]))
-                .await;
+            let mut single = single_segment_request(request, &segments[0]);
+            single.lead_silence_ms = request.lead_silence_ms;
+            return self.synth_single(&single).await;
         }
 
         // Explicit segments arrive from the policy layer with their own voice selections. Each
@@ -242,6 +244,8 @@ impl<R: PiperRunner> PiperEngine<R> {
         }
         let combined =
             concat_wavs(&wavs, wav_concat::DEFAULT_SEGMENT_SILENCE_MS).map_err(TtsError::Wav)?;
+        let combined = wav_concat::prepend_silence_wav(&combined, request.lead_silence_ms)
+            .map_err(TtsError::Wav)?;
         self.write_cached_wav(destination, combined).await
     }
 
@@ -281,6 +285,12 @@ impl<R: PiperRunner> PiperEngine<R> {
             return Err(TtsError::EmptyOutput);
         }
         result?;
+        if request.lead_silence_ms > 0 {
+            let wav = tokio::fs::read(&temporary).await?;
+            let prefixed =
+                prepend_silence_wav(&wav, request.lead_silence_ms).map_err(TtsError::Wav)?;
+            tokio::fs::write(&temporary, prefixed).await?;
+        }
         // A simultaneous matching request can win the race. Its immutable cache result is valid.
         match tokio::fs::rename(&temporary, &destination).await {
             Ok(()) => Ok(destination),
@@ -333,6 +343,7 @@ fn single_segment_request(
         segments: None,
         single_voice: Some(true),
         emphasis_source: None,
+        lead_silence_ms: 0,
     }
 }
 
@@ -364,6 +375,7 @@ fn cache_key(request: &SynthRequest) -> String {
         }
         None => digest.update([0]),
     }
+    digest.update(request.lead_silence_ms.to_be_bytes());
     format!("{:x}", digest.finalize())
 }
 
@@ -421,6 +433,7 @@ mod tests {
             segments: None,
             single_voice: None,
             emphasis_source: None,
+            lead_silence_ms: 0,
         }
     }
 
@@ -536,6 +549,39 @@ mod tests {
             empty.synth(&request()).await,
             Err(TtsError::EmptyOutput)
         ));
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn lead_silence_is_part_of_the_cache_key_and_is_added_once() {
+        let root = temp_dir("lead-silence");
+        let models = root.join("models");
+        tokio::fs::create_dir_all(&models).await.expect("models");
+        tokio::fs::write(models.join("en_US-amy-medium.onnx"), b"model")
+            .await
+            .expect("model");
+        let runner = Arc::new(FakeRunner {
+            calls: AtomicUsize::new(0),
+            bytes: silence_wav(1),
+        });
+        let engine = PiperEngine::new(runner.clone(), &models, root.join("cache"), 1);
+
+        let plain = engine.synth(&request()).await.expect("plain");
+        let mut delayed_request = request();
+        delayed_request.lead_silence_ms = 1_000;
+        let delayed = engine.synth(&delayed_request).await.expect("delayed");
+        let delayed_again = engine
+            .synth(&delayed_request)
+            .await
+            .expect("cached delayed");
+
+        assert_ne!(plain, delayed);
+        assert_eq!(delayed, delayed_again);
+        assert_eq!(runner.calls.load(Ordering::Relaxed), 2);
+        let delayed_wav = tokio::fs::read(delayed).await.expect("WAV");
+        let parsed = parse_wav(&delayed_wav).expect("parsed");
+        assert_eq!(parsed.data.len(), 44 + 44_100);
+        assert!(parsed.data[..44_100].iter().all(|sample| *sample == 0));
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 

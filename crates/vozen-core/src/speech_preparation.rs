@@ -89,6 +89,7 @@ pub fn prepare_speech(input: SpeechPreparationInput<'_>) -> PreparedSpeech {
                 segments: None,
                 single_voice: Some(true),
                 emphasis_source: Some(spoken.clone()),
+                lead_silence_ms: 0,
             },
             spoken,
         }
@@ -187,6 +188,7 @@ fn prepare_detected(
             segments: (has_english && has_other).then_some(segments),
             single_voice: None,
             emphasis_source: Some(spoken.clone()),
+            lead_silence_ms: 0,
         },
         spoken,
     }

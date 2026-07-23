@@ -178,6 +178,7 @@ mod tests {
             segments: None,
             single_voice: None,
             emphasis_source: None,
+            lead_silence_ms: 0,
         }
     }
 

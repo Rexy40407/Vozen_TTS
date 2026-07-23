@@ -379,6 +379,7 @@ where
             segments: None,
             single_voice: Some(true),
             emphasis_source: None,
+            lead_silence_ms: 0,
         };
         if synthesis.cancelled() {
             let _ = self

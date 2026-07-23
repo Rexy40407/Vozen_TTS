@@ -39,6 +39,8 @@ pub struct SynthRequest {
     pub segments: Option<Vec<SpeechSegment>>,
     pub single_voice: Option<bool>,
     pub emphasis_source: Option<String>,
+    /// Optional silence inserted before this utterance. Zero keeps legacy output unchanged.
+    pub lead_silence_ms: u32,
 }
 
 /// A message is speakable only when it retains a Unicode letter or number.
@@ -119,6 +121,7 @@ pub fn redact_request(request: &SynthRequest, blocklist: &[String]) -> SynthRequ
         segments,
         single_voice: request.single_voice,
         emphasis_source: request.emphasis_source.clone(),
+        lead_silence_ms: request.lead_silence_ms,
     }
 }
 
@@ -157,6 +160,7 @@ pub fn cap_synth_request(request: &SynthRequest) -> SynthRequest {
         segments,
         single_voice: request.single_voice,
         emphasis_source: request.emphasis_source.clone(),
+        lead_silence_ms: request.lead_silence_ms,
     }
 }
 
@@ -229,6 +233,7 @@ mod tests {
             segments: None,
             single_voice: Some(true),
             emphasis_source: Some(text.to_owned()),
+            lead_silence_ms: 0,
         }
     }
 

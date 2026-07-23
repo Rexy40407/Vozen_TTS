@@ -136,6 +136,14 @@ pub fn silence_wav(milliseconds: u32) -> Vec<u8> {
     build_wav(&vec![0; bytes as usize])
 }
 
+/// Prepends a canonical silence segment while preserving the strict Piper WAV format.
+pub fn prepend_silence_wav(wav: &[u8], milliseconds: u32) -> Result<Vec<u8>, WavError> {
+    if milliseconds == 0 {
+        return Ok(wav.to_vec());
+    }
+    concat_wavs(&[silence_wav(milliseconds), wav.to_vec()], 0)
+}
+
 fn is_piper_format(format: WavFormat) -> bool {
     format.audio_format == 1
         && format.sample_rate == PIPER_SAMPLE_RATE
@@ -189,5 +197,16 @@ mod tests {
         let mut stereo = build_wav(&[1, 2]);
         stereo[22..24].copy_from_slice(&2u16.to_le_bytes());
         assert_eq!(concat_wavs(&[stereo], 0), Err(WavError::UnsupportedFormat));
+    }
+
+    #[test]
+    fn prepends_requested_silence_without_mutating_the_original() {
+        let source = build_wav(&[1, 2, 3, 4]);
+        let prefixed = prepend_silence_wav(&source, 1).expect("prefixed");
+        let parsed = parse_wav(&prefixed).expect("parsed");
+        assert_eq!(parsed.data.len(), 44 + 4);
+        assert_eq!(&parsed.data[..44], vec![0; 44].as_slice());
+        assert_eq!(&parsed.data[44..], &[1, 2, 3, 4]);
+        assert_eq!(parse_wav(&source).expect("source").data, &[1, 2, 3, 4]);
     }
 }
