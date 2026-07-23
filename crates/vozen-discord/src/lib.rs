@@ -29,6 +29,7 @@ mod attachment_transcription;
 mod automatic_translation_service;
 mod birthday_command;
 mod bot_stats_command;
+mod cast;
 mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
@@ -118,6 +119,10 @@ pub use automatic_translation_service::{
 };
 pub use birthday_command::{BirthdayCommand, BirthdayCommandError, parse_birthday_command};
 pub use bot_stats_command::{BotStatsCommand, BotStatsCommandError, parse_bot_stats_command};
+pub use cast::{
+    CAST_LANGUAGE_CHOICES, CAST_THEMES, CastAssignment, CastEntry, CastLanguage, CastMember,
+    CastTheme, assign_cast, build_cast_speech, cast_theme_by_key, chunk_cast_speech,
+};
 pub use command_registration::{
     CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
     CommandRegistrationOutcome, DiscordHttpCommandRegistrationClient, register_commands,
