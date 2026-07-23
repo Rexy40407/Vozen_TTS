@@ -33,6 +33,7 @@ import {
   rustRedeemOwnsCommand,
   rustGameListOwnsCommand,
   rustGameScoresOwnsCommand,
+  rustGamePlayOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -364,6 +365,15 @@ describe('Rust core voice migration ownership', () => {
     expect(rustGameScoresOwnsCommand('game', 'stats', 'true')).toBe(true);
     expect(rustGameScoresOwnsCommand('game', 'play', 'true')).toBe(false);
     expect(rustGameScoresOwnsCommand('game', 'stop', 'true')).toBe(false);
+  });
+
+  it('promotes live game play and stop only with the core voice canary', () => {
+    expect(rustGamePlayOwnsCommand('game', 'play')).toBe(false);
+    expect(rustGamePlayOwnsCommand('game', 'play', 'false', 'true', 'piper')).toBe(false);
+    expect(rustGamePlayOwnsCommand('game', 'play', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustGamePlayOwnsCommand('game', 'play', 'true', 'true', 'piper')).toBe(true);
+    expect(rustGamePlayOwnsCommand('game', 'stop', 'true', 'true', 'piper')).toBe(true);
+    expect(rustGamePlayOwnsCommand('game', 'list', 'true', 'true', 'piper')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

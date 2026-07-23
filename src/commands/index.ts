@@ -83,6 +83,7 @@ import {
   rustRedeemOwnsCommand,
   rustGameListOwnsCommand,
   rustGameScoresOwnsCommand,
+  rustGamePlayOwnsCommand,
   rustVoiceOwnsCommand,
   rustRandomizerOwnsCommand,
   rustCastOwnsCommand,
@@ -405,6 +406,10 @@ export async function handleInteraction(
       i.commandName === 'game' ? i.options.getSubcommand(false) : null,
     ) ||
     rustGameScoresOwnsCommand(
+      i.commandName,
+      i.commandName === 'game' ? i.options.getSubcommand(false) : null,
+    ) ||
+    rustGamePlayOwnsCommand(
       i.commandName,
       i.commandName === 'game' ? i.options.getSubcommand(false) : null,
     ) ||

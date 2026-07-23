@@ -1,7 +1,7 @@
-//! Strict parsing for the live `/game` leaves that are not promoted yet.
+//! Strict parsing for the live `/game` leaves owned by the Rust adapter.
 //!
 //! Parsing them before the runtime promotion keeps forged nested options from reaching the
-//! future Rust game manager and gives the canary a stable boundary for play/stop.
+//! Rust game manager and gives the canary a stable boundary for play/stop.
 
 use serenity::model::application::{CommandData, CommandDataOptionValue};
 use thiserror::Error;

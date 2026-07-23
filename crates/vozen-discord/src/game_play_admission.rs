@@ -1,7 +1,7 @@
 //! Pure admission gates for `/game play`.
 //!
 //! This mirrors the Node command's pre-session checks. It is deliberately transport-free so
-//! Rust can be canaried without claiming authority over the still Node-owned game manager.
+//! the Discord adapter can enforce the same gates before creating a live game session.
 
 use crate::{GameDefinition, game_by_id};
 

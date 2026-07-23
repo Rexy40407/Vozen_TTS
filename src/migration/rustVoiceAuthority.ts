@@ -584,6 +584,23 @@ export function rustGameScoresOwnsCommand(
   );
 }
 
+/** Live game sessions are promoted only when the Rust voice gateway is active as well. */
+export function rustGamePlayOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
+  enabled = process.env.RUST_GAME_PLAY_ENABLED,
+  ttsEngine = process.env.TTS_ENGINE,
+): boolean {
+  return (
+    coreEnabled?.trim().toLowerCase() === 'true' &&
+    enabled?.trim().toLowerCase() === 'true' &&
+    rustPiperCompatible(ttsEngine) &&
+    commandName === 'game' &&
+    (subcommand === 'play' || subcommand === 'stop')
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
