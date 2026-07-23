@@ -73,6 +73,7 @@ import {
   rustPrivacyOwnsCommand,
   rustBirthdayOwnsCommand,
   rustServerStatsOwnsCommand,
+  rustPremiumInfoOwnsCommand,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
@@ -359,6 +360,10 @@ export async function handleInteraction(
       i.commandName === 'birthday' ? i.options.getSubcommand(false) : null,
     ) ||
     rustServerStatsOwnsCommand(i.commandName) ||
+    rustPremiumInfoOwnsCommand(
+      i.commandName,
+      i.commandName === 'premium' ? i.options.getSubcommand(false) : null,
+    ) ||
     rustTranslationOwnsCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,

@@ -23,6 +23,7 @@ import {
   rustPrivacyOwnsCommand,
   rustBirthdayOwnsCommand,
   rustServerStatsOwnsCommand,
+  rustPremiumInfoOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -200,6 +201,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustServerStatsOwnsCommand('server-stats')).toBe(false);
     expect(rustServerStatsOwnsCommand('server-stats', 'true')).toBe(true);
     expect(rustServerStatsOwnsCommand('stats', 'true')).toBe(false);
+  });
+
+  it('promotes only premium info behind its own canary', () => {
+    expect(rustPremiumInfoOwnsCommand('premium', 'info')).toBe(false);
+    expect(rustPremiumInfoOwnsCommand('premium', 'info', 'true')).toBe(true);
+    expect(rustPremiumInfoOwnsCommand('premium', 'activate', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

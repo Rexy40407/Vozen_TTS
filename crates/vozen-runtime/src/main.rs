@@ -26,6 +26,7 @@ mod file_export_sink;
 mod help_sink;
 mod invite_sink;
 mod piper_adapter;
+mod premium_sink;
 mod privacy_sink;
 mod pronunciation_sink;
 mod server_stats_sink;
@@ -119,6 +120,7 @@ struct RuntimeConfig {
     top_speakers: bool,
     birthday: bool,
     server_stats: bool,
+    premium: bool,
     privacy: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
@@ -342,6 +344,7 @@ impl RuntimeConfig {
         let birthday = birthday_enabled(env::var("RUST_BIRTHDAY_ENABLED").ok().as_deref());
         let server_stats =
             server_stats_enabled(env::var("RUST_SERVER_STATS_ENABLED").ok().as_deref());
+        let premium = premium_enabled(env::var("RUST_PREMIUM_ENABLED").ok().as_deref());
         let privacy = privacy_enabled(env::var("RUST_PRIVACY_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
@@ -382,6 +385,7 @@ impl RuntimeConfig {
             top_speakers,
             birthday,
             server_stats,
+            premium,
             privacy,
             automatic_translation,
             dashboard,
@@ -619,6 +623,10 @@ fn birthday_enabled(raw: Option<&str>) -> bool {
 }
 
 fn server_stats_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn premium_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1053,6 +1061,30 @@ fn server_stats_event_sink(
     )))
 }
 
+fn premium_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+    client_id: Option<String>,
+    redemption_secret: Option<String>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    let guild_sku_id = nonempty_env("PREMIUM_GUILD_SKU_ID").and_then(|value| value.parse().ok());
+    let user_sku_id = nonempty_env("PREMIUM_USER_SKU_ID").and_then(|value| value.parse().ok());
+    Ok(Some(Arc::new(
+        premium_sink::PremiumGatewaySink::new(
+            store,
+            nonempty_env("KOFI_URL").unwrap_or_else(|| "https://ko-fi.com/".to_owned()),
+            client_id,
+            redemption_secret,
+            guild_sku_id,
+            user_sku_id,
+        )
+        .map_err(|_| RuntimeError::PremiumGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -1235,6 +1267,8 @@ enum RuntimeError {
     BirthdayGateway,
     #[error("server-stats gateway initialisation failed")]
     ServerStatsGateway,
+    #[error("premium gateway initialisation failed")]
+    PremiumGateway,
     #[error("privacy gateway initialisation failed")]
     PrivacyGateway,
     #[error("config default voice gateway initialisation failed")]
@@ -1384,6 +1418,14 @@ async fn run() -> Result<(), RuntimeError> {
         config.vote_client_id.clone(),
         config.vote_redemption_secret.clone(),
         store.clone(),
+    )? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = premium_event_sink(
+        config.premium,
+        store.clone(),
+        config.vote_client_id.clone(),
+        config.vote_redemption_secret.clone(),
     )? {
         event_sinks.push(sink);
     }
