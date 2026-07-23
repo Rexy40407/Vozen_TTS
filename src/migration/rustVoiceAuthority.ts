@@ -109,6 +109,21 @@ export function rustConfigRoleOwnsCommand(
   );
 }
 
+/** Guild default voice uses the same installed-model catalogue as Rust voice preferences. */
+export function rustConfigDefaultVoiceOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_CONFIG_DEFAULT_VOICE_ENABLED,
+  ttsEngine = process.env.TTS_ENGINE,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    rustPiperCompatible(ttsEngine) &&
+    commandName === 'config' &&
+    subcommand === 'default-voice'
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

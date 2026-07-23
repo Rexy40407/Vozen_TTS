@@ -28,6 +28,8 @@ mod automatic_translation_service;
 mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
+mod config_default_voice_command;
+mod config_default_voice_service;
 mod config_language_command;
 mod config_language_service;
 mod config_numeric_command;
@@ -81,6 +83,13 @@ pub use command_registration::{
 pub use command_routing::{CommandArea, command_area, route_command};
 pub use command_speech_pipeline::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline,
+};
+pub use config_default_voice_command::{
+    ConfigDefaultVoiceCommand, ConfigDefaultVoiceCommandError, parse_config_default_voice_command,
+};
+pub use config_default_voice_service::{
+    ConfigDefaultVoiceFailure, ConfigDefaultVoiceInvocation, ConfigDefaultVoiceOutcome,
+    ConfigDefaultVoiceService, ConfigDefaultVoiceSettings,
 };
 pub use config_language_command::{
     ConfigLanguageCommand, ConfigLanguageCommandError, parse_config_language_command,

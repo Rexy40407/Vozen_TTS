@@ -111,6 +111,7 @@ const KEYS = [
   'config.rateLimitSet',
   'config.roleSet',
   'config.roleCleared',
+  'config.defaultVoiceSet',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };

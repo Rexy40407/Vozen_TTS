@@ -7,6 +7,7 @@
 //! adapters are individually opt-in. Voice/message ownership still requires its own canary flag.
 
 mod automatic_translation_sink;
+mod config_default_voice_sink;
 mod config_language_sink;
 mod config_numeric_sink;
 mod config_role_sink;
@@ -82,6 +83,7 @@ struct RuntimeConfig {
     translation_text: Option<TranslationTextRuntimeOptions>,
     translation_preferences: bool,
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
+    config_default_voice: Option<ConfigDefaultVoiceRuntimeOptions>,
     pronunciation: bool,
     config_language: bool,
     config_toggles: bool,
@@ -216,6 +218,12 @@ struct VoicePreferenceRuntimeOptions {
     default_speed: f64,
 }
 
+/// `/config default-voice` shares the discovered Piper catalogue but has an independent canary
+/// so preference migrations cannot accidentally claim an admin command.
+struct ConfigDefaultVoiceRuntimeOptions {
+    available_models: Vec<String>,
+}
+
 /// This is separate from automatic channel translation and is disabled unless the exact flag
 /// is enabled alongside the matching Node ownership boundary.
 struct TranslationTextRuntimeOptions {
@@ -266,6 +274,7 @@ impl RuntimeConfig {
                 .as_deref(),
         );
         let voice_preferences = voice_preferences_from_environment()?;
+        let config_default_voice = config_default_voice_from_environment()?;
         let pronunciation =
             pronunciation_enabled(env::var("RUST_PRONUNCIATION_ENABLED").ok().as_deref());
         let config_language =
@@ -292,6 +301,7 @@ impl RuntimeConfig {
             translation_text,
             translation_preferences,
             voice_preferences,
+            config_default_voice,
             pronunciation,
             config_language,
             config_toggles,
@@ -390,6 +400,22 @@ fn voice_preferences_from_environment()
     }))
 }
 
+fn config_default_voice_from_environment()
+-> Result<Option<ConfigDefaultVoiceRuntimeOptions>, RuntimeError> {
+    if !config_default_voice_enabled(
+        env::var("RUST_CONFIG_DEFAULT_VOICE_ENABLED")
+            .ok()
+            .as_deref(),
+    ) {
+        return Ok(None);
+    }
+    require_piper_runtime_default(env::var("TTS_ENGINE").ok().as_deref())?;
+    let models_dir = nonempty_env("MODELS_DIR").unwrap_or_else(|| "./models".to_owned());
+    Ok(Some(ConfigDefaultVoiceRuntimeOptions {
+        available_models: discover_piper_models(std::path::Path::new(&models_dir))?,
+    }))
+}
+
 fn translation_text_from_environment() -> Option<TranslationTextRuntimeOptions> {
     translation_text_enabled(env::var("RUST_TRANSLATE_TEXT_ENABLED").ok().as_deref()).then(|| {
         TranslationTextRuntimeOptions {
@@ -441,6 +467,10 @@ fn translation_preferences_enabled(raw: Option<&str>) -> bool {
 }
 
 fn voice_preferences_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn config_default_voice_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -694,6 +724,24 @@ fn config_role_event_sink(
     )))
 }
 
+fn config_default_voice_event_sink(
+    options: Option<ConfigDefaultVoiceRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    let Some(options) = options else {
+        return Ok(None);
+    };
+    Ok(Some(Arc::new(
+        config_default_voice_sink::ConfigDefaultVoiceGatewaySink::new(
+            store,
+            vozen_discord::ConfigDefaultVoiceSettings {
+                available_models: options.available_models,
+            },
+        )
+        .map_err(|_| RuntimeError::ConfigDefaultVoiceGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -858,6 +906,8 @@ enum RuntimeError {
     ConfigNumericGateway,
     #[error("config role gateway initialisation failed")]
     ConfigRoleGateway,
+    #[error("config default voice gateway initialisation failed")]
+    ConfigDefaultVoiceGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -941,6 +991,10 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = config_role_event_sink(config.config_role, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = config_default_voice_event_sink(config.config_default_voice, store.clone())?
+    {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1407,6 +1461,15 @@ mod tests {
             assert!(!enabled(Some("yes")));
             assert!(!enabled(None));
         }
+    }
+
+    #[test]
+    fn default_voice_config_promotion_is_exactly_opt_in() {
+        assert!(config_default_voice_enabled(Some("true")));
+        assert!(config_default_voice_enabled(Some(" TRUE ")));
+        assert!(!config_default_voice_enabled(Some("1")));
+        assert!(!config_default_voice_enabled(Some("yes")));
+        assert!(!config_default_voice_enabled(None));
     }
 
     #[test]

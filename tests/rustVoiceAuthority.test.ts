@@ -8,6 +8,7 @@ import {
   rustConfigLanguageOwnsCommand,
   rustConfigNumericOwnsCommand,
   rustConfigRoleOwnsCommand,
+  rustConfigDefaultVoiceOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -79,6 +80,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigRoleOwnsCommand('config', 'priority-role', 'true')).toBe(false);
     expect(rustConfigRoleOwnsCommand('config', 'blocked-role', 'true')).toBe(false);
     expect(rustConfigRoleOwnsCommand('config', 'show', 'true')).toBe(false);
+  });
+
+  it('promotes default voice only with the Piper-compatible catalogue canary', () => {
+    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice')).toBe(false);
+    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'piper')).toBe(true);
+    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'gtts')).toBe(false);
+    expect(rustConfigDefaultVoiceOwnsCommand('config', 'role', 'true', 'piper')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

@@ -139,7 +139,8 @@
     "config.rateLimitRange",
     "config.rateLimitSet",
     "config.roleSet",
-    "config.roleCleared"
+    "config.roleCleared",
+    "config.defaultVoiceSet"
   ],
   "messages": {
     "en": {
@@ -242,7 +243,8 @@
       "config.rateLimitRange": "The rate-limit value has to be between 1 and 120.",
       "config.rateLimitSet": "Rate limit set to {value} messages per minute.",
       "config.roleSet": "Auto-read is now limited to members with {role}.",
-      "config.roleCleared": "Role restriction removed — everyone can be read now."
+      "config.roleCleared": "Role restriction removed — everyone can be read now.",
+      "config.defaultVoiceSet": "✅ Server default voice set to **{name}**. Members without their own voice will hear this one. (id: `{model}`)"
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -344,7 +346,8 @@
       "config.rateLimitRange": "O valor de rate-limit tem de estar entre 1 e 120.",
       "config.rateLimitSet": "Rate-limit: {value}/min.",
       "config.roleSet": "Auto-leitura restrita a quem tem {role}.",
-      "config.roleCleared": "Restricao de role removida: todos podem ser lidos."
+      "config.roleCleared": "Restricao de role removida: todos podem ser lidos.",
+      "config.defaultVoiceSet": "✅ Voz default do servidor: **{name}**. Os membros sem voz própria vão ouvir esta. (id: `{model}`)"
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -446,7 +449,8 @@
       "config.rateLimitRange": "El valor del límite de frecuencia tiene que estar entre 1 y 120.",
       "config.rateLimitSet": "Límite de frecuencia configurado en {value} mensajes por minuto.",
       "config.roleSet": "La lectura automática ahora se limita a los miembros con {role}.",
-      "config.roleCleared": "Restricción por rol eliminada: ahora se puede leer a todos."
+      "config.roleCleared": "Restricción por rol eliminada: ahora se puede leer a todos.",
+      "config.defaultVoiceSet": "✅ Voz predeterminada del servidor configurada como **{name}**. Los miembros sin su propia voz escucharán esta. (id: `{model}`)"
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -548,7 +552,8 @@
       "config.rateLimitRange": "La valeur de la limite de débit doit être comprise entre 1 et 120.",
       "config.rateLimitSet": "Limite de débit définie sur {value} messages par minute.",
       "config.roleSet": "La lecture automatique est désormais limitée aux membres ayant {role}.",
-      "config.roleCleared": "Restriction de rôle supprimée — tout le monde peut désormais être lu."
+      "config.roleCleared": "Restriction de rôle supprimée — tout le monde peut désormais être lu.",
+      "config.defaultVoiceSet": "✅ Voix par défaut du serveur définie sur **{name}**. Les membres sans voix propre entendront celle-ci. (id : `{model}`)"
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -650,7 +655,8 @@
       "config.rateLimitRange": "Der Wert für das Ratenlimit muss zwischen 1 und 120 liegen.",
       "config.rateLimitSet": "Ratenlimit auf {value} Nachrichten pro Minute gesetzt.",
       "config.roleSet": "Automatisches Vorlesen ist jetzt auf Mitglieder mit {role} beschränkt.",
-      "config.roleCleared": "Rollenbeschränkung entfernt — jetzt kann jeder vorgelesen werden."
+      "config.roleCleared": "Rollenbeschränkung entfernt — jetzt kann jeder vorgelesen werden.",
+      "config.defaultVoiceSet": "✅ Standardstimme des Servers auf **{name}** gesetzt. Mitglieder ohne eigene Stimme hören diese. (id: `{model}`)"
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -752,7 +758,8 @@
       "config.rateLimitRange": "De waarde voor de snelheidslimiet moet tussen 1 en 120 liggen.",
       "config.rateLimitSet": "Snelheidslimiet ingesteld op {value} berichten per minuut.",
       "config.roleSet": "Automatisch voorlezen is nu beperkt tot leden met {role}.",
-      "config.roleCleared": "Rolbeperking verwijderd — iedereen kan nu voorgelezen worden."
+      "config.roleCleared": "Rolbeperking verwijderd — iedereen kan nu voorgelezen worden.",
+      "config.defaultVoiceSet": "✅ Standaardstem van de server ingesteld op **{name}**. Leden zonder eigen stem horen deze. (id: `{model}`)"
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -854,7 +861,8 @@
       "config.rateLimitRange": "Wartość limitu tempa musi mieścić się w przedziale od 1 do 120.",
       "config.rateLimitSet": "Limit tempa ustawiony na {value} wiadomości na minutę.",
       "config.roleSet": "Automatyczne czytanie jest teraz ograniczone do członków z rolą {role}.",
-      "config.roleCleared": "Ograniczenie roli usunięte — teraz każdy może być czytany."
+      "config.roleCleared": "Ograniczenie roli usunięte — teraz każdy może być czytany.",
+      "config.defaultVoiceSet": "✅ Domyślny głos serwera ustawiony na **{name}**. Członkowie bez własnego głosu usłyszą ten. (id: `{model}`)"
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -956,7 +964,8 @@
       "config.rateLimitRange": "Hız sınırı değeri 1 ile 120 arasında olmalı.",
       "config.rateLimitSet": "Hız sınırı dakikada {value} mesaj olarak ayarlandı.",
       "config.roleSet": "Otomatik okuma artık yalnızca {role} rolüne sahip üyelerle sınırlı.",
-      "config.roleCleared": "Rol kısıtlaması kaldırıldı — artık herkes okunabilir."
+      "config.roleCleared": "Rol kısıtlaması kaldırıldı — artık herkes okunabilir.",
+      "config.defaultVoiceSet": "✅ Sunucu varsayılan sesi **{name}** olarak ayarlandı. Kendi sesi olmayan üyeler bunu duyacak. (id: `{model}`)"
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -1058,7 +1067,8 @@
       "config.rateLimitRange": "Hodnota limitu rychlosti musí být mezi 1 a 120.",
       "config.rateLimitSet": "Limit rychlosti nastaven na {value} zpráv za minutu.",
       "config.roleSet": "Automatické předčítání je nyní omezeno na členy s rolí {role}.",
-      "config.roleCleared": "Omezení role odstraněno — teď může být předčítán každý."
+      "config.roleCleared": "Omezení role odstraněno — teď může být předčítán každý.",
+      "config.defaultVoiceSet": "✅ Výchozí hlas serveru nastaven na **{name}**. Členové bez vlastního hlasu uslyší tento. (id: `{model}`)"
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -1160,7 +1170,8 @@
       "config.rateLimitRange": "Värdet för hastighetsgränsen måste vara mellan 1 och 120.",
       "config.rateLimitSet": "Hastighetsgräns satt till {value} meddelanden per minut.",
       "config.roleSet": "Automatisk uppläsning är nu begränsad till medlemmar med {role}.",
-      "config.roleCleared": "Rollbegränsning borttagen — alla kan läsas upp nu."
+      "config.roleCleared": "Rollbegränsning borttagen — alla kan läsas upp nu.",
+      "config.defaultVoiceSet": "✅ Serverns standardröst satt till **{name}**. Medlemmar utan egen röst hör den här. (id: `{model}`)"
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -1262,7 +1273,8 @@
       "config.rateLimitRange": "Nopeusrajan arvon on oltava välillä 1 ja 120.",
       "config.rateLimitSet": "Nopeusrajaksi asetettu {value} viestiä minuutissa.",
       "config.roleSet": "Automaattinen lukeminen on nyt rajattu jäseniin, joilla on rooli {role}.",
-      "config.roleCleared": "Roolirajoitus poistettu — kaikki voidaan nyt lukea."
+      "config.roleCleared": "Roolirajoitus poistettu — kaikki voidaan nyt lukea.",
+      "config.defaultVoiceSet": "✅ Palvelimen oletusääneksi asetettu **{name}**. Jäsenet, joilla ei ole omaa ääntä, kuulevat tämän. (id: `{model}`)"
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -1364,7 +1376,8 @@
       "config.rateLimitRange": "Værdien for hastighedsgrænse skal være mellem 1 og 120.",
       "config.rateLimitSet": "Hastighedsgrænse sat til {value} beskeder i minuttet.",
       "config.roleSet": "Automatisk oplæsning er nu begrænset til medlemmer med {role}.",
-      "config.roleCleared": "Rollebegrænsning fjernet — alle kan nu blive læst."
+      "config.roleCleared": "Rollebegrænsning fjernet — alle kan nu blive læst.",
+      "config.defaultVoiceSet": "✅ Serverens standardstemme sat til **{name}**. Medlemmer uden deres egen stemme hører denne. (id: `{model}`)"
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -1466,7 +1479,8 @@
       "config.rateLimitRange": "Valoarea limitei de rată trebuie să fie între 1 și 120.",
       "config.rateLimitSet": "Limita de rată setată la {value} mesaje pe minut.",
       "config.roleSet": "Citirea automată este acum limitată la membrii cu {role}.",
-      "config.roleCleared": "Restricția de rol a fost eliminată — acum oricine poate fi citit."
+      "config.roleCleared": "Restricția de rol a fost eliminată — acum oricine poate fi citit.",
+      "config.defaultVoiceSet": "✅ Vocea implicită a serverului setată la **{name}**. Membrii fără voce proprie o vor auzi pe aceasta. (id: `{model}`)"
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -1568,7 +1582,8 @@
       "config.rateLimitRange": "A sebességkorlát értékének 1 és 120 között kell lennie.",
       "config.rateLimitSet": "Sebességkorlát beállítva: {value} üzenet percenként.",
       "config.roleSet": "Az automatikus felolvasás mostantól a(z) {role} szereppel rendelkező tagokra korlátozódik.",
-      "config.roleCleared": "A szerepkorlátozás eltávolítva — mostantól mindenkit fel lehet olvasni."
+      "config.roleCleared": "A szerepkorlátozás eltávolítva — mostantól mindenkit fel lehet olvasni.",
+      "config.defaultVoiceSet": "✅ A szerver alapértelmezett hangja beállítva: **{name}**. A saját hang nélküli tagok ezt fogják hallani. (id: `{model}`)"
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -1670,7 +1685,8 @@
       "config.rateLimitRange": "Rhaid i'r gwerth terfyn-cyfradd fod rhwng 1 a 120.",
       "config.rateLimitSet": "Terfyn cyfradd wedi'i osod i {value} neges y funud.",
       "config.roleSet": "Mae darllen awtomatig nawr wedi'i gyfyngu i aelodau â {role}.",
-      "config.roleCleared": "Cyfyngiad rôl wedi'i dynnu — gall pawb gael eu darllen nawr."
+      "config.roleCleared": "Cyfyngiad rôl wedi'i dynnu — gall pawb gael eu darllen nawr.",
+      "config.defaultVoiceSet": "✅ Llais rhagosodedig y gweinydd wedi'i osod i **{name}**. Bydd aelodau heb eu llais eu hunain yn clywed hwn. (id: `{model}`)"
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -1772,7 +1788,8 @@
       "config.rateLimitRange": "Tíðnitakmarkið verður að vera á milli 1 og 120.",
       "config.rateLimitSet": "Tíðnitakmark stillt á {value} skilaboð á mínútu.",
       "config.roleSet": "Sjálflestur er núna takmarkaður við meðlimi með {role}.",
-      "config.roleCleared": "Hlutverkstakmörkun fjarlægð — allir geta verið lesnir núna."
+      "config.roleCleared": "Hlutverkstakmörkun fjarlægð — allir geta verið lesnir núna.",
+      "config.defaultVoiceSet": "✅ Sjálfgefin rödd netþjóns stillt á **{name}**. Meðlimir án eigin raddar heyra þessa. (id: `{model}`)"
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -1874,7 +1891,8 @@
       "config.rateLimitRange": "De Wäert fir d'Ratelimitt muss tëscht 1 an 120 leien.",
       "config.rateLimitSet": "Ratelimitt op {value} Messagen d'Minutt gesat.",
       "config.roleSet": "Automatescht Virliesen ass elo op Memberen mat {role} limitéiert.",
-      "config.roleCleared": "Rolleaschränkung ewechgeholl — jidderee kann elo virgelies ginn."
+      "config.roleCleared": "Rolleaschränkung ewechgeholl — jidderee kann elo virgelies ginn.",
+      "config.defaultVoiceSet": "✅ Standardstëmm vum Server op **{name}** gesat. Memberen ouni eege Stëmm héieren dës. (id: `{model}`)"
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -1976,7 +1994,8 @@
       "config.rateLimitRange": "Ātruma ierobežojuma vērtībai jābūt no 1 līdz 120.",
       "config.rateLimitSet": "Ātruma ierobežojums iestatīts uz {value} ziņām minūtē.",
       "config.roleSet": "Automātiskā lasīšana tagad ierobežota tikai dalībniekiem ar {role}.",
-      "config.roleCleared": "Lomas ierobežojums noņemts — tagad var lasīt ikvienu."
+      "config.roleCleared": "Lomas ierobežojums noņemts — tagad var lasīt ikvienu.",
+      "config.defaultVoiceSet": "✅ Servera noklusējuma balss iestatīta uz **{name}**. Dalībnieki bez savas balss dzirdēs šo. (id: `{model}`)"
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -2078,7 +2097,8 @@
       "config.rateLimitRange": "Hodnota limitu rýchlosti musí byť medzi 1 a 120.",
       "config.rateLimitSet": "Limit rýchlosti nastavený na {value} správ za minútu.",
       "config.roleSet": "Automatické čítanie je teraz obmedzené na členov s rolou {role}.",
-      "config.roleCleared": "Obmedzenie roly odstránené — teraz môže byť čítaný každý."
+      "config.roleCleared": "Obmedzenie roly odstránené — teraz môže byť čítaný každý.",
+      "config.defaultVoiceSet": "✅ Predvolený hlas servera nastavený na **{name}**. Členovia bez vlastného hlasu budú počuť tento. (id: `{model}`)"
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -2180,7 +2200,8 @@
       "config.rateLimitRange": "Vrednost omejitve hitrosti mora biti med 1 in 120.",
       "config.rateLimitSet": "Omejitev hitrosti je nastavljena na {value} sporočil na minuto.",
       "config.roleSet": "Samodejno branje je zdaj omejeno na člane z {role}.",
-      "config.roleCleared": "Omejitev vloge je odstranjena — zdaj se lahko bere vsakogar."
+      "config.roleCleared": "Omejitev vloge je odstranjena — zdaj se lahko bere vsakogar.",
+      "config.defaultVoiceSet": "✅ Privzeti glas strežnika je nastavljen na **{name}**. Člani brez lastnega glasu bodo slišali tega. (id: `{model}`)"
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -2282,7 +2303,8 @@
       "config.rateLimitRange": "Thamani ya kikomo cha kasi lazima iwe kati ya 1 na 120.",
       "config.rateLimitSet": "Kikomo cha kasi kimewekwa kuwa ujumbe {value} kwa dakika.",
       "config.roleSet": "Kusoma kiotomatiki sasa kumewekewa kikomo kwa wanachama wenye {role}.",
-      "config.roleCleared": "Kizuizi cha jukumu kimeondolewa — kila mtu anaweza kusomewa sasa."
+      "config.roleCleared": "Kizuizi cha jukumu kimeondolewa — kila mtu anaweza kusomewa sasa.",
+      "config.defaultVoiceSet": "✅ Sauti chaguo-msingi ya seva imewekwa kuwa **{name}**. Wanachama wasio na sauti yao wenyewe watasikia hii. (kitambulisho: `{model}`)"
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -2384,7 +2406,8 @@
       "config.rateLimitRange": "Giá trị giới hạn tần suất phải nằm trong khoảng 1 đến 120.",
       "config.rateLimitSet": "Đã đặt giới hạn tần suất là {value} tin nhắn mỗi phút.",
       "config.roleSet": "Tự động đọc giờ chỉ giới hạn cho thành viên có {role}.",
-      "config.roleCleared": "Đã gỡ hạn chế theo vai trò — giờ mọi người đều có thể được đọc."
+      "config.roleCleared": "Đã gỡ hạn chế theo vai trò — giờ mọi người đều có thể được đọc.",
+      "config.defaultVoiceSet": "✅ Đã đặt giọng mặc định của máy chủ thành **{name}**. Thành viên chưa có giọng riêng sẽ nghe giọng này. (id: `{model}`)"
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -2486,7 +2509,8 @@
       "config.rateLimitRange": "El valor del límit de freqüència ha d'estar entre 1 i 120.",
       "config.rateLimitSet": "Límit de freqüència establert a {value} missatges per minut.",
       "config.roleSet": "La lectura automàtica ara està limitada als membres amb {role}.",
-      "config.roleCleared": "Restricció de rol eliminada. Ara es pot llegir tothom."
+      "config.roleCleared": "Restricció de rol eliminada. Ara es pot llegir tothom.",
+      "config.defaultVoiceSet": "✅ Veu predeterminada del servidor establerta a **{name}**. Els membres sense veu pròpia sentiran aquesta. (id: `{model}`)"
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -2588,7 +2612,8 @@
       "config.rateLimitRange": "Il valore del limite di frequenza deve essere tra 1 e 120.",
       "config.rateLimitSet": "Limite di frequenza impostato su {value} messaggi al minuto.",
       "config.roleSet": "La lettura automatica è ora limitata ai membri con {role}.",
-      "config.roleCleared": "Restrizione di ruolo rimossa — ora tutti possono essere letti."
+      "config.roleCleared": "Restrizione di ruolo rimossa — ora tutti possono essere letti.",
+      "config.defaultVoiceSet": "✅ Voce predefinita del server impostata su **{name}**. I membri senza una voce propria sentiranno questa. (id: `{model}`)"
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -2690,7 +2715,8 @@
       "config.rateLimitRange": "Η τιμή του ορίου ρυθμού πρέπει να είναι μεταξύ 1 και 120.",
       "config.rateLimitSet": "Το όριο ρυθμού ορίστηκε σε {value} μηνύματα ανά λεπτό.",
       "config.roleSet": "Η αυτόματη ανάγνωση περιορίζεται τώρα σε μέλη με τον ρόλο {role}.",
-      "config.roleCleared": "Ο περιορισμός ρόλου αφαιρέθηκε — τώρα μπορεί να διαβάζεται ο καθένας."
+      "config.roleCleared": "Ο περιορισμός ρόλου αφαιρέθηκε — τώρα μπορεί να διαβάζεται ο καθένας.",
+      "config.defaultVoiceSet": "✅ Η προεπιλεγμένη φωνή του διακομιστή ορίστηκε σε **{name}**. Τα μέλη χωρίς δική τους φωνή θα ακούν αυτήν. (id: `{model}`)"
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -2792,7 +2818,8 @@
       "config.rateLimitRange": "Значение ограничения частоты должно быть от 1 до 120.",
       "config.rateLimitSet": "Ограничение частоты установлено на {value} сообщений в минуту.",
       "config.roleSet": "Авточтение теперь ограничено участниками с {role}.",
-      "config.roleCleared": "Ограничение по роли снято — теперь читать можно всех."
+      "config.roleCleared": "Ограничение по роли снято — теперь читать можно всех.",
+      "config.defaultVoiceSet": "✅ Голос сервера по умолчанию установлен на **{name}**. Участники без своего голоса будут слышать этот. (id: `{model}`)"
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -2894,7 +2921,8 @@
       "config.rateLimitRange": "Значення ліміту частоти має бути від 1 до 120.",
       "config.rateLimitSet": "Ліміт частоти встановлено на {value} повідомлень за хвилину.",
       "config.roleSet": "Автозачитування тепер обмежено учасниками з роллю {role}.",
-      "config.roleCleared": "Обмеження за роллю знято — тепер можна читати всіх."
+      "config.roleCleared": "Обмеження за роллю знято — тепер можна читати всіх.",
+      "config.defaultVoiceSet": "✅ Типовий голос сервера встановлено на **{name}**. Учасники без власного голосу чутимуть цей. (id: `{model}`)"
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -2996,7 +3024,8 @@
       "config.rateLimitRange": "Жиілік шегінің мәні 1 мен 120 аралығында болуы керек.",
       "config.rateLimitSet": "Жиілік шегі минутына {value} хабарлама болып орнатылды.",
       "config.roleSet": "Автоматты оқу енді тек {role} рөлі бар мүшелермен шектелген.",
-      "config.roleCleared": "Рөл шектеуі жойылды — енді барлығы оқылуы мүмкін."
+      "config.roleCleared": "Рөл шектеуі жойылды — енді барлығы оқылуы мүмкін.",
+      "config.defaultVoiceSet": "✅ Сервердің әдепкі дауысы **{name}** болып орнатылды. Өз дауысы жоқ мүшелер осыны естиді. (id: `{model}`)"
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -3098,7 +3127,8 @@
       "config.rateLimitRange": "Вредност ограничења брзине мора бити између 1 и 120.",
       "config.rateLimitSet": "Ограничење брзине постављено на {value} порука у минути.",
       "config.roleSet": "Аутоматско читање је сада ограничено на чланове са улогом {role}.",
-      "config.roleCleared": "Ограничење по улози уклоњено — сада сви могу бити читани."
+      "config.roleCleared": "Ограничење по улози уклоњено — сада сви могу бити читани.",
+      "config.defaultVoiceSet": "✅ Подразумевани глас сервера постављен на **{name}**. Чланови без сопственог гласа чуће овај. (ид: `{model}`)"
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -3200,7 +3230,8 @@
       "config.rateLimitRange": "يجب أن تكون قيمة حد المعدل بين 1 و120.",
       "config.rateLimitSet": "تم تعيين حد المعدل إلى {value} رسالة في الدقيقة.",
       "config.roleSet": "أصبحت القراءة التلقائية مقتصرة على الأعضاء الحاملين لـ {role}.",
-      "config.roleCleared": "تم إزالة قيد الرتبة — يمكن قراءة الجميع الآن."
+      "config.roleCleared": "تم إزالة قيد الرتبة — يمكن قراءة الجميع الآن.",
+      "config.defaultVoiceSet": "✅ تم تعيين الصوت الافتراضي للخادم إلى **{name}**. الأعضاء الذين ليس لديهم صوت خاص سيسمعون هذا الصوت. (المعرّف: `{model}`)"
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -3302,7 +3333,8 @@
       "config.rateLimitRange": "مقدار محدودیت نرخ باید بین 1 و 120 باشد.",
       "config.rateLimitSet": "محدودیت نرخ روی {value} پیام در دقیقه تنظیم شد.",
       "config.roleSet": "خواندن خودکار حالا فقط به اعضای دارای {role} محدود شد.",
-      "config.roleCleared": "محدودیت نقش برداشته شد — حالا همه می‌توانند خوانده شوند."
+      "config.roleCleared": "محدودیت نقش برداشته شد — حالا همه می‌توانند خوانده شوند.",
+      "config.defaultVoiceSet": "✅ صدای پیش‌فرض سرور روی **{name}** تنظیم شد. اعضایی که صدای خودشان را ندارند این را می‌شنوند. (شناسه: `{model}`)"
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -3404,7 +3436,8 @@
       "config.rateLimitRange": "სიხშირის ლიმიტის მნიშვნელობა უნდა იყოს 1-სა და 120-ს შორის.",
       "config.rateLimitSet": "სიხშირის ლიმიტი დაყენდა {value} შეტყობინებაზე წუთში.",
       "config.roleSet": "ავტოკითხვა ახლა შეზღუდულია {role}-ის მქონე წევრებით.",
-      "config.roleCleared": "როლის შეზღუდვა მოხსნილია — ახლა ყველა შეიძლება წაიკითხოს."
+      "config.roleCleared": "როლის შეზღუდვა მოხსნილია — ახლა ყველა შეიძლება წაიკითხოს.",
+      "config.defaultVoiceSet": "✅ სერვერის ნაგულისხმევი ხმა დაყენდა **{name}**-ზე. საკუთარი ხმის არმქონე წევრები ამას მოისმენენ. (id: `{model}`)"
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -3506,7 +3539,8 @@
       "config.rateLimitRange": "दर-सीमा मान १ र १२० बीचमा हुनुपर्छ।",
       "config.rateLimitSet": "दर सीमा प्रति मिनेट {value} सन्देश मा सेट भयो।",
       "config.roleSet": "स्वतः-पढ्ने अब {role} भएका सदस्यहरूमा मात्र सीमित छ।",
-      "config.roleCleared": "भूमिका प्रतिबन्ध हटाइयो — अब सबैको सन्देश पढ्न सकिन्छ।"
+      "config.roleCleared": "भूमिका प्रतिबन्ध हटाइयो — अब सबैको सन्देश पढ्न सकिन्छ।",
+      "config.defaultVoiceSet": "✅ सर्भरको पूर्वनिर्धारित स्वर **{name}** मा सेट भयो। आफ्नै स्वर नभएका सदस्यहरूले यही सुन्नेछन्। (id: `{model}`)"
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -3608,7 +3642,8 @@
       "config.rateLimitRange": "速率限制值必须在 1 到 120 之间。",
       "config.rateLimitSet": "速率限制已设为每分钟 {value} 条消息。",
       "config.roleSet": "自动朗读现在仅限拥有 {role} 的成员。",
-      "config.roleCleared": "已移除身份组限制——现在所有人的消息都可被朗读。"
+      "config.roleCleared": "已移除身份组限制——现在所有人的消息都可被朗读。",
+      "config.defaultVoiceSet": "✅ 服务器默认声音已设为 **{name}**。没有自己声音的成员将听到这个声音。（id：`{model}`）"
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -3710,7 +3745,8 @@
       "config.rateLimitRange": "レート制限は 1 から 120 の間で指定してください。",
       "config.rateLimitSet": "レート制限を1分あたり {value} メッセージに設定しました。",
       "config.roleSet": "自動読み上げは {role} を持つメンバーに限定されました。",
-      "config.roleCleared": "ロール制限を解除しました：全員が読み上げ対象になります。"
+      "config.roleCleared": "ロール制限を解除しました：全員が読み上げ対象になります。",
+      "config.defaultVoiceSet": "✅ サーバーの既定の声を **{name}** に設定しました。自分の声を設定していないメンバーはこの声を聞きます。(id: `{model}`)"
     }
   }
 }
