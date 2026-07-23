@@ -19,6 +19,12 @@ pub struct TranslateTextCommand {
     pub target_locale: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TranslatePreviewCommand {
+    pub text: String,
+    pub target_locale: String,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum TranslateTextCommandError {
     #[error("incoming command does not match the registered command contract: {0}")]
@@ -30,6 +36,18 @@ pub enum TranslateTextCommandError {
     #[error("the private translation command has a non-string locale option")]
     InvalidLocale,
     #[error("the private translation command contains an undeclared option")]
+    UnexpectedOption,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum TranslatePreviewCommandError {
+    #[error("incoming command does not match the registered command contract: {0}")]
+    Contract(#[from] ContractError),
+    #[error("the preview command is missing its required option")]
+    MissingOption,
+    #[error("the preview command has an invalid option type")]
+    InvalidOption,
+    #[error("the preview command contains an undeclared option")]
     UnexpectedOption,
 }
 
@@ -77,6 +95,52 @@ pub fn parse_translate_text_command(
         })
         .transpose()?;
     Ok(Some(TranslateTextCommand {
+        text,
+        target_locale,
+    }))
+}
+
+/// Parses exactly the Manage Server `/translate preview` leaf.
+pub fn parse_translate_preview_command(
+    command: &CommandData,
+) -> Result<Option<TranslatePreviewCommand>, TranslatePreviewCommandError> {
+    let path = command_path_from_options(&command.options);
+    if route_command(&command.name, command.kind.into(), &path)? != CommandArea::Translation
+        || command.name != "translate"
+        || path != ["preview"]
+    {
+        return Ok(None);
+    }
+    let Some(group) = command.options.first() else {
+        return Err(TranslatePreviewCommandError::MissingOption);
+    };
+    let CommandDataOptionValue::SubCommand(options) = &group.value else {
+        return Err(TranslatePreviewCommandError::InvalidOption);
+    };
+    if options.len() != 2
+        || options
+            .iter()
+            .any(|option| option.name != "text" && option.name != "locale")
+    {
+        return Err(TranslatePreviewCommandError::UnexpectedOption);
+    }
+    let text = options
+        .iter()
+        .find(|option| option.name == "text")
+        .ok_or(TranslatePreviewCommandError::MissingOption)
+        .and_then(|option| match &option.value {
+            CommandDataOptionValue::String(value) => Ok(value.clone()),
+            _ => Err(TranslatePreviewCommandError::InvalidOption),
+        })?;
+    let target_locale = options
+        .iter()
+        .find(|option| option.name == "locale")
+        .ok_or(TranslatePreviewCommandError::MissingOption)
+        .and_then(|option| match &option.value {
+            CommandDataOptionValue::String(value) => Ok(value.clone()),
+            _ => Err(TranslatePreviewCommandError::InvalidOption),
+        })?;
+    Ok(Some(TranslatePreviewCommand {
         text,
         target_locale,
     }))
@@ -131,5 +195,42 @@ mod tests {
             )),
             Err(TranslateTextCommandError::UnexpectedOption)
         );
+    }
+
+    #[test]
+    fn parses_only_preview_with_both_required_strings() {
+        assert_eq!(
+            parse_translate_preview_command(&command(
+                r#"{"id":"1","name":"translate","type":1,"options":[{"name":"preview","type":1,"options":[{"name":"text","type":3,"value":"hello"},{"name":"locale","type":3,"value":"pt"}]}]}"#,
+            ))
+            .expect("preview"),
+            Some(TranslatePreviewCommand {
+                text: "hello".into(),
+                target_locale: "pt".into(),
+            })
+        );
+        assert_eq!(
+            parse_translate_preview_command(&command(
+                r#"{"id":"1","name":"translate","type":1,"options":[{"name":"text","type":1,"options":[]}] }"#,
+            ))
+            .expect("other leaf"),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_preview_without_locale_or_with_forged_options() {
+        assert!(matches!(
+            parse_translate_preview_command(&command(
+                r#"{"id":"1","name":"translate","type":1,"options":[{"name":"preview","type":1,"options":[{"name":"text","type":3,"value":"hello"}]}]}"#,
+            )),
+            Err(TranslatePreviewCommandError::MissingOption)
+        ));
+        assert!(matches!(
+            parse_translate_preview_command(&command(
+                r#"{"id":"1","name":"translate","type":1,"options":[{"name":"preview","type":1,"options":[{"name":"text","type":3,"value":"hello"},{"name":"locale","type":3,"value":"pt"},{"name":"other","type":3,"value":"x"}]}]}"#,
+            )),
+            Err(TranslatePreviewCommandError::UnexpectedOption)
+        ));
     }
 }

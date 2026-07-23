@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   rustTranslationOwnsCommand,
   rustTranslationOwnsAutomaticMessages,
+  rustTranslationPreviewOwnsCommand,
   rustTranslationPreferencesOwnCommand,
   rustQueueOwnsCommand,
   rustPronunciationOwnsCommand,
@@ -322,6 +323,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranslationPreferencesOwnCommand('translate', 'opt-out', 'true')).toBe(true);
     expect(rustTranslationPreferencesOwnCommand('translate', 'text', 'true')).toBe(false);
     expect(rustTranslationPreferencesOwnCommand('translate', 'map-add', 'true')).toBe(false);
+  });
+
+  it('promotes translation preview only behind the explicit translation canary', () => {
+    expect(rustTranslationPreviewOwnsCommand('translate', 'preview')).toBe(false);
+    expect(rustTranslationPreviewOwnsCommand('translate', 'preview', 'true')).toBe(true);
+    expect(rustTranslationPreviewOwnsCommand('translate', 'text', 'true')).toBe(false);
   });
 
   it('yields only Rust-complete textual voice preferences under their own flag', () => {

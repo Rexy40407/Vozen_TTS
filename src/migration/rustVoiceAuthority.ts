@@ -425,7 +425,7 @@ function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
 /**
  * Translation promotion is leaf-level: `/translate` also contains server mappings, opt-outs
  * and automatic-translation settings which remain Node-owned. Rust may only claim the private
- * `text` leaf after its matching runtime adapter is intentionally started.
+ * `text` and `preview` leaves after their matching runtime adapter is intentionally started.
  */
 export function rustTranslationOwnsCommand(
   commandName: string,
@@ -434,6 +434,20 @@ export function rustTranslationOwnsCommand(
 ): boolean {
   return (
     enabled?.trim().toLowerCase() === 'true' && commandName === 'translate' && subcommand === 'text'
+  );
+}
+
+/** `/translate preview` shares the explicit provider/quota adapter but keeps its admin boundary
+ * independently testable from member preference leaves. */
+export function rustTranslationPreviewOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_TRANSLATE_TEXT_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'translate' &&
+    subcommand === 'preview'
   );
 }
 

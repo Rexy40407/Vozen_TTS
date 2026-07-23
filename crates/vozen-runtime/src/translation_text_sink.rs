@@ -17,7 +17,7 @@ use serenity::{
 use vozen_discord::{
     ExplicitTranslationInvocation, ExplicitTranslationOutcome, ExplicitTranslationService,
     GatewayEventDispatchError, GatewayEventSink, VoiceResponseLocalizer,
-    parse_translate_text_command,
+    parse_translate_preview_command, parse_translate_text_command,
 };
 use vozen_store::SqliteStore;
 
@@ -104,23 +104,53 @@ impl GatewayEventSink for TranslationTextGatewaySink {
         let Interaction::Command(command) = interaction else {
             return Ok(());
         };
-        let Some(parsed) =
-            parse_translate_text_command(&command.data).map_err(|_| GatewayEventDispatchError)?
+        let parsed_text =
+            parse_translate_text_command(&command.data).map_err(|_| GatewayEventDispatchError)?;
+        let parsed_preview = parse_translate_preview_command(&command.data)
+            .map_err(|_| GatewayEventDispatchError)?;
+        let Some((text, explicit_locale, is_preview)) = parsed_text
+            .map(|parsed| (parsed.text, parsed.target_locale, false))
+            .or_else(|| {
+                parsed_preview.map(|parsed| (parsed.text, Some(parsed.target_locale), true))
+            })
         else {
             return Ok(());
         };
-        // Parse before defer: every non-text `/translate` subcommand remains Node-owned.
+        let guild_id = command.guild_id.map(|id| id.get().to_string());
+        if is_preview {
+            let can_manage_guild = command
+                .member
+                .as_ref()
+                .and_then(|member| member.permissions)
+                .is_some_and(|permissions| {
+                    permissions.contains(serenity::model::Permissions::MANAGE_GUILD)
+                });
+            if guild_id.is_none() || !can_manage_guild {
+                command
+                    .create_response(
+                        &context,
+                        serenity::builder::CreateInteractionResponse::Message(
+                            serenity::builder::CreateInteractionResponseMessage::new()
+                                .content("You need Manage Server to configure translation.")
+                                .ephemeral(true),
+                        ),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                return Ok(());
+            }
+        }
+        // Parse before defer: every unpromoted `/translate` subcommand remains Node-owned.
         command
             .defer_ephemeral(&context)
             .await
             .map_err(|_| GatewayEventDispatchError)?;
-        let guild_id = command.guild_id.map(|id| id.get().to_string());
         let preference_scope = guild_id.as_deref().unwrap_or(USER_APP_TRANSLATION_SCOPE);
         let user_id = command.user.id.get().to_string();
         let guild_locale = command.guild_locale.as_deref();
         let parameters = BTreeMap::new();
         let content = match self.target_locale(
-            parsed.target_locale,
+            explicit_locale,
             preference_scope,
             &user_id,
             &command.locale,
@@ -145,50 +175,81 @@ impl GatewayEventSink for TranslationTextGatewaySink {
                 .execute(ExplicitTranslationInvocation {
                     guild_id: guild_id.as_deref(),
                     user_id: &user_id,
-                    text: &parsed.text,
+                    text: &text,
                     target_locale: &target_locale,
                 })
                 .await
             {
                 ExplicitTranslationOutcome::Ready { text, .. } => {
-                    let mut parameters = BTreeMap::new();
-                    parameters.insert("locale", target_locale);
-                    parameters.insert(
-                        "text",
-                        truncate_utf16(&text, MAX_TRANSLATION_RESPONSE_UTF16),
-                    );
-                    self.message(
-                        "translation.ready",
-                        &command.locale,
-                        guild_locale,
-                        &parameters,
-                    )?
+                    if is_preview {
+                        format!(
+                            "Preview ({target_locale}):\n{}",
+                            truncate_utf16(&text, MAX_TRANSLATION_RESPONSE_UTF16)
+                        )
+                    } else {
+                        let mut parameters = BTreeMap::new();
+                        parameters.insert("locale", target_locale);
+                        parameters.insert(
+                            "text",
+                            truncate_utf16(&text, MAX_TRANSLATION_RESPONSE_UTF16),
+                        );
+                        self.message(
+                            "translation.ready",
+                            &command.locale,
+                            guild_locale,
+                            &parameters,
+                        )?
+                    }
                 }
-                ExplicitTranslationOutcome::Empty => self.message(
-                    "translation.empty",
-                    &command.locale,
-                    guild_locale,
-                    &parameters,
-                )?,
-                ExplicitTranslationOutcome::Disabled => self.message(
-                    "translation.disabled",
-                    &command.locale,
-                    guild_locale,
-                    &parameters,
-                )?,
-                ExplicitTranslationOutcome::QuotaExceeded => self.message(
-                    "translation.quota",
-                    &command.locale,
-                    guild_locale,
-                    &parameters,
-                )?,
+                ExplicitTranslationOutcome::Empty => {
+                    if is_preview {
+                        "Provide readable text and a supported target locale.".to_owned()
+                    } else {
+                        self.message(
+                            "translation.empty",
+                            &command.locale,
+                            guild_locale,
+                            &parameters,
+                        )?
+                    }
+                }
+                ExplicitTranslationOutcome::Disabled => {
+                    if is_preview {
+                        "Translation is currently disabled.".to_owned()
+                    } else {
+                        self.message(
+                            "translation.disabled",
+                            &command.locale,
+                            guild_locale,
+                            &parameters,
+                        )?
+                    }
+                }
+                ExplicitTranslationOutcome::QuotaExceeded => {
+                    if is_preview {
+                        "The rolling 30-day translation limit has been reached.".to_owned()
+                    } else {
+                        self.message(
+                            "translation.quota",
+                            &command.locale,
+                            guild_locale,
+                            &parameters,
+                        )?
+                    }
+                }
                 ExplicitTranslationOutcome::Unavailable
-                | ExplicitTranslationOutcome::StoreUnavailable => self.message(
-                    "translation.unavailable",
-                    &command.locale,
-                    guild_locale,
-                    &parameters,
-                )?,
+                | ExplicitTranslationOutcome::StoreUnavailable => {
+                    if is_preview {
+                        "Translation is temporarily unavailable.".to_owned()
+                    } else {
+                        self.message(
+                            "translation.unavailable",
+                            &command.locale,
+                            guild_locale,
+                            &parameters,
+                        )?
+                    }
+                }
             },
         };
         // Provider text is never trusted to control mentions. The Node automatic-translation
