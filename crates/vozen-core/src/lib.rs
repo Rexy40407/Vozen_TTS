@@ -11,6 +11,7 @@ mod game_heads_or_tails;
 mod game_math;
 mod game_quiz;
 mod game_reflexes;
+mod game_roulette;
 mod game_skip_count;
 mod game_text_quiz;
 mod game_tictactoe;
@@ -49,6 +50,7 @@ pub use game_heads_or_tails::{
 pub use game_math::{MathGame, MathGuessResult, MathOperation, MathProblem, first_integer};
 pub use game_quiz::{QuizAnswer, QuizRoundOpened, QuizState};
 pub use game_reflexes::{ReflexesEvent, ReflexesGame, ReflexesScore};
+pub use game_roulette::{RouletteEvent, RouletteGame};
 pub use game_skip_count::{NumberSequence, SkipCountGame, SkipCountGuessResult};
 pub use game_text_quiz::{
     TextQuizEvent, TextQuizGame, TextQuizScore, jaccard_similarity, normalize_game_answer,
