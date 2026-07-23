@@ -411,6 +411,12 @@ pub trait GatewayEventSink: Send + Sync {
         Ok(())
     }
 
+    /// Runs when Discord confirms that the bot is present in a guild again. Lifecycle sinks use
+    /// this to cancel a pending departure purge; other sinks deliberately ignore the hook.
+    async fn on_guild_create(&self, _guild_id: &str) -> Result<(), GatewayEventDispatchError> {
+        Ok(())
+    }
+
     async fn on_message(
         &self,
         context: Context,
@@ -885,6 +891,11 @@ impl EventHandler for VozenGatewayHandler {
                 joined_timestamp: guild.joined_at.unix_timestamp(),
             });
         self.gateway_state.replace_guild_voice_states(&guild);
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink
+                .on_guild_create(&guild.id.get().to_string())
+                .await;
+        }
     }
 
     async fn guild_delete(

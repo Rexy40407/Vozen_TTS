@@ -26,6 +26,7 @@ mod engine_router;
 mod file_export_sink;
 mod game_list_sink;
 mod game_score_sink;
+mod guild_lifecycle_sink;
 mod help_sink;
 mod invite_sink;
 mod piper_adapter;
@@ -83,7 +84,9 @@ use vozen_discord::{
     locale_display_options, run_discord_gateway_with_state_and_sink, voice_display_options,
     write_planned_rejoin_marker,
 };
-use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore, month_key_utc};
+use vozen_store::{
+    DEPARTURE_GRACE_MS, ProviderHealth as StoreProviderHealth, SqliteStore, month_key_utc,
+};
 
 use crate::topgg_metrics::{
     ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats, sync_topgg_commands,
@@ -1535,6 +1538,7 @@ async fn run() -> Result<(), RuntimeError> {
     // Google HD counters are cost-control metadata, not personal message content. Keep the same
     // bounded monthly retention as the Node runtime without letting an old row block startup.
     spawn_gcloud_retention(store.clone());
+    spawn_guild_retention(store.clone());
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
@@ -1544,7 +1548,12 @@ async fn run() -> Result<(), RuntimeError> {
     // Only a runtime that owns Rust voice sessions may write the shared restart marker. A
     // shadow process must never authorize the still-live Node process to reconnect calls.
     let write_rejoin_marker_on_shutdown = config.core_voice.is_some();
-    let mut event_sinks = Vec::new();
+    let mut event_sinks: Vec<Arc<dyn GatewayEventSink>> = Vec::new();
+    // This sink only records departure markers and clears them on guild_create; it does not
+    // consume messages or interactions, so it is safe while Node remains authoritative.
+    event_sinks.push(Arc::new(
+        guild_lifecycle_sink::GuildLifecycleGatewaySink::new(store.clone()),
+    ));
     if let Some(sink) =
         core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?
     {
@@ -1977,6 +1986,18 @@ fn spawn_gcloud_retention(store: Arc<Mutex<SqliteStore>>) {
             interval.tick().await;
             if let Ok(store) = store.lock() {
                 let _ = purge_gcloud_retention(&store, system_now_ms());
+            }
+        }
+    });
+}
+
+fn spawn_guild_retention(store: Arc<Mutex<SqliteStore>>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
+        loop {
+            interval.tick().await;
+            if let Ok(store) = store.lock() {
+                let _ = store.purge_departed_guilds(system_now_ms(), DEPARTURE_GRACE_MS);
             }
         }
     });
