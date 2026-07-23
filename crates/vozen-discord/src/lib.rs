@@ -106,6 +106,7 @@ mod speak_message_command;
 mod speech_preparation;
 mod stats_command;
 mod text_quiz_driver;
+mod tictactoe_driver;
 mod top_speakers_command;
 mod transcribe_message_command;
 mod translate_message_command;
@@ -323,6 +324,7 @@ pub use stats_command::{StatsCommand, StatsCommandError, parse_stats_command};
 pub use text_quiz_driver::{
     TextQuizDriver, TextQuizDriverAction, TextQuizGameDriver, TextQuizMode,
 };
+pub use tictactoe_driver::{TicTacToeDriver, TicTacToeDriverAction, TicTacToeGameDriver};
 pub use top_speakers_command::{
     TopSpeakersCommand, TopSpeakersCommandError, parse_top_speakers_command,
 };
