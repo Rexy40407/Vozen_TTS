@@ -71,6 +71,19 @@ impl GatewayEventSink for CompositeGatewayEventSink {
         Ok(())
     }
 
+    async fn on_voice_state_update(
+        &self,
+        context: Context,
+        old: Option<serenity::model::voice::VoiceState>,
+        new: serenity::model::voice::VoiceState,
+    ) -> Result<(), GatewayEventDispatchError> {
+        for sink in &self.sinks {
+            sink.on_voice_state_update(context.clone(), old.clone(), new.clone())
+                .await?;
+        }
+        Ok(())
+    }
+
     async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
         for sink in &self.sinks {
             sink.on_guild_delete(guild_id).await?;
