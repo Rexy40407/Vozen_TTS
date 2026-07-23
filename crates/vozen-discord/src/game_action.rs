@@ -17,6 +17,14 @@ pub struct GameSpeech {
     pub speed: Option<f64>,
 }
 
+/// Display name and points captured during one match. The durable score store keeps only the
+/// Discord id; this short-lived value preserves the name needed by the final in-channel summary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GameStanding {
+    pub name: String,
+    pub points: i64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderedGameAction {
     pub key: &'static str,
@@ -84,6 +92,27 @@ pub fn render_game_action(action: &GameDriverAction) -> Option<RenderedGameActio
             None
         }
     }
+}
+
+/// Builds the shared final scoreboard used by every game family. The caller renders each
+/// returned action with the interaction/guild locale and joins the resulting lines with newlines,
+/// matching Node's `sendStandings` without embedding locale-specific text in Rust.
+#[must_use]
+pub fn render_game_finish(standings: &[GameStanding]) -> Vec<RenderedGameAction> {
+    if standings.is_empty() {
+        return vec![message("game.finish.noScores", BTreeMap::new())];
+    }
+    let mut ranked = standings.to_vec();
+    ranked.sort_by_key(|standing| std::cmp::Reverse(standing.points));
+    let mut rendered = vec![message("game.finish.title", BTreeMap::new())];
+    rendered.extend(ranked.into_iter().enumerate().map(|(index, standing)| {
+        let mut parameters = BTreeMap::new();
+        parameters.insert("rank", rank_medal(index + 1));
+        parameters.insert("user", standing.name);
+        parameters.insert("points", standing.points.to_string());
+        message("game.finish.line", parameters)
+    }));
+    rendered
 }
 
 fn message(key: &'static str, parameters: BTreeMap<&'static str, String>) -> RenderedGameAction {
@@ -816,6 +845,15 @@ fn coin_side_name(side: CoinSide) -> String {
     }
 }
 
+fn rank_medal(rank: usize) -> String {
+    match rank {
+        1 => "🥇".to_owned(),
+        2 => "🥈".to_owned(),
+        3 => "🥉".to_owned(),
+        _ => format!("#{rank}"),
+    }
+}
+
 fn math_symbol(operation: MathOperation) -> &'static str {
     match operation {
         MathOperation::Plus => "+",
@@ -969,5 +1007,37 @@ mod tests {
             .is_none()
         );
         assert!(render_game_action(&GameDriverAction::Finished).is_none());
+    }
+
+    #[test]
+    fn finish_renderer_matches_node_order_and_empty_state() {
+        let empty = render_game_finish(&[]);
+        assert_eq!(empty.len(), 1);
+        assert_eq!(empty[0].key, "game.finish.noScores");
+
+        let rendered = render_game_finish(&[
+            GameStanding {
+                name: "Kai".into(),
+                points: 1,
+            },
+            GameStanding {
+                name: "Ana".into(),
+                points: 3,
+            },
+            GameStanding {
+                name: "Bea".into(),
+                points: 3,
+            },
+            GameStanding {
+                name: "Leo".into(),
+                points: 0,
+            },
+        ]);
+        assert_eq!(rendered[0].key, "game.finish.title");
+        assert_eq!(rendered[1].parameters["rank"], "🥇");
+        assert_eq!(rendered[1].parameters["user"], "Ana");
+        assert_eq!(rendered[2].parameters["rank"], "🥈");
+        assert_eq!(rendered[3].parameters["rank"], "🥉");
+        assert_eq!(rendered[4].parameters["rank"], "#4");
     }
 }
