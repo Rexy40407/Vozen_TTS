@@ -131,6 +131,23 @@ impl GameSessionStore {
         self.sessions.remove(guild_id)
     }
 
+    /// Finishes only the generation that created the callback. This prevents a delayed timer
+    /// from an old match removing a newer match in the same guild after a stop-and-restart.
+    pub fn finish_if_matches(
+        &mut self,
+        guild_id: &str,
+        channel_id: &str,
+        game_id: &str,
+        starter_id: &str,
+    ) -> Option<GameSession> {
+        let matches = self.sessions.get(guild_id).is_some_and(|session| {
+            session.channel_id == channel_id
+                && session.game_id == game_id
+                && session.starter_id == starter_id
+        });
+        matches.then(|| self.sessions.remove(guild_id).expect("session exists"))
+    }
+
     /// Finishes a normal match and returns its accumulated points for one transactional SQLite
     /// write. Forced teardown must use `stop`/`end_guild` and deliberately discard this value.
     pub fn finish_scores(&mut self, guild_id: &str) -> Option<Vec<GameScore>> {
@@ -244,5 +261,26 @@ mod tests {
                 .is_some()
         );
         assert_eq!(store.stop_authorized("guild", "missing", true), Ok(None));
+    }
+
+    #[test]
+    fn delayed_finish_cannot_remove_a_newer_match() {
+        let mut store = GameSessionStore::default();
+        store.start(session(false));
+        assert!(store.stop("guild").is_some());
+        let mut replacement = session(false);
+        replacement.channel_id = "replacement".into();
+        store.start(replacement);
+
+        assert_eq!(
+            store.finish_if_matches("guild", "thread", "headsOrTails", "starter"),
+            None
+        );
+        assert_eq!(store.channel_of("guild"), Some("replacement"));
+        assert!(
+            store
+                .finish_if_matches("guild", "replacement", "headsOrTails", "starter")
+                .is_some()
+        );
     }
 }
