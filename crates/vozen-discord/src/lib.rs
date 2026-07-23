@@ -317,7 +317,9 @@ pub use speech_preparation::{
     begin_message_speech, finish_message_speech, prepare_message_speech,
 };
 pub use stats_command::{StatsCommand, StatsCommandError, parse_stats_command};
-pub use text_quiz_driver::{TextQuizDriver, TextQuizDriverAction, TextQuizMode};
+pub use text_quiz_driver::{
+    TextQuizDriver, TextQuizDriverAction, TextQuizGameDriver, TextQuizMode,
+};
 pub use top_speakers_command::{
     TopSpeakersCommand, TopSpeakersCommandError, parse_top_speakers_command,
 };

@@ -19,23 +19,28 @@ pub struct GameMessage {
     pub can_trigger_speech: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GameDriverAction {
     Ignored,
     Award { user_id: String, points: i64 },
     Finished,
+    TextQuiz(crate::text_quiz_driver::TextQuizDriverAction),
 }
 
 /// A single game implementation behind the lifecycle boundary.
 pub trait GameDriver: Send {
-    fn on_message(&mut self, message: &GameMessage) -> GameDriverAction;
+    fn on_start(&mut self, _now_ms: i64) -> Vec<GameDriverAction> {
+        Vec::new()
+    }
+
+    fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction>;
 
     fn on_tick(&mut self, _now_ms: i64) -> Vec<GameDriverAction> {
         Vec::new()
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GameManagerEvent {
     Consumed { actions: Vec<GameDriverAction> },
     Finished { session: GameSession },
@@ -87,13 +92,25 @@ impl GameManager {
     /// Installs the driver only when the session lock is acquired. A rejected start leaves both
     /// the existing session and the supplied driver untouched.
     pub fn start(&mut self, session: GameSession, driver: Box<dyn GameDriver>) -> StartGameResult {
+        self.start_at(session, driver, 0).0
+    }
+
+    /// Starts a game and returns its initial semantic actions (intro/first round). The original
+    /// `start` method remains as a compatibility wrapper for callers that only need the status.
+    pub fn start_at(
+        &mut self,
+        session: GameSession,
+        mut driver: Box<dyn GameDriver>,
+        now_ms: i64,
+    ) -> (StartGameResult, Vec<GameDriverAction>) {
         let guild_id = session.guild_id.clone();
         match self.sessions.start(session) {
             StartGameResult::Started => {
+                let actions = driver.on_start(now_ms);
                 self.drivers.insert(guild_id, ActiveDriver { driver });
-                StartGameResult::Started
+                (StartGameResult::Started, actions)
             }
-            already_active => already_active,
+            already_active => (already_active, Vec::new()),
         }
     }
 
@@ -109,7 +126,7 @@ impl GameManager {
         let actions = self
             .drivers
             .get_mut(&message.guild_id)
-            .map(|active| vec![active.driver.on_message(message)])
+            .map(|active| active.driver.on_message(message))
             .unwrap_or_default();
         self.apply_actions(&message.guild_id, actions)
     }
@@ -201,16 +218,16 @@ mod tests {
     }
 
     impl GameDriver for FakeGame {
-        fn on_message(&mut self, message: &GameMessage) -> GameDriverAction {
+        fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {
             if self.finish_on.as_deref() == Some(message.content.as_str()) {
-                GameDriverAction::Finished
+                vec![GameDriverAction::Finished]
             } else if message.content == "point" {
-                GameDriverAction::Award {
+                vec![GameDriverAction::Award {
                     user_id: message.author_id.clone(),
                     points: 2,
-                }
+                }]
             } else {
-                GameDriverAction::Ignored
+                vec![GameDriverAction::Ignored]
             }
         }
     }

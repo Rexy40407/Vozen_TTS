@@ -6,6 +6,8 @@
 
 use vozen_core::{TextQuizEvent, TextQuizGame};
 
+use crate::{GameDriver, GameDriverAction, GameMessage};
+
 const ROUND_MS: i64 = 25_000;
 const FAST_SPEECH_MS: i64 = 20_000;
 const FAST_SPEECH_RATIO: f64 = 0.7;
@@ -89,6 +91,73 @@ pub struct TextQuizDriver {
     game: TextQuizGame,
     model: Option<String>,
     deadline_ms: Option<i64>,
+}
+
+/// Adapter that lets [`TextQuizDriver`] run inside the generic [`crate::GameManager`]. Semantic
+/// quiz actions are retained for the gateway, while accepted answers additionally become the
+/// generic score award consumed by the manager.
+pub struct TextQuizGameDriver {
+    inner: TextQuizDriver,
+}
+
+impl TextQuizGameDriver {
+    #[must_use]
+    pub fn new(mode: TextQuizMode, prompts: Vec<(String, String)>, model: Option<String>) -> Self {
+        Self {
+            inner: TextQuizDriver::new(mode, prompts, model),
+        }
+    }
+
+    #[must_use]
+    pub fn inner(&self) -> &TextQuizDriver {
+        &self.inner
+    }
+}
+
+impl GameDriver for TextQuizGameDriver {
+    fn on_start(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
+        vec![GameDriverAction::TextQuiz(self.inner.start(now_ms))]
+    }
+
+    fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {
+        self.inner
+            .answer(
+                0,
+                &message.author_id,
+                &message.author_name,
+                &message.content,
+            )
+            .into_iter()
+            .flat_map(to_manager_actions)
+            .collect()
+    }
+
+    fn on_tick(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
+        self.inner
+            .tick(now_ms)
+            .into_iter()
+            .flat_map(to_manager_actions)
+            .collect()
+    }
+}
+
+fn to_manager_actions(action: TextQuizDriverAction) -> Vec<GameDriverAction> {
+    match action.clone() {
+        TextQuizDriverAction::Accepted { user_id, .. } => vec![
+            GameDriverAction::Award {
+                user_id: user_id.clone(),
+                points: 1,
+            },
+            GameDriverAction::TextQuiz(action),
+        ],
+        TextQuizDriverAction::Finished => {
+            vec![
+                GameDriverAction::TextQuiz(action),
+                GameDriverAction::Finished,
+            ]
+        }
+        other => vec![GameDriverAction::TextQuiz(other)],
+    }
 }
 
 impl TextQuizDriver {
@@ -223,6 +292,7 @@ impl TextQuizDriver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{GameManager, GameManagerEvent, GameMessage, GameSession, StartGameResult};
 
     #[test]
     fn opens_rounds_with_mode_specific_voice_and_deadline() {
@@ -301,5 +371,49 @@ mod tests {
         let _ = driver.start(0);
         let actions = driver.answer(1, "u", "Rexy", "the cat sat on mat");
         assert!(matches!(actions[0], TextQuizDriverAction::Accepted { .. }));
+    }
+
+    #[test]
+    fn manager_adapter_turns_acceptance_into_a_persistable_score() {
+        let mut manager = GameManager::new();
+        let session = GameSession {
+            guild_id: "guild".into(),
+            channel_id: "game".into(),
+            game_id: "spelling".into(),
+            starter_id: "starter".into(),
+            locale: "en".into(),
+            needs_voice: true,
+            parent_channel_id: None,
+            scores: Vec::new(),
+        };
+        let (status, initial) = manager.start_at(
+            session,
+            Box::new(TextQuizGameDriver::new(
+                TextQuizMode::Spelling,
+                vec![("computer".into(), "computer".into())],
+                None,
+            )),
+            0,
+        );
+        assert_eq!(status, StartGameResult::Started);
+        assert!(matches!(
+            initial.as_slice(),
+            [GameDriverAction::TextQuiz(
+                TextQuizDriverAction::RoundOpened { .. }
+            )]
+        ));
+        let event = manager.handle_message(&GameMessage {
+            guild_id: "guild".into(),
+            channel_id: "game".into(),
+            author_id: "u1".into(),
+            author_name: "Ana".into(),
+            content: "computer".into(),
+            can_trigger_speech: true,
+        });
+        assert!(matches!(
+            event,
+            Some(GameManagerEvent::Finished { session })
+                if session.scores.iter().any(|score| score.user_id == "u1" && score.points == 1)
+        ));
     }
 }
