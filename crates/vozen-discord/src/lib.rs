@@ -98,6 +98,7 @@ mod queue_control;
 mod randomizer;
 mod redeem_command;
 mod rejoin_service;
+mod roulette_driver;
 mod server_stats_command;
 mod setup_command;
 mod songbird_transport;
@@ -306,6 +307,7 @@ pub use randomizer::{
 };
 pub use redeem_command::{RedeemCommand, RedeemCommandError, parse_redeem_command};
 pub use rejoin_service::{PlannedRejoinError, PlannedRejoinOutcome, PlannedRejoinService};
+pub use roulette_driver::{RouletteDriverAction, RouletteGameDriver};
 pub use server_stats_command::{
     ServerStatsCommand, ServerStatsCommandError, parse_server_stats_command,
 };
