@@ -23,6 +23,7 @@ mod config_toggle_sink;
 #[cfg(feature = "voice-driver")]
 mod core_voice_sink;
 mod engine_router;
+mod error_reporter;
 mod file_export_sink;
 mod game_list_sink;
 mod game_score_sink;
@@ -1757,9 +1758,11 @@ enum RuntimeError {
 
 #[tokio::main]
 async fn main() {
+    let error_reporter = error_reporter::ErrorReporter::from_environment();
     if let Err(error) = run().await {
         // Runtime errors intentionally never contain the Discord token or an OAuth bearer token.
         eprintln!("vozen runtime startup failed: {error}");
+        error_reporter.report(&error.to_string(), "runtime").await;
         std::process::exit(1);
     }
 }
