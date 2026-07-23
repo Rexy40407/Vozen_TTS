@@ -904,6 +904,12 @@ impl EventHandler for VozenGatewayHandler {
         incomplete: serenity::model::guild::UnavailableGuild,
         _full: Option<serenity::model::guild::Guild>,
     ) {
+        // Discord also emits Guild Delete when a guild is temporarily unavailable. Treat only a
+        // real leave/kick as a departure; otherwise a transient outage could schedule a 30-day
+        // data purge and clear the Rust voice recovery hint.
+        if !should_mark_guild_departed(incomplete.unavailable) {
+            return;
+        }
         let guild_id = incomplete.id.get().to_string();
         self.gateway_state.forget_guild(&guild_id);
         if let Some(event_sink) = &self.event_sink {
@@ -945,9 +951,19 @@ impl EventHandler for VozenGatewayHandler {
     }
 }
 
+fn should_mark_guild_departed(unavailable: bool) -> bool {
+    !unavailable
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temporary_guild_unavailability_never_starts_departure_retention() {
+        assert!(!should_mark_guild_departed(true));
+        assert!(should_mark_guild_departed(false));
+    }
 
     #[test]
     fn asks_for_exactly_the_existing_intent_set() {
