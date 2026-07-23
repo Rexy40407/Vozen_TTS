@@ -23,6 +23,30 @@ const RUST_CORE_VOICE_COMMANDS = new Set([
 ]);
 const RUST_PRIVATE_TTS_FILE_COMMANDS = new Set(['tts-file']);
 
+/** Read-only/control-plane commands that can be promoted together once Rust is live. */
+const RUST_PUBLIC_COMMANDS = new Set([
+  'uptime',
+  'invite',
+  'help',
+  'vote',
+  'top-speakers',
+  'stats',
+  'bot-stats',
+  'server-stats',
+  'game',
+]);
+
+export function rustPublicCommandsOwnCommand(
+  commandName: string,
+  subcommand: string | null = null,
+  enabled = process.env.RUST_PUBLIC_COMMANDS_ENABLED,
+): boolean {
+  if (enabled?.trim().toLowerCase() !== 'true') return false;
+  if (!RUST_PUBLIC_COMMANDS.has(commandName)) return false;
+  if (commandName !== 'game') return true;
+  return subcommand === 'list' || subcommand === 'leaderboard' || subcommand === 'stats';
+}
+
 /** Message context-menu transcription has an independent canary because it starts a Whisper
  * process and must not race Node's ephemeral response. */
 export function rustTranscriptionOwnsCommand(

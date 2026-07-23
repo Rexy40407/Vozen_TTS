@@ -37,6 +37,7 @@ import {
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
+  rustPublicCommandsOwnCommand,
   rustTranscriptionOwnsCommand,
   rustSpeakContextOwnsCommand,
   rustTranslateContextOwnsCommand,
@@ -45,6 +46,13 @@ import {
 } from '../src/migration/rustVoiceAuthority';
 
 describe('Rust core voice migration ownership', () => {
+  it('groups only read-only/control-plane commands behind the public canary', () => {
+    expect(rustPublicCommandsOwnCommand('help', null, 'true')).toBe(true);
+    expect(rustPublicCommandsOwnCommand('game', 'leaderboard', 'true')).toBe(true);
+    expect(rustPublicCommandsOwnCommand('game', 'play', 'true')).toBe(false);
+    expect(rustPublicCommandsOwnCommand('premium', 'info', 'true')).toBe(false);
+    expect(rustPublicCommandsOwnCommand('help', null, 'false')).toBe(false);
+  });
   it('keeps message transcription behind an exact independent canary', () => {
     expect(rustTranscriptionOwnsCommand('Transcribe voice message')).toBe(false);
     expect(rustTranscriptionOwnsCommand('Transcribe voice message', 3, 'true')).toBe(true);

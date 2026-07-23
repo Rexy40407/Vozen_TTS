@@ -357,26 +357,36 @@ impl RuntimeConfig {
         let config_reset =
             config_reset_enabled(env::var("RUST_CONFIG_RESET_ENABLED").ok().as_deref());
         let config_show = config_show_enabled(env::var("RUST_CONFIG_SHOW_ENABLED").ok().as_deref());
-        let uptime = uptime_enabled(env::var("RUST_UPTIME_ENABLED").ok().as_deref());
-        let invite = invite_enabled(env::var("RUST_INVITE_ENABLED").ok().as_deref());
+        let public_commands =
+            public_commands_enabled(env::var("RUST_PUBLIC_COMMANDS_ENABLED").ok().as_deref());
+        let uptime =
+            uptime_enabled(env::var("RUST_UPTIME_ENABLED").ok().as_deref()) || public_commands;
+        let invite =
+            invite_enabled(env::var("RUST_INVITE_ENABLED").ok().as_deref()) || public_commands;
         let invite_client_id = nonempty_env("CLIENT_ID");
-        let help = help_enabled(env::var("RUST_HELP_ENABLED").ok().as_deref());
+        let help = help_enabled(env::var("RUST_HELP_ENABLED").ok().as_deref()) || public_commands;
         let help_support_url = nonempty_env("SUPPORT_URL")
             .unwrap_or_else(|| "https://discord.gg/4kYw2WUbNN".to_owned());
-        let vote = vote_enabled(env::var("RUST_VOTE_ENABLED").ok().as_deref());
+        let vote = vote_enabled(env::var("RUST_VOTE_ENABLED").ok().as_deref()) || public_commands;
         let vote_client_id = nonempty_env("CLIENT_ID");
         let top_speakers =
-            top_speakers_enabled(env::var("RUST_TOP_SPEAKERS_ENABLED").ok().as_deref());
+            top_speakers_enabled(env::var("RUST_TOP_SPEAKERS_ENABLED").ok().as_deref())
+                || public_commands;
         let birthday = birthday_enabled(env::var("RUST_BIRTHDAY_ENABLED").ok().as_deref());
-        let bot_stats = bot_stats_enabled(env::var("RUST_BOT_STATS_ENABLED").ok().as_deref());
+        let bot_stats = bot_stats_enabled(env::var("RUST_BOT_STATS_ENABLED").ok().as_deref())
+            || public_commands;
         let server_stats =
-            server_stats_enabled(env::var("RUST_SERVER_STATS_ENABLED").ok().as_deref());
-        let stats = stats_enabled(env::var("RUST_STATS_ENABLED").ok().as_deref());
+            server_stats_enabled(env::var("RUST_SERVER_STATS_ENABLED").ok().as_deref())
+                || public_commands;
+        let stats =
+            stats_enabled(env::var("RUST_STATS_ENABLED").ok().as_deref()) || public_commands;
         let premium = premium_enabled(env::var("RUST_PREMIUM_ENABLED").ok().as_deref());
         let redeem = redeem_enabled(env::var("RUST_REDEEM_ENABLED").ok().as_deref());
         let privacy = privacy_enabled(env::var("RUST_PRIVACY_ENABLED").ok().as_deref());
-        let game_list = game_list_enabled(env::var("RUST_GAME_LIST_ENABLED").ok().as_deref());
-        let game_scores = game_scores_enabled(env::var("RUST_GAME_SCORES_ENABLED").ok().as_deref());
+        let game_list = game_list_enabled(env::var("RUST_GAME_LIST_ENABLED").ok().as_deref())
+            || public_commands;
+        let game_scores = game_scores_enabled(env::var("RUST_GAME_SCORES_ENABLED").ok().as_deref())
+            || public_commands;
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -605,6 +615,12 @@ fn automatic_translation_from_environment() -> Option<AutomaticTranslationRuntim
 /// This deliberately matches Node's safe opt-in semantics: only literal `true` can make Rust
 /// own a Discord interaction. `1`, `yes`, missing and spelling mistakes remain shadow-only.
 fn core_voice_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+/// Bundles only read-only/control-plane handlers. Voice, live games, STT, payments and
+/// destructive privacy actions deliberately remain on independent canaries.
+fn public_commands_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -2363,6 +2379,15 @@ mod tests {
         assert!(!game_scores_enabled(Some("1")));
         assert!(!game_scores_enabled(Some("yes")));
         assert!(!game_scores_enabled(None));
+    }
+
+    #[test]
+    fn public_command_bundle_is_exactly_opt_in() {
+        assert!(public_commands_enabled(Some("true")));
+        assert!(public_commands_enabled(Some(" TRUE ")));
+        assert!(!public_commands_enabled(Some("1")));
+        assert!(!public_commands_enabled(Some("yes")));
+        assert!(!public_commands_enabled(None));
     }
 
     #[test]
