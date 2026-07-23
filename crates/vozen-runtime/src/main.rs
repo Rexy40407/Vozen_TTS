@@ -79,10 +79,10 @@ use vozen_api::{
 use vozen_contracts::DiscordCommandCatalog;
 use vozen_core::{SynthesisEngine, parse_kofi_shop_map};
 use vozen_discord::{
-    CompositeGatewayEventSink, CoreVoiceSettings, DiscordDashboardOptionsProvider,
-    DiscordRuntimeConfig, DiscordRuntimeError, GatewayEventSink, GatewayState,
-    locale_display_options, run_discord_gateway_with_state_and_sink, voice_display_options,
-    write_planned_rejoin_marker,
+    CommandRegistrationConfig, CompositeGatewayEventSink, CoreVoiceSettings,
+    DiscordDashboardOptionsProvider, DiscordHttpCommandRegistrationClient, DiscordRuntimeConfig,
+    DiscordRuntimeError, GatewayEventSink, GatewayState, locale_display_options, register_commands,
+    run_discord_gateway_with_state_and_sink, voice_display_options, write_planned_rejoin_marker,
 };
 use vozen_store::{
     DEPARTURE_GRACE_MS, ProviderHealth as StoreProviderHealth, SqliteStore, month_key_utc,
@@ -621,6 +621,40 @@ fn core_voice_enabled(raw: Option<&str>) -> bool {
 /// Bundles only read-only/control-plane handlers. Voice, live games, STT, payments and
 /// destructive privacy actions deliberately remain on independent canaries.
 fn public_commands_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+async fn register_rust_commands_if_enabled(config: &RuntimeConfig) -> Result<(), RuntimeError> {
+    if !register_commands_enabled(env::var("RUST_REGISTER_COMMANDS_ENABLED").ok().as_deref()) {
+        return Ok(());
+    }
+    let application_id = nonempty_env("CLIENT_ID").ok_or(RuntimeError::MissingClientId)?;
+    let owner_guild_id = nonempty_env("OWNER_GUILD_ID");
+    let state_path = nonempty_env("RUST_COMMANDS_STATE_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            config
+                .database_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("commands-state-rust.json")
+        });
+    let client = DiscordHttpCommandRegistrationClient::new(config.discord_token.clone())
+        .map_err(|_| RuntimeError::CommandRegistration)?;
+    register_commands(
+        &client,
+        &CommandRegistrationConfig {
+            application_id,
+            state_path: Some(state_path),
+            owner_guild_id,
+        },
+    )
+    .await
+    .map_err(|_| RuntimeError::CommandRegistration)?;
+    Ok(())
+}
+
+fn register_commands_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1433,6 +1467,8 @@ enum RuntimeError {
         "CLIENT_ID is required when PREMIUM_API_ENABLED=true or TOPGG_WEBHOOK_SECRET is configured"
     )]
     MissingClientId,
+    #[error("Rust Discord command registration failed")]
+    CommandRegistration,
     #[error("VOTE_REDEMPTION_SECRET is required when TOPGG_WEBHOOK_SECRET is configured")]
     MissingVoteRedemptionSecret,
     #[error("{0} must be a positive number (and an integer where required)")]
@@ -1548,6 +1584,7 @@ async fn run() -> Result<(), RuntimeError> {
             .map_err(|_| RuntimeError::StoreLock)?
             .initialize_vote_redemption_ledger(redemption_secret)?;
     }
+    register_rust_commands_if_enabled(&config).await?;
     // Retention is best effort: a one-off SQLite lock must not take down Discord, and the next
     // daily pass retries. The permanent HMAC marker is deliberately not touched by this job.
     spawn_vote_retention(store.clone());
@@ -2388,6 +2425,15 @@ mod tests {
         assert!(!public_commands_enabled(Some("1")));
         assert!(!public_commands_enabled(Some("yes")));
         assert!(!public_commands_enabled(None));
+    }
+
+    #[test]
+    fn rust_command_registration_is_exactly_opt_in() {
+        assert!(register_commands_enabled(Some("true")));
+        assert!(register_commands_enabled(Some(" TRUE ")));
+        assert!(!register_commands_enabled(Some("1")));
+        assert!(!register_commands_enabled(Some("yes")));
+        assert!(!register_commands_enabled(None));
     }
 
     #[test]
