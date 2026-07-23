@@ -20,6 +20,7 @@ mod blocklist;
 mod channel_profile;
 mod data_lifecycle;
 mod game_score;
+mod gcloud_usage;
 mod guild_config;
 mod kofi_claim;
 mod kofi_delivery;
@@ -47,6 +48,7 @@ pub use admin_stats::{
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
 pub use channel_profile::{ChannelProfile, ChannelProfilePatch, MAX_CHANNEL_PROFILES_PER_GUILD};
 pub use data_lifecycle::{GUILD_PURGE_TABLES, USER_ERASE_TABLES};
+pub use gcloud_usage::{GcloudUsageScope, day_key_utc, month_key_utc};
 pub use guild_config::{GuildConfig, GuildConfigPatch};
 pub use kofi_claim::{
     ACTIVATION_TERMS_VERSION, ActivationConfirmation, ActivationOutcome, ClaimOutcome,
@@ -123,6 +125,16 @@ pub enum StoreError {
     InvalidOperationalTelemetry(String),
     #[error("invalid birthday month/day")]
     InvalidBirthday,
+    #[error("invalid Google HD usage scope key")]
+    InvalidGcloudKey,
+    #[error("invalid Google HD usage month")]
+    InvalidGcloudMonth,
+    #[error("invalid Google HD usage day")]
+    InvalidGcloudDay,
+    #[error("Google HD usage characters must be positive")]
+    InvalidGcloudChars,
+    #[error("Google HD usage limits must be non-negative")]
+    InvalidGcloudLimit,
     #[error("invalid translation mapping")]
     InvalidTranslationMapping,
     #[error("translation mapping would create a direct cycle")]
