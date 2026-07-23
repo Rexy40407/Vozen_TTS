@@ -6,14 +6,18 @@
 //! consuming a command whose UI contract Rust does not yet implement.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use serenity::{
-    builder::{CreateAllowedMentions, CreateEmbed, EditInteractionResponse},
+    builder::{
+        CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed,
+        CreateInteractionResponse, CreateInteractionResponseMessage, EditInteractionResponse,
+    },
     client::Context,
-    model::application::Interaction,
+    model::application::{ButtonStyle, ComponentInteraction, Interaction},
 };
 use vozen_discord::{
     GatewayEventDispatchError, GatewayEventSink, VoiceDisplayCatalog, VoicePreferenceCommand,
@@ -24,11 +28,35 @@ use vozen_store::{SqliteStore, UserEngine, VoiceEffect};
 
 use crate::system_now_ms;
 
+const BROWSE_PAGE_SIZE: usize = 8;
+const BROWSE_TTL_SECONDS: i64 = 120;
+const MAX_BROWSE_SESSIONS: usize = 512;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BrowseVoice {
+    id: String,
+    label: String,
+    engine: String,
+}
+
+#[derive(Clone, Debug)]
+struct BrowseSession {
+    owner_user_id: String,
+    locale: String,
+    voices: Vec<BrowseVoice>,
+    favourites: BTreeSet<String>,
+    recent: BTreeSet<String>,
+    page: usize,
+    expires_at: i64,
+}
+
 pub struct VoicePreferenceGatewaySink {
+    store: Arc<Mutex<SqliteStore>>,
     service: VoicePreferenceService,
     localizer: VoiceResponseLocalizer,
     displays: VoiceDisplayCatalog,
     available_models: Vec<String>,
+    browse_sessions: Arc<Mutex<BTreeMap<String, BrowseSession>>>,
 }
 
 impl VoicePreferenceGatewaySink {
@@ -38,12 +66,14 @@ impl VoicePreferenceGatewaySink {
     ) -> Result<Self, GatewayEventDispatchError> {
         let available_models = settings.available_models.clone();
         Ok(Self {
+            store: store.clone(),
             service: VoicePreferenceService::new(store, settings),
             localizer: VoiceResponseLocalizer::from_generated_contract()
                 .map_err(|_| GatewayEventDispatchError)?,
             displays: VoiceDisplayCatalog::from_generated_contract()
                 .map_err(|_| GatewayEventDispatchError)?,
             available_models,
+            browse_sessions: Arc::new(Mutex::new(BTreeMap::new())),
         })
     }
 
@@ -58,12 +88,285 @@ impl VoicePreferenceGatewaySink {
             .render_key(key, Some(interaction_locale), guild_locale, parameters)
             .ok_or(GatewayEventDispatchError)
     }
+
+    async fn browse_command(
+        &self,
+        context: &Context,
+        command: serenity::model::application::CommandInteraction,
+        query: Option<String>,
+        locale: Option<String>,
+        engine: String,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let requested_locale = locale.as_deref().unwrap_or_default();
+        if !requested_locale.is_empty()
+            && (requested_locale.len() != 2
+                || !requested_locale
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase()))
+        {
+            let content = self.message(
+                "voice.browse.invalidLocale",
+                &command.locale,
+                command.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?;
+            command
+                .create_response(
+                    context,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(content)
+                            .ephemeral(true),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        }
+        let voices = browse_voices(
+            &self.displays,
+            &self.available_models,
+            &command.locale,
+            query.as_deref(),
+            locale.as_deref(),
+            &engine,
+        );
+        if voices.is_empty() {
+            let content = self.message(
+                "voice.browse.empty",
+                &command.locale,
+                command.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?;
+            command
+                .create_response(
+                    context,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content(content)
+                            .ephemeral(true),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        }
+        let user_id = command.user.id.get().to_string();
+        let (favourites, recent) = {
+            let store = self.store.lock().map_err(|_| GatewayEventDispatchError)?;
+            let favourites = store
+                .list_voice_favorites(&user_id)
+                .map_err(|_| GatewayEventDispatchError)?
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            let recent = store
+                .list_recent_voices(&user_id)
+                .map_err(|_| GatewayEventDispatchError)?
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            (favourites, recent)
+        };
+        let page_count = browse_page_count(&voices);
+        let mut parameters = BTreeMap::new();
+        parameters.insert("page", "1".to_owned());
+        parameters.insert("pages", page_count.to_string());
+        let title = self.message(
+            "voice.browse.title",
+            &command.locale,
+            command.guild_locale.as_deref(),
+            &parameters,
+        )?;
+        let session_id = command.id.get().to_string();
+        let session = BrowseSession {
+            owner_user_id: user_id,
+            locale: command.locale.clone(),
+            voices,
+            favourites,
+            recent,
+            page: 0,
+            expires_at: now_seconds() + BROWSE_TTL_SECONDS,
+        };
+        let content = browse_content(&session, &title);
+        let previous = self.message(
+            "voice.browse.previous",
+            &command.locale,
+            command.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?;
+        let next = self.message(
+            "voice.browse.next",
+            &command.locale,
+            command.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?;
+        let expired_content = self.message(
+            "voice.browse.expired",
+            &command.locale,
+            command.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?;
+        let expiration_context = context.clone();
+        let expiration_command = command.clone();
+        let expiration_sessions = self.browse_sessions.clone();
+        let response = CreateInteractionResponseMessage::new()
+            .content(content)
+            .components(vec![browse_buttons(
+                &session_id,
+                session.page,
+                page_count,
+                &previous,
+                &next,
+            )])
+            .ephemeral(true);
+        command
+            .create_response(context, CreateInteractionResponse::Message(response))
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let mut sessions = self
+            .browse_sessions
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?;
+        sessions.retain(|_, existing| existing.expires_at > now_seconds());
+        while sessions.len() >= MAX_BROWSE_SESSIONS {
+            let Some(oldest) = sessions.keys().next().cloned() else {
+                break;
+            };
+            sessions.remove(&oldest);
+        }
+        sessions.insert(session_id, session);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(BROWSE_TTL_SECONDS as u64)).await;
+            let should_expire = expiration_sessions
+                .lock()
+                .ok()
+                .and_then(|mut sessions| sessions.remove(&expiration_command.id.get().to_string()))
+                .is_some();
+            if should_expire {
+                let _ = expiration_command
+                    .edit_response(
+                        &expiration_context,
+                        EditInteractionResponse::new()
+                            .content(expired_content)
+                            .components(Vec::new()),
+                    )
+                    .await;
+            }
+        });
+        Ok(())
+    }
+
+    async fn browse_component(
+        &self,
+        context: &Context,
+        component: ComponentInteraction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let Some((action, session_id)) = parse_browse_component(&component.data.custom_id) else {
+            return Ok(());
+        };
+        let user_id = component.user.id.get().to_string();
+        let mut expired = false;
+        let session = {
+            let mut sessions = self
+                .browse_sessions
+                .lock()
+                .map_err(|_| GatewayEventDispatchError)?;
+            match sessions.get_mut(session_id) {
+                None => {
+                    expired = true;
+                    None
+                }
+                Some(session) => {
+                    if session.owner_user_id != user_id {
+                        return Ok(());
+                    }
+                    if session.expires_at <= now_seconds() {
+                        sessions.remove(session_id);
+                        expired = true;
+                        None
+                    } else {
+                        let page_count = browse_page_count(&session.voices);
+                        match action {
+                            "prev" => session.page = session.page.saturating_sub(1),
+                            "next" => {
+                                session.page = (session.page + 1).min(page_count.saturating_sub(1));
+                            }
+                            _ => return Ok(()),
+                        }
+                        Some(session.clone())
+                    }
+                }
+            }
+        };
+        if expired || session.is_none() {
+            let content = self.message(
+                "voice.browse.expired",
+                &component.locale,
+                component.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?;
+            component
+                .create_response(
+                    context,
+                    CreateInteractionResponse::UpdateMessage(
+                        CreateInteractionResponseMessage::new()
+                            .content(content)
+                            .components(Vec::new()),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        }
+        let session = session.expect("checked above");
+        let page_count = browse_page_count(&session.voices);
+        let mut parameters = BTreeMap::new();
+        parameters.insert("page", (session.page + 1).to_string());
+        parameters.insert("pages", page_count.to_string());
+        let title = self.message(
+            "voice.browse.title",
+            &session.locale,
+            component.guild_locale.as_deref(),
+            &parameters,
+        )?;
+        let content = browse_content(&session, &title);
+        let previous = self.message(
+            "voice.browse.previous",
+            &session.locale,
+            component.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?;
+        let next = self.message(
+            "voice.browse.next",
+            &session.locale,
+            component.guild_locale.as_deref(),
+            &BTreeMap::new(),
+        )?;
+        component
+            .create_response(
+                context,
+                CreateInteractionResponse::UpdateMessage(
+                    CreateInteractionResponseMessage::new()
+                        .content(content)
+                        .components(vec![browse_buttons(
+                            session_id,
+                            session.page,
+                            page_count,
+                            &previous,
+                            &next,
+                        )]),
+                ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(())
+    }
 }
 
 fn is_promoted(command: &VoicePreferenceCommand) -> bool {
     matches!(
         command,
         VoicePreferenceCommand::List
+            | VoicePreferenceCommand::Browse { .. }
             | VoicePreferenceCommand::Reset
             | VoicePreferenceCommand::Set { .. }
             | VoicePreferenceCommand::Favorite { .. }
@@ -76,6 +379,106 @@ fn is_promoted(command: &VoicePreferenceCommand) -> bool {
             | VoicePreferenceCommand::Nickname { .. }
             | VoicePreferenceCommand::Effect { .. }
     )
+}
+
+fn browse_voices(
+    displays: &VoiceDisplayCatalog,
+    available_models: &[String],
+    interaction_locale: &str,
+    query: Option<&str>,
+    requested_locale: Option<&str>,
+    requested_engine: &str,
+) -> Vec<BrowseVoice> {
+    let query = query.unwrap_or_default().trim().to_ascii_lowercase();
+    let requested_locale = requested_locale
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    let mut seen = BTreeSet::new();
+    let mut voices = available_models
+        .iter()
+        .filter(|model| seen.insert((*model).clone()))
+        .map(|model| {
+            let label = displays.voice_name(Some(interaction_locale), available_models, model);
+            let engine = if model.contains("-google-") {
+                "google"
+            } else {
+                "local"
+            };
+            BrowseVoice {
+                id: model.clone(),
+                label,
+                engine: engine.to_owned(),
+            }
+        })
+        .filter(|voice| {
+            (requested_engine == "all" || requested_engine == voice.engine)
+                && (requested_locale.is_empty()
+                    || voice
+                        .id
+                        .to_ascii_lowercase()
+                        .starts_with(&format!("{requested_locale}_")))
+                && (query.is_empty()
+                    || voice.label.to_ascii_lowercase().contains(&query)
+                    || voice.id.to_ascii_lowercase().contains(&query))
+        })
+        .collect::<Vec<_>>();
+    voices.sort_by(|left, right| left.label.cmp(&right.label));
+    voices
+}
+
+fn browse_page_count(voices: &[BrowseVoice]) -> usize {
+    voices.len().div_ceil(BROWSE_PAGE_SIZE).max(1)
+}
+
+fn browse_content(session: &BrowseSession, title: &str) -> String {
+    let page_count = browse_page_count(&session.voices);
+    let page = session.page.min(page_count.saturating_sub(1));
+    let start = page * BROWSE_PAGE_SIZE;
+    let lines = session.voices[start..(start + BROWSE_PAGE_SIZE).min(session.voices.len())]
+        .iter()
+        .map(|voice| {
+            let mut badges = String::new();
+            if session.favourites.contains(&voice.id) {
+                badges.push_str(" ⭐");
+            }
+            if session.recent.contains(&voice.id) {
+                badges.push_str(" 🕘");
+            }
+            format!("• **{}** — {}{}", voice.label, voice.engine, badges)
+        })
+        .collect::<Vec<_>>();
+    format!("{title}\n{}", lines.join("\n"))
+}
+
+fn browse_buttons(
+    session_id: &str,
+    page: usize,
+    page_count: usize,
+    previous: &str,
+    next: &str,
+) -> CreateActionRow {
+    CreateActionRow::Buttons(vec![
+        CreateButton::new(format!("vbr:prev:{session_id}"))
+            .label(previous)
+            .style(ButtonStyle::Secondary)
+            .disabled(page == 0),
+        CreateButton::new(format!("vbr:next:{session_id}"))
+            .label(next)
+            .style(ButtonStyle::Secondary)
+            .disabled(page >= page_count.saturating_sub(1)),
+    ])
+}
+
+fn parse_browse_component(custom_id: &str) -> Option<(&str, &str)> {
+    let remainder = custom_id.strip_prefix("vbr:")?;
+    remainder.split_once(':')
+}
+
+fn now_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs() as i64)
 }
 
 fn format_voice_list(
@@ -156,6 +559,9 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
         context: Context,
         interaction: Interaction,
     ) -> Result<(), GatewayEventDispatchError> {
+        if let Interaction::Component(component) = interaction {
+            return self.browse_component(&context, component).await;
+        }
         let Interaction::Command(command) = interaction else {
             return Ok(());
         };
@@ -166,6 +572,22 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
         };
         if !is_promoted(&parsed) {
             return Ok(());
+        }
+        if let VoicePreferenceCommand::Browse {
+            query,
+            locale,
+            engine,
+        } = &parsed
+        {
+            return self
+                .browse_command(
+                    &context,
+                    command,
+                    query.clone(),
+                    locale.clone(),
+                    engine.clone(),
+                )
+                .await;
         }
         command
             .defer_ephemeral(&context)
@@ -363,6 +785,11 @@ mod tests {
     #[test]
     fn only_textual_preference_leaves_can_be_claimed() {
         assert!(is_promoted(&VoicePreferenceCommand::List));
+        assert!(is_promoted(&VoicePreferenceCommand::Browse {
+            query: None,
+            locale: None,
+            engine: "all".into(),
+        }));
         assert!(is_promoted(&VoicePreferenceCommand::Reset));
         assert!(is_promoted(&VoicePreferenceCommand::Set {
             model: "en_US-amy-medium".into(),
@@ -391,6 +818,44 @@ mod tests {
         assert!(rendered.contains("• Amy (en_US-amy-medium)"));
         assert!(rendered.contains("• Lessac (en_US-lessac-medium)"));
         assert!(rendered.contains("Portuguese"));
+    }
+
+    #[test]
+    fn browse_filters_by_query_locale_engine_and_deduplicates_models() {
+        let displays = VoiceDisplayCatalog::from_generated_contract().expect("catalog");
+        let models = vec![
+            "en_US-amy-medium".to_owned(),
+            "en_US-amy-medium".to_owned(),
+            "pt_PT-google-medium".to_owned(),
+        ];
+        let local = browse_voices(&displays, &models, "en", Some("amy"), Some("en"), "local");
+        assert_eq!(
+            local,
+            vec![BrowseVoice {
+                id: "en_US-amy-medium".into(),
+                label: "English — Amy".into(),
+                engine: "local".into(),
+            }]
+        );
+        assert!(
+            browse_voices(&displays, &models, "en", None, None, "google")
+                .iter()
+                .all(|voice| voice.engine == "google")
+        );
+    }
+
+    #[test]
+    fn browse_session_controls_are_bound_to_the_expected_id() {
+        assert_eq!(
+            parse_browse_component("vbr:next:123"),
+            Some(("next", "123"))
+        );
+        assert_eq!(
+            parse_browse_component("vbr:delete:123"),
+            Some(("delete", "123"))
+        );
+        assert_eq!(parse_browse_component("vbr:next"), None);
+        assert_eq!(parse_browse_component("other:next:123"), None);
     }
 
     #[test]

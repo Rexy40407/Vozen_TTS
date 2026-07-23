@@ -168,7 +168,8 @@ impl VoicePreferenceService {
             | VoicePreferenceCommand::Unfavorite { .. }
             | VoicePreferenceCommand::Favorites
             | VoicePreferenceCommand::Recent
-            | VoicePreferenceCommand::List => {
+            | VoicePreferenceCommand::List
+            | VoicePreferenceCommand::Browse { .. } => {
                 unreachable!("library commands are handled before guild scope")
             }
         }

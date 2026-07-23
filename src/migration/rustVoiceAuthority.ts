@@ -402,8 +402,9 @@ export function rustVoiceOwnsCommand(
 
 /**
  * `/voice` is a mixed surface.  Rust may claim only the preference leaves with a complete
- * localised response contract; the model picker, browser, preview and interactive panel stay
- * Node-owned until their display and playback contracts have parity.
+ * localised response contract; the model picker, preview and interactive panel stay Node-owned
+ * until their display and playback contracts have parity. The read-only browser has its own
+ * bounded Rust session and is safe to share this canary.
  */
 export function rustVoicePreferencesOwnCommand(
   commandName: string,
@@ -416,6 +417,7 @@ export function rustVoicePreferencesOwnCommand(
     rustPiperCompatible(ttsEngine) &&
     commandName === 'voice' &&
     (subcommand === 'list' ||
+      subcommand === 'browse' ||
       subcommand === 'set' ||
       subcommand === 'favorite' ||
       subcommand === 'unfavorite' ||

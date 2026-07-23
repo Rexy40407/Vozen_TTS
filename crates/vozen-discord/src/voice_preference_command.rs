@@ -1,8 +1,8 @@
 //! Strict parser for the textual preference subset of `/voice`.
 //!
-//! Browsing, previews and the interactive configuration panel still require Discord UI adapters,
-//! so they deliberately remain with Node.  These preference mutations have a complete SQLite
-//! contract and can be proven independently before ownership is switched.
+//! Previews and the interactive configuration panel still require audio/UI adapters, so they
+//! deliberately remain with Node. The read-only browser and preference mutations have complete
+//! contracts and can be proven independently before ownership is switched.
 
 use serenity::model::application::{CommandData, CommandDataOption, CommandDataOptionValue};
 use thiserror::Error;
@@ -13,6 +13,11 @@ use crate::{CommandArea, command_path_from_options, route_command};
 #[derive(Debug, Clone, PartialEq)]
 pub enum VoicePreferenceCommand {
     List,
+    Browse {
+        query: Option<String>,
+        locale: Option<String>,
+        engine: String,
+    },
     Set {
         model: String,
         speed: Option<f64>,
@@ -68,6 +73,7 @@ pub fn parse_voice_preference_command(
     let (name, options) = subcommand(&command.options)?;
     match name {
         "list" => empty(options).map(|()| Some(VoicePreferenceCommand::List)),
+        "browse" => parse_browse(options).map(Some),
         "set" => parse_set(options).map(Some),
         "favorite" => {
             parse_model(options).map(|model| Some(VoicePreferenceCommand::Favorite { model }))
@@ -130,6 +136,26 @@ fn parse_set(
         model,
         speed,
         engine,
+    })
+}
+
+fn parse_browse(
+    options: &[CommandDataOption],
+) -> Result<VoicePreferenceCommand, VoicePreferenceCommandError> {
+    if options.len() > 3
+        || options
+            .iter()
+            .any(|option| !matches!(option.name.as_str(), "query" | "locale" | "engine"))
+    {
+        return Err(VoicePreferenceCommandError::UnexpectedOption);
+    }
+    Ok(VoicePreferenceCommand::Browse {
+        query: optional_string(options, "query")?.map(|value| value.trim().to_owned()),
+        locale: optional_string(options, "locale")?.map(|value| value.trim().to_ascii_lowercase()),
+        engine: optional_string(options, "engine")?
+            .unwrap_or_else(|| "all".to_owned())
+            .trim()
+            .to_ascii_lowercase(),
     })
 }
 
@@ -235,6 +261,14 @@ mod tests {
         assert_eq!(
             parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"list","type":1,"options":[]}]}"#)).expect("list"),
             Some(VoicePreferenceCommand::List)
+        );
+        assert_eq!(
+            parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"browse","type":1,"options":[{"name":"query","type":3,"value":" Amy "},{"name":"locale","type":3,"value":"EN"},{"name":"engine","type":3,"value":"local"}]}]}"#)).expect("browse"),
+            Some(VoicePreferenceCommand::Browse {
+                query: Some("Amy".into()),
+                locale: Some("en".into()),
+                engine: "local".into(),
+            })
         );
         assert_eq!(
             parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"detection","type":1,"options":[{"name":"active","type":5,"value":true}]}]}"#)).expect("detection"),
