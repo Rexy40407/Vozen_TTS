@@ -73,6 +73,7 @@ mod game_play_admission;
 mod game_score_command;
 mod game_session;
 mod gateway_composite;
+mod guess_language_driver;
 mod guild_synthesis_coordinator;
 mod hangman_driver;
 mod heads_or_tails_coordinator;
@@ -263,6 +264,9 @@ pub use game_play_admission::{
 pub use game_score_command::{GameScoreCommand, GameScoreCommandError, parse_game_score_command};
 pub use game_session::{GameScore, GameSession, GameSessionStore, GameStopDenied, StartGameResult};
 pub use gateway_composite::CompositeGatewayEventSink;
+pub use guess_language_driver::{
+    GuessLanguageDriver, GuessLanguageDriverAction, GuessLanguageGameDriver,
+};
 pub use guild_synthesis_coordinator::GuildSynthesisCoordinator;
 pub use hangman_driver::{HangmanDriver, HangmanDriverAction, HangmanGameDriver};
 pub use heads_or_tails_coordinator::{

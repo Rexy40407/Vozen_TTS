@@ -87,6 +87,13 @@ impl GuessLanguageGame {
     }
 
     #[must_use]
+    pub fn current_prompt(&self) -> Option<&LanguagePrompt> {
+        self.open
+            .then(|| self.prompts.get(self.round - 1))
+            .flatten()
+    }
+
+    #[must_use]
     pub fn begin_round(&mut self) -> GuessLanguageEvent {
         if self.finished || self.round >= self.prompts.len() {
             self.open = false;
