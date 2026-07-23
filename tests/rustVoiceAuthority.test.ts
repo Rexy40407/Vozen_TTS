@@ -13,6 +13,7 @@ import {
   rustConfigQueueRolesOwnCommand,
   rustConfigGreetLanguageOwnsCommand,
   rustConfigBlockwordOwnsCommand,
+  rustConfigShowOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -125,6 +126,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigBlockwordOwnsCommand('config', 'block-word', 'remove', 'true')).toBe(true);
     expect(rustConfigBlockwordOwnsCommand('config', 'block-word', 'list', 'true')).toBe(false);
     expect(rustConfigBlockwordOwnsCommand('config', null, 'add', 'true')).toBe(false);
+  });
+
+  it('promotes only read-only config show behind its own canary', () => {
+    expect(rustConfigShowOwnsCommand('config', 'show')).toBe(false);
+    expect(rustConfigShowOwnsCommand('config', 'show', 'true')).toBe(true);
+    expect(rustConfigShowOwnsCommand('config', 'reset', 'true')).toBe(false);
+    expect(rustConfigShowOwnsCommand('voice', 'show', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

@@ -979,6 +979,14 @@ export const catalog: Record<string, Entry> = {
     en: 'Role: {value}',
     pt: 'Role: {value}',
   },
+  'config.showPriorityRole': {
+    en: 'Queue priority role: {value}',
+    pt: 'Role de prioridade da fila: {value}',
+  },
+  'config.showBlockedRole': {
+    en: 'Queue blocked role: {value}',
+    pt: 'Role bloqueada da fila: {value}',
+  },
   'config.showEnabled': {
     en: 'Enabled: {value}',
     pt: 'Ativo: {value}',

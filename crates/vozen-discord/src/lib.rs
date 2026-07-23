@@ -44,6 +44,8 @@ mod config_queue_role_command;
 mod config_queue_role_service;
 mod config_role_command;
 mod config_role_service;
+mod config_show_command;
+mod config_show_service;
 mod config_toggle_command;
 mod config_toggle_service;
 mod core_voice_command;
@@ -147,6 +149,12 @@ pub use config_role_command::{
 };
 pub use config_role_service::{
     ConfigRoleFailure, ConfigRoleInvocation, ConfigRoleOutcome, ConfigRoleService,
+};
+pub use config_show_command::{
+    ConfigShowCommand, ConfigShowCommandError, parse_config_show_command,
+};
+pub use config_show_service::{
+    ConfigShowFailure, ConfigShowInvocation, ConfigShowOutcome, ConfigShowService,
 };
 pub use config_toggle_command::{
     ConfigToggle, ConfigToggleCommand, ConfigToggleCommandError, parse_config_toggle_command,

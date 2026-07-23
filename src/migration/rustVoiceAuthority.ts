@@ -161,7 +161,7 @@ export function rustConfigGreetLanguageOwnsCommand(
   );
 }
 
-/** Blocklist mutations are grouped under their own canary; `/config show/reset` stay Node-owned. */
+/** Blocklist mutations are grouped under their own canary; reset stays Node-owned. */
 export function rustConfigBlockwordOwnsCommand(
   commandName: string,
   subcommandGroup: string | null,
@@ -173,6 +173,17 @@ export function rustConfigBlockwordOwnsCommand(
     commandName === 'config' &&
     subcommandGroup === 'block-word' &&
     (subcommand === 'add' || subcommand === 'remove')
+  );
+}
+
+/** Read-only configuration output has its own canary and never claims reset or mutations. */
+export function rustConfigShowOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_CONFIG_SHOW_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' && commandName === 'config' && subcommand === 'show'
   );
 }
 
