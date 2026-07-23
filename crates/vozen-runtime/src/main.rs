@@ -8,6 +8,7 @@
 
 mod automatic_translation_sink;
 mod config_language_sink;
+mod config_toggle_sink;
 #[cfg(feature = "voice-driver")]
 mod core_voice_sink;
 mod engine_router;
@@ -81,6 +82,7 @@ struct RuntimeConfig {
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
     pronunciation: bool,
     config_language: bool,
+    config_toggles: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -264,6 +266,8 @@ impl RuntimeConfig {
             pronunciation_enabled(env::var("RUST_PRONUNCIATION_ENABLED").ok().as_deref());
         let config_language =
             config_language_enabled(env::var("RUST_CONFIG_LANGUAGE_ENABLED").ok().as_deref());
+        let config_toggles =
+            config_toggles_enabled(env::var("RUST_CONFIG_TOGGLES_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -283,6 +287,7 @@ impl RuntimeConfig {
             voice_preferences,
             pronunciation,
             config_language,
+            config_toggles,
             automatic_translation,
             dashboard,
             admin,
@@ -435,6 +440,10 @@ fn pronunciation_enabled(raw: Option<&str>) -> bool {
 }
 
 fn config_language_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn config_toggles_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -629,6 +638,19 @@ fn config_language_event_sink(
     )))
 }
 
+fn config_toggle_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        config_toggle_sink::ConfigToggleGatewaySink::new(store)
+            .map_err(|_| RuntimeError::ConfigToggleGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -787,6 +809,8 @@ enum RuntimeError {
     PronunciationGateway,
     #[error("config language gateway initialisation failed")]
     ConfigLanguageGateway,
+    #[error("config toggle gateway initialisation failed")]
+    ConfigToggleGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -861,6 +885,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = config_language_event_sink(config.config_language, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = config_toggle_event_sink(config.config_toggles, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1304,6 +1331,15 @@ mod tests {
         assert!(!config_language_enabled(Some("1")));
         assert!(!config_language_enabled(Some("yes")));
         assert!(!config_language_enabled(None));
+    }
+
+    #[test]
+    fn config_toggle_promotion_is_exactly_opt_in() {
+        assert!(config_toggles_enabled(Some("true")));
+        assert!(config_toggles_enabled(Some(" TRUE ")));
+        assert!(!config_toggles_enabled(Some("1")));
+        assert!(!config_toggles_enabled(Some("yes")));
+        assert!(!config_toggles_enabled(None));
     }
 
     #[test]

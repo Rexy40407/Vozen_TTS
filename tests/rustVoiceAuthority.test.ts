@@ -6,6 +6,7 @@ import {
   rustQueueOwnsCommand,
   rustPronunciationOwnsCommand,
   rustConfigLanguageOwnsCommand,
+  rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
@@ -50,6 +51,15 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigLanguageOwnsCommand('config', 'language', 'true')).toBe(true);
     expect(rustConfigLanguageOwnsCommand('config', 'show', 'true')).toBe(false);
     expect(rustConfigLanguageOwnsCommand('voice', 'language', 'true')).toBe(false);
+  });
+
+  it('promotes only the boolean config leaves behind their own flag', () => {
+    expect(rustConfigTogglesOwnCommand('config', 'auto-read')).toBe(false);
+    expect(rustConfigTogglesOwnCommand('config', 'auto-read', 'true')).toBe(true);
+    expect(rustConfigTogglesOwnCommand('config', 'greet', 'true')).toBe(true);
+    expect(rustConfigTogglesOwnCommand('config', 'language', 'true')).toBe(false);
+    expect(rustConfigTogglesOwnCommand('config', 'show', 'true')).toBe(false);
+    expect(rustConfigTogglesOwnCommand('voice', 'auto-read', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {
