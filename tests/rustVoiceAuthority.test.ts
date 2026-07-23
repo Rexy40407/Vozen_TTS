@@ -24,6 +24,7 @@ import {
   rustBirthdayOwnsCommand,
   rustServerStatsOwnsCommand,
   rustPremiumInfoOwnsCommand,
+  rustRedeemOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -207,6 +208,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustPremiumInfoOwnsCommand('premium', 'info')).toBe(false);
     expect(rustPremiumInfoOwnsCommand('premium', 'info', 'true')).toBe(true);
     expect(rustPremiumInfoOwnsCommand('premium', 'activate', 'true')).toBe(false);
+  });
+
+  it('promotes only redeem behind its own canary', () => {
+    expect(rustRedeemOwnsCommand('redeem')).toBe(false);
+    expect(rustRedeemOwnsCommand('redeem', 'true')).toBe(true);
+    expect(rustRedeemOwnsCommand('premium', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

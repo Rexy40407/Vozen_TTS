@@ -29,6 +29,7 @@ mod piper_adapter;
 mod premium_sink;
 mod privacy_sink;
 mod pronunciation_sink;
+mod redeem_sink;
 mod server_stats_sink;
 mod top_speakers_sink;
 mod topgg_metrics;
@@ -121,6 +122,7 @@ struct RuntimeConfig {
     birthday: bool,
     server_stats: bool,
     premium: bool,
+    redeem: bool,
     privacy: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
@@ -345,6 +347,7 @@ impl RuntimeConfig {
         let server_stats =
             server_stats_enabled(env::var("RUST_SERVER_STATS_ENABLED").ok().as_deref());
         let premium = premium_enabled(env::var("RUST_PREMIUM_ENABLED").ok().as_deref());
+        let redeem = redeem_enabled(env::var("RUST_REDEEM_ENABLED").ok().as_deref());
         let privacy = privacy_enabled(env::var("RUST_PRIVACY_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
@@ -386,6 +389,7 @@ impl RuntimeConfig {
             birthday,
             server_stats,
             premium,
+            redeem,
             privacy,
             automatic_translation,
             dashboard,
@@ -627,6 +631,10 @@ fn server_stats_enabled(raw: Option<&str>) -> bool {
 }
 
 fn premium_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn redeem_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1085,6 +1093,18 @@ fn premium_event_sink(
     )))
 }
 
+fn redeem_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        redeem_sink::RedeemGatewaySink::new(store).map_err(|_| RuntimeError::RedeemGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -1269,6 +1289,8 @@ enum RuntimeError {
     ServerStatsGateway,
     #[error("premium gateway initialisation failed")]
     PremiumGateway,
+    #[error("redeem gateway initialisation failed")]
+    RedeemGateway,
     #[error("privacy gateway initialisation failed")]
     PrivacyGateway,
     #[error("config default voice gateway initialisation failed")]
@@ -1427,6 +1449,9 @@ async fn run() -> Result<(), RuntimeError> {
         config.vote_client_id.clone(),
         config.vote_redemption_secret.clone(),
     )? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = redeem_event_sink(config.redeem, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = privacy_event_sink(config.privacy, store.clone())? {

@@ -77,6 +77,7 @@ mod pronunciation_command;
 mod pronunciation_service;
 mod queue_command;
 mod queue_control;
+mod redeem_command;
 mod rejoin_service;
 mod server_stats_command;
 mod songbird_transport;
@@ -233,6 +234,7 @@ pub use queue_command::{QueueCommand, QueueCommandError, parse_queue_command};
 pub use queue_control::{
     QueueControlInvocation, QueueControlOutcome, QueueControlPlayback, QueueControlService,
 };
+pub use redeem_command::{RedeemCommand, RedeemCommandError, parse_redeem_command};
 pub use rejoin_service::{PlannedRejoinError, PlannedRejoinOutcome, PlannedRejoinService};
 pub use server_stats_command::{
     ServerStatsCommand, ServerStatsCommandError, parse_server_stats_command,

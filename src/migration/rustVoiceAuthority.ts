@@ -281,6 +281,14 @@ export function rustPremiumInfoOwnsCommand(
   );
 }
 
+/** Gift-code redemption is transactional in SQLite and stays behind its own canary. */
+export function rustRedeemOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_REDEEM_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'redeem';
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
