@@ -33,6 +33,7 @@ mod help_sink;
 mod invite_sink;
 #[cfg(feature = "voice-driver")]
 mod live_transcription_sink;
+mod loop_lag;
 mod owner_command_sink;
 mod piper_adapter;
 mod premium_sink;
@@ -1802,6 +1803,7 @@ async fn run() -> Result<(), RuntimeError> {
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
+    loop_lag::spawn(gateway_state.metrics().as_ref().clone());
     if let Some(topgg_metrics) = config.topgg_metrics {
         spawn_topgg_metrics(topgg_metrics, gateway_state.clone());
     }

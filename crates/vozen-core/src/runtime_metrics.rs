@@ -20,6 +20,7 @@ pub struct RuntimeMetrics {
     voice_drops: Arc<AtomicU64>,
     voice_reconnects: Arc<AtomicU64>,
     votes: Arc<AtomicU64>,
+    loop_stalls: Arc<AtomicU64>,
     synth_latencies_ms: Arc<Mutex<Vec<u64>>>,
 }
 
@@ -35,6 +36,7 @@ pub struct RuntimeMetricsSnapshot {
     pub voice_drops: u64,
     pub voice_reconnects: u64,
     pub votes: u64,
+    pub loop_stalls: u64,
 }
 
 impl RuntimeMetrics {
@@ -68,6 +70,12 @@ impl RuntimeMetrics {
 
     pub fn record_vote(&self) {
         self.votes.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records a Tokio runtime stall large enough to delay gateway work such as autocomplete.
+    /// This is deliberately process-local and contains no request, user, or guild data.
+    pub fn record_loop_stall(&self) {
+        self.loop_stalls.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn record_synth_latency_ms(&self, latency_ms: u64) {
@@ -106,6 +114,7 @@ impl RuntimeMetrics {
             voice_drops: self.voice_drops.load(Ordering::Relaxed),
             voice_reconnects: self.voice_reconnects.load(Ordering::Relaxed),
             votes: self.votes.load(Ordering::Relaxed),
+            loop_stalls: self.loop_stalls.load(Ordering::Relaxed),
         }
     }
 }
@@ -130,5 +139,6 @@ mod tests {
         assert_eq!(snapshot.synth_count, 3);
         assert_eq!(snapshot.synth_p50_ms, 20);
         assert_eq!(snapshot.synth_p95_ms, 30);
+        assert_eq!(snapshot.loop_stalls, 0);
     }
 }
