@@ -8,27 +8,9 @@ use serenity::{
     model::application::Interaction,
 };
 use vozen_discord::{
-    GatewayEventDispatchError, GatewayEventSink, VoiceResponseLocalizer, parse_game_list_command,
+    GAME_CATALOG, GatewayEventDispatchError, GatewayEventSink, VoiceResponseLocalizer,
+    parse_game_list_command,
 };
-
-const GAME_KEYS: &[(&str, &str)] = &[
-    ("game.guessLanguage.name", "game.guessLanguage.desc"),
-    ("game.math.name", "game.math.desc"),
-    ("game.skipCount.name", "game.skipCount.desc"),
-    ("game.spelling.name", "game.spelling.desc"),
-    ("game.spellOut.name", "game.spellOut.desc"),
-    ("game.fastSpeech.name", "game.fastSpeech.desc"),
-    ("game.accentSwap.name", "game.accentSwap.desc"),
-    ("game.reflexes.name", "game.reflexes.desc"),
-    ("game.vozenSays.name", "game.vozenSays.desc"),
-    ("game.roulette.name", "game.roulette.desc"),
-    ("game.hangman.name", "game.hangman.desc"),
-    ("game.wordle.name", "game.wordle.desc"),
-    ("game.tictactoe.name", "game.tictactoe.desc"),
-    ("game.chess.name", "game.chess.desc"),
-    ("game.wordChain.name", "game.wordChain.descr"),
-    ("game.headsOrTails.name", "game.headsOrTails.desc"),
-];
 
 pub struct GameListGatewaySink {
     localizer: VoiceResponseLocalizer,
@@ -63,10 +45,16 @@ impl GameListGatewaySink {
         command: &serenity::model::application::CommandInteraction,
     ) -> Result<String, GatewayEventDispatchError> {
         let mut lines = vec![self.render("game.list.title", command, &BTreeMap::new())?];
-        for &(name_key, desc_key) in GAME_KEYS {
+        for game in GAME_CATALOG {
             let mut parameters = BTreeMap::new();
-            parameters.insert("name", self.render(name_key, command, &BTreeMap::new())?);
-            parameters.insert("desc", self.render(desc_key, command, &BTreeMap::new())?);
+            parameters.insert(
+                "name",
+                self.render(game.name_key, command, &BTreeMap::new())?,
+            );
+            parameters.insert(
+                "desc",
+                self.render(game.desc_key, command, &BTreeMap::new())?,
+            );
             lines.push(self.render("game.list.line", command, &parameters)?);
         }
         Ok(lines.join("\n"))
@@ -120,12 +108,12 @@ mod tests {
 
     #[test]
     fn game_registry_matches_node_order_and_size() {
-        assert_eq!(GAME_KEYS.len(), 16);
+        assert_eq!(GAME_CATALOG.len(), 16);
         assert_eq!(
-            GAME_KEYS[0],
+            (GAME_CATALOG[0].name_key, GAME_CATALOG[0].desc_key),
             ("game.guessLanguage.name", "game.guessLanguage.desc")
         );
-        assert_eq!(GAME_KEYS[14].1, "game.wordChain.descr");
-        assert_eq!(GAME_KEYS[15].0, "game.headsOrTails.name");
+        assert_eq!(GAME_CATALOG[14].desc_key, "game.wordChain.descr");
+        assert_eq!(GAME_CATALOG[15].name_key, "game.headsOrTails.name");
     }
 }
