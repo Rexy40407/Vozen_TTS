@@ -27,6 +27,7 @@ mod file_export_sink;
 mod game_list_sink;
 mod game_score_sink;
 mod guild_lifecycle_sink;
+mod guild_welcome_sink;
 mod help_sink;
 mod invite_sink;
 #[cfg(feature = "voice-driver")]
@@ -139,6 +140,7 @@ struct RuntimeConfig {
     invite_client_id: Option<String>,
     help: bool,
     help_support_url: String,
+    welcome: bool,
     vote: bool,
     vote_client_id: Option<String>,
     top_speakers: bool,
@@ -404,6 +406,7 @@ impl RuntimeConfig {
         let help = help_enabled(env::var("RUST_HELP_ENABLED").ok().as_deref()) || public_commands;
         let help_support_url = nonempty_env("SUPPORT_URL")
             .unwrap_or_else(|| "https://discord.gg/4kYw2WUbNN".to_owned());
+        let welcome = welcome_enabled(env::var("RUST_WELCOME_ENABLED").ok().as_deref());
         let vote = vote_enabled(env::var("RUST_VOTE_ENABLED").ok().as_deref()) || public_commands;
         let vote_client_id = nonempty_env("CLIENT_ID");
         let top_speakers =
@@ -473,6 +476,7 @@ impl RuntimeConfig {
             invite_client_id,
             help,
             help_support_url,
+            welcome,
             vote,
             vote_client_id,
             top_speakers,
@@ -843,6 +847,10 @@ fn invite_enabled(raw: Option<&str>) -> bool {
 }
 
 fn help_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn welcome_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1693,6 +1701,8 @@ enum RuntimeError {
     InviteGateway,
     #[error("help gateway initialisation failed")]
     HelpGateway,
+    #[error("welcome gateway initialisation failed")]
+    WelcomeGateway,
     #[error("vote gateway initialisation failed")]
     VoteGateway,
     #[error("top-speakers gateway initialisation failed")]
@@ -1792,6 +1802,12 @@ async fn run() -> Result<(), RuntimeError> {
     event_sinks.push(Arc::new(
         guild_lifecycle_sink::GuildLifecycleGatewaySink::new(store.clone()),
     ));
+    if config.welcome {
+        event_sinks.push(Arc::new(
+            guild_welcome_sink::GuildWelcomeGatewaySink::new()
+                .map_err(|_| RuntimeError::WelcomeGateway)?,
+        ));
+    }
     if let Some(sink) = owner_command_event_sink(config.owner_commands, store.clone())? {
         event_sinks.push(sink);
     }
@@ -2476,6 +2492,15 @@ mod tests {
         assert!(!translation_text_enabled(Some("1")));
         assert!(!translation_text_enabled(Some("yes")));
         assert!(!translation_text_enabled(None));
+    }
+
+    #[test]
+    fn welcome_promotion_is_exactly_opt_in() {
+        assert!(welcome_enabled(Some("true")));
+        assert!(welcome_enabled(Some(" TRUE ")));
+        assert!(!welcome_enabled(Some("1")));
+        assert!(!welcome_enabled(Some("yes")));
+        assert!(!welcome_enabled(None));
     }
 
     #[test]

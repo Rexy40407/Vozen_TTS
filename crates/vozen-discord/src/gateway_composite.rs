@@ -48,6 +48,18 @@ impl GatewayEventSink for CompositeGatewayEventSink {
         Ok(())
     }
 
+    async fn on_guild_create_details(
+        &self,
+        context: Context,
+        guild: serenity::model::guild::Guild,
+    ) -> Result<(), GatewayEventDispatchError> {
+        for sink in &self.sinks {
+            sink.on_guild_create_details(context.clone(), guild.clone())
+                .await?;
+        }
+        Ok(())
+    }
+
     async fn on_message(
         &self,
         context: Context,

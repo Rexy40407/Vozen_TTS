@@ -448,6 +448,18 @@ pub trait GatewayEventSink: Send + Sync {
         Ok(())
     }
 
+    /// Rich Guild Create hook for slices that need transient channel/locale facts. The legacy ID
+    /// hook remains the default so lifecycle sinks can keep their narrow contract.
+    async fn on_guild_create_details(
+        &self,
+        context: Context,
+        guild: serenity::model::guild::Guild,
+    ) -> Result<(), GatewayEventDispatchError> {
+        self.on_guild_create(&guild.id.get().to_string()).await?;
+        let _ = context;
+        Ok(())
+    }
+
     async fn on_message(
         &self,
         context: Context,
@@ -1047,7 +1059,7 @@ impl EventHandler for VozenGatewayHandler {
 
     async fn guild_create(
         &self,
-        _context: Context,
+        context: Context,
         guild: serenity::model::guild::Guild,
         _is_new: Option<bool>,
     ) {
@@ -1061,9 +1073,7 @@ impl EventHandler for VozenGatewayHandler {
             });
         self.gateway_state.replace_guild_voice_states(&guild);
         if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink
-                .on_guild_create(&guild.id.get().to_string())
-                .await;
+            let _ = event_sink.on_guild_create_details(context, guild).await;
         }
     }
 
