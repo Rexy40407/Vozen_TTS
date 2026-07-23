@@ -14,6 +14,7 @@ mod config_greet_language_sink;
 mod config_language_sink;
 mod config_numeric_sink;
 mod config_queue_role_sink;
+mod config_reset_sink;
 mod config_role_sink;
 mod config_show_sink;
 mod config_toggle_sink;
@@ -98,6 +99,7 @@ struct RuntimeConfig {
     config_toggles: bool,
     config_numeric: bool,
     config_role: bool,
+    config_reset: bool,
     config_show: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
@@ -305,6 +307,8 @@ impl RuntimeConfig {
         let config_numeric =
             config_numeric_enabled(env::var("RUST_CONFIG_NUMERIC_ENABLED").ok().as_deref());
         let config_role = config_role_enabled(env::var("RUST_CONFIG_ROLE_ENABLED").ok().as_deref());
+        let config_reset =
+            config_reset_enabled(env::var("RUST_CONFIG_RESET_ENABLED").ok().as_deref());
         let config_show = config_show_enabled(env::var("RUST_CONFIG_SHOW_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
@@ -333,6 +337,7 @@ impl RuntimeConfig {
             config_toggles,
             config_numeric,
             config_role,
+            config_reset,
             config_show,
             automatic_translation,
             dashboard,
@@ -538,6 +543,10 @@ fn config_role_enabled(raw: Option<&str>) -> bool {
 }
 
 fn config_show_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn config_reset_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -854,6 +863,19 @@ fn config_show_event_sink(
     )))
 }
 
+fn config_reset_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        config_reset_sink::ConfigResetGatewaySink::new(store)
+            .map_err(|_| RuntimeError::ConfigResetGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -1020,6 +1042,8 @@ enum RuntimeError {
     ConfigRoleGateway,
     #[error("config show gateway initialisation failed")]
     ConfigShowGateway,
+    #[error("config reset gateway initialisation failed")]
+    ConfigResetGateway,
     #[error("config default voice gateway initialisation failed")]
     ConfigDefaultVoiceGateway,
     #[error("config channel gateway initialisation failed")]
@@ -1134,6 +1158,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = config_show_event_sink(config.config_show, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = config_reset_event_sink(config.config_reset, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1654,6 +1681,15 @@ mod tests {
         assert!(!config_show_enabled(Some("1")));
         assert!(!config_show_enabled(Some("yes")));
         assert!(!config_show_enabled(None));
+    }
+
+    #[test]
+    fn config_reset_promotion_is_exactly_opt_in() {
+        assert!(config_reset_enabled(Some("true")));
+        assert!(config_reset_enabled(Some(" TRUE ")));
+        assert!(!config_reset_enabled(Some("1")));
+        assert!(!config_reset_enabled(Some("yes")));
+        assert!(!config_reset_enabled(None));
     }
 
     #[test]

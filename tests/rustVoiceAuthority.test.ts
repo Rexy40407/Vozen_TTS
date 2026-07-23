@@ -14,6 +14,7 @@ import {
   rustConfigGreetLanguageOwnsCommand,
   rustConfigBlockwordOwnsCommand,
   rustConfigShowOwnsCommand,
+  rustConfigResetOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -133,6 +134,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigShowOwnsCommand('config', 'show', 'true')).toBe(true);
     expect(rustConfigShowOwnsCommand('config', 'reset', 'true')).toBe(false);
     expect(rustConfigShowOwnsCommand('voice', 'show', 'true')).toBe(false);
+  });
+
+  it('promotes only config reset behind its own canary', () => {
+    expect(rustConfigResetOwnsCommand('config', 'reset')).toBe(false);
+    expect(rustConfigResetOwnsCommand('config', 'reset', 'true')).toBe(true);
+    expect(rustConfigResetOwnsCommand('config', 'show', 'true')).toBe(false);
+    expect(rustConfigResetOwnsCommand('voice', 'reset', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

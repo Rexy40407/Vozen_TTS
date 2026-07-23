@@ -42,6 +42,8 @@ mod config_numeric_command;
 mod config_numeric_service;
 mod config_queue_role_command;
 mod config_queue_role_service;
+mod config_reset_command;
+mod config_reset_service;
 mod config_role_command;
 mod config_role_service;
 mod config_show_command;
@@ -143,6 +145,12 @@ pub use config_queue_role_command::{
 pub use config_queue_role_service::{
     ConfigQueueRoleFailure, ConfigQueueRoleInvocation, ConfigQueueRoleOutcome,
     ConfigQueueRoleService,
+};
+pub use config_reset_command::{
+    ConfigResetCommand, ConfigResetCommandError, parse_config_reset_command,
+};
+pub use config_reset_service::{
+    ConfigResetFailure, ConfigResetInvocation, ConfigResetOutcome, ConfigResetService,
 };
 pub use config_role_command::{
     ConfigRoleCommand, ConfigRoleCommandError, parse_config_role_command,

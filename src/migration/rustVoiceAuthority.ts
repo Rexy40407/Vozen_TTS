@@ -187,6 +187,17 @@ export function rustConfigShowOwnsCommand(
   );
 }
 
+/** Reset clears the guild config plus translation scope only behind an explicit canary. */
+export function rustConfigResetOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_CONFIG_RESET_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' && commandName === 'config' && subcommand === 'reset'
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

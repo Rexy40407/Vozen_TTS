@@ -40,6 +40,20 @@ pub enum TranslationReservationDenial {
 }
 
 impl SqliteStore {
+    pub fn clear_translation_config(&self, guild_id: &str) -> Result<(), StoreError> {
+        let transaction = self.connection().unchecked_transaction()?;
+        transaction.execute(
+            "DELETE FROM translation_mapping WHERE guild_id = ?1",
+            [guild_id],
+        )?;
+        transaction.execute(
+            "DELETE FROM translation_preference WHERE guild_id = ?1",
+            [guild_id],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
     pub fn translation_mappings(
         &self,
         guild_id: &str,

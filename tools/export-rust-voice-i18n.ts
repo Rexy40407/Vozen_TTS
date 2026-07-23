@@ -129,6 +129,7 @@ const KEYS = [
   'config.showMaxChars',
   'config.showRateLimit',
   'config.showBlocklist',
+  'config.reset',
   'config.valueNone',
   'config.valueAny',
   'config.valueAutoDetect',
