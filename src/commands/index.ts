@@ -296,9 +296,6 @@ export async function handleInteraction(
     i.commandName === 'pronunciation' || i.commandName === 'server-pronunciation'
       ? i.options.getSubcommand(false)
       : null;
-  const pronunciationHasCompleteAdd =
-    pronunciationSubcommand === 'add' &&
-    Boolean(i.options.getString('term')?.trim() && i.options.getString('say')?.trim());
   // The Rust process responds to this exact interaction when the explicitly opt-in migration
   // flag is active. Returning before any defer/write prevents a double response from the two
   // Discord gateway sessions; every other command remains Node-owned.
@@ -307,11 +304,7 @@ export async function handleInteraction(
     rustRandomizerOwnsCommand(i.commandName) ||
     rustCastOwnsCommand(i.commandName) ||
     rustQueueOwnsCommand(i.commandName) ||
-    rustPronunciationOwnsCommand(
-      i.commandName,
-      pronunciationSubcommand,
-      pronunciationHasCompleteAdd,
-    ) ||
+    rustPronunciationOwnsCommand(i.commandName, pronunciationSubcommand) ||
     rustConfigLanguageOwnsCommand(
       i.commandName,
       i.commandName === 'config' ? i.options.getSubcommand(false) : null,
