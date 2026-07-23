@@ -181,6 +181,7 @@ struct CoreVoiceRuntimeOptions {
     cache_dir: PathBuf,
     piper_concurrency: usize,
     queue_cap: usize,
+    queue_enabled: bool,
     message_autoread: bool,
     settings: CoreVoiceSettings,
 }
@@ -305,6 +306,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             .into(),
         piper_concurrency,
         queue_cap,
+        queue_enabled: queue_enabled(env::var("RUST_QUEUE_ENABLED").ok().as_deref()),
         message_autoread: message_autoread_enabled(
             env::var("RUST_MESSAGE_AUTOREAD_ENABLED").ok().as_deref(),
         ),
@@ -423,6 +425,10 @@ fn automatic_translation_enabled(raw: Option<&str>) -> bool {
 }
 
 fn message_autoread_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn queue_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1282,6 +1288,15 @@ mod tests {
         assert!(!message_autoread_enabled(Some("1")));
         assert!(!message_autoread_enabled(Some("yes")));
         assert!(!message_autoread_enabled(None));
+    }
+
+    #[test]
+    fn rust_queue_promotion_is_exactly_opt_in() {
+        assert!(queue_enabled(Some("true")));
+        assert!(queue_enabled(Some(" TRUE ")));
+        assert!(!queue_enabled(Some("1")));
+        assert!(!queue_enabled(Some("yes")));
+        assert!(!queue_enabled(None));
     }
 
     #[tokio::test]

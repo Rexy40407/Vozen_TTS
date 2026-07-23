@@ -52,6 +52,7 @@ import { handlePrivacy } from './handlers/privacy';
 import {
   rustTranslationOwnsCommand,
   rustTranslationPreferencesOwnCommand,
+  rustQueueOwnsCommand,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
@@ -266,6 +267,7 @@ export async function handleInteraction(
   // Discord gateway sessions; every other command remains Node-owned.
   if (
     rustVoiceOwnsCommand(i.commandName) ||
+    rustQueueOwnsCommand(i.commandName) ||
     rustTranslationOwnsCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,

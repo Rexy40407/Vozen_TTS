@@ -3,6 +3,7 @@ import {
   rustTranslationOwnsCommand,
   rustTranslationOwnsAutomaticMessages,
   rustTranslationPreferencesOwnCommand,
+  rustQueueOwnsCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
@@ -21,6 +22,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoiceOwnsCommand('tts-file', 'false', 'yes')).toBe(false);
     expect(rustVoiceOwnsCommand('voice', 'true')).toBe(false);
     expect(rustVoiceOwnsCommand('queue', 'true')).toBe(false);
+  });
+
+  it('keeps queue ownership behind its own Piper-compatible canary', () => {
+    expect(rustQueueOwnsCommand('queue')).toBe(false);
+    expect(rustQueueOwnsCommand('queue', 'true', 'yes')).toBe(false);
+    expect(rustQueueOwnsCommand('queue', 'true', 'true')).toBe(true);
+    expect(rustQueueOwnsCommand('queue', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustQueueOwnsCommand('join', 'true', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

@@ -18,16 +18,17 @@ use serenity::{
         CreateInteractionResponse, CreateInteractionResponseMessage, EditInteractionResponse,
     },
     client::Context,
-    model::application::Interaction,
+    model::{Permissions, application::Interaction},
 };
-use vozen_core::{SynthesisEngine, detect_language};
+use vozen_core::{PublicQueueItem, QueueLane, QueueSource, SynthesisEngine, detect_language};
 use vozen_discord::{
     CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor, CoreVoiceInteractionFacts,
     DiscordDashboardOptionsProvider, DiscordMessageFactsOwned, GatewayEventDispatchError,
     GatewayEventSink, GatewayState, GuildSynthesisCoordinator, MessageVoiceInvocation,
-    MessageVoiceOutcome, MessageVoiceService, PlannedRejoinService, RejoinChannelState,
-    SongbirdCommandPlayback, SongbirdVoiceSessionTransport, collect_message_media,
-    consume_planned_rejoin_marker,
+    MessageVoiceOutcome, MessageVoiceService, PlannedRejoinService, QueueControlInvocation,
+    QueueControlOutcome, QueueControlService, RejoinChannelState, SongbirdCommandPlayback,
+    SongbirdVoiceSessionTransport, collect_message_media, consume_planned_rejoin_marker,
+    parse_queue_command,
 };
 use vozen_store::SqliteStore;
 
@@ -300,6 +301,15 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         let Some(facts) = CoreVoiceInteractionFacts::from_command(&command) else {
             return Ok(());
         };
+        if self.options.queue_enabled {
+            if let Some(queue) =
+                parse_queue_command(&command.data).map_err(|_| GatewayEventDispatchError)?
+            {
+                return self
+                    .handle_queue_interaction(&context, &command, &facts, queue)
+                    .await;
+            }
+        }
         let executor = self.executor(&context)?;
         let defer = Executor::requires_ephemeral_defer(&command.data)
             .map_err(|_| GatewayEventDispatchError)?;
@@ -338,6 +348,50 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
         }
+        Ok(())
+    }
+
+    async fn handle_queue_interaction(
+        &self,
+        context: &Context,
+        command: &serenity::model::application::CommandInteraction,
+        facts: &CoreVoiceInteractionFacts,
+        queue: vozen_discord::QueueCommand,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let dependencies = self.dependencies(context)?;
+        let can_manage_guild = command
+            .member
+            .as_ref()
+            .and_then(|member| member.permissions)
+            .is_some_and(|permissions| permissions.contains(Permissions::MANAGE_GUILD));
+        let caller_voice_channel = self
+            .gateway_state
+            .voice_channel_id(&facts.guild_id, &facts.user_id);
+        let bot_voice_channel = self.gateway_state.bot_voice_channel_id(&facts.guild_id);
+        let outcome = QueueControlService::new(dependencies.playback.clone())
+            .execute(
+                QueueControlInvocation {
+                    guild_id: &facts.guild_id,
+                    user_id: &facts.user_id,
+                    can_manage_guild,
+                    caller_voice_channel_id: caller_voice_channel.as_deref(),
+                    bot_voice_channel_id: bot_voice_channel.as_deref(),
+                    now_ms: system_now_ms().try_into().unwrap_or_default(),
+                },
+                queue,
+            )
+            .await;
+        command
+            .create_response(
+                context,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(queue_response(outcome))
+                        .ephemeral(true),
+                ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
         Ok(())
     }
 
@@ -437,9 +491,83 @@ fn sanitize_speaker_name(raw: &str) -> Option<String> {
         .then(|| value.to_owned())
 }
 
+fn queue_response(outcome: QueueControlOutcome) -> String {
+    match outcome {
+        QueueControlOutcome::Empty => "The queue is empty.".to_owned(),
+        QueueControlOutcome::Snapshot(items) => {
+            let lines = items.iter().map(queue_item_line).collect::<Vec<_>>();
+            if lines.is_empty() {
+                "The queue is empty.".to_owned()
+            } else {
+                format!("Pending queue ({}):\n{}", lines.len(), lines.join("\n"))
+            }
+        }
+        QueueControlOutcome::Removed => "Removed that queued item.".to_owned(),
+        QueueControlOutcome::Unavailable => "That queue item is unavailable.".to_owned(),
+        QueueControlOutcome::RequiresManageGuild => {
+            "You need Manage Server to control the queue.".to_owned()
+        }
+        QueueControlOutcome::NotInSameVoice => {
+            "Join Vozen's voice channel to control audio.".to_owned()
+        }
+        QueueControlOutcome::Cleared => "Cleared the queue.".to_owned(),
+        QueueControlOutcome::Paused => "Audio paused.".to_owned(),
+        QueueControlOutcome::NothingToPause => "There is no audio to pause.".to_owned(),
+        QueueControlOutcome::Resumed => "Audio resumed.".to_owned(),
+        QueueControlOutcome::NotPaused => "Audio is not paused.".to_owned(),
+        QueueControlOutcome::Skipped => "Skipped the current audio.".to_owned(),
+        QueueControlOutcome::NothingPlaying => "There is no audio to skip.".to_owned(),
+        QueueControlOutcome::PlaybackFailed => "The queue is unavailable right now.".to_owned(),
+    }
+}
+
+fn queue_item_line(item: &PublicQueueItem) -> String {
+    format!(
+        "- `{}` - {}, {}, {}s waiting",
+        item.id,
+        queue_source_label(item.source),
+        queue_lane_label(item.lane),
+        item.age_ms / 1_000
+    )
+}
+
+fn queue_source_label(source: QueueSource) -> &'static str {
+    match source {
+        QueueSource::Message => "message",
+        QueueSource::Command => "command",
+        QueueSource::Game => "game",
+        QueueSource::Sound => "sound",
+        QueueSource::System => "system",
+    }
+}
+
+fn queue_lane_label(lane: QueueLane) -> &'static str {
+    match lane {
+        QueueLane::Standard => "standard",
+        QueueLane::Accessibility => "accessibility",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn queue_responses_keep_items_opaque_and_match_node_wording() {
+        assert_eq!(
+            queue_response(QueueControlOutcome::Snapshot(vec![PublicQueueItem {
+                id: "opaque".into(),
+                source: QueueSource::Message,
+                lane: QueueLane::Standard,
+                age_ms: 3_200,
+            }])),
+            "Pending queue (1):\n- `opaque` - message, standard, 3s waiting"
+        );
+        assert_eq!(
+            queue_response(QueueControlOutcome::NotInSameVoice),
+            "Join Vozen's voice channel to control audio."
+        );
+    }
 
     #[test]
     fn promotion_options_preserve_distinct_queue_and_synthesis_limits() {
@@ -449,6 +577,7 @@ mod tests {
             cache_dir: "cache".into(),
             piper_concurrency: 2,
             queue_cap: 20,
+            queue_enabled: true,
             message_autoread: false,
             settings: CoreVoiceSettings {
                 available_models: vec!["en_US-amy-medium".into()],
@@ -486,6 +615,7 @@ mod tests {
                 cache_dir: "cache".into(),
                 piper_concurrency: 1,
                 queue_cap: 1,
+                queue_enabled: true,
                 message_autoread: true,
                 settings: CoreVoiceSettings {
                     available_models: vec!["en_US-amy-medium".into()],
