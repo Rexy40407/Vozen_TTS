@@ -81,6 +81,7 @@ import {
   rustGameListOwnsCommand,
   rustGameScoresOwnsCommand,
   rustVoiceOwnsCommand,
+  rustRandomizerOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
@@ -301,6 +302,7 @@ export async function handleInteraction(
   // Discord gateway sessions; every other command remains Node-owned.
   if (
     rustVoiceOwnsCommand(i.commandName) ||
+    rustRandomizerOwnsCommand(i.commandName) ||
     rustQueueOwnsCommand(i.commandName) ||
     rustPronunciationOwnsCommand(
       i.commandName,

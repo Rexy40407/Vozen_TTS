@@ -242,6 +242,7 @@ struct CoreVoiceRuntimeOptions {
     queue_cap: usize,
     queue_enabled: bool,
     message_autoread: bool,
+    randomizer_enabled: bool,
     settings: CoreVoiceSettings,
 }
 
@@ -450,6 +451,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
         message_autoread: message_autoread_enabled(
             env::var("RUST_MESSAGE_AUTOREAD_ENABLED").ok().as_deref(),
         ),
+        randomizer_enabled: randomizer_enabled(env::var("RUST_RANDOMIZER_ENABLED").ok().as_deref()),
         settings: CoreVoiceSettings {
             available_models: Vec::new(),
             default_voice,
@@ -457,6 +459,10 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             default_engine: SynthesisEngine::Piper,
         },
     }))
+}
+
+fn randomizer_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
 fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeError> {

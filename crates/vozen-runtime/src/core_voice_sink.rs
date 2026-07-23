@@ -15,20 +15,27 @@ use std::{
 use async_trait::async_trait;
 use serenity::{
     builder::{
-        CreateInteractionResponse, CreateInteractionResponseMessage, EditInteractionResponse,
+        CreateActionRow, CreateAllowedMentions, CreateInputText, CreateInteractionResponse,
+        CreateInteractionResponseMessage, CreateModal, CreateSelectMenu, CreateSelectMenuKind,
+        CreateSelectMenuOption, EditInteractionResponse,
     },
     client::Context,
-    model::{Permissions, application::Interaction},
+    model::{
+        Permissions,
+        application::{ComponentInteractionDataKind, InputTextStyle, Interaction},
+    },
 };
 use vozen_core::{PublicQueueItem, QueueLane, QueueSource, SynthesisEngine, detect_language};
 use vozen_discord::{
-    CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor, CoreVoiceInteractionFacts,
-    DiscordDashboardOptionsProvider, DiscordMessageFactsOwned, GatewayEventDispatchError,
-    GatewayEventSink, GatewayState, GuildSynthesisCoordinator, MessageVoiceInvocation,
-    MessageVoiceOutcome, MessageVoiceService, PlannedRejoinService, QueueControlInvocation,
-    QueueControlOutcome, QueueControlService, RejoinChannelState, SongbirdCommandPlayback,
-    SongbirdVoiceSessionTransport, collect_message_media, consume_planned_rejoin_marker,
-    parse_queue_command,
+    CoreTtsOutcome, CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor,
+    CoreVoiceInteractionFacts, CoreVoiceOutcome, DiscordDashboardOptionsProvider,
+    DiscordMessageFactsOwned, GatewayEventDispatchError, GatewayEventSink, GatewayState,
+    GuildSynthesisCoordinator, MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService,
+    PlannedRejoinService, QueueControlInvocation, QueueControlOutcome, QueueControlService,
+    RandomizerCommand, RandomizerSession, RejoinChannelState, SongbirdCommandPlayback,
+    SongbirdVoiceSessionTransport, VoiceResponseLocalizer, collect_message_media,
+    consume_planned_rejoin_marker, parse_amount_component_id, parse_fill_component_id,
+    parse_modal_options, parse_queue_command, parse_randomizer_command, pick_option,
 };
 use vozen_store::SqliteStore;
 
@@ -58,6 +65,7 @@ pub struct CoreVoiceGatewaySink {
     executor: Mutex<Option<Arc<Executor>>>,
     message_service: Mutex<Option<Arc<MessageService>>>,
     last_speakers: Mutex<BTreeMap<String, String>>,
+    randomizer_sessions: Mutex<BTreeMap<String, RandomizerSession>>,
     rejoin_attempted: AtomicBool,
 }
 
@@ -76,6 +84,7 @@ impl CoreVoiceGatewaySink {
             executor: Mutex::new(None),
             message_service: Mutex::new(None),
             last_speakers: Mutex::new(BTreeMap::new()),
+            randomizer_sessions: Mutex::new(BTreeMap::new()),
             rejoin_attempted: AtomicBool::new(false),
         }
     }
@@ -223,6 +232,377 @@ impl CoreVoiceGatewaySink {
         .map_err(|_| GatewayEventDispatchError)?;
         Ok(())
     }
+
+    fn prune_randomizer_sessions(&self, now_ms: i64) {
+        if let Ok(mut sessions) = self.randomizer_sessions.lock() {
+            sessions.retain(|_, session| session.valid_at(now_ms));
+            // A Discord interaction can be replayed or abandoned. Keep the transient map bounded
+            // even if a guild sends a large number of unfinished modal flows.
+            if sessions.len() > 1024 {
+                let mut entries = sessions
+                    .iter()
+                    .map(|(id, session)| (id.clone(), session.issued_at_ms))
+                    .collect::<Vec<_>>();
+                entries.sort_by_key(|(_, issued_at)| *issued_at);
+                for (id, _) in entries.into_iter().take(sessions.len() - 1024) {
+                    sessions.remove(&id);
+                }
+            }
+        }
+    }
+
+    fn randomizer_localizer(&self) -> Result<VoiceResponseLocalizer, GatewayEventDispatchError> {
+        VoiceResponseLocalizer::from_generated_contract().map_err(|_| GatewayEventDispatchError)
+    }
+
+    fn randomizer_session_matches(
+        session: &RandomizerSession,
+        user_id: &str,
+        guild_id: &str,
+        now_ms: i64,
+    ) -> bool {
+        session.user_id == user_id && session.guild_id == guild_id && session.valid_at(now_ms)
+    }
+
+    fn randomizer_facts(
+        guild_id: &str,
+        channel_id: &str,
+        user_id: &str,
+        member: Option<&serenity::model::guild::Member>,
+    ) -> CoreVoiceInteractionFacts {
+        CoreVoiceInteractionFacts {
+            guild_id: guild_id.to_owned(),
+            channel_id: channel_id.to_owned(),
+            user_id: user_id.to_owned(),
+            member_role_ids: member.map(|member| {
+                member
+                    .roles
+                    .iter()
+                    .map(|role_id| role_id.get().to_string())
+                    .collect()
+            }),
+        }
+    }
+
+    async fn randomizer_result(
+        &self,
+        context: &Context,
+        facts: &CoreVoiceInteractionFacts,
+        locale: Option<&str>,
+        guild_locale: Option<&str>,
+        options: &[String],
+    ) -> Result<String, GatewayEventDispatchError> {
+        let winner = pick_option(options).ok_or(GatewayEventDispatchError)?;
+        let localizer = self.randomizer_localizer()?;
+        let mut parameters = BTreeMap::new();
+        parameters.insert("winner", winner.to_owned());
+        parameters.insert("count", options.len().to_string());
+        let line = localizer
+            .render_key("rand.result", locale, guild_locale, &parameters)
+            .ok_or(GatewayEventDispatchError)?;
+        parameters.clear();
+        parameters.insert("winner", winner.to_owned());
+        let speak_text = localizer
+            .render_key("rand.speak", locale, guild_locale, &parameters)
+            .ok_or(GatewayEventDispatchError)?;
+        let spoke = self.executor(context)?.speak_text(facts, &speak_text).await
+            == CoreVoiceOutcome::Tts(CoreTtsOutcome::Queued);
+        let mut content = format!("🎲 {line}");
+        if !spoke {
+            let not_in_voice = localizer
+                .render_key("rand.notInVoice", locale, guild_locale, &BTreeMap::new())
+                .ok_or(GatewayEventDispatchError)?;
+            content.push('\n');
+            content.push_str(&not_in_voice);
+        }
+        Ok(content)
+    }
+
+    fn randomizer_modal(
+        &self,
+        interaction_id: &str,
+        amount: usize,
+        locale: Option<&str>,
+        guild_locale: Option<&str>,
+    ) -> Result<CreateInteractionResponse, GatewayEventDispatchError> {
+        let localizer = self.randomizer_localizer()?;
+        let mut title_parameters = BTreeMap::new();
+        title_parameters.insert("amount", amount.to_string());
+        let title = localizer
+            .render_key("rand.modalTitle", locale, guild_locale, &title_parameters)
+            .ok_or(GatewayEventDispatchError)?;
+        let mut rows = Vec::with_capacity(amount);
+        for index in 1..=amount {
+            let mut parameters = BTreeMap::new();
+            parameters.insert("n", index.to_string());
+            let label = localizer
+                .render_key("rand.modalOption", locale, guild_locale, &parameters)
+                .ok_or(GatewayEventDispatchError)?;
+            rows.push(CreateActionRow::InputText(
+                CreateInputText::new(InputTextStyle::Short, label, format!("opt{index}"))
+                    .max_length(vozen_discord::MAX_OPTION_CHARS as u16)
+                    .required(true),
+            ));
+        }
+        Ok(CreateInteractionResponse::Modal(
+            CreateModal::new(format!("randFill:{interaction_id}"), title).components(rows),
+        ))
+    }
+
+    async fn handle_randomizer_command(
+        &self,
+        context: &Context,
+        command: &serenity::model::application::CommandInteraction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let Some(guild_id) = command.guild_id else {
+            return Ok(());
+        };
+        let Some(facts) = CoreVoiceInteractionFacts::from_command(command) else {
+            return Ok(());
+        };
+        let parsed =
+            parse_randomizer_command(&command.data).map_err(|_| GatewayEventDispatchError)?;
+        let Some(parsed) = parsed else {
+            return Ok(());
+        };
+        let now_ms = system_now_ms();
+        self.prune_randomizer_sessions(now_ms);
+        let guild_id = guild_id.get().to_string();
+        let user_id = command.user.id.get().to_string();
+        let issued = RandomizerSession {
+            user_id,
+            guild_id,
+            amount: None,
+            locale: command.locale.clone(),
+            issued_at_ms: now_ms,
+        };
+        match parsed {
+            RandomizerCommand::Direct { options } => {
+                command
+                    .defer(context)
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                let content = self
+                    .randomizer_result(
+                        context,
+                        &facts,
+                        Some(&command.locale),
+                        command.guild_locale.as_deref(),
+                        &options,
+                    )
+                    .await?;
+                command
+                    .edit_response(
+                        context,
+                        EditInteractionResponse::new()
+                            .content(content)
+                            .allowed_mentions(
+                                CreateAllowedMentions::new()
+                                    .all_users(false)
+                                    .all_roles(false)
+                                    .everyone(false),
+                            ),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+            }
+            RandomizerCommand::ChooseAmount => {
+                if let Ok(mut sessions) = self.randomizer_sessions.lock() {
+                    sessions.insert(command.id.get().to_string(), issued);
+                }
+                let localizer = self.randomizer_localizer()?;
+                let prompt = localizer
+                    .render_key(
+                        "rand.selectPrompt",
+                        Some(&command.locale),
+                        command.guild_locale.as_deref(),
+                        &BTreeMap::new(),
+                    )
+                    .ok_or(GatewayEventDispatchError)?;
+                let placeholder = localizer
+                    .render_key(
+                        "rand.selectPlaceholder",
+                        Some(&command.locale),
+                        command.guild_locale.as_deref(),
+                        &BTreeMap::new(),
+                    )
+                    .ok_or(GatewayEventDispatchError)?;
+                let options = (vozen_discord::MIN_OPTIONS..=vozen_discord::MAX_MODAL_OPTIONS)
+                    .map(|amount| {
+                        let mut parameters = BTreeMap::new();
+                        parameters.insert("n", amount.to_string());
+                        let label = localizer
+                            .render_key(
+                                "rand.selectOption",
+                                Some(&command.locale),
+                                command.guild_locale.as_deref(),
+                                &parameters,
+                            )
+                            .unwrap_or_else(|| amount.to_string());
+                        CreateSelectMenuOption::new(label, amount.to_string())
+                    })
+                    .collect();
+                let select = CreateSelectMenu::new(
+                    format!("randAmount:{}", command.id.get()),
+                    CreateSelectMenuKind::String { options },
+                )
+                .placeholder(placeholder)
+                .min_values(1)
+                .max_values(1);
+                command
+                    .create_response(
+                        context,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .content(prompt)
+                                .ephemeral(true)
+                                .components(vec![CreateActionRow::SelectMenu(select)]),
+                        ),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+            }
+            RandomizerCommand::Modal { amount } => {
+                if let Ok(mut sessions) = self.randomizer_sessions.lock() {
+                    let mut session = issued;
+                    session.amount = Some(amount);
+                    sessions.insert(command.id.get().to_string(), session);
+                }
+                command
+                    .create_response(
+                        context,
+                        self.randomizer_modal(
+                            &command.id.get().to_string(),
+                            amount,
+                            Some(&command.locale),
+                            command.guild_locale.as_deref(),
+                        )?,
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_randomizer_component(
+        &self,
+        context: &Context,
+        component: serenity::model::application::ComponentInteraction,
+    ) -> Result<bool, GatewayEventDispatchError> {
+        let Some(session_id) = parse_amount_component_id(&component.data.custom_id) else {
+            return Ok(false);
+        };
+        let Some(guild_id) = component.guild_id else {
+            return Ok(true);
+        };
+        let now_ms = system_now_ms();
+        self.prune_randomizer_sessions(now_ms);
+        let amount = match &component.data.kind {
+            ComponentInteractionDataKind::StringSelect { values } if values.len() == 1 => values
+                .first()
+                .and_then(|value| value.parse::<usize>().ok())
+                .filter(|value| {
+                    (vozen_discord::MIN_OPTIONS..=vozen_discord::MAX_MODAL_OPTIONS).contains(value)
+                }),
+            _ => None,
+        };
+        let Some(amount) = amount else {
+            return Ok(true);
+        };
+        let guild_id = guild_id.get().to_string();
+        let user_id = component.user.id.get().to_string();
+        let mut sessions = self
+            .randomizer_sessions
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?;
+        let Some(session) = sessions.get_mut(&session_id) else {
+            return Ok(true);
+        };
+        if !Self::randomizer_session_matches(session, &user_id, &guild_id, now_ms) {
+            sessions.remove(&session_id);
+            return Ok(true);
+        }
+        session.amount = Some(amount);
+        let response = self.randomizer_modal(
+            &session_id,
+            amount,
+            Some(&component.locale),
+            component.guild_locale.as_deref(),
+        )?;
+        drop(sessions);
+        component
+            .create_response(context, response)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(true)
+    }
+
+    async fn handle_randomizer_modal(
+        &self,
+        context: &Context,
+        modal: serenity::model::application::ModalInteraction,
+    ) -> Result<bool, GatewayEventDispatchError> {
+        let Some(session_id) = parse_fill_component_id(&modal.data.custom_id) else {
+            return Ok(false);
+        };
+        let Some(guild_id) = modal.guild_id else {
+            return Ok(true);
+        };
+        let now_ms = system_now_ms();
+        self.prune_randomizer_sessions(now_ms);
+        let guild_id = guild_id.get().to_string();
+        let user_id = modal.user.id.get().to_string();
+        let session = self
+            .randomizer_sessions
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .remove(&session_id);
+        let Some(session) = session else {
+            return Ok(true);
+        };
+        let Some(amount) = session.amount else {
+            return Ok(true);
+        };
+        if !Self::randomizer_session_matches(&session, &user_id, &guild_id, now_ms) {
+            return Ok(true);
+        }
+        let options = parse_modal_options(&modal, amount).map_err(|_| GatewayEventDispatchError)?;
+        let facts = Self::randomizer_facts(
+            &guild_id,
+            &modal.channel_id.get().to_string(),
+            &user_id,
+            modal.member.as_ref(),
+        );
+        modal
+            .defer(context)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let content = self
+            .randomizer_result(
+                context,
+                &facts,
+                Some(&modal.locale),
+                modal.guild_locale.as_deref(),
+                &options,
+            )
+            .await?;
+        modal
+            .edit_response(
+                context,
+                EditInteractionResponse::new()
+                    .content(content)
+                    .allowed_mentions(
+                        CreateAllowedMentions::new()
+                            .all_users(false)
+                            .all_roles(false)
+                            .everyone(false),
+                    ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(true)
+    }
 }
 
 #[async_trait]
@@ -300,6 +680,32 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         context: Context,
         interaction: Interaction,
     ) -> Result<(), GatewayEventDispatchError> {
+        if self.options.randomizer_enabled {
+            match &interaction {
+                Interaction::Component(component) => {
+                    if self
+                        .handle_randomizer_component(&context, component.clone())
+                        .await?
+                    {
+                        return Ok(());
+                    }
+                    return Ok(());
+                }
+                Interaction::Modal(modal) => {
+                    if self
+                        .handle_randomizer_modal(&context, modal.clone())
+                        .await?
+                    {
+                        return Ok(());
+                    }
+                    return Ok(());
+                }
+                Interaction::Command(command) if command.data.name == "randomizer" => {
+                    return self.handle_randomizer_command(&context, &command).await;
+                }
+                _ => {}
+            }
+        }
         let Interaction::Command(command) = interaction else {
             return Ok(());
         };
@@ -591,6 +997,7 @@ mod tests {
             queue_cap: 20,
             queue_enabled: true,
             message_autoread: false,
+            randomizer_enabled: false,
             settings: CoreVoiceSettings {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),
@@ -629,6 +1036,7 @@ mod tests {
                 queue_cap: 1,
                 queue_enabled: true,
                 message_autoread: true,
+                randomizer_enabled: false,
                 settings: CoreVoiceSettings {
                     available_models: vec!["en_US-amy-medium".into()],
                     default_voice: "en_US-amy-medium".into(),

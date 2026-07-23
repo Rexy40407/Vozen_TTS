@@ -200,6 +200,24 @@ where
         })
     }
 
+    /// Speaks a short runtime-generated line through the exact same admission, rate-limit and
+    /// queue path as `/tts`. This is deliberately not a Discord response helper: callers remain
+    /// responsible for choosing whether the originating interaction is public or ephemeral.
+    pub async fn speak_text(
+        &self,
+        facts: &CoreVoiceInteractionFacts,
+        text: &str,
+    ) -> CoreVoiceOutcome {
+        self.service
+            .execute(
+                facts.invocation(&|_| "someone".to_owned(), &|_| "a channel".to_owned()),
+                &crate::CoreVoiceCommand::Tts {
+                    text: text.to_owned(),
+                },
+            )
+            .await
+    }
+
     fn response_context(
         &self,
         outcome: CoreVoiceOutcome,

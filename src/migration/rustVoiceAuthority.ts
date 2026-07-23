@@ -37,6 +37,21 @@ export function rustTranscriptionOwnsCommand(
   );
 }
 
+/** `/randomizer` owns a short-lived menu/modal flow inside the Rust voice sink. */
+export function rustRandomizerOwnsCommand(
+  commandName: string,
+  coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
+  enabled = process.env.RUST_RANDOMIZER_ENABLED,
+  ttsEngine = process.env.TTS_ENGINE,
+): boolean {
+  return (
+    coreEnabled?.trim().toLowerCase() === 'true' &&
+    enabled?.trim().toLowerCase() === 'true' &&
+    rustPiperCompatible(ttsEngine) &&
+    commandName === 'randomizer'
+  );
+}
+
 /** Queue controls share the Rust Songbird ledger with core voice, so they have their own
  * canary. Without this second flag Node must retain `/queue`; otherwise a Rust process that has
  * not built the voice driver could leave users without a response. */

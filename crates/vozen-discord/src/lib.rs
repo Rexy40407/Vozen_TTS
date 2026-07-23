@@ -86,6 +86,7 @@ mod pronunciation_command;
 mod pronunciation_service;
 mod queue_command;
 mod queue_control;
+mod randomizer;
 mod redeem_command;
 mod rejoin_service;
 mod server_stats_command;
@@ -261,6 +262,12 @@ pub use pronunciation_service::{
 pub use queue_command::{QueueCommand, QueueCommandError, parse_queue_command};
 pub use queue_control::{
     QueueControlInvocation, QueueControlOutcome, QueueControlPlayback, QueueControlService,
+};
+pub use randomizer::{
+    MAX_DIRECT_INPUT_CHARS, MAX_MODAL_OPTIONS, MAX_OPTION_CHARS, MAX_OPTIONS, MIN_OPTIONS,
+    RandomizerCommand, RandomizerCommandError, RandomizerInteractionError, RandomizerSession,
+    SESSION_TTL_MS, parse_amount_component_id, parse_direct_options, parse_fill_component_id,
+    parse_modal_options, parse_randomizer_command, pick_option,
 };
 pub use redeem_command::{RedeemCommand, RedeemCommandError, parse_redeem_command};
 pub use rejoin_service::{PlannedRejoinError, PlannedRejoinOutcome, PlannedRejoinService};
