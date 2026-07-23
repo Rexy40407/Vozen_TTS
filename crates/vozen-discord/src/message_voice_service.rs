@@ -33,8 +33,8 @@ pub struct MessageVoiceInvocation<'a> {
     pub media: &'a [MediaAnnouncement],
     pub detected_language: Option<&'a str>,
     pub announce_speaker: Option<&'a str>,
-    pub resolve_user: &'a dyn Fn(&str) -> String,
-    pub resolve_channel: &'a dyn Fn(&str) -> String,
+    pub resolve_user: &'a (dyn Fn(&str) -> String + Send + Sync),
+    pub resolve_channel: &'a (dyn Fn(&str) -> String + Send + Sync),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

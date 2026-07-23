@@ -82,6 +82,7 @@ import {
   rustGameScoresOwnsCommand,
   rustVoiceOwnsCommand,
   rustRandomizerOwnsCommand,
+  rustCastOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
@@ -303,6 +304,7 @@ export async function handleInteraction(
   if (
     rustVoiceOwnsCommand(i.commandName) ||
     rustRandomizerOwnsCommand(i.commandName) ||
+    rustCastOwnsCommand(i.commandName) ||
     rustQueueOwnsCommand(i.commandName) ||
     rustPronunciationOwnsCommand(
       i.commandName,

@@ -10,7 +10,7 @@ rust-version.workspace = true
 # Enables actual Discord voice transport. It needs libopus (and CMake/a C compiler only when
 # libopus cannot be obtained from the operating system). Kept opt-in so the control-plane and
 # parity tests remain portable on developer machines.
-voice-driver = ["songbird/driver", "songbird/tungstenite"]
+voice-driver = ["songbird/driver", "songbird/builtin-queue", "songbird/tungstenite"]
 
 [dependencies]
 async-trait.workspace = true

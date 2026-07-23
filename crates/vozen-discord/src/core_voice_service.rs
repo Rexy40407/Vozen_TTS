@@ -81,8 +81,8 @@ pub struct CoreVoiceInvocation<'a> {
     pub channel_id: &'a str,
     pub user_id: &'a str,
     pub member_role_ids: Option<&'a [String]>,
-    pub resolve_user: &'a dyn Fn(&str) -> String,
-    pub resolve_channel: &'a dyn Fn(&str) -> String,
+    pub resolve_user: &'a (dyn Fn(&str) -> String + Send + Sync),
+    pub resolve_channel: &'a (dyn Fn(&str) -> String + Send + Sync),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -336,6 +336,88 @@ where
                 )
                 .await,
             ),
+        }
+    }
+
+    /// Enqueues a runtime-generated line after applying the same cleaning, role, same-call and
+    /// rate-limit gates as `/tts`. The caller may select only an already validated model/engine;
+    /// this method does not trust Discord option values as a model catalogue.
+    pub async fn execute_custom_speech(
+        &self,
+        invocation: CoreVoiceInvocation<'_>,
+        text: &str,
+        model: &str,
+        speed: f64,
+        engine: SynthesisEngine,
+        enforce_rate_limit: bool,
+    ) -> CoreTtsOutcome {
+        let roles = invocation
+            .member_role_ids
+            .map(|roles| roles.iter().map(String::as_str).collect::<Vec<_>>());
+        let prepared = {
+            let store = match self.store.lock() {
+                Ok(store) => store,
+                Err(_) => return CoreTtsOutcome::StoreUnavailable,
+            };
+            let mut speech = match self.speech.lock() {
+                Ok(speech) => speech,
+                Err(_) => return CoreTtsOutcome::StoreUnavailable,
+            };
+            speech.prepare_with_rate_limit(
+                &store,
+                CommandSpeechInput {
+                    guild_id: invocation.guild_id,
+                    channel_id: invocation.channel_id,
+                    user_id: invocation.user_id,
+                    raw: text,
+                    caller_voice_channel_id: self
+                        .gateway_state
+                        .voice_channel_id(invocation.guild_id, invocation.user_id)
+                        .as_deref(),
+                    bot_voice_channel_id: self
+                        .gateway_state
+                        .bot_voice_channel_id(invocation.guild_id)
+                        .as_deref(),
+                    member_role_ids: roles.as_deref(),
+                    available_models: &self.settings.available_models,
+                    runtime_default_voice: &self.settings.default_voice,
+                    runtime_default_speed: self.settings.default_speed,
+                    runtime_default_engine: self.settings.default_engine,
+                    detected_language: None,
+                    resolve_user: invocation.resolve_user,
+                    resolve_channel: invocation.resolve_channel,
+                },
+                (self.now_ms)(),
+                enforce_rate_limit,
+            )
+        };
+        let (lane, mut request) = match prepared {
+            Ok(CommandSpeechOutcome::Ready { lane, speech }) => (lane, speech.request),
+            Ok(CommandSpeechOutcome::NotInSameVoice) => return CoreTtsOutcome::NotInSameVoice,
+            Ok(CommandSpeechOutcome::Blocked) => return CoreTtsOutcome::Blocked,
+            Ok(CommandSpeechOutcome::Empty) => return CoreTtsOutcome::Empty,
+            Ok(CommandSpeechOutcome::RateLimited) => return CoreTtsOutcome::RateLimited,
+            Ok(CommandSpeechOutcome::FullyBlocked) => return CoreTtsOutcome::FullyBlocked,
+            Err(_) => return CoreTtsOutcome::StoreUnavailable,
+        };
+        request.model = model.to_owned();
+        request.speed = if speed.is_finite() {
+            speed
+        } else {
+            self.settings.default_speed
+        };
+        request.engine = engine;
+        request.segments = None;
+        request.single_voice = Some(true);
+        match self
+            .enqueue_synth_request(invocation.guild_id, invocation.user_id, lane, request)
+            .await
+        {
+            CorePreviewOutcome::Queued => CoreTtsOutcome::Queued,
+            CorePreviewOutcome::Busy => CoreTtsOutcome::Busy,
+            CorePreviewOutcome::SynthesisFailed => CoreTtsOutcome::SynthesisFailed,
+            CorePreviewOutcome::PlaybackFailed => CoreTtsOutcome::PlaybackFailed,
+            _ => CoreTtsOutcome::PlaybackFailed,
         }
     }
 

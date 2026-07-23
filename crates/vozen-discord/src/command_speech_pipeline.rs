@@ -34,8 +34,8 @@ pub struct CommandSpeechInput<'a> {
     pub runtime_default_engine: SynthesisEngine,
     /// Must be absent unless the caller already checked the user's detection opt-in.
     pub detected_language: Option<&'a str>,
-    pub resolve_user: &'a dyn Fn(&str) -> String,
-    pub resolve_channel: &'a dyn Fn(&str) -> String,
+    pub resolve_user: &'a (dyn Fn(&str) -> String + Send + Sync),
+    pub resolve_channel: &'a (dyn Fn(&str) -> String + Send + Sync),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -68,6 +68,18 @@ impl CommandSpeechPipeline {
         input: CommandSpeechInput<'_>,
         now_ms: i64,
     ) -> Result<CommandSpeechOutcome, StoreError> {
+        self.prepare_with_rate_limit(store, input, now_ms, true)
+    }
+
+    /// Prepares a follow-up chunk after the caller has already spent the command's rate-limit
+    /// token. Admission, cleaning and blocklists still run for every chunk.
+    pub fn prepare_with_rate_limit(
+        &mut self,
+        store: &SqliteStore,
+        input: CommandSpeechInput<'_>,
+        now_ms: i64,
+        enforce_rate_limit: bool,
+    ) -> Result<CommandSpeechOutcome, StoreError> {
         if input.raw.trim().is_empty() {
             return Ok(CommandSpeechOutcome::Empty);
         }
@@ -92,9 +104,10 @@ impl CommandSpeechPipeline {
             } => return Ok(CommandSpeechOutcome::Blocked),
         };
 
-        if !self
-            .rate_limiters
-            .allow(input.guild_id, input.user_id, config.rate_per_min, now_ms)
+        if enforce_rate_limit
+            && !self
+                .rate_limiters
+                .allow(input.guild_id, input.user_id, config.rate_per_min, now_ms)
         {
             return Ok(CommandSpeechOutcome::RateLimited);
         }
@@ -187,6 +200,34 @@ mod tests {
             pipeline
                 .prepare(&store, input("hello", &available), 0)
                 .expect("allowed"),
+            CommandSpeechOutcome::Ready { .. }
+        ));
+    }
+
+    #[test]
+    fn follow_up_chunks_can_reuse_the_single_command_rate_token() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    rate_per_min: Some(1),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("config");
+        let available = models();
+        let mut pipeline = CommandSpeechPipeline::default();
+        assert!(matches!(
+            pipeline
+                .prepare(&store, input("first chunk", &available), 0)
+                .expect("first"),
+            CommandSpeechOutcome::Ready { .. }
+        ));
+        assert!(matches!(
+            pipeline
+                .prepare_with_rate_limit(&store, input("second chunk", &available), 0, false)
+                .expect("second"),
             CommandSpeechOutcome::Ready { .. }
         ));
     }

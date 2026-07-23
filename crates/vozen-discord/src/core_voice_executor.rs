@@ -140,8 +140,8 @@ where
         command: &CommandData,
         facts: &CoreVoiceInteractionFacts,
         interaction_locale: Option<&str>,
-        resolve_user: &dyn Fn(&str) -> String,
-        resolve_channel: &dyn Fn(&str) -> String,
+        resolve_user: &(dyn Fn(&str) -> String + Send + Sync),
+        resolve_channel: &(dyn Fn(&str) -> String + Send + Sync),
     ) -> Result<CoreVoiceInteractionExecution, CoreVoiceExecutionError> {
         let Some(command) =
             parse_promoted_core_voice(command).map_err(|_| CoreVoiceExecutionError::Command)?
@@ -216,6 +216,31 @@ where
                 },
             )
             .await
+    }
+
+    /// Speaks a generated line with an explicitly validated model/engine, while retaining the
+    /// service's ordinary admission and queue safeguards.
+    pub async fn speak_text_with_voice(
+        &self,
+        facts: &CoreVoiceInteractionFacts,
+        text: &str,
+        model: &str,
+        speed: f64,
+        engine: vozen_core::SynthesisEngine,
+        enforce_rate_limit: bool,
+    ) -> CoreVoiceOutcome {
+        CoreVoiceOutcome::Tts(
+            self.service
+                .execute_custom_speech(
+                    facts.invocation(&|_| "someone".to_owned(), &|_| "a channel".to_owned()),
+                    text,
+                    model,
+                    speed,
+                    engine,
+                    enforce_rate_limit,
+                )
+                .await,
+        )
     }
 
     fn response_context(

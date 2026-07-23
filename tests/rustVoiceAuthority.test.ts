@@ -36,6 +36,7 @@ import {
   rustVoicePreferencesOwnCommand,
   rustTranscriptionOwnsCommand,
   rustRandomizerOwnsCommand,
+  rustCastOwnsCommand,
 } from '../src/migration/rustVoiceAuthority';
 
 describe('Rust core voice migration ownership', () => {
@@ -51,6 +52,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustRandomizerOwnsCommand('randomizer', 'true', 'true', 'piper')).toBe(true);
     expect(rustRandomizerOwnsCommand('randomizer', 'true', 'true', 'gtts')).toBe(false);
     expect(rustRandomizerOwnsCommand('joke', 'true', 'true', 'piper')).toBe(false);
+  });
+
+  it('keeps cast behind the core Piper canary', () => {
+    expect(rustCastOwnsCommand('cast')).toBe(false);
+    expect(rustCastOwnsCommand('cast', 'true', 'true', 'piper')).toBe(true);
+    expect(rustCastOwnsCommand('cast', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustCastOwnsCommand('randomizer', 'true', 'true', 'piper')).toBe(false);
   });
 
   it('is off unless explicitly enabled and only yields the promoted command set', () => {

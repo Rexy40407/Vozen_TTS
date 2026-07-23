@@ -120,8 +120,9 @@ pub use automatic_translation_service::{
 pub use birthday_command::{BirthdayCommand, BirthdayCommandError, parse_birthday_command};
 pub use bot_stats_command::{BotStatsCommand, BotStatsCommandError, parse_bot_stats_command};
 pub use cast::{
-    CAST_LANGUAGE_CHOICES, CAST_THEMES, CastAssignment, CastEntry, CastLanguage, CastMember,
-    CastTheme, assign_cast, build_cast_speech, cast_theme_by_key, chunk_cast_speech,
+    CAST_LANGUAGE_CHOICES, CAST_MAX_MEMBERS, CAST_THEMES, CAST_WAIT_MS, CastAction, CastAssignment,
+    CastEntry, CastLanguage, CastMember, CastSession, CastTheme, assign_cast, build_cast_speech,
+    cast_theme_by_key, chunk_cast_speech, parse_cast_component_id,
 };
 pub use command_registration::{
     CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
@@ -500,6 +501,25 @@ impl GatewayState {
                 .and_then(|users| users.get(user_id))
                 .cloned()
         })
+    }
+
+    /// Returns only the transient user IDs currently recorded in a voice channel. The gateway
+    /// receives these IDs from Discord voice-state events; names and member roles are deliberately
+    /// not retained here and must be resolved separately by an authorized interaction handler.
+    pub fn voice_member_ids(&self, guild_id: &str, channel_id: &str) -> Vec<String> {
+        self.voice_channels
+            .read()
+            .ok()
+            .and_then(|guilds| guilds.get(guild_id).cloned())
+            .map(|users| {
+                users
+                    .into_iter()
+                    .filter_map(|(user_id, current_channel)| {
+                        (current_channel == channel_id).then_some(user_id)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub(crate) fn discord_http(&self) -> Option<Arc<serenity::http::Http>> {
@@ -938,6 +958,19 @@ mod tests {
         state.update_voice_state("guild", "user", Some("voice".into()));
         state.forget_guild("guild");
         assert_eq!(state.voice_channel_id("guild", "user"), None);
+    }
+
+    #[test]
+    fn gateway_state_lists_only_users_in_the_requested_voice_channel() {
+        let state = GatewayState::default();
+        state.update_voice_state("guild", "alpha", Some("voice-a".into()));
+        state.update_voice_state("guild", "beta", Some("voice-b".into()));
+        state.update_voice_state("guild", "gamma", Some("voice-a".into()));
+        assert_eq!(
+            state.voice_member_ids("guild", "voice-a"),
+            vec!["alpha".to_owned(), "gamma".to_owned()]
+        );
+        assert!(state.voice_member_ids("guild", "missing").is_empty());
     }
 
     #[test]

@@ -49,8 +49,8 @@ pub struct MessagePreparationInput<'a> {
     pub detected_language: Option<&'a str>,
     pub announce_speaker: Option<&'a str>,
     pub media: &'a [MediaAnnouncement],
-    pub resolve_user: &'a dyn Fn(&str) -> String,
-    pub resolve_channel: &'a dyn Fn(&str) -> String,
+    pub resolve_user: &'a (dyn Fn(&str) -> String + Send + Sync),
+    pub resolve_channel: &'a (dyn Fn(&str) -> String + Send + Sync),
 }
 
 /// Private user content after the safe cleaning step.  The gateway is deliberately unable to

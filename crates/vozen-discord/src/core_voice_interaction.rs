@@ -44,8 +44,8 @@ impl CoreVoiceInteractionFacts {
     #[must_use]
     pub fn invocation<'a>(
         &'a self,
-        resolve_user: &'a dyn Fn(&str) -> String,
-        resolve_channel: &'a dyn Fn(&str) -> String,
+        resolve_user: &'a (dyn Fn(&str) -> String + Send + Sync),
+        resolve_channel: &'a (dyn Fn(&str) -> String + Send + Sync),
     ) -> CoreVoiceInvocation<'a> {
         CoreVoiceInvocation {
             guild_id: &self.guild_id,

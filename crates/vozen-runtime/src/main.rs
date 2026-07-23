@@ -243,6 +243,7 @@ struct CoreVoiceRuntimeOptions {
     queue_enabled: bool,
     message_autoread: bool,
     randomizer_enabled: bool,
+    cast_enabled: bool,
     settings: CoreVoiceSettings,
 }
 
@@ -452,6 +453,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             env::var("RUST_MESSAGE_AUTOREAD_ENABLED").ok().as_deref(),
         ),
         randomizer_enabled: randomizer_enabled(env::var("RUST_RANDOMIZER_ENABLED").ok().as_deref()),
+        cast_enabled: cast_enabled(env::var("RUST_CAST_ENABLED").ok().as_deref()),
         settings: CoreVoiceSettings {
             available_models: Vec::new(),
             default_voice,
@@ -462,6 +464,10 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
 }
 
 fn randomizer_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn cast_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1372,6 +1378,7 @@ enum RuntimeError {
     #[error("{0} must be a positive number (and an integer where required)")]
     InvalidCoreVoiceSetting(&'static str),
     #[error("RUST_CORE_VOICE_ENABLED=true requires a runtime built with --features voice-driver")]
+    #[cfg_attr(feature = "voice-driver", allow(dead_code))]
     VoiceDriverRequired,
     #[error(
         "Rust voice features currently require TTS_ENGINE to be unset or set to piper; leave them disabled until that provider is ported"

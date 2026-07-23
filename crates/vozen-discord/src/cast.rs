@@ -1250,6 +1250,59 @@ pub const CAST_THEMES: &[CastTheme] = &[
     },
 ];
 
+pub const CAST_WAIT_MS: i64 = 120_000;
+pub const CAST_MAX_MEMBERS: usize = 25;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CastAction {
+    Theme,
+    Language,
+    Engine,
+    Reveal,
+    Cancel,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CastSession {
+    pub user_id: String,
+    pub guild_id: String,
+    pub channel_id: String,
+    pub voice_channel_id: String,
+    pub theme_key: Option<String>,
+    pub language: String,
+    pub engine: String,
+    pub issued_at_ms: i64,
+}
+
+impl CastSession {
+    #[must_use]
+    pub fn valid_at(&self, now_ms: i64) -> bool {
+        now_ms >= self.issued_at_ms && now_ms.saturating_sub(self.issued_at_ms) <= CAST_WAIT_MS
+    }
+}
+
+/// Parses the exact component ID shape emitted by the Rust cast panel. Arbitrary IDs are never
+/// accepted as a session key, preventing one user's controls from mutating another flow.
+pub fn parse_cast_component_id(custom_id: &str) -> Option<(CastAction, String)> {
+    let mut parts = custom_id.split(':');
+    if parts.next()? != "cast" {
+        return None;
+    }
+    let action = match parts.next()? {
+        "theme" => CastAction::Theme,
+        "language" => CastAction::Language,
+        "engine" => CastAction::Engine,
+        "reveal" => CastAction::Reveal,
+        "cancel" => CastAction::Cancel,
+        _ => return None,
+    };
+    let session_id = parts.next()?.trim();
+    if session_id.is_empty() || parts.next().is_some() {
+        return None;
+    }
+    Some((action, session_id.to_owned()))
+}
+
 pub fn cast_theme_by_key(key: &str) -> Option<&'static CastTheme> {
     CAST_THEMES.iter().find(|theme| theme.key == key)
 }
@@ -1455,5 +1508,27 @@ mod tests {
                 .iter()
                 .all(|chunk| chunk.chars().count() <= 40)
         );
+    }
+
+    #[test]
+    fn component_ids_are_strict_and_sessions_expire() {
+        assert_eq!(
+            parse_cast_component_id("cast:reveal:interaction-1"),
+            Some((CastAction::Reveal, "interaction-1".into()))
+        );
+        assert!(parse_cast_component_id("cast:reveal:").is_none());
+        assert!(parse_cast_component_id("cast:reveal:one:extra").is_none());
+        let session = CastSession {
+            user_id: "user".into(),
+            guild_id: "guild".into(),
+            channel_id: "channel".into(),
+            voice_channel_id: "voice".into(),
+            theme_key: None,
+            language: "en".into(),
+            engine: "piper".into(),
+            issued_at_ms: 100,
+        };
+        assert!(session.valid_at(100 + CAST_WAIT_MS));
+        assert!(!session.valid_at(100 + CAST_WAIT_MS + 1));
     }
 }

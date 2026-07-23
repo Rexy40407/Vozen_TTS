@@ -12,21 +12,26 @@ use std::{
     },
 };
 
+use uuid::Uuid;
+
 use async_trait::async_trait;
 use serenity::{
     builder::{
-        CreateActionRow, CreateAllowedMentions, CreateInputText, CreateInteractionResponse,
+        CreateActionRow, CreateAllowedMentions, CreateButton, CreateInputText,
+        CreateInteractionResponse, CreateInteractionResponseFollowup,
         CreateInteractionResponseMessage, CreateModal, CreateSelectMenu, CreateSelectMenuKind,
         CreateSelectMenuOption, EditInteractionResponse,
     },
     client::Context,
     model::{
         Permissions,
-        application::{ComponentInteractionDataKind, InputTextStyle, Interaction},
+        application::{ButtonStyle, ComponentInteractionDataKind, InputTextStyle, Interaction},
+        id::{GuildId, UserId},
     },
 };
 use vozen_core::{PublicQueueItem, QueueLane, QueueSource, SynthesisEngine, detect_language};
 use vozen_discord::{
+    CAST_LANGUAGE_CHOICES, CAST_MAX_MEMBERS, CAST_THEMES, CastAction, CastMember, CastSession,
     CoreTtsOutcome, CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor,
     CoreVoiceInteractionFacts, CoreVoiceOutcome, DiscordDashboardOptionsProvider,
     DiscordMessageFactsOwned, GatewayEventDispatchError, GatewayEventSink, GatewayState,
@@ -34,8 +39,9 @@ use vozen_discord::{
     PlannedRejoinService, QueueControlInvocation, QueueControlOutcome, QueueControlService,
     RandomizerCommand, RandomizerSession, RejoinChannelState, SongbirdCommandPlayback,
     SongbirdVoiceSessionTransport, VoiceResponseLocalizer, collect_message_media,
-    consume_planned_rejoin_marker, parse_amount_component_id, parse_fill_component_id,
-    parse_modal_options, parse_queue_command, parse_randomizer_command, pick_option,
+    consume_planned_rejoin_marker, parse_amount_component_id, parse_cast_component_id,
+    parse_fill_component_id, parse_modal_options, parse_queue_command, parse_randomizer_command,
+    pick_option,
 };
 use vozen_store::SqliteStore;
 
@@ -66,6 +72,7 @@ pub struct CoreVoiceGatewaySink {
     message_service: Mutex<Option<Arc<MessageService>>>,
     last_speakers: Mutex<BTreeMap<String, String>>,
     randomizer_sessions: Mutex<BTreeMap<String, RandomizerSession>>,
+    cast_sessions: Mutex<BTreeMap<String, CastSession>>,
     rejoin_attempted: AtomicBool,
 }
 
@@ -85,6 +92,7 @@ impl CoreVoiceGatewaySink {
             message_service: Mutex::new(None),
             last_speakers: Mutex::new(BTreeMap::new()),
             randomizer_sessions: Mutex::new(BTreeMap::new()),
+            cast_sessions: Mutex::new(BTreeMap::new()),
             rejoin_attempted: AtomicBool::new(false),
         }
     }
@@ -512,25 +520,26 @@ impl CoreVoiceGatewaySink {
         };
         let guild_id = guild_id.get().to_string();
         let user_id = component.user.id.get().to_string();
-        let mut sessions = self
-            .randomizer_sessions
-            .lock()
-            .map_err(|_| GatewayEventDispatchError)?;
-        let Some(session) = sessions.get_mut(&session_id) else {
-            return Ok(true);
+        let response = {
+            let mut sessions = self
+                .randomizer_sessions
+                .lock()
+                .map_err(|_| GatewayEventDispatchError)?;
+            let Some(session) = sessions.get_mut(&session_id) else {
+                return Ok(true);
+            };
+            if !Self::randomizer_session_matches(session, &user_id, &guild_id, now_ms) {
+                sessions.remove(&session_id);
+                return Ok(true);
+            }
+            session.amount = Some(amount);
+            self.randomizer_modal(
+                &session_id,
+                amount,
+                Some(&component.locale),
+                component.guild_locale.as_deref(),
+            )?
         };
-        if !Self::randomizer_session_matches(session, &user_id, &guild_id, now_ms) {
-            sessions.remove(&session_id);
-            return Ok(true);
-        }
-        session.amount = Some(amount);
-        let response = self.randomizer_modal(
-            &session_id,
-            amount,
-            Some(&component.locale),
-            component.guild_locale.as_deref(),
-        )?;
-        drop(sessions);
         component
             .create_response(context, response)
             .await
@@ -602,6 +611,668 @@ impl CoreVoiceGatewaySink {
             .await
             .map_err(|_| GatewayEventDispatchError)?;
         Ok(true)
+    }
+
+    fn prune_cast_sessions(&self, now_ms: i64) {
+        if let Ok(mut sessions) = self.cast_sessions.lock() {
+            sessions.retain(|_, session| session.valid_at(now_ms));
+            if sessions.len() > 256 {
+                let mut entries = sessions
+                    .iter()
+                    .map(|(id, session)| (id.clone(), session.issued_at_ms))
+                    .collect::<Vec<_>>();
+                entries.sort_by_key(|(_, issued_at)| *issued_at);
+                for (id, _) in entries.into_iter().take(sessions.len() - 256) {
+                    sessions.remove(&id);
+                }
+            }
+        }
+    }
+
+    fn cast_panel_content(session: &CastSession) -> String {
+        let theme = session
+            .theme_key
+            .as_deref()
+            .and_then(vozen_discord::cast_theme_by_key)
+            .map(|theme| theme.label)
+            .unwrap_or("choose a theme");
+        let language = CAST_LANGUAGE_CHOICES
+            .iter()
+            .find(|choice| choice.value == session.language)
+            .map(|choice| choice.name)
+            .unwrap_or("English");
+        let engine = match session.engine.as_str() {
+            "piper" => "Piper",
+            "kokoro" => "Kokoro",
+            _ => "Google",
+        };
+        let mut content = format!(
+            "🎭 **Create a cast for your voice call**\nTheme: {theme}\nLanguage: {language}\nEngine: {engine}"
+        );
+        if session.theme_key.as_deref() == Some("pokemon") {
+            content.push_str(
+                "\n-# Unofficial fan reference; not affiliated with Nintendo, Game Freak, or The Pokémon Company.",
+            );
+        }
+        content
+    }
+
+    fn cast_panel_response(
+        interaction_id: &str,
+        session: &CastSession,
+    ) -> CreateInteractionResponse {
+        let themes = CAST_THEMES
+            .iter()
+            .map(|theme| {
+                CreateSelectMenuOption::new(theme.label, theme.key)
+                    .default_selection(session.theme_key.as_deref() == Some(theme.key))
+            })
+            .collect();
+        let languages = CAST_LANGUAGE_CHOICES
+            .iter()
+            .map(|choice| {
+                CreateSelectMenuOption::new(choice.name, choice.value)
+                    .default_selection(choice.value == session.language)
+            })
+            .collect();
+        let engines = [
+            ("Google", "google"),
+            ("Piper", "piper"),
+            ("Kokoro", "kokoro"),
+        ]
+        .into_iter()
+        .map(|(label, value)| {
+            CreateSelectMenuOption::new(label, value).default_selection(value == session.engine)
+        })
+        .collect();
+        let theme_menu = CreateSelectMenu::new(
+            format!("cast:theme:{interaction_id}"),
+            CreateSelectMenuKind::String { options: themes },
+        )
+        .placeholder("Choose a theme")
+        .min_values(1)
+        .max_values(1);
+        let language_menu = CreateSelectMenu::new(
+            format!("cast:language:{interaction_id}"),
+            CreateSelectMenuKind::String { options: languages },
+        )
+        .placeholder("Choose a language")
+        .min_values(1)
+        .max_values(1);
+        let engine_menu = CreateSelectMenu::new(
+            format!("cast:engine:{interaction_id}"),
+            CreateSelectMenuKind::String { options: engines },
+        )
+        .placeholder("Choose a voice engine")
+        .min_values(1)
+        .max_values(1);
+        let reveal = CreateButton::new(format!("cast:reveal:{interaction_id}"))
+            .label("Reveal cast")
+            .style(ButtonStyle::Primary)
+            .disabled(session.theme_key.is_none());
+        let cancel = CreateButton::new(format!("cast:cancel:{interaction_id}"))
+            .label("Cancel")
+            .style(ButtonStyle::Secondary);
+        CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content(Self::cast_panel_content(session))
+                .ephemeral(true)
+                .components(vec![
+                    CreateActionRow::SelectMenu(theme_menu),
+                    CreateActionRow::SelectMenu(language_menu),
+                    CreateActionRow::SelectMenu(engine_menu),
+                    CreateActionRow::Buttons(vec![reveal, cancel]),
+                ]),
+        )
+    }
+
+    async fn fetch_cast_members(
+        &self,
+        context: &Context,
+        guild_id: &str,
+        voice_channel_id: &str,
+    ) -> Vec<CastMember> {
+        let Ok(guild_number) = guild_id.parse::<u64>() else {
+            return Vec::new();
+        };
+        let ids = self
+            .gateway_state
+            .voice_member_ids(guild_id, voice_channel_id);
+        let mut members = Vec::new();
+        // Fetch only one more than the product limit. This keeps a malformed/stale gateway map
+        // from turning a reveal into an unbounded REST fan-out.
+        for id in ids.into_iter().take(CAST_MAX_MEMBERS + 1) {
+            let Ok(user_number) = id.parse::<u64>() else {
+                continue;
+            };
+            let Ok(member) = context
+                .http
+                .get_member(GuildId::new(guild_number), UserId::new(user_number))
+                .await
+            else {
+                continue;
+            };
+            members.push(CastMember {
+                id,
+                display_name: member.display_name().to_owned(),
+                bot: member.user.bot,
+            });
+        }
+        members
+    }
+
+    fn cast_voice_settings(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        session: &CastSession,
+    ) -> Option<(String, f64, SynthesisEngine)> {
+        let language = session.language.to_ascii_lowercase();
+        let compatible = self
+            .options
+            .settings
+            .available_models
+            .iter()
+            .filter(|model| {
+                let model = model.to_ascii_lowercase();
+                model.starts_with(&format!("{language}_"))
+                    || model.starts_with(&format!("{language}-"))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let store = self.store.lock().ok()?;
+        let config = store.guild_config(guild_id).ok()?;
+        let stored = store.get_user_voice(guild_id, user_id).ok().flatten();
+        let preferred = stored
+            .as_ref()
+            .map(|voice| voice.model.clone())
+            .filter(|model| compatible.iter().any(|candidate| candidate == model));
+        let model = preferred
+            .or_else(|| compatible.first().cloned())
+            .or_else(|| {
+                (!config.default_voice.trim().is_empty())
+                    .then(|| config.default_voice.clone())
+                    .filter(|model| {
+                        self.options
+                            .settings
+                            .available_models
+                            .iter()
+                            .any(|candidate| candidate == model)
+                    })
+            })
+            .unwrap_or_else(|| self.options.settings.default_voice.clone());
+        if session.engine == "piper" && !compatible.iter().any(|candidate| candidate == &model) {
+            return None;
+        }
+        let speed = stored
+            .as_ref()
+            .map(|voice| voice.speed)
+            .filter(|speed| speed.is_finite())
+            .unwrap_or(self.options.settings.default_speed);
+        let engine = match session.engine.as_str() {
+            "piper" => SynthesisEngine::Piper,
+            "kokoro" => SynthesisEngine::Kokoro,
+            _ => SynthesisEngine::Default,
+        };
+        Some((model, speed, engine))
+    }
+
+    async fn handle_cast_command(
+        &self,
+        context: &Context,
+        command: &serenity::model::application::CommandInteraction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let Some(guild_id) = command.guild_id else {
+            return Ok(());
+        };
+        if !command.data.options.is_empty() {
+            return Ok(());
+        }
+        let Some(facts) = CoreVoiceInteractionFacts::from_command(command) else {
+            return Ok(());
+        };
+        let guild_id = guild_id.get().to_string();
+        let user_id = command.user.id.get().to_string();
+        let Some(user_voice) = self.gateway_state.voice_channel_id(&guild_id, &user_id) else {
+            command
+                .create_response(
+                    context,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content("You must be in Vozen's voice call to use this command.")
+                            .ephemeral(true),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        };
+        if self
+            .gateway_state
+            .bot_voice_channel_id(&guild_id)
+            .as_deref()
+            != Some(&user_voice)
+        {
+            command
+                .create_response(
+                    context,
+                    CreateInteractionResponse::Message(
+                        CreateInteractionResponseMessage::new()
+                            .content("You must be in Vozen's voice call to use this command.")
+                            .ephemeral(true),
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        }
+        let engine = self
+            .store
+            .lock()
+            .ok()
+            .and_then(|store| store.get_user_voice(&guild_id, &user_id).ok().flatten())
+            .map(|voice| match voice.engine {
+                vozen_store::UserEngine::Piper => "piper",
+                vozen_store::UserEngine::Kokoro => "kokoro",
+                _ => "google",
+            })
+            .unwrap_or("piper")
+            .to_owned();
+        let session = CastSession {
+            user_id,
+            guild_id: guild_id.clone(),
+            channel_id: command.channel_id.get().to_string(),
+            voice_channel_id: user_voice,
+            theme_key: None,
+            language: "en".to_owned(),
+            engine,
+            issued_at_ms: system_now_ms(),
+        };
+        self.prune_cast_sessions(system_now_ms());
+        if let Ok(mut sessions) = self.cast_sessions.lock() {
+            sessions.insert(command.id.get().to_string(), session.clone());
+        }
+        let _ = facts;
+        command
+            .create_response(
+                context,
+                Self::cast_panel_response(&command.id.get().to_string(), &session),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(())
+    }
+
+    async fn handle_cast_component(
+        &self,
+        context: &Context,
+        component: serenity::model::application::ComponentInteraction,
+    ) -> Result<bool, GatewayEventDispatchError> {
+        let Some((action, session_id)) = parse_cast_component_id(&component.data.custom_id) else {
+            return Ok(false);
+        };
+        let Some(guild_id) = component.guild_id else {
+            return Ok(true);
+        };
+        self.prune_cast_sessions(system_now_ms());
+        let guild_id = guild_id.get().to_string();
+        let user_id = component.user.id.get().to_string();
+        let channel_id = component.channel_id.get().to_string();
+        let mut session = {
+            let mut sessions = self
+                .cast_sessions
+                .lock()
+                .map_err(|_| GatewayEventDispatchError)?;
+            let Some(session) = sessions.get(&session_id) else {
+                return Ok(true);
+            };
+            if session.user_id != user_id
+                || session.guild_id != guild_id
+                || session.channel_id != channel_id
+                || !session.valid_at(system_now_ms())
+            {
+                sessions.remove(&session_id);
+                return Ok(true);
+            }
+            session.clone()
+        };
+
+        let selected = match &component.data.kind {
+            ComponentInteractionDataKind::StringSelect { values } if values.len() == 1 => {
+                values.first().cloned()
+            }
+            _ => None,
+        };
+        match action {
+            CastAction::Theme => {
+                if selected
+                    .as_deref()
+                    .and_then(vozen_discord::cast_theme_by_key)
+                    .is_none()
+                {
+                    return Ok(true);
+                }
+                session.theme_key = selected;
+            }
+            CastAction::Language => {
+                if selected.as_deref().is_none_or(|value| {
+                    !CAST_LANGUAGE_CHOICES
+                        .iter()
+                        .any(|choice| choice.value == value)
+                }) {
+                    return Ok(true);
+                }
+                session.language = selected.expect("validated language");
+            }
+            CastAction::Engine => {
+                if selected
+                    .as_deref()
+                    .is_none_or(|value| !matches!(value, "google" | "piper" | "kokoro"))
+                {
+                    return Ok(true);
+                }
+                session.engine = selected.expect("validated engine");
+            }
+            CastAction::Cancel => {
+                if let Ok(mut sessions) = self.cast_sessions.lock() {
+                    sessions.remove(&session_id);
+                }
+                component
+                    .defer(context)
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                component
+                    .edit_response(
+                        context,
+                        EditInteractionResponse::new().content("Cast cancelled."),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                return Ok(true);
+            }
+            CastAction::Reveal => {
+                if session.theme_key.is_none() {
+                    return Ok(true);
+                }
+                if let Ok(mut sessions) = self.cast_sessions.lock() {
+                    sessions.remove(&session_id);
+                }
+                component
+                    .defer(context)
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                return self
+                    .finish_cast_reveal(context, &component, &session)
+                    .await
+                    .map(|()| true);
+            }
+        }
+
+        if let Ok(mut sessions) = self.cast_sessions.lock() {
+            sessions.insert(session_id.clone(), session.clone());
+        }
+        component
+            .defer(context)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        component
+            .edit_response(
+                context,
+                EditInteractionResponse::new()
+                    .content(Self::cast_panel_content(&session))
+                    .components(Self::cast_panel_components(&session_id, &session)),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(true)
+    }
+
+    fn cast_panel_components(interaction_id: &str, session: &CastSession) -> Vec<CreateActionRow> {
+        let themes = CAST_THEMES
+            .iter()
+            .map(|theme| {
+                CreateSelectMenuOption::new(theme.label, theme.key)
+                    .default_selection(session.theme_key.as_deref() == Some(theme.key))
+            })
+            .collect();
+        let languages = CAST_LANGUAGE_CHOICES
+            .iter()
+            .map(|choice| {
+                CreateSelectMenuOption::new(choice.name, choice.value)
+                    .default_selection(choice.value == session.language)
+            })
+            .collect();
+        let engines = [
+            ("Google", "google"),
+            ("Piper", "piper"),
+            ("Kokoro", "kokoro"),
+        ]
+        .into_iter()
+        .map(|(label, value)| {
+            CreateSelectMenuOption::new(label, value).default_selection(value == session.engine)
+        })
+        .collect();
+        let theme_menu = CreateSelectMenu::new(
+            format!("cast:theme:{interaction_id}"),
+            CreateSelectMenuKind::String { options: themes },
+        )
+        .placeholder("Choose a theme")
+        .min_values(1)
+        .max_values(1);
+        let language_menu = CreateSelectMenu::new(
+            format!("cast:language:{interaction_id}"),
+            CreateSelectMenuKind::String { options: languages },
+        )
+        .placeholder("Choose a language")
+        .min_values(1)
+        .max_values(1);
+        let engine_menu = CreateSelectMenu::new(
+            format!("cast:engine:{interaction_id}"),
+            CreateSelectMenuKind::String { options: engines },
+        )
+        .placeholder("Choose a voice engine")
+        .min_values(1)
+        .max_values(1);
+        let reveal = CreateButton::new(format!("cast:reveal:{interaction_id}"))
+            .label("Reveal cast")
+            .style(ButtonStyle::Primary)
+            .disabled(session.theme_key.is_none());
+        let cancel = CreateButton::new(format!("cast:cancel:{interaction_id}"))
+            .label("Cancel")
+            .style(ButtonStyle::Secondary);
+        vec![
+            CreateActionRow::SelectMenu(theme_menu),
+            CreateActionRow::SelectMenu(language_menu),
+            CreateActionRow::SelectMenu(engine_menu),
+            CreateActionRow::Buttons(vec![reveal, cancel]),
+        ]
+    }
+
+    async fn finish_cast_reveal(
+        &self,
+        context: &Context,
+        component: &serenity::model::application::ComponentInteraction,
+        session: &CastSession,
+    ) -> Result<(), GatewayEventDispatchError> {
+        if self
+            .gateway_state
+            .voice_channel_id(&session.guild_id, &session.user_id)
+            .as_deref()
+            != Some(session.voice_channel_id.as_str())
+            || self
+                .gateway_state
+                .bot_voice_channel_id(&session.guild_id)
+                .as_deref()
+                != Some(session.voice_channel_id.as_str())
+        {
+            component
+                .edit_response(
+                    context,
+                    EditInteractionResponse::new()
+                        .content("You must still be in Vozen's voice call to reveal this cast."),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        }
+        let members = self
+            .fetch_cast_members(context, &session.guild_id, &session.voice_channel_id)
+            .await;
+        let humans = members
+            .into_iter()
+            .filter(|member| !member.bot)
+            .collect::<Vec<_>>();
+        if humans.is_empty() || humans.len() > CAST_MAX_MEMBERS {
+            let message = if humans.len() > CAST_MAX_MEMBERS {
+                "There are too many people in this call. `/cast` supports up to 25 humans."
+            } else {
+                "Nobody else is available in the voice call."
+            };
+            component
+                .edit_response(context, EditInteractionResponse::new().content(message))
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        }
+        let mut seed = Uuid::new_v4().as_u128();
+        let assignments = vozen_discord::assign_cast(
+            &humans,
+            session.theme_key.as_deref().unwrap_or_default(),
+            || {
+                seed = seed.rotate_left(17);
+                (seed as f64) / (u128::MAX as f64)
+            },
+        )
+        .ok_or(GatewayEventDispatchError)?;
+        let Some((model, speed, engine)) =
+            self.cast_voice_settings(&session.guild_id, &session.user_id, session)
+        else {
+            component
+                .edit_response(
+                    context,
+                    EditInteractionResponse::new().content(
+                        "The selected language has no installed Piper voice. Choose another language and run `/cast` again.",
+                    ),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        };
+        let speech_assignments = assignments
+            .iter()
+            .map(|assignment| vozen_discord::CastAssignment {
+                user_id: assignment.user_id.clone(),
+                display_name: assignment.display_name.clone(),
+                entry: assignment.entry,
+            })
+            .collect::<Vec<_>>();
+        let speech = vozen_discord::build_cast_speech(&speech_assignments, &session.language);
+        let chunks = vozen_discord::chunk_cast_speech(&speech, 260);
+        let facts = CoreVoiceInteractionFacts {
+            guild_id: session.guild_id.clone(),
+            channel_id: session.channel_id.clone(),
+            user_id: session.user_id.clone(),
+            member_role_ids: component.member.as_ref().map(|member| {
+                member
+                    .roles
+                    .iter()
+                    .map(|role_id| role_id.get().to_string())
+                    .collect()
+            }),
+        };
+        let executor = self.executor(context)?;
+        let first_outcome = executor
+            .speak_text_with_voice(&facts, &chunks[0], &model, speed, engine, true)
+            .await;
+        let CoreVoiceOutcome::Tts(first_tts) = first_outcome else {
+            return Ok(());
+        };
+        if matches!(
+            first_tts,
+            CoreTtsOutcome::NotInSameVoice
+                | CoreTtsOutcome::Blocked
+                | CoreTtsOutcome::RateLimited
+                | CoreTtsOutcome::Empty
+                | CoreTtsOutcome::FullyBlocked
+                | CoreTtsOutcome::StoreUnavailable
+        ) {
+            let message = match first_tts {
+                CoreTtsOutcome::NotInSameVoice => {
+                    "You must still be in Vozen's voice call to reveal this cast."
+                }
+                CoreTtsOutcome::Blocked => "You cannot use voice commands in this server.",
+                CoreTtsOutcome::RateLimited => {
+                    "You're doing that too quickly. Try again in a moment."
+                }
+                _ => "This cast could not be spoken right now. Run `/cast` again.",
+            };
+            component
+                .edit_response(context, EditInteractionResponse::new().content(message))
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(());
+        }
+        let theme_label = session
+            .theme_key
+            .as_deref()
+            .and_then(vozen_discord::cast_theme_by_key)
+            .map(|theme| theme.label)
+            .unwrap_or("Cast");
+        let language_label = CAST_LANGUAGE_CHOICES
+            .iter()
+            .find(|choice| choice.value == session.language)
+            .map(|choice| choice.name)
+            .unwrap_or("English");
+        let mut public = format!("🎭 **Cast revealed — {theme_label} · {language_label}**");
+        for assignment in &assignments {
+            public.push_str(&format!(
+                "\n• <@{}> → {}",
+                assignment.user_id, assignment.entry.label
+            ));
+        }
+        if session.theme_key.as_deref() == Some("pokemon") {
+            public.push_str(
+                "\n-# Unofficial fan reference; not affiliated with Nintendo, Game Freak, or The Pokémon Company.",
+            );
+        }
+        component
+            .create_followup(
+                context,
+                CreateInteractionResponseFollowup::new()
+                    .content(public)
+                    .allowed_mentions(
+                        CreateAllowedMentions::new()
+                            .all_users(false)
+                            .all_roles(false)
+                            .everyone(false),
+                    ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+
+        let spoken = first_tts == CoreTtsOutcome::Queued;
+        if spoken {
+            for chunk in chunks.into_iter().skip(1) {
+                let outcome = executor
+                    .speak_text_with_voice(&facts, &chunk, &model, speed, engine, false)
+                    .await;
+                if outcome != CoreVoiceOutcome::Tts(CoreTtsOutcome::Queued) {
+                    break;
+                }
+            }
+        }
+        component
+            .edit_response(
+                context,
+                EditInteractionResponse::new().content(if spoken {
+                    "Cast revealed and spoken in the call."
+                } else {
+                    "Cast revealed in chat; voice is busy."
+                }),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(())
     }
 }
 
@@ -680,28 +1351,43 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         context: Context,
         interaction: Interaction,
     ) -> Result<(), GatewayEventDispatchError> {
-        if self.options.randomizer_enabled {
+        if self.options.randomizer_enabled || self.options.cast_enabled {
             match &interaction {
                 Interaction::Component(component) => {
-                    if self
-                        .handle_randomizer_component(&context, component.clone())
-                        .await?
+                    if self.options.randomizer_enabled
+                        && self
+                            .handle_randomizer_component(&context, component.clone())
+                            .await?
+                    {
+                        return Ok(());
+                    }
+                    if self.options.cast_enabled
+                        && self
+                            .handle_cast_component(&context, component.clone())
+                            .await?
                     {
                         return Ok(());
                     }
                     return Ok(());
                 }
                 Interaction::Modal(modal) => {
-                    if self
-                        .handle_randomizer_modal(&context, modal.clone())
-                        .await?
+                    if self.options.randomizer_enabled
+                        && self
+                            .handle_randomizer_modal(&context, modal.clone())
+                            .await?
                     {
                         return Ok(());
                     }
                     return Ok(());
                 }
                 Interaction::Command(command) if command.data.name == "randomizer" => {
-                    return self.handle_randomizer_command(&context, &command).await;
+                    return self.handle_randomizer_command(&context, command).await;
+                }
+                Interaction::Command(command) if command.data.name == "cast" => {
+                    if self.options.cast_enabled {
+                        return self.handle_cast_command(&context, command).await;
+                    }
+                    return Ok(());
                 }
                 _ => {}
             }
@@ -712,14 +1398,13 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         let Some(facts) = CoreVoiceInteractionFacts::from_command(&command) else {
             return Ok(());
         };
-        if self.options.queue_enabled {
-            if let Some(queue) =
+        if self.options.queue_enabled
+            && let Some(queue) =
                 parse_queue_command(&command.data).map_err(|_| GatewayEventDispatchError)?
-            {
-                return self
-                    .handle_queue_interaction(&context, &command, &facts, queue)
-                    .await;
-            }
+        {
+            return self
+                .handle_queue_interaction(&context, &command, &facts, queue)
+                .await;
         }
         let executor = self.executor(&context)?;
         let defer_ephemeral = Executor::requires_ephemeral_defer(&command.data)
@@ -769,6 +1454,28 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         Ok(())
     }
 
+    async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
+        if let Ok(executor) = self.executor.lock()
+            && let Some(executor) = executor.as_ref()
+        {
+            executor.forget_guild(guild_id);
+        }
+        if let Ok(service) = self.message_service.lock()
+            && let Some(service) = service.as_ref()
+        {
+            service.forget_guild(guild_id);
+        }
+        if let Ok(mut speakers) = self.last_speakers.lock() {
+            speakers.remove(guild_id);
+        }
+        if let Ok(mut sessions) = self.cast_sessions.lock() {
+            sessions.retain(|_, session| session.guild_id != guild_id);
+        }
+        Ok(())
+    }
+}
+
+impl CoreVoiceGatewaySink {
     async fn handle_queue_interaction(
         &self,
         context: &Context,
@@ -813,25 +1520,6 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         Ok(())
     }
 
-    async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
-        if let Ok(executor) = self.executor.lock() {
-            if let Some(executor) = executor.as_ref() {
-                executor.forget_guild(guild_id);
-            }
-        }
-        if let Ok(service) = self.message_service.lock() {
-            if let Some(service) = service.as_ref() {
-                service.forget_guild(guild_id);
-            }
-        }
-        if let Ok(mut speakers) = self.last_speakers.lock() {
-            speakers.remove(guild_id);
-        }
-        Ok(())
-    }
-}
-
-impl CoreVoiceGatewaySink {
     /// Returns a detection only for members who explicitly enabled automatic language detection.
     /// Store faults and uncertain text deliberately fall back to the configured voice.
     fn detected_language(
@@ -892,11 +1580,12 @@ fn sanitize_speaker_name(raw: &str) -> Option<String> {
         if allowed {
             output.push(character);
             last_was_space = false;
-        } else if character.is_whitespace() || character == '_' {
-            if !last_was_space && !output.is_empty() {
-                output.push(' ');
-                last_was_space = true;
-            }
+        } else if (character.is_whitespace() || character == '_')
+            && !last_was_space
+            && !output.is_empty()
+        {
+            output.push(' ');
+            last_was_space = true;
         }
         if output.chars().count() >= 40 {
             break;
@@ -969,6 +1658,7 @@ fn queue_lane_label(lane: QueueLane) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vozen_discord::CoreVoiceSettings;
 
     #[test]
     fn queue_responses_keep_items_opaque_and_match_node_wording() {
@@ -998,6 +1688,7 @@ mod tests {
             queue_enabled: true,
             message_autoread: false,
             randomizer_enabled: false,
+            cast_enabled: false,
             settings: CoreVoiceSettings {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),
@@ -1037,6 +1728,7 @@ mod tests {
                 queue_enabled: true,
                 message_autoread: true,
                 randomizer_enabled: false,
+                cast_enabled: false,
                 settings: CoreVoiceSettings {
                     available_models: vec!["en_US-amy-medium".into()],
                     default_voice: "en_US-amy-medium".into(),

@@ -32,6 +32,16 @@ use uuid::Uuid;
 #[cfg(feature = "voice-driver")]
 use songbird::events::{Event, EventContext, EventData, EventHandler, TrackEvent};
 
+#[cfg(feature = "voice-driver")]
+fn songbird_driver(call: &songbird::Call) -> &songbird::driver::Driver {
+    <songbird::Call as std::ops::Deref>::deref(call)
+}
+
+#[cfg(feature = "voice-driver")]
+fn songbird_driver_mut(call: &mut songbird::Call) -> &mut songbird::driver::Driver {
+    <songbird::Call as std::ops::DerefMut>::deref_mut(call)
+}
+
 /// Private track bookkeeping. It deliberately excludes synthesized text, voice model and WAV
 /// path; only the opaque values required for the existing `/queue` controls are retained.
 #[cfg(any(feature = "voice-driver", test))]
@@ -310,7 +320,7 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
         let call = manager.get(guild_id).ok_or(CommandPlaybackError)?;
         let handler = call.lock().await;
 
-        Ok(if handler.queue().current().is_some() {
+        Ok(if songbird_driver(&handler).queue().current().is_some() {
             CommandPlaybackState::Active
         } else {
             CommandPlaybackState::Idle
@@ -328,7 +338,7 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
             .ok_or(CommandPlaybackError)?;
         let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
         let handler = call.lock().await;
-        let queued = handler.queue().len();
+        let queued = songbird_driver(&handler).queue().len();
 
         Ok(self
             .reservations
@@ -366,6 +376,7 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
                 created_at_ms: options.created_at_ms,
             },
         )?;
+        let wav = wav.to_path_buf();
         let mut track =
             songbird::tracks::Track::new_with_uuid(songbird::input::File::new(wav).into(), id);
         track.events.add_event(
@@ -375,7 +386,7 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
             ),
             std::time::Duration::ZERO,
         );
-        handler.enqueue(track).await;
+        songbird_driver_mut(&mut handler).enqueue(track).await;
         Ok(())
     }
 
@@ -395,7 +406,10 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
             .ok_or(CommandPlaybackError)?;
         let call = manager.get(guild_id).ok_or(CommandPlaybackError)?;
         let handler = call.lock().await;
-        handler.queue().skip().map_err(|_| CommandPlaybackError)
+        songbird_driver(&handler)
+            .queue()
+            .skip()
+            .map_err(|_| CommandPlaybackError)
     }
 
     async fn silence(&self, guild_id: &str) -> Result<(), CommandPlaybackError> {
@@ -405,7 +419,7 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
             .ok_or(CommandPlaybackError)?;
         let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
         let handler = call.lock().await;
-        handler.queue().stop();
+        songbird_driver(&handler).queue().stop();
         self.reservations
             .lock()
             .expect("voice queue reservation lock poisoned")
@@ -443,7 +457,7 @@ impl QueueControlPlayback for SongbirdCommandPlayback {
             .ok_or(CommandPlaybackError)?;
         let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
         let handler = call.lock().await;
-        let active = handler
+        let active = songbird_driver(&handler)
             .queue()
             .current_queue()
             .into_iter()
@@ -469,7 +483,7 @@ impl QueueControlPlayback for SongbirdCommandPlayback {
             .ok_or(CommandPlaybackError)?;
         let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
         let handler = call.lock().await;
-        let active = handler.queue().current_queue();
+        let active = songbird_driver(&handler).queue().current_queue();
         let active_ids = active
             .iter()
             .map(songbird::tracks::TrackHandle::uuid)
@@ -486,7 +500,7 @@ impl QueueControlPlayback for SongbirdCommandPlayback {
             return Ok(false);
         };
         // `removable_track` excludes index zero, so this can never interrupt current speech.
-        let Some(removed) = handler.queue().dequeue(index) else {
+        let Some(removed) = songbird_driver(&handler).queue().dequeue(index) else {
             return Ok(false);
         };
         drop(removed.stop());
@@ -508,7 +522,7 @@ impl QueueControlPlayback for SongbirdCommandPlayback {
             .ok_or(CommandPlaybackError)?;
         let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
         let handler = call.lock().await;
-        let current = handler.queue().current();
+        let current = songbird_driver(&handler).queue().current();
         drop(handler);
         let Some(current) = current else {
             return Ok(false);
@@ -539,7 +553,7 @@ impl QueueControlPlayback for SongbirdCommandPlayback {
             .ok_or(CommandPlaybackError)?;
         let call = manager.get(discord_guild_id).ok_or(CommandPlaybackError)?;
         let handler = call.lock().await;
-        let current = handler.queue().current();
+        let current = songbird_driver(&handler).queue().current();
         drop(handler);
         let Some(current) = current else {
             return Ok(false);
@@ -633,7 +647,7 @@ pub async fn join_and_enqueue_wav(
         .await
         .map_err(|_| VoicePlaybackError::JoinFailed)?;
     let mut handler = call.lock().await;
-    handler
+    songbird_driver_mut(&mut handler)
         .enqueue_input(songbird::input::File::new(wav).into())
         .await;
     Ok(())
