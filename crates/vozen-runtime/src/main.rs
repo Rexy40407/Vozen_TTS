@@ -7,6 +7,7 @@
 //! adapters are individually opt-in. Voice/message ownership still requires its own canary flag.
 
 mod automatic_translation_sink;
+mod config_channel_sink;
 mod config_default_voice_sink;
 mod config_language_sink;
 mod config_numeric_sink;
@@ -84,6 +85,7 @@ struct RuntimeConfig {
     translation_preferences: bool,
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
     config_default_voice: Option<ConfigDefaultVoiceRuntimeOptions>,
+    config_channel: bool,
     pronunciation: bool,
     config_language: bool,
     config_toggles: bool,
@@ -275,6 +277,8 @@ impl RuntimeConfig {
         );
         let voice_preferences = voice_preferences_from_environment()?;
         let config_default_voice = config_default_voice_from_environment()?;
+        let config_channel =
+            config_channel_enabled(env::var("RUST_CONFIG_CHANNEL_ENABLED").ok().as_deref());
         let pronunciation =
             pronunciation_enabled(env::var("RUST_PRONUNCIATION_ENABLED").ok().as_deref());
         let config_language =
@@ -302,6 +306,7 @@ impl RuntimeConfig {
             translation_preferences,
             voice_preferences,
             config_default_voice,
+            config_channel,
             pronunciation,
             config_language,
             config_toggles,
@@ -471,6 +476,10 @@ fn voice_preferences_enabled(raw: Option<&str>) -> bool {
 }
 
 fn config_default_voice_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn config_channel_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -742,6 +751,19 @@ fn config_default_voice_event_sink(
     )))
 }
 
+fn config_channel_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        config_channel_sink::ConfigChannelGatewaySink::new(store)
+            .map_err(|_| RuntimeError::ConfigChannelGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -908,6 +930,8 @@ enum RuntimeError {
     ConfigRoleGateway,
     #[error("config default voice gateway initialisation failed")]
     ConfigDefaultVoiceGateway,
+    #[error("config channel gateway initialisation failed")]
+    ConfigChannelGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -995,6 +1019,9 @@ async fn run() -> Result<(), RuntimeError> {
     }
     if let Some(sink) = config_default_voice_event_sink(config.config_default_voice, store.clone())?
     {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = config_channel_event_sink(config.config_channel, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1470,6 +1497,15 @@ mod tests {
         assert!(!config_default_voice_enabled(Some("1")));
         assert!(!config_default_voice_enabled(Some("yes")));
         assert!(!config_default_voice_enabled(None));
+    }
+
+    #[test]
+    fn config_channel_promotion_is_exactly_opt_in() {
+        assert!(config_channel_enabled(Some("true")));
+        assert!(config_channel_enabled(Some(" TRUE ")));
+        assert!(!config_channel_enabled(Some("1")));
+        assert!(!config_channel_enabled(Some("yes")));
+        assert!(!config_channel_enabled(None));
     }
 
     #[test]

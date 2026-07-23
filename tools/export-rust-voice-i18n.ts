@@ -112,6 +112,9 @@ const KEYS = [
   'config.roleSet',
   'config.roleCleared',
   'config.defaultVoiceSet',
+  'config.channelWrongType',
+  'config.channelNoAccess',
+  'config.channelSet',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };

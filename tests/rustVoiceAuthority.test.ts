@@ -9,6 +9,7 @@ import {
   rustConfigNumericOwnsCommand,
   rustConfigRoleOwnsCommand,
   rustConfigDefaultVoiceOwnsCommand,
+  rustConfigChannelOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -87,6 +88,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'piper')).toBe(true);
     expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'gtts')).toBe(false);
     expect(rustConfigDefaultVoiceOwnsCommand('config', 'role', 'true', 'piper')).toBe(false);
+  });
+
+  it('promotes only the tts channel config leaf behind its own canary', () => {
+    expect(rustConfigChannelOwnsCommand('config', 'tts-channel')).toBe(false);
+    expect(rustConfigChannelOwnsCommand('config', 'tts-channel', 'true')).toBe(true);
+    expect(rustConfigChannelOwnsCommand('config', 'auto-read', 'true')).toBe(false);
+    expect(rustConfigChannelOwnsCommand('voice', 'tts-channel', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {
