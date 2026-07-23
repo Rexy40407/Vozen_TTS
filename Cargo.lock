@@ -4187,6 +4187,7 @@ dependencies = [
  "serde_json",
  "serenity",
  "thiserror 2.0.19",
+ "time",
  "tokio",
  "vozen-api",
  "vozen-contracts",

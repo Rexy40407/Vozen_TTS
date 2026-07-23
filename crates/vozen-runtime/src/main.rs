@@ -34,6 +34,8 @@ use vozen_api::{
     ProviderHealth as PublicProviderHealth, PublicStatusInput, PublicStatusProvider,
     RuntimeRouterConfig,
     account_api::AccountApiConfig,
+    admin_api::AdminApiConfig,
+    admin_router::AdminRouterConfig,
     dashboard_api::{
         DashboardApiConfig, DashboardOption, DashboardOptions, DashboardOptionsError,
         DashboardOptionsProvider,
@@ -78,6 +80,7 @@ struct RuntimeConfig {
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
+    admin: Option<AdminRuntimeOptions>,
 }
 
 struct PublicStatusConfig {
@@ -107,6 +110,15 @@ struct TopggMetricsRuntimeConfig {
 /// of account configuration accidentally.
 struct DashboardRuntimeOptions {
     models_dir: PathBuf,
+}
+
+/// Owner console routes are a separate, explicit promotion. Missing values keep the API inert;
+/// the runtime never invents an owner, session secret or OAuth audience.
+struct AdminRuntimeOptions {
+    panel_origin: String,
+    session_secret: Option<String>,
+    owner_id: Option<String>,
+    client_id: Option<String>,
 }
 
 struct RuntimeDashboardOptionsProvider {
@@ -246,6 +258,7 @@ impl RuntimeConfig {
         let voice_preferences = voice_preferences_from_environment()?;
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
+        let admin = admin_from_environment();
         Ok(Self {
             discord_token,
             database_path,
@@ -262,6 +275,7 @@ impl RuntimeConfig {
             voice_preferences,
             automatic_translation,
             dashboard,
+            admin,
         })
     }
 }
@@ -427,6 +441,23 @@ fn dashboard_from_environment() -> Result<Option<DashboardRuntimeOptions>, Runti
 }
 
 fn dashboard_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn admin_from_environment() -> Option<AdminRuntimeOptions> {
+    if !admin_enabled(env::var("RUST_ADMIN_API_ENABLED").ok().as_deref()) {
+        return None;
+    }
+    Some(AdminRuntimeOptions {
+        panel_origin: nonempty_env("ADMIN_PANEL_ORIGIN")
+            .unwrap_or_else(|| "https://rexy40407.github.io".to_owned()),
+        session_secret: nonempty_env("ADMIN_SESSION_SECRET"),
+        owner_id: nonempty_env("OWNER_ID"),
+        client_id: nonempty_env("ADMIN_CLIENT_ID").or_else(|| nonempty_env("CLIENT_ID")),
+    })
+}
+
+fn admin_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -704,6 +735,8 @@ enum RuntimeError {
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
     DashboardRequiresPremiumHttp,
+    #[error("RUST_ADMIN_API_ENABLED=true requires PREMIUM_API_ENABLED=true")]
+    AdminRequiresPremiumHttp,
     #[error("SQLite startup failed: {0}")]
     Store(#[from] vozen_store::StoreError),
     #[error("SQLite store lock was poisoned")]
@@ -803,6 +836,7 @@ async fn run() -> Result<(), RuntimeError> {
     let app = build_http_router(
         config.premium_http,
         config.dashboard,
+        config.admin,
         config.topgg_webhook,
         config.public_status,
         store,
@@ -859,6 +893,7 @@ fn write_current_rejoin_marker(gateway_state: &GatewayState) {
 fn build_http_router(
     premium_http: Option<PremiumHttpConfig>,
     dashboard: Option<DashboardRuntimeOptions>,
+    admin: Option<AdminRuntimeOptions>,
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
     public_status: Option<PublicStatusConfig>,
     store: Arc<Mutex<SqliteStore>>,
@@ -870,6 +905,9 @@ fn build_http_router(
     let Some(config) = premium_http else {
         if dashboard.is_some() {
             return Err(RuntimeError::DashboardRequiresPremiumHttp);
+        }
+        if admin.is_some() {
+            return Err(RuntimeError::AdminRequiresPremiumHttp);
         }
         return runtime_router(RuntimeRouterConfig {
             public_status,
@@ -925,6 +963,38 @@ fn build_http_router(
             })
         })
         .transpose()?;
+    let admin = admin.map(|admin| {
+        let gateway_state = gateway_state.clone();
+        let api = vozen_api::admin_api::AdminApi::new(AdminApiConfig {
+            store: store.clone(),
+            resolver: verifier.clone(),
+            now: now.clone(),
+            admin_session_secret: admin.session_secret,
+            owner_id: admin.owner_id,
+            admin_client_id: admin.client_id,
+            session_ttl_seconds: None,
+            log: Arc::new(|message| eprintln!("{message}")),
+            resolve_guilds: Some(Arc::new(move || {
+                gateway_state
+                    .guild_snapshots()
+                    .into_iter()
+                    .map(|guild| vozen_api::admin_api::AdminGuildBrief {
+                        id: guild.id,
+                        name: guild.name,
+                        icon: guild.icon,
+                        member_count: i64::try_from(guild.member_count).unwrap_or(i64::MAX),
+                        joined_timestamp: Some(guild.joined_timestamp.saturating_mul(1_000)),
+                    })
+                    .collect()
+            })),
+            local_day: Arc::new(system_local_day),
+        });
+        AdminRouterConfig {
+            origin: admin.panel_origin,
+            api: Arc::new(api),
+            now: now.clone(),
+        }
+    });
     runtime_router(RuntimeRouterConfig {
         public_status,
         account: Some(AccountApiConfig {
@@ -947,7 +1017,7 @@ fn build_http_router(
         // OAuth audience/scope, Manage Guild and current bot presence before the options
         // provider asks Discord for the bot's current authorised channels and roles.
         dashboard,
-        admin: None,
+        admin,
         kofi_webhook,
         topgg_webhook: topgg_webhook.map(|config| TopggWebhookConfig {
             webhook_secret: config.webhook_secret,
@@ -997,6 +1067,10 @@ fn system_now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().try_into().unwrap_or(i64::MAX))
         .unwrap_or_default()
+}
+
+fn system_local_day() -> String {
+    time::OffsetDateTime::now_utc().date().to_string()
 }
 
 fn purge_vote_retention(
@@ -1168,6 +1242,15 @@ mod tests {
         assert!(!dashboard_enabled(Some("1")));
         assert!(!dashboard_enabled(Some("yes")));
         assert!(!dashboard_enabled(None));
+    }
+
+    #[test]
+    fn rust_admin_promotion_is_exactly_opt_in() {
+        assert!(admin_enabled(Some("true")));
+        assert!(admin_enabled(Some(" TRUE ")));
+        assert!(!admin_enabled(Some("1")));
+        assert!(!admin_enabled(Some("yes")));
+        assert!(!admin_enabled(None));
     }
 
     #[test]

@@ -17,6 +17,7 @@ async-trait.workspace = true
 reqwest.workspace = true
 serenity.workspace = true
 serde_json.workspace = true
+time.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 vozen-api = { path = "../vozen-api" }

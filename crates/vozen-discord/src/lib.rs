@@ -187,6 +187,17 @@ pub trait GatewayEventSink: Send + Sync {
 #[error("promoted gateway event handler failed")]
 pub struct GatewayEventDispatchError;
 
+/// Live metadata received from Discord's Guild Create event. This is deliberately transient:
+/// admin views may display it, but it is never persisted or used as an authorization claim.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GatewayGuildSnapshot {
+    pub id: String,
+    pub name: String,
+    pub icon: Option<String>,
+    pub member_count: u64,
+    pub joined_timestamp: i64,
+}
+
 /// Minimal gateway facts used by the Rust adapters. It intentionally contains neither message
 /// content, profiles nor tokens: the only live voice data is a transient guild/user/channel ID
 /// mapping required to enforce same-call speech admission without Serenity's global member cache.
@@ -196,6 +207,7 @@ pub struct GatewayState {
     bot_user_id: Arc<RwLock<Option<String>>>,
     guild_ids: Arc<RwLock<BTreeSet<String>>>,
     guild_names: Arc<RwLock<BTreeMap<String, String>>>,
+    guild_snapshots: Arc<RwLock<BTreeMap<String, GatewayGuildSnapshot>>>,
     voice_channels: Arc<RwLock<BTreeMap<String, BTreeMap<String, String>>>>,
     /// HTTP is retained after READY only for low-frequency, authorized dashboard option lookups.
     /// It contains no message content or cached guild/member state.
@@ -239,6 +251,15 @@ impl GatewayState {
             .read()
             .ok()
             .and_then(|guild_names| guild_names.get(guild_id).cloned())
+    }
+
+    /// Current Guild Create metadata for the admin console. Missing metadata is expected during
+    /// the short READY -> Guild Create window and must be treated as unavailable by callers.
+    pub fn guild_snapshots(&self) -> Vec<GatewayGuildSnapshot> {
+        self.guild_snapshots
+            .read()
+            .map(|snapshots| snapshots.values().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Returns Vozen's current voice channel for a guild. It is absent until the READY identity
@@ -300,6 +321,9 @@ impl GatewayState {
         if let Ok(mut guild_names) = self.guild_names.write() {
             guild_names.retain(|guild_id, _| guild_ids.contains(guild_id));
         }
+        if let Ok(mut snapshots) = self.guild_snapshots.write() {
+            snapshots.retain(|guild_id, _| guild_ids.contains(guild_id));
+        }
     }
 
     fn remember_bot_user(&self, user_id: String) {
@@ -327,6 +351,13 @@ impl GatewayState {
         }
         if let Ok(mut guild_names) = self.guild_names.write() {
             guild_names.insert(guild_id, guild_name);
+        }
+    }
+
+    fn remember_guild_snapshot(&self, snapshot: GatewayGuildSnapshot) {
+        self.remember_guild(snapshot.id.clone(), snapshot.name.clone());
+        if let Ok(mut snapshots) = self.guild_snapshots.write() {
+            snapshots.insert(snapshot.id.clone(), snapshot);
         }
     }
 
@@ -374,6 +405,9 @@ impl GatewayState {
         }
         if let Ok(mut guild_names) = self.guild_names.write() {
             guild_names.remove(guild_id);
+        }
+        if let Ok(mut snapshots) = self.guild_snapshots.write() {
+            snapshots.remove(guild_id);
         }
         if let Ok(mut voice_channels) = self.voice_channels.write() {
             voice_channels.remove(guild_id);
@@ -532,7 +566,13 @@ impl EventHandler for VozenGatewayHandler {
         _is_new: Option<bool>,
     ) {
         self.gateway_state
-            .remember_guild(guild.id.get().to_string(), guild.name.clone());
+            .remember_guild_snapshot(GatewayGuildSnapshot {
+                id: guild.id.get().to_string(),
+                name: guild.name.clone(),
+                icon: guild.icon_url(),
+                member_count: guild.member_count,
+                joined_timestamp: guild.joined_at.unix_timestamp(),
+            });
         self.gateway_state.replace_guild_voice_states(&guild);
     }
 
@@ -619,6 +659,23 @@ mod tests {
         assert_eq!(state.guild_ids(), vec!["guild-a", "guild-c"]);
         assert_eq!(state.guild_count(), 2);
         assert_eq!(state.guild_name("guild-c").as_deref(), Some("Guild C"));
+        state.remember_guild_snapshot(GatewayGuildSnapshot {
+            id: "guild-c".into(),
+            name: "Guild C".into(),
+            icon: Some("https://cdn.example/icon.webp".into()),
+            member_count: 42,
+            joined_timestamp: 1_700_000_000,
+        });
+        assert_eq!(
+            state.guild_snapshots(),
+            vec![GatewayGuildSnapshot {
+                id: "guild-c".into(),
+                name: "Guild C".into(),
+                icon: Some("https://cdn.example/icon.webp".into()),
+                member_count: 42,
+                joined_timestamp: 1_700_000_000,
+            }]
+        );
         assert_eq!(state.guild_name("guild-b"), None);
         assert!(!state.bot_has_guild("guild-b"));
         state.set_bot_voice_channel("guild-c", Some("voice".into()));
