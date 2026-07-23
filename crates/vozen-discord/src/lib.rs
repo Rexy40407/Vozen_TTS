@@ -28,6 +28,8 @@ mod automatic_translation_service;
 mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
+mod config_blockword_command;
+mod config_blockword_service;
 mod config_channel_command;
 mod config_channel_service;
 mod config_default_voice_command;
@@ -89,6 +91,14 @@ pub use command_registration::{
 pub use command_routing::{CommandArea, command_area, route_command};
 pub use command_speech_pipeline::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline,
+};
+pub use config_blockword_command::{
+    ConfigBlockwordAction, ConfigBlockwordCommand, ConfigBlockwordCommandError,
+    parse_config_blockword_command,
+};
+pub use config_blockword_service::{
+    ConfigBlockwordFailure, ConfigBlockwordInvocation, ConfigBlockwordOutcome,
+    ConfigBlockwordService,
 };
 pub use config_channel_command::{
     ConfigChannelCommand, ConfigChannelCommandError, parse_config_channel_command,

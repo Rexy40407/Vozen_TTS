@@ -163,6 +163,21 @@ export function rustConfigGreetLanguageOwnsCommand(
   );
 }
 
+/** Blocklist mutations are grouped under their own canary; `/config show/reset` stay Node-owned. */
+export function rustConfigBlockwordOwnsCommand(
+  commandName: string,
+  subcommandGroup: string | null,
+  subcommand: string | null,
+  enabled = process.env.RUST_CONFIG_BLOCKWORD_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'config' &&
+    subcommandGroup === 'block-word' &&
+    (subcommand === 'add' || subcommand === 'remove')
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

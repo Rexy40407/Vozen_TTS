@@ -121,6 +121,10 @@ const KEYS = [
   'config.blockedRoleCleared',
   'config.rolesConflict',
   'config.greetLangSet',
+  'config.wordEmpty',
+  'config.blocked',
+  'config.blockLimit',
+  'config.unblocked',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };

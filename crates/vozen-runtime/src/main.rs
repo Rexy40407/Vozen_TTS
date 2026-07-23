@@ -7,6 +7,7 @@
 //! adapters are individually opt-in. Voice/message ownership still requires its own canary flag.
 
 mod automatic_translation_sink;
+mod config_blockword_sink;
 mod config_channel_sink;
 mod config_default_voice_sink;
 mod config_greet_language_sink;
@@ -90,6 +91,7 @@ struct RuntimeConfig {
     config_channel: bool,
     config_queue_roles: bool,
     config_greet_language: bool,
+    config_blockword: bool,
     pronunciation: bool,
     config_language: bool,
     config_toggles: bool,
@@ -290,6 +292,8 @@ impl RuntimeConfig {
                 .ok()
                 .as_deref(),
         );
+        let config_blockword =
+            config_blockword_enabled(env::var("RUST_CONFIG_BLOCKWORD_ENABLED").ok().as_deref());
         let pronunciation =
             pronunciation_enabled(env::var("RUST_PRONUNCIATION_ENABLED").ok().as_deref());
         let config_language =
@@ -320,6 +324,7 @@ impl RuntimeConfig {
             config_channel,
             config_queue_roles,
             config_greet_language,
+            config_blockword,
             pronunciation,
             config_language,
             config_toggles,
@@ -501,6 +506,10 @@ fn config_queue_roles_enabled(raw: Option<&str>) -> bool {
 }
 
 fn config_greet_language_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn config_blockword_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -811,6 +820,19 @@ fn config_greet_language_event_sink(
     )))
 }
 
+fn config_blockword_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        config_blockword_sink::ConfigBlockwordGatewaySink::new(store)
+            .map_err(|_| RuntimeError::ConfigBlockwordGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -983,6 +1005,8 @@ enum RuntimeError {
     ConfigQueueRoleGateway,
     #[error("config greet language gateway initialisation failed")]
     ConfigGreetLanguageGateway,
+    #[error("config blockword gateway initialisation failed")]
+    ConfigBlockwordGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -1081,6 +1105,9 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) =
         config_greet_language_event_sink(config.config_greet_language, store.clone())?
     {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = config_blockword_event_sink(config.config_blockword, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1583,6 +1610,15 @@ mod tests {
         assert!(!config_greet_language_enabled(Some("1")));
         assert!(!config_greet_language_enabled(Some("yes")));
         assert!(!config_greet_language_enabled(None));
+    }
+
+    #[test]
+    fn config_blockword_promotion_is_exactly_opt_in() {
+        assert!(config_blockword_enabled(Some("true")));
+        assert!(config_blockword_enabled(Some(" TRUE ")));
+        assert!(!config_blockword_enabled(Some("1")));
+        assert!(!config_blockword_enabled(Some("yes")));
+        assert!(!config_blockword_enabled(None));
     }
 
     #[test]

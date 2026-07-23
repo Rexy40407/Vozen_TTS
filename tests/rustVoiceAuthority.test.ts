@@ -12,6 +12,7 @@ import {
   rustConfigChannelOwnsCommand,
   rustConfigQueueRolesOwnCommand,
   rustConfigGreetLanguageOwnsCommand,
+  rustConfigBlockwordOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -112,6 +113,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigGreetLanguageOwnsCommand('config', 'greet-language', 'true')).toBe(true);
     expect(rustConfigGreetLanguageOwnsCommand('config', 'language', 'true')).toBe(false);
     expect(rustConfigGreetLanguageOwnsCommand('voice', 'greet-language', 'true')).toBe(false);
+  });
+
+  it('promotes only block-word add/remove behind the grouped canary', () => {
+    expect(rustConfigBlockwordOwnsCommand('config', 'block-word', 'add')).toBe(false);
+    expect(rustConfigBlockwordOwnsCommand('config', 'block-word', 'add', 'true')).toBe(true);
+    expect(rustConfigBlockwordOwnsCommand('config', 'block-word', 'remove', 'true')).toBe(true);
+    expect(rustConfigBlockwordOwnsCommand('config', 'block-word', 'list', 'true')).toBe(false);
+    expect(rustConfigBlockwordOwnsCommand('config', null, 'add', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

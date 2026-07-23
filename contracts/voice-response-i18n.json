@@ -149,7 +149,11 @@
     "config.blockedRoleSet",
     "config.blockedRoleCleared",
     "config.rolesConflict",
-    "config.greetLangSet"
+    "config.greetLangSet",
+    "config.wordEmpty",
+    "config.blocked",
+    "config.blockLimit",
+    "config.unblocked"
   ],
   "messages": {
     "en": {
@@ -262,7 +266,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Join greeting language set to **{language}**."
+      "config.greetLangSet": "✅ Join greeting language set to **{language}**.",
+      "config.wordEmpty": "The word can't be empty.",
+      "config.blocked": "Blocked: {word}. I'll skip this word when reading, but still read the rest of the message.",
+      "config.blockLimit": "This server already has the maximum of {max} blocked words. Remove one before adding another.",
+      "config.unblocked": "Unblocked: {word}."
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -374,7 +382,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Língua da saudação de entrada definida para **{language}**."
+      "config.greetLangSet": "✅ Língua da saudação de entrada definida para **{language}**.",
+      "config.wordEmpty": "A palavra nao pode ser vazia.",
+      "config.blocked": "Bloqueado: {word}. Vou saltar esta palavra ao ler, mas leio o resto da mensagem na mesma.",
+      "config.blockLimit": "Este servidor ja tem o maximo de {max} palavras bloqueadas. Remove uma antes de adicionar outra.",
+      "config.unblocked": "Desbloqueado: {word}."
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -486,7 +498,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Idioma del saludo de entrada configurado en **{language}**."
+      "config.greetLangSet": "✅ Idioma del saludo de entrada configurado en **{language}**.",
+      "config.wordEmpty": "La palabra no puede estar vacía.",
+      "config.blocked": "Bloqueada: {word}.",
+      "config.blockLimit": "Este servidor ya tiene el máximo de {max} palabras bloqueadas. Elimina una antes de añadir otra.",
+      "config.unblocked": "Desbloqueada: {word}."
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -598,7 +614,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Langue du message d'accueil à l'arrivée définie sur **{language}**."
+      "config.greetLangSet": "✅ Langue du message d'accueil à l'arrivée définie sur **{language}**.",
+      "config.wordEmpty": "Le mot ne peut pas être vide.",
+      "config.blocked": "Bloqué : {word}.",
+      "config.blockLimit": "Ce serveur a déjà le maximum de {max} mots bloqués. Supprimez-en un avant d'en ajouter un autre.",
+      "config.unblocked": "Débloqué : {word}."
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -710,7 +730,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Sprache der Beitrittsbegrüßung auf **{language}** gesetzt."
+      "config.greetLangSet": "✅ Sprache der Beitrittsbegrüßung auf **{language}** gesetzt.",
+      "config.wordEmpty": "Das Wort darf nicht leer sein.",
+      "config.blocked": "Blockiert: {word}.",
+      "config.blockLimit": "Dieser Server hat bereits die maximale Anzahl von {max} blockierten Wörtern. Entferne eines, bevor du ein weiteres hinzufügst.",
+      "config.unblocked": "Freigegeben: {word}."
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -822,7 +846,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Taal van de begroeting bij binnenkomst ingesteld op **{language}**."
+      "config.greetLangSet": "✅ Taal van de begroeting bij binnenkomst ingesteld op **{language}**.",
+      "config.wordEmpty": "Het woord mag niet leeg zijn.",
+      "config.blocked": "Geblokkeerd: {word}.",
+      "config.blockLimit": "Deze server heeft al het maximum van {max} geblokkeerde woorden. Verwijder er een voordat je een nieuwe toevoegt.",
+      "config.unblocked": "Gedeblokkeerd: {word}."
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -934,7 +962,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Język powitania przy wejściu ustawiony na **{language}**."
+      "config.greetLangSet": "✅ Język powitania przy wejściu ustawiony na **{language}**.",
+      "config.wordEmpty": "Słowo nie może być puste.",
+      "config.blocked": "Zablokowano: {word}.",
+      "config.blockLimit": "Ten serwer ma już maksymalną liczbę {max} zablokowanych słów. Usuń jedno, zanim dodasz kolejne.",
+      "config.unblocked": "Odblokowano: {word}."
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -1046,7 +1078,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Katılım selamlama dili **{language}** olarak ayarlandı."
+      "config.greetLangSet": "✅ Katılım selamlama dili **{language}** olarak ayarlandı.",
+      "config.wordEmpty": "Kelime boş olamaz.",
+      "config.blocked": "Engellendi: {word}.",
+      "config.blockLimit": "Bu sunucuda zaten en fazla {max} engellenmiş kelime var. Yenisini eklemeden önce birini kaldır.",
+      "config.unblocked": "Engel kaldırıldı: {word}."
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -1158,7 +1194,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Jazyk pozdravu při připojení nastaven na **{language}**."
+      "config.greetLangSet": "✅ Jazyk pozdravu při připojení nastaven na **{language}**.",
+      "config.wordEmpty": "Slovo nesmí být prázdné.",
+      "config.blocked": "Zablokováno: {word}.",
+      "config.blockLimit": "Tento server už má maximum {max} zablokovaných slov. Než přidáš další, jedno odeber.",
+      "config.unblocked": "Odblokováno: {word}."
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -1270,7 +1310,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Språk för välkomsthälsning satt till **{language}**."
+      "config.greetLangSet": "✅ Språk för välkomsthälsning satt till **{language}**.",
+      "config.wordEmpty": "Ordet kan inte vara tomt.",
+      "config.blocked": "Blockerade: {word}.",
+      "config.blockLimit": "Den här servern har redan maxantalet {max} blockerade ord. Ta bort ett innan du lägger till ett nytt.",
+      "config.unblocked": "Avblockerade: {word}."
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -1382,7 +1426,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Liittymistervehdyksen kieleksi asetettu **{language}**."
+      "config.greetLangSet": "✅ Liittymistervehdyksen kieleksi asetettu **{language}**.",
+      "config.wordEmpty": "Sana ei voi olla tyhjä.",
+      "config.blocked": "Estetty: {word}.",
+      "config.blockLimit": "Tällä palvelimella on jo enimmäismäärä {max} estettyä sanaa. Poista yksi ennen kuin lisäät uuden.",
+      "config.unblocked": "Esto poistettu: {word}."
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -1494,7 +1542,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Sprog for velkomsthilsen sat til **{language}**."
+      "config.greetLangSet": "✅ Sprog for velkomsthilsen sat til **{language}**.",
+      "config.wordEmpty": "Ordet må ikke være tomt.",
+      "config.blocked": "Blokeret: {word}.",
+      "config.blockLimit": "Denne server har allerede det maksimale antal på {max} blokerede ord. Fjern et, før du tilføjer et nyt.",
+      "config.unblocked": "Fjernet blokering: {word}."
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -1606,7 +1658,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Limba salutului de intrare setată la **{language}**."
+      "config.greetLangSet": "✅ Limba salutului de intrare setată la **{language}**.",
+      "config.wordEmpty": "Cuvântul nu poate fi gol.",
+      "config.blocked": "Blocat: {word}.",
+      "config.blockLimit": "Acest server are deja maximul de {max} cuvinte blocate. Elimină unul înainte de a adăuga altul.",
+      "config.unblocked": "Deblocat: {word}."
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -1718,7 +1774,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ A csatlakozási köszöntés nyelve beállítva: **{language}**."
+      "config.greetLangSet": "✅ A csatlakozási köszöntés nyelve beállítva: **{language}**.",
+      "config.wordEmpty": "A szó nem lehet üres.",
+      "config.blocked": "Letiltva: {word}.",
+      "config.blockLimit": "Ezen a szerveren már megvan a maximális {max} tiltott szó. Távolíts el egyet, mielőtt újat adnál hozzá.",
+      "config.unblocked": "Feloldva: {word}."
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -1830,7 +1890,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Iaith cyfarch wrth ymuno wedi'i gosod i **{language}**."
+      "config.greetLangSet": "✅ Iaith cyfarch wrth ymuno wedi'i gosod i **{language}**.",
+      "config.wordEmpty": "Ni all y gair fod yn wag.",
+      "config.blocked": "Wedi'i rwystro: {word}.",
+      "config.blockLimit": "Mae gan y gweinydd hwn eisoes yr uchafswm o {max} gair wedi'u rhwystro. Tynna un cyn ychwanegu un arall.",
+      "config.unblocked": "Wedi'i ddadrwystro: {word}."
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -1942,7 +2006,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Tungumál innkomukveðju stillt á **{language}**."
+      "config.greetLangSet": "✅ Tungumál innkomukveðju stillt á **{language}**.",
+      "config.wordEmpty": "Orðið má ekki vera tómt.",
+      "config.blocked": "Bannað: {word}.",
+      "config.blockLimit": "Þessi netþjónn er þegar með hámarkið {max} bönnuð orð. Fjarlægðu eitt áður en þú bætir öðru við.",
+      "config.unblocked": "Afbannað: {word}."
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -2054,7 +2122,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Sprooch fir d'Begréissung beim Bäitrëtt op **{language}** gesat."
+      "config.greetLangSet": "✅ Sprooch fir d'Begréissung beim Bäitrëtt op **{language}** gesat.",
+      "config.wordEmpty": "D'Wuert dierf net eidel sinn.",
+      "config.blocked": "Gespaart: {word}.",
+      "config.blockLimit": "Dëse Server huet scho d'Maximum vu {max} gespaarte Wierder. Läsch een, ier s du en aneren bäifüügs.",
+      "config.unblocked": "Entspaart: {word}."
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -2166,7 +2238,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Pievienošanās sveiciena valoda iestatīta uz **{language}**."
+      "config.greetLangSet": "✅ Pievienošanās sveiciena valoda iestatīta uz **{language}**.",
+      "config.wordEmpty": "Vārds nevar būt tukšs.",
+      "config.blocked": "Bloķēts: {word}.",
+      "config.blockLimit": "Šim serverim jau ir maksimālais {max} bloķēto vārdu skaits. Noņem kādu, pirms pievieno jaunu.",
+      "config.unblocked": "Atbloķēts: {word}."
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -2278,7 +2354,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Jazyk pozdravu pri pripojení nastavený na **{language}**."
+      "config.greetLangSet": "✅ Jazyk pozdravu pri pripojení nastavený na **{language}**.",
+      "config.wordEmpty": "Slovo nemôže byť prázdne.",
+      "config.blocked": "Zablokované: {word}.",
+      "config.blockLimit": "Tento server už má maximum {max} zablokovaných slov. Pred pridaním ďalšieho jedno odstráň.",
+      "config.unblocked": "Odblokované: {word}."
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -2390,7 +2470,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Jezik pozdrava ob prihodu nastavljen na **{language}**."
+      "config.greetLangSet": "✅ Jezik pozdrava ob prihodu nastavljen na **{language}**.",
+      "config.wordEmpty": "Beseda ne sme biti prazna.",
+      "config.blocked": "Blokirano: {word}.",
+      "config.blockLimit": "Ta strežnik že ima največ {max} blokiranih besed. Preden dodaš novo, eno odstrani.",
+      "config.unblocked": "Deblokirano: {word}."
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -2502,7 +2586,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Lugha ya salamu ya kujiunga imewekwa kuwa **{language}**."
+      "config.greetLangSet": "✅ Lugha ya salamu ya kujiunga imewekwa kuwa **{language}**.",
+      "config.wordEmpty": "Neno haliwezi kuwa tupu.",
+      "config.blocked": "Limezuiwa: {word}.",
+      "config.blockLimit": "Seva hii tayari ina kiwango cha juu cha maneno {max} yaliyozuiwa. Ondoa moja kabla ya kuongeza jingine.",
+      "config.unblocked": "Limeruhusiwa: {word}."
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -2614,7 +2702,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Đã đặt ngôn ngữ lời chào khi vào thành **{language}**."
+      "config.greetLangSet": "✅ Đã đặt ngôn ngữ lời chào khi vào thành **{language}**.",
+      "config.wordEmpty": "Từ không được để trống.",
+      "config.blocked": "Đã chặn: {word}.",
+      "config.blockLimit": "Máy chủ này đã đạt tối đa {max} từ bị chặn. Hãy xóa bớt một từ trước khi thêm từ khác.",
+      "config.unblocked": "Đã bỏ chặn: {word}."
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -2726,7 +2818,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Llengua de la salutació d'entrada establerta a **{language}**."
+      "config.greetLangSet": "✅ Llengua de la salutació d'entrada establerta a **{language}**.",
+      "config.wordEmpty": "La paraula no pot estar buida.",
+      "config.blocked": "Bloquejada: {word}.",
+      "config.blockLimit": "Aquest servidor ja té el màxim de {max} paraules bloquejades. Elimina'n una abans d'afegir-ne una altra.",
+      "config.unblocked": "Desbloquejada: {word}."
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -2838,7 +2934,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Lingua del saluto d'ingresso impostata su **{language}**."
+      "config.greetLangSet": "✅ Lingua del saluto d'ingresso impostata su **{language}**.",
+      "config.wordEmpty": "La parola non può essere vuota.",
+      "config.blocked": "Bloccata: {word}.",
+      "config.blockLimit": "Questo server ha già il massimo di {max} parole bloccate. Rimuovine una prima di aggiungerne un'altra.",
+      "config.unblocked": "Sbloccata: {word}."
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -2950,7 +3050,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Η γλώσσα χαιρετισμού εισόδου ορίστηκε σε **{language}**."
+      "config.greetLangSet": "✅ Η γλώσσα χαιρετισμού εισόδου ορίστηκε σε **{language}**.",
+      "config.wordEmpty": "Η λέξη δεν μπορεί να είναι κενή.",
+      "config.blocked": "Αποκλείστηκε: {word}.",
+      "config.blockLimit": "Αυτός ο διακομιστής έχει ήδη το μέγιστο των {max} αποκλεισμένων λέξεων. Αφαίρεσε μία πριν προσθέσεις άλλη.",
+      "config.unblocked": "Απο-αποκλείστηκε: {word}."
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -3062,7 +3166,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Язык приветствия при входе установлен на **{language}**."
+      "config.greetLangSet": "✅ Язык приветствия при входе установлен на **{language}**.",
+      "config.wordEmpty": "Слово не может быть пустым.",
+      "config.blocked": "Заблокировано: {word}.",
+      "config.blockLimit": "На этом сервере уже максимум заблокированных слов ({max}). Удалите одно, прежде чем добавить новое.",
+      "config.unblocked": "Разблокировано: {word}."
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -3174,7 +3282,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Мову вітання при вході встановлено на **{language}**."
+      "config.greetLangSet": "✅ Мову вітання при вході встановлено на **{language}**.",
+      "config.wordEmpty": "Слово не може бути порожнім.",
+      "config.blocked": "Заблоковано: {word}.",
+      "config.blockLimit": "Цей сервер уже має максимум {max} заблокованих слів. Видаліть одне, перш ніж додавати інше.",
+      "config.unblocked": "Розблоковано: {word}."
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -3286,7 +3398,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Кіру сәлемдесуінің тілі **{language}** болып орнатылды."
+      "config.greetLangSet": "✅ Кіру сәлемдесуінің тілі **{language}** болып орнатылды.",
+      "config.wordEmpty": "Сөз бос болуы мүмкін емес.",
+      "config.blocked": "Бұғатталды: {word}.",
+      "config.blockLimit": "Бұл серверде бұғатталған сөздердің ең көп саны {max} бұрыннан бар. Жаңасын қоспас бұрын біреуін жойыңыз.",
+      "config.unblocked": "Бұғаттан шығарылды: {word}."
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -3398,7 +3514,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ Језик поздрава при уласку постављен на **{language}**."
+      "config.greetLangSet": "✅ Језик поздрава при уласку постављен на **{language}**.",
+      "config.wordEmpty": "Реч не може бити празна.",
+      "config.blocked": "Блокирано: {word}.",
+      "config.blockLimit": "Овај сервер већ има максималних {max} блокираних речи. Уклони једну пре него што додаш нову.",
+      "config.unblocked": "Одблокирано: {word}."
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -3510,7 +3630,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ تم تعيين لغة تحية الانضمام إلى **{language}**."
+      "config.greetLangSet": "✅ تم تعيين لغة تحية الانضمام إلى **{language}**.",
+      "config.wordEmpty": "لا يمكن أن تكون الكلمة فارغة.",
+      "config.blocked": "محظورة: {word}.",
+      "config.blockLimit": "هذا الخادم لديه بالفعل الحد الأقصى وهو {max} كلمة محظورة. أزل واحدة قبل إضافة أخرى.",
+      "config.unblocked": "أُلغي الحظر عن: {word}."
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -3622,7 +3746,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ زبان خوش‌آمدِ ورود روی **{language}** تنظیم شد."
+      "config.greetLangSet": "✅ زبان خوش‌آمدِ ورود روی **{language}** تنظیم شد.",
+      "config.wordEmpty": "کلمه نمی‌تواند خالی باشد.",
+      "config.blocked": "مسدود شد: {word}.",
+      "config.blockLimit": "این سرور از پیش حداکثرِ {max} کلمهٔ مسدود را دارد. قبل از افزودن یکی دیگر، یکی را حذف کن.",
+      "config.unblocked": "رفع مسدودی شد: {word}."
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -3734,7 +3862,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ შესვლის მისალმების ენად დაყენდა **{language}**."
+      "config.greetLangSet": "✅ შესვლის მისალმების ენად დაყენდა **{language}**.",
+      "config.wordEmpty": "სიტყვა ცარიელი ვერ იქნება.",
+      "config.blocked": "დაბლოკილია: {word}.",
+      "config.blockLimit": "ამ სერვერს უკვე აქვს {max} დაბლოკილი სიტყვის მაქსიმუმი. ახლის დამატებამდე წაშალეთ ერთი.",
+      "config.unblocked": "განბლოკილია: {word}."
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -3846,7 +3978,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ जोडिँदाको अभिवादन भाषा **{language}** मा सेट भयो।"
+      "config.greetLangSet": "✅ जोडिँदाको अभिवादन भाषा **{language}** मा सेट भयो।",
+      "config.wordEmpty": "शब्द खाली हुन सक्दैन।",
+      "config.blocked": "रोकियो: {word}।",
+      "config.blockLimit": "यस सर्भरमा पहिले नै अधिकतम {max} रोकिएका शब्द छन्। अर्को थप्नुअघि एउटा हटाउनुहोस्।",
+      "config.unblocked": "रोक हटाइयो: {word}।"
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -3958,7 +4094,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ 加入问候语言已设为 **{language}**。"
+      "config.greetLangSet": "✅ 加入问候语言已设为 **{language}**。",
+      "config.wordEmpty": "词语不能为空。",
+      "config.blocked": "已屏蔽：{word}。",
+      "config.blockLimit": "本服务器已达到 {max} 个屏蔽词的上限。请先移除一个再添加。",
+      "config.unblocked": "已解除屏蔽：{word}。"
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -4070,7 +4210,11 @@
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
       "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
-      "config.greetLangSet": "✅ 参加時の挨拶の言語を **{language}** に設定しました。"
+      "config.greetLangSet": "✅ 参加時の挨拶の言語を **{language}** に設定しました。",
+      "config.wordEmpty": "単語を空にはできません。",
+      "config.blocked": "ブロックしました：{word}。",
+      "config.blockLimit": "このサーバーはすでにブロック単語の上限（{max} 個）に達しています。追加する前にひとつ削除してください。",
+      "config.unblocked": "ブロックを解除しました：{word}。"
     }
   }
 }
