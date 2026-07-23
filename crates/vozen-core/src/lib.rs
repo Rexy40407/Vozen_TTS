@@ -14,6 +14,7 @@ mod game_skip_count;
 mod game_text_quiz;
 mod game_tictactoe;
 mod game_vozen_says;
+mod game_word_chain;
 mod game_wordle;
 mod kofi;
 mod language_detection;
@@ -48,6 +49,9 @@ pub use game_skip_count::{NumberSequence, SkipCountGame, SkipCountGuessResult};
 pub use game_text_quiz::{TextQuizEvent, TextQuizGame, TextQuizScore, normalize_game_answer};
 pub use game_tictactoe::{Mark, TicTacToeGame, TicTacToeMove};
 pub use game_vozen_says::{VozenSaysEvent, VozenSaysGame, VozenSaysScore};
+pub use game_word_chain::{
+    ChainValidation, ChainValidationReason, WordChainConfig, WordChainEngine, WordChainLanguage,
+};
 pub use game_wordle::{CellState, WordleEvent, WordleGame, WordleRow};
 pub use kofi::{
     KofiEvent, KofiGrant, KofiPlan, PREMIUM_MAX_SEATS, PREMIUM_PASS_SEATS, ShopProduct,
