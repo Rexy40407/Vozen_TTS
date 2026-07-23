@@ -189,6 +189,11 @@ export function filterPronunciationChoices(
     .map((e) => ({ name: `${e.term} → ${e.replacement}`, value: e.term }));
 }
 
+/** The public command name is hyphenated; keep autocomplete routing on the canonical contract. */
+export function isServerPronunciationCommand(commandName: string): boolean {
+  return commandName === 'server-pronunciation';
+}
+
 /**
  * Sanitizes autocomplete choices to Discord's limits: max. 25 entries, `name` 1–100
  * chars, `value` ≤100 chars. ONE invalid entry makes the API reject the WHOLE payload
@@ -239,7 +244,7 @@ function computeAutocompleteChoices(
     if (i.commandName === 'pronunciation') {
       return filterPronunciationChoices(getUserPronunciations(deps.db, i.user.id), focused.value);
     }
-    if (i.commandName === 'serverpronunciation') {
+    if (isServerPronunciationCommand(i.commandName)) {
       return i.guildId
         ? filterPronunciationChoices(getServerPronunciations(deps.db, i.guildId), focused.value)
         : [];

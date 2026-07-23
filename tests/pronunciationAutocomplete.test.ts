@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterPronunciationChoices } from '../src/commands/index';
+import { filterPronunciationChoices, isServerPronunciationCommand } from '../src/commands/index';
 
 // Autocomplete for /pronunciation remove (and /server-pronunciation remove): instead of the
 // user TYPING the term from memory, the picker lists the SAVED pronunciations.
@@ -37,5 +37,12 @@ describe('filterPronunciationChoices', () => {
       replacement: `rep ${i}`,
     }));
     expect(filterPronunciationChoices(many, '')).toHaveLength(25);
+  });
+});
+
+describe('server pronunciation autocomplete routing', () => {
+  it('uses the canonical hyphenated command name', () => {
+    expect(isServerPronunciationCommand('server-pronunciation')).toBe(true);
+    expect(isServerPronunciationCommand('serverpronunciation')).toBe(false);
   });
 });
