@@ -61,6 +61,7 @@ mod file_export_command;
 mod file_export_service;
 mod gateway_composite;
 mod guild_synthesis_coordinator;
+mod help_command;
 mod interaction_dispatch;
 mod invite_command;
 mod message_admission;
@@ -198,6 +199,7 @@ pub use file_export_service::{
 };
 pub use gateway_composite::CompositeGatewayEventSink;
 pub use guild_synthesis_coordinator::GuildSynthesisCoordinator;
+pub use help_command::{HelpCommand, HelpCommandError, parse_help_command};
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
 };

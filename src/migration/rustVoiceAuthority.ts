@@ -214,6 +214,14 @@ export function rustInviteOwnsCommand(
   return enabled?.trim().toLowerCase() === 'true' && commandName === 'invite';
 }
 
+/** Help is a static discovery surface and has no payment or authentication authority. */
+export function rustHelpOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_HELP_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'help';
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
