@@ -109,7 +109,9 @@ impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P> {
         Ok(matches!(
             parse_promoted_core_voice(command).map_err(|_| CoreVoiceExecutionError::Command)?,
             Some(
-                crate::CoreVoiceCommand::Tts { .. } | crate::CoreVoiceCommand::VoicePreview { .. },
+                crate::CoreVoiceCommand::Tts { .. }
+                    | crate::CoreVoiceCommand::Laugh
+                    | crate::CoreVoiceCommand::VoicePreview { .. },
             )
         ))
     }
@@ -136,7 +138,9 @@ where
         };
         let defer_ephemeral = matches!(
             command,
-            crate::CoreVoiceCommand::Tts { .. } | crate::CoreVoiceCommand::VoicePreview { .. }
+            crate::CoreVoiceCommand::Tts { .. }
+                | crate::CoreVoiceCommand::Laugh
+                | crate::CoreVoiceCommand::VoicePreview { .. }
         );
         let outcome = if let crate::CoreVoiceCommand::VoicePreview { model } = &command {
             let guild_locale = self.guild_locale(facts);
@@ -264,6 +268,12 @@ mod tests {
             r#"{"id":"1","name":"tts","type":1,"options":[{"name":"text","type":3,"value":"hello"}]}"#
         ))
         .expect("tts"));
+        assert!(
+            CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&command(
+                r#"{"id":"1","name":"laugh","type":1,"options":[]}"#
+            ))
+            .expect("laugh")
+        );
         let preview = command(
             r#"{"id":"1","name":"voice","type":1,"options":[{"name":"preview","type":1,"options":[]}] }"#,
         );

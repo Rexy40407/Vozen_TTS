@@ -69,6 +69,7 @@ mod guild_synthesis_coordinator;
 mod help_command;
 mod interaction_dispatch;
 mod invite_command;
+mod laugh_text;
 mod message_admission;
 mod message_interaction;
 mod message_media;
@@ -220,6 +221,7 @@ pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
 };
 pub use invite_command::{InviteCommand, InviteCommandError, parse_invite_command};
+pub use laugh_text::laughter_for_model;
 pub use message_admission::{DiscordMessageFacts, admit_discord_message};
 pub use message_interaction::DiscordMessageFactsOwned;
 pub use message_media::collect_message_media;

@@ -20,7 +20,7 @@ use vozen_store::{SqliteStore, UserEngine};
 use crate::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline, CoreVoiceCommand,
     GatewayState, GuildSynthesisCoordinator, JoinVoiceOutcome, LeaveVoiceOutcome,
-    VoiceSessionService, VoiceSessionTransport,
+    VoiceSessionService, VoiceSessionTransport, laughter_for_model,
 };
 
 #[derive(Debug, Error)]
@@ -115,6 +115,7 @@ pub enum CorePreviewOutcome {
 pub enum CoreVoiceOutcome {
     Joined(JoinVoiceOutcome),
     Left(LeaveVoiceOutcome),
+    Laugh(CorePreviewOutcome),
     Tts(CoreTtsOutcome),
     Preview(CorePreviewOutcome),
     Skipped(CorePlaybackControlOutcome),
@@ -227,6 +228,9 @@ where
             ),
             CoreVoiceCommand::Leave => {
                 CoreVoiceOutcome::Left(self.sessions.leave_explicitly(invocation.guild_id).await)
+            }
+            CoreVoiceCommand::Laugh => {
+                CoreVoiceOutcome::Laugh(self.execute_laugh(invocation).await)
             }
             CoreVoiceCommand::Skip => {
                 CoreVoiceOutcome::Skipped(self.skip(invocation.guild_id).await)
@@ -423,6 +427,37 @@ where
                 CorePreviewOutcome::PlaybackFailed
             }
         }
+    }
+
+    /// `/laugh` keeps the Node precedence (saved model, guild default, runtime default) but
+    /// chooses laughter in the same script as that model before entering the shared preview
+    /// admission, synthesis and queue path.
+    async fn execute_laugh(&self, invocation: CoreVoiceInvocation<'_>) -> CorePreviewOutcome {
+        let model = {
+            let store = match self.store.lock() {
+                Ok(store) => store,
+                Err(_) => return CorePreviewOutcome::StoreUnavailable,
+            };
+            let config = match store.guild_config(invocation.guild_id) {
+                Ok(config) => config,
+                Err(_) => return CorePreviewOutcome::StoreUnavailable,
+            };
+            let stored = match store.get_user_voice(invocation.guild_id, invocation.user_id) {
+                Ok(stored) => stored,
+                Err(_) => return CorePreviewOutcome::StoreUnavailable,
+            };
+            stored
+                .as_ref()
+                .map(|voice| voice.model.clone())
+                .filter(|model| !model.trim().is_empty())
+                .or_else(|| {
+                    (!config.default_voice.trim().is_empty()).then(|| config.default_voice.clone())
+                })
+                .unwrap_or_else(|| self.settings.default_voice.clone())
+        };
+        let sample = laughter_for_model(&model);
+        self.execute_preview(invocation, Some(&model), &sample)
+            .await
     }
 
     async fn skip(&self, guild_id: &str) -> CorePlaybackControlOutcome {
@@ -887,6 +922,20 @@ mod tests {
                 )
                 .await,
             CoreVoiceOutcome::Preview(CorePreviewOutcome::Queued)
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn laugh_uses_the_shared_preview_queue_and_same_call_admission() {
+        let (service, _, state) = service(true);
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        assert_eq!(
+            service
+                .execute(invocation(), &CoreVoiceCommand::Laugh)
+                .await,
+            CoreVoiceOutcome::Laugh(CorePreviewOutcome::Queued)
         );
         assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 1);
     }

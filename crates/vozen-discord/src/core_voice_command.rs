@@ -15,6 +15,8 @@ use crate::{CommandArea, command_path_from_options, route_command};
 pub enum CoreVoiceCommand {
     Join,
     Leave,
+    /// `/laugh` uses the caller's resolved voice but otherwise shares the core call path.
+    Laugh,
     Skip,
     ShutUp,
     /// The raw argument is kept only for this interaction. Cleaning, rate limiting and all
@@ -55,12 +57,13 @@ pub fn parse_promoted_core_voice(
         }
         return parse_voice_preview(&command.options).map(Some);
     }
-    if area != CommandArea::CoreVoice {
+    if area != CommandArea::CoreVoice && !(command.name == "laugh" && area == CommandArea::Fun) {
         return Ok(None);
     }
     match command.name.as_str() {
         "join" => Ok(Some(CoreVoiceCommand::Join)),
         "leave" => Ok(Some(CoreVoiceCommand::Leave)),
+        "laugh" => Ok(Some(CoreVoiceCommand::Laugh)),
         "skip" => Ok(Some(CoreVoiceCommand::Skip)),
         "shut-up" => Ok(Some(CoreVoiceCommand::ShutUp)),
         "tts" => {
@@ -133,6 +136,13 @@ mod tests {
             ))
             .expect("leave"),
             Some(CoreVoiceCommand::Leave)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"laugh","type":1,"options":[]}"#
+            ))
+            .expect("laugh"),
+            Some(CoreVoiceCommand::Laugh)
         );
         assert_eq!(
             parse_promoted_core_voice(&command(

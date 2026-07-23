@@ -19,6 +19,11 @@ pub enum CoreVoiceResponse {
     JoinFailed,
     Left,
     LeaveFailed,
+    LaughNotInVoice,
+    LaughRateLimited,
+    LaughBusy,
+    LaughQueued,
+    LaughFailed,
     SkipNotInVoice,
     SkipNothingPlaying,
     Skipped,
@@ -59,6 +64,7 @@ impl CoreVoiceResponse {
             Self::VoiceUnavailable
             | Self::JoinFailed
             | Self::LeaveFailed
+            | Self::LaughFailed
             | Self::SynthesisFailed
             | Self::PlaybackFailed
             | Self::StoreUnavailable => "error.generic",
@@ -74,6 +80,10 @@ impl CoreVoiceResponse {
             Self::NothingToRead => "tts.nothingAfterClean",
             Self::RateLimited => "tts.tooFast",
             Self::Busy => "tts.busy",
+            Self::LaughNotInVoice => "tts.notInVoice",
+            Self::LaughRateLimited => "tts.tooFast",
+            Self::LaughBusy => "tts.busy",
+            Self::LaughQueued => "laugh.playing",
             Self::Queued => "tts.queued",
             Self::PreviewNotInPlayer => "voice.notInVoice",
             Self::PreviewNotInSameVoice => "tts.notInVoice",
@@ -109,6 +119,23 @@ pub fn core_voice_response(outcome: CoreVoiceOutcome) -> CoreVoiceResponse {
             CoreVoiceResponse::LeaveFailed
         }
         CoreVoiceOutcome::Left(LeaveVoiceOutcome::StoreUnavailable) => {
+            CoreVoiceResponse::StoreUnavailable
+        }
+        CoreVoiceOutcome::Laugh(CorePreviewOutcome::NotInPlayer)
+        | CoreVoiceOutcome::Laugh(CorePreviewOutcome::NotInSameVoice) => {
+            CoreVoiceResponse::LaughNotInVoice
+        }
+        CoreVoiceOutcome::Laugh(CorePreviewOutcome::RateLimited) => {
+            CoreVoiceResponse::LaughRateLimited
+        }
+        CoreVoiceOutcome::Laugh(CorePreviewOutcome::Busy) => CoreVoiceResponse::LaughBusy,
+        CoreVoiceOutcome::Laugh(CorePreviewOutcome::Queued) => CoreVoiceResponse::LaughQueued,
+        CoreVoiceOutcome::Laugh(
+            CorePreviewOutcome::UnknownModel
+            | CorePreviewOutcome::SynthesisFailed
+            | CorePreviewOutcome::PlaybackFailed,
+        ) => CoreVoiceResponse::LaughFailed,
+        CoreVoiceOutcome::Laugh(CorePreviewOutcome::StoreUnavailable) => {
             CoreVoiceResponse::StoreUnavailable
         }
         CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NotInVoice) => {
@@ -197,6 +224,10 @@ mod tests {
         assert_eq!(
             core_voice_response(CoreVoiceOutcome::Preview(CorePreviewOutcome::Queued)),
             CoreVoiceResponse::PreviewQueued
+        );
+        assert_eq!(
+            core_voice_response(CoreVoiceOutcome::Laugh(CorePreviewOutcome::Queued)),
+            CoreVoiceResponse::LaughQueued
         );
     }
 
