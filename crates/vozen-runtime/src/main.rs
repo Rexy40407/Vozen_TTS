@@ -83,7 +83,7 @@ use vozen_discord::{
     locale_display_options, run_discord_gateway_with_state_and_sink, voice_display_options,
     write_planned_rejoin_marker,
 };
-use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
+use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore, month_key_utc};
 
 use crate::topgg_metrics::{
     ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats, sync_topgg_commands,
@@ -1532,6 +1532,9 @@ async fn run() -> Result<(), RuntimeError> {
     // Retention is best effort: a one-off SQLite lock must not take down Discord, and the next
     // daily pass retries. The permanent HMAC marker is deliberately not touched by this job.
     spawn_vote_retention(store.clone());
+    // Google HD counters are cost-control metadata, not personal message content. Keep the same
+    // bounded monthly retention as the Node runtime without letting an old row block startup.
+    spawn_gcloud_retention(store.clone());
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
@@ -1955,6 +1958,25 @@ fn spawn_vote_retention(store: Arc<Mutex<SqliteStore>>) {
             interval.tick().await;
             if let Ok(store) = store.lock() {
                 let _ = purge_vote_retention(&store, system_now_ms());
+            }
+        }
+    });
+}
+
+const GCLOUD_RETENTION_MS: i64 = 92 * 86_400_000;
+
+fn purge_gcloud_retention(store: &SqliteStore, now: i64) -> Result<usize, vozen_store::StoreError> {
+    let cutoff = month_key_utc(now.saturating_sub(GCLOUD_RETENTION_MS));
+    store.purge_old_gcloud_usage(&cutoff)
+}
+
+fn spawn_gcloud_retention(store: Arc<Mutex<SqliteStore>>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
+        loop {
+            interval.tick().await;
+            if let Ok(store) = store.lock() {
+                let _ = purge_gcloud_retention(&store, system_now_ms());
             }
         }
     });
@@ -2466,6 +2488,47 @@ mod tests {
                 .vote_reward_status(user, secret)
                 .expect("status")
                 .already_redeemed
+        );
+    }
+
+    #[test]
+    fn gcloud_retention_removes_only_months_older_than_the_node_ttl() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        let now = 1_753_372_800_000_i64; // 2025-07-01T00:00:00Z
+        store
+            .add_gcloud_monthly_chars(
+                vozen_store::GcloudUsageScope::Guild,
+                "guild-old",
+                "2025-03",
+                10,
+            )
+            .expect("old usage");
+        store
+            .add_gcloud_monthly_chars(
+                vozen_store::GcloudUsageScope::Guild,
+                "guild-recent",
+                "2025-05",
+                20,
+            )
+            .expect("recent usage");
+
+        let removed = purge_gcloud_retention(&store, now).expect("purge");
+        assert_eq!(removed, 1);
+        assert_eq!(
+            store
+                .gcloud_monthly_chars(vozen_store::GcloudUsageScope::Guild, "guild-old", "2025-03",)
+                .expect("old lookup"),
+            0
+        );
+        assert_eq!(
+            store
+                .gcloud_monthly_chars(
+                    vozen_store::GcloudUsageScope::Guild,
+                    "guild-recent",
+                    "2025-05",
+                )
+                .expect("recent lookup"),
+            20
         );
     }
 
