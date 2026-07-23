@@ -63,32 +63,7 @@ impl VozenSaysGame {
 
     #[must_use]
     pub fn play(&mut self, user_id: &str, name: &str, raw: &str) -> VozenSaysEvent {
-        if self.done || self.round == 0 || self.round > ROUNDS {
-            return VozenSaysEvent::Ignored;
-        }
-        if normalize_answer(raw) != normalize_answer(&self.item) {
-            return VozenSaysEvent::Ignored;
-        }
-        if self.real {
-            self.done = true;
-            self.add_point(user_id);
-            let event = VozenSaysEvent::Obeyed {
-                user_id: user_id.to_owned(),
-                name: name.to_owned(),
-            };
-            if self.round < ROUNDS {
-                let _ = self.next_round(self.deadline_ms);
-            }
-            return event;
-        }
-        if self.caught.iter().any(|caught| caught == user_id) {
-            return VozenSaysEvent::Ignored;
-        }
-        self.caught.push(user_id.to_owned());
-        VozenSaysEvent::Caught {
-            user_id: user_id.to_owned(),
-            name: name.to_owned(),
-        }
+        self.play_at(user_id, name, raw, self.deadline_ms)
     }
 
     pub fn advance(&mut self, now_ms: i64) -> VozenSaysEvent {
@@ -111,6 +86,57 @@ impl VozenSaysGame {
     #[must_use]
     pub fn is_finished(&self) -> bool {
         self.round >= ROUNDS && self.done
+    }
+
+    #[must_use]
+    pub fn round(&self) -> u8 {
+        self.round
+    }
+
+    #[must_use]
+    pub fn item(&self) -> &str {
+        &self.item
+    }
+
+    #[must_use]
+    pub fn real(&self) -> bool {
+        self.real
+    }
+
+    #[must_use]
+    pub fn deadline_ms(&self) -> i64 {
+        self.deadline_ms
+    }
+
+    /// Clock-aware answer hook. The old `play` method remains as a compatibility wrapper.
+    #[must_use]
+    pub fn play_at(&mut self, user_id: &str, name: &str, raw: &str, now_ms: i64) -> VozenSaysEvent {
+        if self.done || self.round == 0 || self.round > ROUNDS {
+            return VozenSaysEvent::Ignored;
+        }
+        if normalize_answer(raw) != normalize_answer(&self.item) {
+            return VozenSaysEvent::Ignored;
+        }
+        if self.real {
+            self.done = true;
+            self.add_point(user_id);
+            let event = VozenSaysEvent::Obeyed {
+                user_id: user_id.to_owned(),
+                name: name.to_owned(),
+            };
+            if self.round < ROUNDS {
+                let _ = self.next_round(now_ms);
+            }
+            return event;
+        }
+        if self.caught.iter().any(|caught| caught == user_id) {
+            return VozenSaysEvent::Ignored;
+        }
+        self.caught.push(user_id.to_owned());
+        VozenSaysEvent::Caught {
+            user_id: user_id.to_owned(),
+            name: name.to_owned(),
+        }
     }
 
     #[must_use]

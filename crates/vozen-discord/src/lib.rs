@@ -125,6 +125,7 @@ mod voice_preference_command;
 mod voice_preference_service;
 mod voice_session;
 mod vote_command;
+mod vozen_says_driver;
 mod wordle_driver;
 
 pub use attachment_transcription::{
@@ -377,6 +378,7 @@ pub use voice_session::{
     VoiceSessionTransportError,
 };
 pub use vote_command::{VoteCommand, VoteCommandError, parse_vote_command};
+pub use vozen_says_driver::{VozenSaysDriver, VozenSaysDriverAction, VozenSaysGameDriver};
 pub use wordle_driver::{WordleDriver, WordleDriverAction, WordleGameDriver};
 
 /// Optional event boundary used while command/message paths are promoted from the Node runtime.
