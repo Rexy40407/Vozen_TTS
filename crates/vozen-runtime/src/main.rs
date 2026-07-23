@@ -161,7 +161,8 @@ struct PublicStatusConfig {
 }
 
 struct PremiumHttpConfig {
-    client_id: String,
+    browser_api_enabled: bool,
+    client_id: Option<String>,
     origin: String,
     kofi_webhook_token: Option<String>,
     kofi_shop_map: Option<String>,
@@ -1578,16 +1579,22 @@ fn public_status_enabled(raw: Option<&str>) -> bool {
 /// Mirrors Node's dangerous-feature flag: only the literal value `true` enables the browser
 /// premium API. A typo or a blank value must never expose an authenticated endpoint.
 fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeError> {
-    let enabled = premium_http_enabled(env::var("PREMIUM_API_ENABLED").ok().as_deref());
-    if !enabled {
+    let browser_api_enabled = premium_http_enabled(env::var("PREMIUM_API_ENABLED").ok().as_deref());
+    let kofi_webhook_token = nonempty_env("KOFI_WEBHOOK_TOKEN");
+    if !browser_api_enabled && kofi_webhook_token.is_none() {
         return Ok(None);
     }
-    let client_id = nonempty_env("CLIENT_ID").ok_or(RuntimeError::MissingClientId)?;
+    let client_id = if browser_api_enabled {
+        Some(nonempty_env("CLIENT_ID").ok_or(RuntimeError::MissingClientId)?)
+    } else {
+        nonempty_env("CLIENT_ID")
+    };
     let origin = nonempty_env("PREMIUM_API_ORIGIN").unwrap_or_else(|| "https://vozen.org".into());
     Ok(Some(PremiumHttpConfig {
+        browser_api_enabled,
         client_id,
         origin,
-        kofi_webhook_token: nonempty_env("KOFI_WEBHOOK_TOKEN"),
+        kofi_webhook_token,
         kofi_shop_map: nonempty_env("KOFI_SHOP_MAP"),
         claim_help_webhook_url: nonempty_env("CLAIM_HELP_WEBHOOK_URL")
             .or_else(|| nonempty_env("ERROR_WEBHOOK_URL")),
@@ -1724,6 +1731,8 @@ enum RuntimeError {
     DashboardRequiresPremiumHttp,
     #[error("RUST_ADMIN_API_ENABLED=true requires PREMIUM_API_ENABLED=true")]
     AdminRequiresPremiumHttp,
+    #[error("RUST_DASHBOARD_ENABLED/RUST_ADMIN_API_ENABLED require PREMIUM_API_ENABLED=true")]
+    DashboardOrAdminRequiresPremiumApi,
     #[error("SQLite startup failed: {0}")]
     Store(#[from] vozen_store::StoreError),
     #[error("SQLite store lock was poisoned")]
@@ -2046,10 +2055,18 @@ fn build_http_router(
         .map_err(RuntimeError::from);
     };
 
-    let verifier = Arc::new(
-        DiscordOAuthVerifier::production(config.client_id.clone())
-            .map_err(|_| RuntimeError::OAuthClient)?,
-    );
+    if (dashboard.is_some() || admin.is_some()) && !config.browser_api_enabled {
+        return Err(RuntimeError::DashboardOrAdminRequiresPremiumApi);
+    }
+    let verifier = config
+        .client_id
+        .clone()
+        .map(|client_id| {
+            DiscordOAuthVerifier::production(client_id)
+                .map(Arc::new)
+                .map_err(|_| RuntimeError::OAuthClient)
+        })
+        .transpose()?;
     let now = Arc::new(system_now_ms);
     let kofi_webhook =
         config
@@ -2066,11 +2083,14 @@ fn build_http_router(
         .map(|dashboard| {
             let models = discover_piper_models(&dashboard.models_dir)?;
             let authorization_state = gateway_state.clone();
-            let authorizer =
-                DiscordDashboardAuthorizer::production(config.client_id.clone(), move |guild_id| {
-                    authorization_state.bot_has_guild(guild_id)
-                })
-                .map_err(|_| RuntimeError::OAuthClient)?;
+            let authorizer = DiscordDashboardAuthorizer::production(
+                config
+                    .client_id
+                    .clone()
+                    .ok_or(RuntimeError::MissingClientId)?,
+                move |guild_id| authorization_state.bot_has_guild(guild_id),
+            )
+            .map_err(|_| RuntimeError::OAuthClient)?;
             Ok::<DashboardApiConfig, RuntimeError>(DashboardApiConfig {
                 origin: config.origin.clone(),
                 store: store.clone(),
@@ -2082,60 +2102,78 @@ fn build_http_router(
             })
         })
         .transpose()?;
-    let admin = admin.map(|admin| {
-        let gateway_state = gateway_state.clone();
-        let api = vozen_api::admin_api::AdminApi::new(AdminApiConfig {
-            store: store.clone(),
-            resolver: verifier.clone(),
-            now: now.clone(),
-            admin_session_secret: admin.session_secret,
-            owner_id: admin.owner_id,
-            admin_client_id: admin.client_id,
-            session_ttl_seconds: None,
-            log: Arc::new(|message| eprintln!("{message}")),
-            resolve_guilds: Some(Arc::new(move || {
-                gateway_state
-                    .guild_snapshots()
-                    .into_iter()
-                    .map(|guild| vozen_api::admin_api::AdminGuildBrief {
-                        id: guild.id,
-                        name: guild.name,
-                        icon: guild.icon,
-                        member_count: i64::try_from(guild.member_count).unwrap_or(i64::MAX),
-                        joined_timestamp: Some(guild.joined_timestamp.saturating_mul(1_000)),
-                    })
-                    .collect()
-            })),
-            local_day: Arc::new(system_local_day),
-        });
-        AdminRouterConfig {
-            origin: admin.panel_origin,
-            api: Arc::new(api),
-            now: now.clone(),
-        }
-    });
+    let admin = admin
+        .map(|admin| {
+            let verifier = verifier
+                .clone()
+                .ok_or(RuntimeError::DashboardOrAdminRequiresPremiumApi)?;
+            let gateway_state = gateway_state.clone();
+            let api = vozen_api::admin_api::AdminApi::new(AdminApiConfig {
+                store: store.clone(),
+                resolver: verifier,
+                now: now.clone(),
+                admin_session_secret: admin.session_secret,
+                owner_id: admin.owner_id,
+                admin_client_id: admin.client_id,
+                session_ttl_seconds: None,
+                log: Arc::new(|message| eprintln!("{message}")),
+                resolve_guilds: Some(Arc::new(move || {
+                    gateway_state
+                        .guild_snapshots()
+                        .into_iter()
+                        .map(|guild| vozen_api::admin_api::AdminGuildBrief {
+                            id: guild.id,
+                            name: guild.name,
+                            icon: guild.icon,
+                            member_count: i64::try_from(guild.member_count).unwrap_or(i64::MAX),
+                            joined_timestamp: Some(guild.joined_timestamp.saturating_mul(1_000)),
+                        })
+                        .collect()
+                })),
+                local_day: Arc::new(system_local_day),
+            });
+            Ok::<AdminRouterConfig, RuntimeError>(AdminRouterConfig {
+                origin: admin.panel_origin,
+                api: Arc::new(api),
+                now: now.clone(),
+            })
+        })
+        .transpose()?;
+    let (account, premium) = if config.browser_api_enabled {
+        let verifier = verifier.clone().ok_or(RuntimeError::MissingClientId)?;
+        (
+            Some(AccountApiConfig {
+                origin: config.origin.clone(),
+                store: store.clone(),
+                identity_verifier: verifier.clone(),
+                now: now.clone(),
+                // Guild names are sourced only from the current gateway process; a missing cache
+                // entry stays `null` rather than causing an outbound lookup or leaking old data.
+                resolve_guild_name: Some(Arc::new({
+                    let gateway_state = gateway_state.clone();
+                    move |guild_id| gateway_state.guild_name(guild_id)
+                })),
+            }),
+            Some(PremiumApiConfig {
+                origin: config.origin.clone(),
+                kofi_webhook_token: config.kofi_webhook_token.clone(),
+                store: store.clone(),
+                identity_verifier: verifier,
+                now: now.clone(),
+                claim_help_notifier: config
+                    .claim_help_webhook_url
+                    .clone()
+                    .map(DiscordClaimHelpNotifier::new)
+                    .map(|notifier| Arc::new(notifier) as Arc<dyn ClaimHelpNotifier>),
+            }),
+        )
+    } else {
+        (None, None)
+    };
     runtime_router(RuntimeRouterConfig {
         public_status,
-        account: Some(AccountApiConfig {
-            origin: config.origin.clone(),
-            store: store.clone(),
-            identity_verifier: verifier.clone(),
-            now: now.clone(),
-            // Guild names are sourced only from the current gateway process; a missing cache
-            // entry stays `null` rather than causing an outbound lookup or leaking old data.
-            resolve_guild_name: Some(Arc::new(move |guild_id| gateway_state.guild_name(guild_id))),
-        }),
-        premium: Some(PremiumApiConfig {
-            origin: config.origin,
-            kofi_webhook_token: config.kofi_webhook_token,
-            store: store.clone(),
-            identity_verifier: verifier,
-            now,
-            claim_help_notifier: config
-                .claim_help_webhook_url
-                .map(DiscordClaimHelpNotifier::new)
-                .map(|notifier| Arc::new(notifier) as Arc<dyn ClaimHelpNotifier>),
-        }),
+        account,
+        premium,
         // Only `RUST_DASHBOARD_ENABLED=true` produces this route. Its authorizer rechecks
         // OAuth audience/scope, Manage Guild and current bot presence before the options
         // provider asks Discord for the bot's current authorised channels and roles.
@@ -2287,6 +2325,8 @@ fn public_topgg_commands() -> Option<Vec<serde_json::Value>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{body::Body, http::Request};
+    use tower::ServiceExt;
 
     #[test]
     fn runtime_errors_without_a_token() {
@@ -2728,6 +2768,41 @@ mod tests {
             result,
             Err(RuntimeError::AdminRequiresPremiumHttp)
         ));
+    }
+
+    #[tokio::test]
+    async fn kofi_webhook_can_run_without_the_browser_premium_api() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let app = build_http_router(
+            Some(PremiumHttpConfig {
+                browser_api_enabled: false,
+                client_id: None,
+                origin: "https://vozen.org".into(),
+                kofi_webhook_token: Some("token".into()),
+                kofi_shop_map: None,
+                claim_help_webhook_url: None,
+            }),
+            None,
+            None,
+            None,
+            None,
+            store,
+            GatewayState::default(),
+        )
+        .expect("kofi-only router");
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .expect("response");
+        // The route is present even without the browser Premium API; an unsigned
+        // webhook request is rejected by the Ko-fi verifier before payload parsing.
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
     }
 
     #[test]

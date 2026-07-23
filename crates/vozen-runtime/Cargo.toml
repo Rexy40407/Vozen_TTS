@@ -22,6 +22,7 @@ songbird.workspace = true
 time.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tower.workspace = true
 uuid.workspace = true
 vozen-api = { path = "../vozen-api" }
 vozen-contracts = { path = "../vozen-contracts" }
