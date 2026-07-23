@@ -18,6 +18,7 @@ import {
   rustUptimeOwnsCommand,
   rustInviteOwnsCommand,
   rustHelpOwnsCommand,
+  rustVoteOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -162,6 +163,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustHelpOwnsCommand('help')).toBe(false);
     expect(rustHelpOwnsCommand('help', 'true')).toBe(true);
     expect(rustHelpOwnsCommand('invite', 'true')).toBe(false);
+  });
+
+  it('promotes only public vote behind its own canary', () => {
+    expect(rustVoteOwnsCommand('vote')).toBe(false);
+    expect(rustVoteOwnsCommand('vote', 'true')).toBe(true);
+    expect(rustVoteOwnsCommand('help', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

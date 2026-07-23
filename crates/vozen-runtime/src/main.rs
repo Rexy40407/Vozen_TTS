@@ -32,6 +32,7 @@ mod translation_provider;
 mod translation_text_sink;
 mod uptime_sink;
 mod voice_preference_sink;
+mod vote_sink;
 
 use std::{
     env,
@@ -109,6 +110,8 @@ struct RuntimeConfig {
     invite_client_id: Option<String>,
     help: bool,
     help_support_url: String,
+    vote: bool,
+    vote_client_id: Option<String>,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -324,6 +327,8 @@ impl RuntimeConfig {
         let help = help_enabled(env::var("RUST_HELP_ENABLED").ok().as_deref());
         let help_support_url = nonempty_env("SUPPORT_URL")
             .unwrap_or_else(|| "https://discord.gg/4kYw2WUbNN".to_owned());
+        let vote = vote_enabled(env::var("RUST_VOTE_ENABLED").ok().as_deref());
+        let vote_client_id = nonempty_env("CLIENT_ID");
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -358,6 +363,8 @@ impl RuntimeConfig {
             invite_client_id,
             help,
             help_support_url,
+            vote,
+            vote_client_id,
             automatic_translation,
             dashboard,
             admin,
@@ -578,6 +585,10 @@ fn invite_enabled(raw: Option<&str>) -> bool {
 }
 
 fn help_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn vote_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -940,6 +951,21 @@ fn help_event_sink(
     )))
 }
 
+fn vote_event_sink(
+    enabled: bool,
+    client_id: Option<String>,
+    redemption_secret: Option<String>,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        vote_sink::VoteGatewaySink::new(client_id, redemption_secret, store)
+            .map_err(|_| RuntimeError::VoteGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -1114,6 +1140,8 @@ enum RuntimeError {
     InviteGateway,
     #[error("help gateway initialisation failed")]
     HelpGateway,
+    #[error("vote gateway initialisation failed")]
+    VoteGateway,
     #[error("config default voice gateway initialisation failed")]
     ConfigDefaultVoiceGateway,
     #[error("config channel gateway initialisation failed")]
@@ -1240,6 +1268,14 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = help_event_sink(config.help, config.help_support_url.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = vote_event_sink(
+        config.vote,
+        config.vote_client_id.clone(),
+        config.vote_redemption_secret.clone(),
+        store.clone(),
+    )? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1796,6 +1832,15 @@ mod tests {
         assert!(!help_enabled(Some("1")));
         assert!(!help_enabled(Some("yes")));
         assert!(!help_enabled(None));
+    }
+
+    #[test]
+    fn vote_promotion_is_exactly_opt_in() {
+        assert!(vote_enabled(Some("true")));
+        assert!(vote_enabled(Some(" TRUE ")));
+        assert!(!vote_enabled(Some("1")));
+        assert!(!vote_enabled(Some("yes")));
+        assert!(!vote_enabled(None));
     }
 
     #[test]

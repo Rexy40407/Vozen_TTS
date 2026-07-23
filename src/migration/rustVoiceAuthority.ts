@@ -222,6 +222,14 @@ export function rustHelpOwnsCommand(
   return enabled?.trim().toLowerCase() === 'true' && commandName === 'help';
 }
 
+/** Vote links are public growth copy; rewards remain read-only and fail closed in Rust. */
+export function rustVoteOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_VOTE_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'vote';
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
