@@ -5,6 +5,7 @@
 mod abbreviations;
 mod accent_restoration;
 mod automatic_translation_policy;
+mod game_chess;
 mod game_guess_language;
 mod game_hangman;
 mod game_heads_or_tails;
@@ -40,6 +41,7 @@ pub use automatic_translation_policy::{
     AutomaticTranslationDecision, AutomaticTranslationDenial, AutomaticTranslationFacts,
     admit_automatic_translation,
 };
+pub use game_chess::{ChessColor, ChessEvent, ChessGame};
 pub use game_guess_language::{
     GuessLanguageEvent, GuessLanguageGame, GuessLanguageScore, LanguagePrompt,
 };
