@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use serenity::all::{Context, Interaction, Message};
 use vozen_discord::{GatewayEventDispatchError, GatewayEventSink};
-use vozen_store::SqliteStore;
+use vozen_store::{OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore};
 
 pub struct GuildLifecycleGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
@@ -18,6 +18,19 @@ impl GuildLifecycleGatewaySink {
 
 #[async_trait]
 impl GatewayEventSink for GuildLifecycleGatewaySink {
+    async fn on_ready(&self, _context: Context) -> Result<(), GatewayEventDispatchError> {
+        let Ok(store) = self.store.lock() else {
+            return Err(GatewayEventDispatchError);
+        };
+        store
+            .set_provider_health(
+                OperationalProvider::Internal,
+                ProviderHealth::Healthy,
+                now_ms(),
+            )
+            .map_err(|_| GatewayEventDispatchError)
+    }
+
     async fn on_message(
         &self,
         _context: Context,
@@ -40,6 +53,14 @@ impl GatewayEventSink for GuildLifecycleGatewaySink {
         };
         store
             .unmark_guild_departed(guild_id)
+            .map_err(|_| GatewayEventDispatchError)?;
+        store
+            .add_operational_metric(
+                OperationalMetric::GuildJoin,
+                OperationalProvider::Internal,
+                1.0,
+                None,
+            )
             .map_err(|_| GatewayEventDispatchError)
     }
 
