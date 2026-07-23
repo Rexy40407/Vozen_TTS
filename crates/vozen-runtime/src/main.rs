@@ -278,6 +278,8 @@ struct ConfigDefaultVoiceRuntimeOptions {
 /// is enabled alongside the matching Node ownership boundary.
 struct TranslationTextRuntimeOptions {
     provider: translation_provider::RuntimeTranslationProvider,
+    text_enabled: bool,
+    admin_enabled: bool,
 }
 
 /// Automatic channel translation is a separate, explicitly promoted message path. It has no
@@ -562,10 +564,14 @@ fn config_default_voice_from_environment()
 }
 
 fn translation_text_from_environment() -> Option<TranslationTextRuntimeOptions> {
-    translation_text_enabled(env::var("RUST_TRANSLATE_TEXT_ENABLED").ok().as_deref()).then(|| {
-        TranslationTextRuntimeOptions {
-            provider: translation_provider::RuntimeTranslationProvider::from_environment(),
-        }
+    let text_enabled =
+        translation_text_enabled(env::var("RUST_TRANSLATE_TEXT_ENABLED").ok().as_deref());
+    let admin_enabled =
+        translation_admin_enabled(env::var("RUST_TRANSLATION_ADMIN_ENABLED").ok().as_deref());
+    (text_enabled || admin_enabled).then(|| TranslationTextRuntimeOptions {
+        provider: translation_provider::RuntimeTranslationProvider::from_environment(),
+        text_enabled,
+        admin_enabled,
     })
 }
 
@@ -608,6 +614,10 @@ fn require_piper_runtime_default(raw: Option<&str>) -> Result<(), RuntimeError> 
 }
 
 fn translation_text_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn translation_admin_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -862,8 +872,13 @@ fn translation_text_event_sink(
         return Ok(None);
     };
     Ok(Some(Arc::new(
-        translation_text_sink::TranslationTextGatewaySink::new(store, options.provider)
-            .map_err(|_| RuntimeError::TranslationGateway)?,
+        translation_text_sink::TranslationTextGatewaySink::new(
+            store,
+            options.provider,
+            options.text_enabled,
+            options.admin_enabled,
+        )
+        .map_err(|_| RuntimeError::TranslationGateway)?,
     )))
 }
 
@@ -2042,6 +2057,15 @@ mod tests {
         assert!(!translation_text_enabled(Some("1")));
         assert!(!translation_text_enabled(Some("yes")));
         assert!(!translation_text_enabled(None));
+    }
+
+    #[test]
+    fn translation_admin_promotion_is_exactly_opt_in_and_separate_from_text() {
+        assert!(translation_admin_enabled(Some("true")));
+        assert!(translation_admin_enabled(Some(" TRUE ")));
+        assert!(!translation_admin_enabled(Some("1")));
+        assert!(!translation_admin_enabled(Some("yes")));
+        assert!(!translation_admin_enabled(None));
     }
 
     #[test]

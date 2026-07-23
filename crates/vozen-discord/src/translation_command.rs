@@ -25,6 +25,23 @@ pub struct TranslatePreviewCommand {
     pub target_locale: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranslationAdminCommand {
+    Status,
+    Enable,
+    Disable,
+    Clear,
+    MapAdd {
+        source_channel_id: u64,
+        destination_channel_id: u64,
+        target_locale: String,
+    },
+    MapRemove {
+        source_channel_id: u64,
+    },
+    MapList,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum TranslateTextCommandError {
     #[error("incoming command does not match the registered command contract: {0}")]
@@ -49,6 +66,18 @@ pub enum TranslatePreviewCommandError {
     InvalidOption,
     #[error("the preview command contains an undeclared option")]
     UnexpectedOption,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum TranslationAdminCommandError {
+    #[error("incoming command does not match the registered command contract: {0}")]
+    Contract(#[from] ContractError),
+    #[error("the translation admin command has an invalid option shape")]
+    InvalidShape,
+    #[error("the translation admin command has an invalid channel option")]
+    InvalidChannel,
+    #[error("the translation admin command has an invalid string option")]
+    InvalidString,
 }
 
 /// Parses only the contract-valid `/translate text` leaf.
@@ -117,12 +146,14 @@ pub fn parse_translate_preview_command(
     let CommandDataOptionValue::SubCommand(options) = &group.value else {
         return Err(TranslatePreviewCommandError::InvalidOption);
     };
-    if options.len() != 2
-        || options
-            .iter()
-            .any(|option| option.name != "text" && option.name != "locale")
+    if options
+        .iter()
+        .any(|option| option.name != "text" && option.name != "locale")
     {
         return Err(TranslatePreviewCommandError::UnexpectedOption);
+    }
+    if options.len() != 2 {
+        return Err(TranslatePreviewCommandError::MissingOption);
     }
     let text = options
         .iter()
@@ -144,6 +175,107 @@ pub fn parse_translate_preview_command(
         text,
         target_locale,
     }))
+}
+
+/// Parses server-level translation administration. Manage Server authorization and live channel
+/// permissions are deliberately checked by the Discord sink after this structural boundary.
+pub fn parse_translation_admin_command(
+    command: &CommandData,
+) -> Result<Option<TranslationAdminCommand>, TranslationAdminCommandError> {
+    let path = command_path_from_options(&command.options);
+    if route_command(&command.name, command.kind.into(), &path)? != CommandArea::Translation
+        || command.name != "translate"
+    {
+        return Ok(None);
+    }
+    let Some(subcommand) = path.first().copied() else {
+        return Ok(None);
+    };
+    let Some(group) = command.options.first() else {
+        return Err(TranslationAdminCommandError::InvalidShape);
+    };
+    let CommandDataOptionValue::SubCommand(options) = &group.value else {
+        return Err(TranslationAdminCommandError::InvalidShape);
+    };
+    let no_options = || {
+        if options.is_empty() {
+            Ok(())
+        } else {
+            Err(TranslationAdminCommandError::InvalidShape)
+        }
+    };
+    match subcommand {
+        "status" => {
+            no_options()?;
+            Ok(Some(TranslationAdminCommand::Status))
+        }
+        "enable" => {
+            no_options()?;
+            Ok(Some(TranslationAdminCommand::Enable))
+        }
+        "disable" => {
+            no_options()?;
+            Ok(Some(TranslationAdminCommand::Disable))
+        }
+        "clear" => {
+            no_options()?;
+            Ok(Some(TranslationAdminCommand::Clear))
+        }
+        "map-list" => {
+            no_options()?;
+            Ok(Some(TranslationAdminCommand::MapList))
+        }
+        "map-remove" => {
+            if options.len() != 1 || options[0].name != "source" {
+                return Err(TranslationAdminCommandError::InvalidShape);
+            }
+            let CommandDataOptionValue::Channel(channel_id) = &options[0].value else {
+                return Err(TranslationAdminCommandError::InvalidChannel);
+            };
+            let source_channel_id = channel_id.get();
+            (source_channel_id != 0)
+                .then_some(Some(TranslationAdminCommand::MapRemove {
+                    source_channel_id,
+                }))
+                .ok_or(TranslationAdminCommandError::InvalidChannel)
+        }
+        "map-add" => {
+            if options.len() != 3
+                || !["source", "destination", "locale"]
+                    .iter()
+                    .all(|name| options.iter().filter(|option| option.name == *name).count() == 1)
+            {
+                return Err(TranslationAdminCommandError::InvalidShape);
+            }
+            let channel = |name: &str| {
+                let option = options
+                    .iter()
+                    .find(|option| option.name == name)
+                    .ok_or(TranslationAdminCommandError::InvalidShape)?;
+                let CommandDataOptionValue::Channel(channel_id) = &option.value else {
+                    return Err(TranslationAdminCommandError::InvalidChannel);
+                };
+                let id = channel_id.get();
+                (id != 0)
+                    .then_some(id)
+                    .ok_or(TranslationAdminCommandError::InvalidChannel)
+            };
+            let locale = options
+                .iter()
+                .find(|option| option.name == "locale")
+                .and_then(|option| match &option.value {
+                    CommandDataOptionValue::String(value) => Some(value.clone()),
+                    _ => None,
+                })
+                .ok_or(TranslationAdminCommandError::InvalidString)?;
+            Ok(Some(TranslationAdminCommand::MapAdd {
+                source_channel_id: channel("source")?,
+                destination_channel_id: channel("destination")?,
+                target_locale: locale,
+            }))
+        }
+        _ => Ok(None),
+    }
 }
 
 #[cfg(test)]
@@ -194,6 +326,73 @@ mod tests {
                 r#"{"id":"1","name":"translate","type":1,"options":[{"name":"text","type":1,"options":[{"name":"text","type":3,"value":"hello"},{"name":"other","type":3,"value":"x"}]}]}"#,
             )),
             Err(TranslateTextCommandError::UnexpectedOption)
+        );
+    }
+
+    #[test]
+    fn parses_translation_admin_leaves_and_rejects_forged_shapes() {
+        let command = |subcommand: &str, options: &str| {
+            command(&format!(
+                r#"{{"id":"1","name":"translate","type":1,"options":[{{"name":"{subcommand}","type":1,"options":[{options}]}}]}}"#
+            ))
+        };
+        assert_eq!(
+            parse_translation_admin_command(&command("status", "")),
+            Ok(Some(TranslationAdminCommand::Status))
+        );
+        assert_eq!(
+            parse_translation_admin_command(&command("enable", "")),
+            Ok(Some(TranslationAdminCommand::Enable))
+        );
+        assert_eq!(
+            parse_translation_admin_command(&command("disable", "")),
+            Ok(Some(TranslationAdminCommand::Disable))
+        );
+        assert_eq!(
+            parse_translation_admin_command(&command("clear", "")),
+            Ok(Some(TranslationAdminCommand::Clear))
+        );
+        assert_eq!(
+            parse_translation_admin_command(&command("map-list", "")),
+            Ok(Some(TranslationAdminCommand::MapList))
+        );
+        assert_eq!(
+            parse_translation_admin_command(&command(
+                "map-remove",
+                r#"{"name":"source","type":7,"value":"123"}"#
+            )),
+            Ok(Some(TranslationAdminCommand::MapRemove {
+                source_channel_id: 123
+            }))
+        );
+        assert_eq!(
+            parse_translation_admin_command(&command(
+                "map-add",
+                r#"{"name":"source","type":7,"value":"123"},{"name":"destination","type":7,"value":"456"},{"name":"locale","type":3,"value":"pt"}"#
+            )),
+            Ok(Some(TranslationAdminCommand::MapAdd {
+                source_channel_id: 123,
+                destination_channel_id: 456,
+                target_locale: "pt".into()
+            }))
+        );
+        assert_eq!(
+            parse_translation_admin_command(&command(
+                "status",
+                r#"{"name":"extra","type":3,"value":"forged"}"#
+            )),
+            Err(TranslationAdminCommandError::InvalidShape)
+        );
+        assert_eq!(
+            parse_translation_admin_command(&command(
+                "map-add",
+                r#"{"name":"source","type":7,"value":"123"},{"name":"destination","type":7,"value":"123"},{"name":"locale","type":3,"value":"pt"}"#
+            )),
+            Ok(Some(TranslationAdminCommand::MapAdd {
+                source_channel_id: 123,
+                destination_channel_id: 123,
+                target_locale: "pt".into()
+            }))
         );
     }
 

@@ -1,8 +1,8 @@
-//! Opt-in ephemeral adapter for `/translate text`.
+//! Opt-in adapter for explicit translation and server translation administration.
 //!
-//! It claims only the private leaf already parsed by `vozen-discord`. Automatic translation,
-//! member preferences beyond the default locale, channel mappings and translate-before-speaking
-//! remain Node-owned until each has its own parity boundary.
+//! Automatic message delivery and member preferences remain separate canaries. This sink owns
+//! only the command leaves represented by the typed parsers and never claims them unless the
+//! matching runtime flag is enabled.
 
 use std::{
     collections::BTreeMap,
@@ -10,16 +10,25 @@ use std::{
 };
 
 use serenity::{
-    builder::{CreateAllowedMentions, EditInteractionResponse},
+    builder::{
+        CreateAllowedMentions, CreateInteractionResponse, CreateInteractionResponseMessage,
+        EditInteractionResponse,
+    },
     client::Context,
-    model::application::Interaction,
+    model::{
+        Permissions,
+        application::{CommandInteraction, Interaction},
+        channel::ChannelType,
+        id::ChannelId,
+    },
 };
 use vozen_discord::{
-    ExplicitTranslationInvocation, ExplicitTranslationOutcome, ExplicitTranslationService,
-    GatewayEventDispatchError, GatewayEventSink, VoiceResponseLocalizer,
-    parse_translate_preview_command, parse_translate_text_command,
+    ExplicitTranslationInvocation, ExplicitTranslationOutcome, ExplicitTranslationProvider,
+    ExplicitTranslationService, GatewayEventDispatchError, GatewayEventSink,
+    TranslationAdminCommand, VoiceResponseLocalizer, parse_translate_preview_command,
+    parse_translate_text_command, parse_translation_admin_command,
 };
-use vozen_store::SqliteStore;
+use vozen_store::{GuildConfigPatch, SqliteStore, StoreError, TranslationMapping};
 
 use crate::{system_now_ms, translation_provider::RuntimeTranslationProvider};
 
@@ -30,15 +39,21 @@ pub struct TranslationTextGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
     service: ExplicitTranslationService<RuntimeTranslationProvider>,
     localizer: VoiceResponseLocalizer,
+    text_enabled: bool,
+    admin_enabled: bool,
+    provider_enabled: bool,
 }
 
 impl TranslationTextGatewaySink {
     pub fn new(
         store: Arc<Mutex<SqliteStore>>,
         provider: RuntimeTranslationProvider,
+        text_enabled: bool,
+        admin_enabled: bool,
     ) -> Result<Self, GatewayEventDispatchError> {
         let localizer = VoiceResponseLocalizer::from_generated_contract()
             .map_err(|_| GatewayEventDispatchError)?;
+        let provider_enabled = provider.is_enabled();
         Ok(Self {
             service: ExplicitTranslationService::new(
                 Arc::clone(&store),
@@ -47,6 +62,9 @@ impl TranslationTextGatewaySink {
             ),
             store,
             localizer,
+            text_enabled,
+            admin_enabled,
+            provider_enabled,
         })
     }
 
@@ -84,6 +102,287 @@ impl TranslationTextGatewaySink {
                 .default_for_discord_locale(Some(interaction_locale))
         }))
     }
+
+    async fn respond_ephemeral(
+        &self,
+        context: &Context,
+        command: &CommandInteraction,
+        content: impl Into<String>,
+    ) -> Result<(), GatewayEventDispatchError> {
+        command
+            .create_response(
+                context,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(content)
+                        .ephemeral(true)
+                        .allowed_mentions(no_mentions()),
+                ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)
+    }
+
+    fn can_manage_guild(command: &CommandInteraction) -> bool {
+        command
+            .member
+            .as_ref()
+            .and_then(|member| member.permissions)
+            .is_some_and(|permissions| permissions.contains(Permissions::MANAGE_GUILD))
+    }
+
+    fn store_translation_admin(
+        &self,
+        command: &CommandInteraction,
+        admin: &TranslationAdminCommand,
+    ) -> Result<String, GatewayEventDispatchError> {
+        let Some(guild_id) = command.guild_id.map(|id| id.get().to_string()) else {
+            return Ok("This translation setting is available only in a server.".to_owned());
+        };
+        let store = self.store.lock().map_err(|_| GatewayEventDispatchError)?;
+        let content = match admin {
+            TranslationAdminCommand::Status => {
+                let config = store
+                    .guild_config(&guild_id)
+                    .map_err(|_| GatewayEventDispatchError)?;
+                let mappings = store
+                    .translation_mappings(&guild_id)
+                    .map_err(|_| GatewayEventDispatchError)?;
+                let limits =
+                    translation_limits(&store, &guild_id, &command.user.id.get().to_string())?;
+                format!(
+                    "Translation: **{}**\nProvider: {}\nMappings: {}\nRolling 30-day cap: {} characters (you: {})",
+                    if config.translation_enabled {
+                        "on"
+                    } else {
+                        "off"
+                    },
+                    if self.provider_enabled {
+                        "Azure"
+                    } else {
+                        "not configured (disabled)"
+                    },
+                    mappings.len(),
+                    format_number(limits.0),
+                    format_number(limits.1),
+                )
+            }
+            TranslationAdminCommand::Enable => {
+                if !self.provider_enabled {
+                    "Translation is disabled because the operator has not configured a provider. No messages will be sent externally.".to_owned()
+                } else if store
+                    .translation_mappings(&guild_id)
+                    .map_err(|_| GatewayEventDispatchError)?
+                    .is_empty()
+                {
+                    "Add a valid source-to-destination mapping before enabling translation."
+                        .to_owned()
+                } else {
+                    store
+                        .update_guild_config(
+                            &guild_id,
+                            GuildConfigPatch {
+                                translation_enabled: Some(true),
+                                ..Default::default()
+                            },
+                        )
+                        .map_err(|_| GatewayEventDispatchError)?;
+                    "Translation enabled for the configured channels. It never speaks translated text.".to_owned()
+                }
+            }
+            TranslationAdminCommand::Disable => {
+                store
+                    .update_guild_config(
+                        &guild_id,
+                        GuildConfigPatch {
+                            translation_enabled: Some(false),
+                            ..Default::default()
+                        },
+                    )
+                    .map_err(|_| GatewayEventDispatchError)?;
+                "Translation disabled. Existing mappings remain saved until removed.".to_owned()
+            }
+            TranslationAdminCommand::Clear => {
+                store
+                    .clear_translation_config(&guild_id)
+                    .map_err(|_| GatewayEventDispatchError)?;
+                store
+                    .update_guild_config(
+                        &guild_id,
+                        GuildConfigPatch {
+                            translation_enabled: Some(false),
+                            ..Default::default()
+                        },
+                    )
+                    .map_err(|_| GatewayEventDispatchError)?;
+                "Translation mappings and member opt-outs were deleted; translation remains disabled.".to_owned()
+            }
+            TranslationAdminCommand::MapList => {
+                let mappings = store
+                    .translation_mappings(&guild_id)
+                    .map_err(|_| GatewayEventDispatchError)?;
+                if mappings.is_empty() {
+                    "No translation mappings are configured.".to_owned()
+                } else {
+                    mappings
+                        .into_iter()
+                        .map(|mapping| {
+                            format!(
+                                "<#{}> -> <#{}> ({})",
+                                mapping.source_channel_id,
+                                mapping.destination_channel_id,
+                                mapping.target_locale
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            }
+            TranslationAdminCommand::MapRemove { source_channel_id } => {
+                if store
+                    .remove_translation_mapping(&guild_id, &source_channel_id.to_string())
+                    .map_err(|_| GatewayEventDispatchError)?
+                {
+                    "Translation mapping removed.".to_owned()
+                } else {
+                    "No translation mapping exists for that source channel.".to_owned()
+                }
+            }
+            TranslationAdminCommand::MapAdd { .. } => {
+                return Err(GatewayEventDispatchError);
+            }
+        };
+        Ok(content)
+    }
+
+    async fn channels_can_be_mapped(
+        &self,
+        context: &Context,
+        command: &CommandInteraction,
+        source_channel_id: u64,
+        destination_channel_id: u64,
+    ) -> Result<bool, GatewayEventDispatchError> {
+        let Some(guild_id) = command.guild_id else {
+            return Ok(false);
+        };
+        if source_channel_id == destination_channel_id {
+            return Ok(false);
+        }
+        let guild = guild_id
+            .to_partial_guild(&context.http)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let channels = guild_id
+            .channels(&context.http)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let Some(source) = channels.get(&ChannelId::new(source_channel_id)) else {
+            return Ok(false);
+        };
+        let Some(destination) = channels.get(&ChannelId::new(destination_channel_id)) else {
+            return Ok(false);
+        };
+        if source.kind != ChannelType::Text || destination.kind != ChannelType::Text {
+            return Ok(false);
+        }
+        let bot = context
+            .http
+            .get_current_user()
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let bot_member = guild_id
+            .member(&context.http, bot.id)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let source_permissions = guild.user_permissions_in(source, &bot_member);
+        let destination_permissions = guild.user_permissions_in(destination, &bot_member);
+        Ok(source_permissions.contains(Permissions::VIEW_CHANNEL)
+            && destination_permissions
+                .contains(Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES))
+    }
+
+    async fn handle_admin(
+        &self,
+        context: &Context,
+        command: &CommandInteraction,
+        admin: TranslationAdminCommand,
+    ) -> Result<(), GatewayEventDispatchError> {
+        if command.guild_id.is_none() {
+            return self
+                .respond_ephemeral(
+                    context,
+                    command,
+                    "This translation setting is available only in a server.",
+                )
+                .await;
+        }
+        if !Self::can_manage_guild(command) {
+            return self
+                .respond_ephemeral(
+                    context,
+                    command,
+                    "You need Manage Server to configure translation.",
+                )
+                .await;
+        }
+        if let TranslationAdminCommand::MapAdd {
+            source_channel_id,
+            destination_channel_id,
+            target_locale,
+        } = &admin
+        {
+            if !self.localizer.supports_explicit_locale(target_locale) {
+                return self
+                    .respond_ephemeral(context, command, "That locale is not supported.")
+                    .await;
+            }
+            if !self
+                .channels_can_be_mapped(
+                    context,
+                    command,
+                    *source_channel_id,
+                    *destination_channel_id,
+                )
+                .await?
+            {
+                return self
+                    .respond_ephemeral(
+                        context,
+                        command,
+                        "Both channels must be distinct text channels that Vozen can view; it must also be able to send in the destination.",
+                    )
+                    .await;
+            }
+            let guild_id = command
+                .guild_id
+                .ok_or(GatewayEventDispatchError)?
+                .get()
+                .to_string();
+            let result = self
+                .store
+                .lock()
+                .map_err(|_| GatewayEventDispatchError)?
+                .upsert_translation_mapping(&TranslationMapping {
+                    guild_id,
+                    source_channel_id: source_channel_id.to_string(),
+                    destination_channel_id: destination_channel_id.to_string(),
+                    target_locale: target_locale.clone(),
+                });
+            let content = match result {
+                Ok(()) => format!(
+                    "Mapping saved: <#{}> -> <#{}> ({}).",
+                    source_channel_id, destination_channel_id, target_locale
+                ),
+                Err(StoreError::TranslationCycle) => {
+                    "That mapping would create a translation loop and was rejected.".to_owned()
+                }
+                Err(_) => return Err(GatewayEventDispatchError),
+            };
+            return self.respond_ephemeral(context, command, content).await;
+        }
+        let content = self.store_translation_admin(command, &admin)?;
+        self.respond_ephemeral(context, command, content).await
+    }
 }
 
 #[async_trait::async_trait]
@@ -104,6 +403,16 @@ impl GatewayEventSink for TranslationTextGatewaySink {
         let Interaction::Command(command) = interaction else {
             return Ok(());
         };
+        if self.admin_enabled {
+            let parsed_admin = parse_translation_admin_command(&command.data)
+                .map_err(|_| GatewayEventDispatchError)?;
+            if let Some(admin) = parsed_admin {
+                return self.handle_admin(&context, &command, admin).await;
+            }
+        }
+        if !self.text_enabled {
+            return Ok(());
+        }
         let parsed_text =
             parse_translate_text_command(&command.data).map_err(|_| GatewayEventDispatchError)?;
         let parsed_preview = parse_translate_preview_command(&command.data)
@@ -290,13 +599,139 @@ fn truncate_utf16(input: &str, max_units: usize) -> String {
     input[..end].to_owned()
 }
 
+fn no_mentions() -> CreateAllowedMentions {
+    CreateAllowedMentions::new()
+        .all_users(false)
+        .all_roles(false)
+        .everyone(false)
+}
+
+fn translation_limits(
+    store: &SqliteStore,
+    guild_id: &str,
+    user_id: &str,
+) -> Result<(i64, i64), GatewayEventDispatchError> {
+    let now_ms = system_now_ms();
+    let guild_premium = store
+        .is_guild_premium(guild_id, now_ms)
+        .map_err(|_| GatewayEventDispatchError)?;
+    let user_premium = store
+        .is_user_premium(user_id, now_ms)
+        .map_err(|_| GatewayEventDispatchError)?;
+    Ok((
+        if guild_premium {
+            vozen_discord::PREMIUM_GUILD_TRANSLATION_LIMIT
+        } else {
+            vozen_discord::FREE_GUILD_TRANSLATION_LIMIT
+        },
+        if guild_premium || user_premium {
+            vozen_discord::PREMIUM_USER_TRANSLATION_LIMIT
+        } else {
+            vozen_discord::FREE_USER_TRANSLATION_LIMIT
+        },
+    ))
+}
+
+fn format_number(value: i64) -> String {
+    let negative = value < 0;
+    let digits = value.unsigned_abs().to_string();
+    let mut grouped = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, character) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            grouped.push(',');
+        }
+        grouped.push(character);
+    }
+    if negative {
+        format!("-{grouped}")
+    } else {
+        grouped
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn command() -> CommandInteraction {
+        serde_json::from_str(
+            r#"{"id":"1","application_id":"1","data":{"id":"1","name":"translate","type":1,"options":[]},"guild_id":"2","channel_id":"3","member":null,"user":{"id":"4","username":"user","discriminator":"0"},"token":"token","version":1,"app_permissions":null,"locale":"en-US","guild_locale":null,"entitlements":[],"authorizing_integration_owners":{},"context":null,"attachment_size_limit":0}"#,
+        )
+        .expect("command")
+    }
+
+    fn sink() -> TranslationTextGatewaySink {
+        TranslationTextGatewaySink::new(
+            Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store"))),
+            RuntimeTranslationProvider::Disabled,
+            false,
+            true,
+        )
+        .expect("sink")
+    }
 
     #[test]
     fn truncates_provider_output_without_splitting_unicode() {
         assert_eq!(truncate_utf16("ab😀", 3), "ab");
         assert_eq!(truncate_utf16("ab😀", 4), "ab😀");
+    }
+
+    #[test]
+    fn formats_status_limits_like_the_node_handler() {
+        assert_eq!(format_number(0), "0");
+        assert_eq!(format_number(100_000), "100,000");
+        assert_eq!(format_number(10_000), "10,000");
+        assert_eq!(format_number(-1_000), "-1,000");
+        let sink = sink();
+        let content = sink
+            .store_translation_admin(&command(), &TranslationAdminCommand::Status)
+            .expect("status");
+        assert!(content.contains("Translation: **off**"));
+        assert!(content.contains("Provider: not configured (disabled)"));
+        assert!(content.contains("Rolling 30-day cap: 100,000 characters (you: 10,000)"));
+    }
+
+    #[test]
+    fn admin_mutations_preserve_mapping_and_disable_semantics() {
+        let sink = sink();
+        sink.store
+            .lock()
+            .expect("store")
+            .upsert_translation_mapping(&TranslationMapping {
+                guild_id: "2".into(),
+                source_channel_id: "123".into(),
+                destination_channel_id: "456".into(),
+                target_locale: "pt".into(),
+            })
+            .expect("mapping");
+        let command = command();
+        let list = sink
+            .store_translation_admin(&command, &TranslationAdminCommand::MapList)
+            .expect("list");
+        assert_eq!(list, "<#123> -> <#456> (pt)");
+        let enable = sink
+            .store_translation_admin(&command, &TranslationAdminCommand::Enable)
+            .expect("enable");
+        assert_eq!(
+            enable,
+            "Translation is disabled because the operator has not configured a provider. No messages will be sent externally."
+        );
+        let remove = sink
+            .store_translation_admin(
+                &command,
+                &TranslationAdminCommand::MapRemove {
+                    source_channel_id: 123,
+                },
+            )
+            .expect("remove");
+        assert_eq!(remove, "Translation mapping removed.");
+        assert!(
+            sink.store
+                .lock()
+                .expect("store")
+                .translation_mappings("2")
+                .expect("mappings")
+                .is_empty()
+        );
     }
 }

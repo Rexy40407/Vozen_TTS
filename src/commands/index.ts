@@ -52,6 +52,7 @@ import { handlePrivacy } from './handlers/privacy';
 import {
   rustTranslationOwnsCommand,
   rustTranslationPreviewOwnsCommand,
+  rustTranslationAdminOwnsCommand,
   rustTranslationPreferencesOwnCommand,
   rustQueueOwnsCommand,
   rustPronunciationOwnsCommand,
@@ -390,6 +391,10 @@ export async function handleInteraction(
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
     ) ||
     rustTranslationPreviewOwnsCommand(
+      i.commandName,
+      i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
+    ) ||
+    rustTranslationAdminOwnsCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
     ) ||

@@ -298,7 +298,8 @@ pub use transcribe_message_command::{
 };
 pub use translation_command::{
     TranslatePreviewCommand, TranslatePreviewCommandError, TranslateTextCommand,
-    TranslateTextCommandError, parse_translate_preview_command, parse_translate_text_command,
+    TranslateTextCommandError, TranslationAdminCommand, TranslationAdminCommandError,
+    parse_translate_preview_command, parse_translate_text_command, parse_translation_admin_command,
 };
 pub use translation_preference_command::{
     TranslationPreferenceCommand, TranslationPreferenceCommandError,

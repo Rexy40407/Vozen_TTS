@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   rustTranslationOwnsCommand,
   rustTranslationOwnsAutomaticMessages,
+  rustTranslationAdminOwnsCommand,
   rustTranslationPreviewOwnsCommand,
   rustTranslationPreferencesOwnCommand,
   rustQueueOwnsCommand,
@@ -329,6 +330,16 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranslationPreviewOwnsCommand('translate', 'preview')).toBe(false);
     expect(rustTranslationPreviewOwnsCommand('translate', 'preview', 'true')).toBe(true);
     expect(rustTranslationPreviewOwnsCommand('translate', 'text', 'true')).toBe(false);
+  });
+
+  it('promotes only the server translation administration leaves under their own canary', () => {
+    expect(rustTranslationAdminOwnsCommand('translate', 'status')).toBe(false);
+    expect(rustTranslationAdminOwnsCommand('translate', 'map-add', 'yes')).toBe(false);
+    expect(rustTranslationAdminOwnsCommand('translate', 'map-add', 'true')).toBe(true);
+    expect(rustTranslationAdminOwnsCommand('translate', 'map-remove', 'true')).toBe(true);
+    expect(rustTranslationAdminOwnsCommand('translate', 'map-list', 'true')).toBe(true);
+    expect(rustTranslationAdminOwnsCommand('translate', 'language', 'true')).toBe(false);
+    expect(rustTranslationAdminOwnsCommand('translate', 'text', 'true')).toBe(false);
   });
 
   it('yields only Rust-complete textual voice preferences under their own flag', () => {
