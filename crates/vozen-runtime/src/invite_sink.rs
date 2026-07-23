@@ -99,9 +99,7 @@ impl GatewayEventSink for InviteGatewaySink {
             return Ok(());
         }
         let (content, invite) = self.response(&command)?;
-        let mut response = CreateInteractionResponseMessage::new()
-            .content(content)
-            .ephemeral(true);
+        let mut response = CreateInteractionResponseMessage::new().content(content);
         if let Some((url, button_label)) = invite {
             response = response.components(vec![CreateActionRow::Buttons(vec![
                 CreateButton::new_link(url).label(button_label),
