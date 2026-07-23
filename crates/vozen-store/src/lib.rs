@@ -19,6 +19,7 @@ mod admin_stats;
 mod blocklist;
 mod channel_profile;
 mod data_lifecycle;
+mod game_score;
 mod guild_config;
 mod kofi_claim;
 mod kofi_delivery;
