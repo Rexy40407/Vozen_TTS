@@ -90,6 +90,7 @@ import {
   rustPublicCommandsOwnCommand,
   rustOwnerCommandsOwnCommand,
   rustTranscriptionControlOwnsCommand,
+  rustTranscriptionLiveOwnsCommand,
 } from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
 import { handleTranslate } from './handlers/translation';
@@ -312,6 +313,10 @@ export async function handleInteraction(
   if (
     rustOwnerCommandsOwnCommand(i.commandName) ||
     rustTranscriptionControlOwnsCommand(
+      i.commandName,
+      i.commandName === 'transcribe' ? i.options.getSubcommand(false) : null,
+    ) ||
+    rustTranscriptionLiveOwnsCommand(
       i.commandName,
       i.commandName === 'transcribe' ? i.options.getSubcommand(false) : null,
     ) ||

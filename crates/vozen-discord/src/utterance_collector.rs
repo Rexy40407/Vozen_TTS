@@ -51,7 +51,7 @@ impl UtteranceCollector {
     /// Feeds one decoded 48 kHz stereo PCM frame.
     pub fn push(&mut self, frame: Vec<i16>) -> Option<Utterance> {
         let frame_ms = frame.len() as f64 / SAMPLES_PER_MS;
-        let voiced = f64::from(rms(&frame)) >= self.rms_threshold;
+        let voiced = rms(&frame) >= self.rms_threshold;
         if voiced {
             self.in_utterance = true;
             self.chunks.push(frame);

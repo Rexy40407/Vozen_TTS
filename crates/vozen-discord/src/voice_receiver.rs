@@ -46,9 +46,7 @@ impl VoiceReceiver {
     /// Handles one decoded frame. The frame is dropped immediately when the speaker is unknown
     /// or no longer consented.
     pub fn push_pcm(&mut self, ssrc: u32, pcm: Vec<i16>) -> Option<ReceivedUtterance> {
-        let Some(user_id) = self.ssrc_users.get(&ssrc).copied() else {
-            return None;
-        };
+        let user_id = self.ssrc_users.get(&ssrc).copied()?;
         if !(self.consented)(user_id) {
             self.collectors.remove(&user_id);
             return None;

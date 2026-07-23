@@ -78,17 +78,37 @@ export function rustTranscriptionOwnsCommand(
   );
 }
 
-/** Consent withdrawal does not need the live voice receiver, so it can be canaried independently
- * from `/transcribe start|stop`, which remain Node-owned until Rust has receiver parity. */
+/** Consent withdrawal remains independently promotable while the live receiver is being canaried. */
 export function rustTranscriptionControlOwnsCommand(
   commandName: string,
   subcommand: string | null,
-  enabled = process.env.RUST_TRANSCRIBE_CONTROL_ENABLED,
+  enabled?: string,
+): boolean {
+  const effectiveEnabled =
+    enabled ??
+    (process.env.RUST_TRANSCRIBE_CONTROL_ENABLED?.trim().toLowerCase() === 'true' ||
+    process.env.RUST_TRANSCRIBE_LIVE_ENABLED?.trim().toLowerCase() === 'true'
+      ? 'true'
+      : 'false');
+  return (
+    effectiveEnabled.trim().toLowerCase() === 'true' &&
+    commandName === 'transcribe' &&
+    subcommand === 'revoke'
+  );
+}
+
+/** `/transcribe start|stop` is promoted only when the Rust voice driver and the consent-gated
+ * receiver are enabled together. `revoke` stays on the control canary above so an operator can
+ * withdraw consent before promoting live capture. */
+export function rustTranscriptionLiveOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_TRANSCRIBE_LIVE_ENABLED,
 ): boolean {
   return (
     enabled?.trim().toLowerCase() === 'true' &&
     commandName === 'transcribe' &&
-    subcommand === 'revoke'
+    (subcommand === 'start' || subcommand === 'stop')
   );
 }
 

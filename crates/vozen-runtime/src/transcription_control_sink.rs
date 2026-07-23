@@ -5,8 +5,8 @@
 //! exists in Rust.
 
 use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use serenity::{
@@ -20,17 +20,64 @@ use vozen_discord::{
 };
 use vozen_store::SqliteStore;
 
+/// Process-local consent cache read by the 20 ms Songbird receiver. The audio callback never
+/// touches SQLite; lifecycle/interaction handlers refresh this cache outside the audio thread.
+#[derive(Clone, Default)]
+pub struct SttConsentRegistry {
+    by_guild: Arc<RwLock<BTreeMap<String, BTreeSet<u64>>>>,
+}
+
+impl SttConsentRegistry {
+    #[cfg(feature = "voice-driver")]
+    pub fn is_consented(&self, guild_id: &str, user_id: u64) -> bool {
+        self.by_guild.read().ok().is_some_and(|all| {
+            all.get(guild_id)
+                .is_some_and(|users| users.contains(&user_id))
+        })
+    }
+
+    #[cfg(feature = "voice-driver")]
+    pub fn grant(&self, guild_id: &str, user_id: u64) {
+        if let Ok(mut all) = self.by_guild.write() {
+            all.entry(guild_id.to_owned()).or_default().insert(user_id);
+        }
+    }
+
+    pub fn revoke(&self, guild_id: &str, user_id: u64) {
+        if let Ok(mut all) = self.by_guild.write()
+            && let Some(users) = all.get_mut(guild_id)
+        {
+            users.remove(&user_id);
+            if users.is_empty() {
+                all.remove(guild_id);
+            }
+        }
+    }
+
+    #[cfg(feature = "voice-driver")]
+    pub fn clear_guild(&self, guild_id: &str) {
+        if let Ok(mut all) = self.by_guild.write() {
+            all.remove(guild_id);
+        }
+    }
+}
+
 pub struct TranscriptionControlGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
     localizer: VoiceResponseLocalizer,
+    consent_registry: SttConsentRegistry,
 }
 
 impl TranscriptionControlGatewaySink {
-    pub fn new(store: Arc<Mutex<SqliteStore>>) -> Result<Self, GatewayEventDispatchError> {
+    pub fn new_with_registry(
+        store: Arc<Mutex<SqliteStore>>,
+        consent_registry: SttConsentRegistry,
+    ) -> Result<Self, GatewayEventDispatchError> {
         Ok(Self {
             store,
             localizer: VoiceResponseLocalizer::from_generated_contract()
                 .map_err(|_| GatewayEventDispatchError)?,
+            consent_registry,
         })
     }
 
@@ -57,6 +104,10 @@ impl TranscriptionControlGatewaySink {
             .map_err(|_| GatewayEventDispatchError)?
             .revoke_stt_consent(&user_id, &guild_id)
             .map_err(|_| GatewayEventDispatchError)?;
+        if revoked {
+            self.consent_registry
+                .revoke(&guild_id, command.user.id.get());
+        }
         let key = if revoked {
             "stt.revoked"
         } else {

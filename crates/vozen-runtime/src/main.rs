@@ -29,6 +29,8 @@ mod game_score_sink;
 mod guild_lifecycle_sink;
 mod help_sink;
 mod invite_sink;
+#[cfg(feature = "voice-driver")]
+mod live_transcription_sink;
 mod owner_command_sink;
 mod piper_adapter;
 mod premium_sink;
@@ -95,6 +97,7 @@ use crate::topgg_metrics::{
     ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats, sync_topgg_commands,
 };
 use crate::transcription_adapter::TranscriptionRuntimeOptions;
+use crate::transcription_control_sink::SttConsentRegistry;
 
 const DISCORD_COMMAND_CONTRACT: &str = include_str!("../../../contracts/discord-commands.json");
 
@@ -112,6 +115,8 @@ struct RuntimeConfig {
     tts_file: Option<TtsFileRuntimeOptions>,
     transcription: Option<TranscriptionRuntimeOptions>,
     transcription_control: bool,
+    #[cfg(feature = "voice-driver")]
+    transcription_live: bool,
     translation_text: Option<TranslationTextRuntimeOptions>,
     translation_preferences: bool,
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
@@ -332,9 +337,21 @@ impl RuntimeConfig {
         let core_voice = core_voice_from_environment()?;
         let tts_file = tts_file_from_environment()?;
         let transcription = transcription_from_environment()?;
+        #[cfg(feature = "voice-driver")]
+        let transcription_live =
+            live_transcription_enabled(env::var("RUST_TRANSCRIBE_LIVE_ENABLED").ok().as_deref());
         let transcription_control = transcription_control_enabled(
             env::var("RUST_TRANSCRIBE_CONTROL_ENABLED").ok().as_deref(),
-        );
+        ) || {
+            #[cfg(feature = "voice-driver")]
+            {
+                transcription_live
+            }
+            #[cfg(not(feature = "voice-driver"))]
+            {
+                false
+            }
+        };
         let translation_text = translation_text_from_environment();
         let translation_preferences = translation_preferences_enabled(
             env::var("RUST_TRANSLATION_PREFERENCES_ENABLED")
@@ -413,6 +430,8 @@ impl RuntimeConfig {
             tts_file,
             transcription,
             transcription_control,
+            #[cfg(feature = "voice-driver")]
+            transcription_live,
             translation_text,
             translation_preferences,
             voice_preferences,
@@ -547,7 +566,14 @@ fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeE
 }
 
 fn transcription_from_environment() -> Result<Option<TranscriptionRuntimeOptions>, RuntimeError> {
-    if !transcription_enabled(env::var("RUST_TRANSCRIBE_MESSAGE_ENABLED").ok().as_deref()) {
+    let message_enabled =
+        transcription_enabled(env::var("RUST_TRANSCRIBE_MESSAGE_ENABLED").ok().as_deref());
+    #[cfg(feature = "voice-driver")]
+    let live_enabled =
+        live_transcription_enabled(env::var("RUST_TRANSCRIBE_LIVE_ENABLED").ok().as_deref());
+    #[cfg(not(feature = "voice-driver"))]
+    let live_enabled = false;
+    if !message_enabled && !live_enabled {
         return Ok(None);
     }
     let max_concurrency =
@@ -694,6 +720,11 @@ fn transcription_enabled(raw: Option<&str>) -> bool {
 }
 
 fn transcription_control_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+#[cfg(feature = "voice-driver")]
+fn live_transcription_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -955,6 +986,11 @@ fn transcription_event_sink(
     options: Option<TranscriptionRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    // Live `/transcribe` reuses the adapter configuration, but must not accidentally promote the
+    // separate message-context command when only `RUST_TRANSCRIBE_LIVE_ENABLED` is set.
+    if !transcription_enabled(env::var("RUST_TRANSCRIBE_MESSAGE_ENABLED").ok().as_deref()) {
+        return Ok(None);
+    }
     let Some(options) = options else {
         return Ok(None);
     };
@@ -968,13 +1004,44 @@ fn transcription_event_sink(
 fn transcription_control_event_sink(
     enabled: bool,
     store: Arc<Mutex<SqliteStore>>,
+    consent_registry: SttConsentRegistry,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
     if !enabled {
         return Ok(None);
     }
     Ok(Some(Arc::new(
-        transcription_control_sink::TranscriptionControlGatewaySink::new(store)
-            .map_err(|_| RuntimeError::TranscriptionControlGateway)?,
+        transcription_control_sink::TranscriptionControlGatewaySink::new_with_registry(
+            store,
+            consent_registry,
+        )
+        .map_err(|_| RuntimeError::TranscriptionControlGateway)?,
+    )))
+}
+
+#[cfg(feature = "voice-driver")]
+fn transcription_live_event_sink(
+    enabled: bool,
+    options: Option<TranscriptionRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+    gateway_state: GatewayState,
+    consent_registry: SttConsentRegistry,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    let options = options.ok_or(RuntimeError::TranscriptionGateway)?;
+    let max_concurrency = options.max_concurrency.max(1);
+    let transcriber = transcription_adapter::AttachmentTranscriber::new(options)
+        .map_err(|_| RuntimeError::TranscriptionGateway)?;
+    Ok(Some(Arc::new(
+        live_transcription_sink::LiveTranscriptionGatewaySink::new(
+            store,
+            gateway_state,
+            transcriber,
+            max_concurrency,
+            consent_registry,
+        )
+        .map_err(|_| RuntimeError::TranscriptionGateway)?,
     )))
 }
 
@@ -1663,6 +1730,7 @@ async fn run() -> Result<(), RuntimeError> {
     // shadow process must never authorize the still-live Node process to reconnect calls.
     let write_rejoin_marker_on_shutdown = config.core_voice.is_some();
     let mut event_sinks: Vec<Arc<dyn GatewayEventSink>> = Vec::new();
+    let consent_registry = SttConsentRegistry::default();
     // This sink only records departure markers and clears them on guild_create; it does not
     // consume messages or interactions, so it is safe while Node remains authoritative.
     event_sinks.push(Arc::new(
@@ -1679,12 +1747,24 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) = tts_file_event_sink(config.tts_file, store.clone())? {
         event_sinks.push(sink);
     }
+    #[cfg(feature = "voice-driver")]
+    if let Some(sink) = transcription_live_event_sink(
+        config.transcription_live,
+        config.transcription.clone(),
+        store.clone(),
+        gateway_state.clone(),
+        consent_registry.clone(),
+    )? {
+        event_sinks.push(sink);
+    }
     if let Some(sink) = transcription_event_sink(config.transcription, store.clone())? {
         event_sinks.push(sink);
     }
-    if let Some(sink) =
-        transcription_control_event_sink(config.transcription_control, store.clone())?
-    {
+    if let Some(sink) = transcription_control_event_sink(
+        config.transcription_control,
+        store.clone(),
+        consent_registry.clone(),
+    )? {
         event_sinks.push(sink);
     }
     if let Some(sink) = translation_text_event_sink(config.translation_text, store.clone())? {

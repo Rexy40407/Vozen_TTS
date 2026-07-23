@@ -45,10 +45,21 @@ def main() -> None:
     print(json.dumps({"ready": True, "model": args.model, "lang": forced or "auto"}), flush=True)
 
     for line in sys.stdin:
-        path = line.strip()
+        request = line.strip()
+        request_lang = ""
+        if request.startswith("{"):
+            try:
+                payload = json.loads(request)
+                path = str(payload.get("path", "")).strip()
+                request_lang = str(payload.get("lang", "")).strip().lower()
+            except (TypeError, ValueError):
+                path = ""
+        else:
+            path = request
         if not path:
             continue
         try:
+            forced_for_request = request_lang or forced
             kwargs = dict(
                 beam_size=1,
                 vad_filter=True,
@@ -56,7 +67,7 @@ def main() -> None:
                 condition_on_previous_text=False,
             )
             try:
-                segments, info = model.transcribe(path, language=forced, **kwargs)
+                segments, info = model.transcribe(path, language=forced_for_request, **kwargs)
             except ValueError:
                 # Lingua forcada nao suportada pelo modelo -> cai na auto-detecao.
                 segments, info = model.transcribe(path, **kwargs)

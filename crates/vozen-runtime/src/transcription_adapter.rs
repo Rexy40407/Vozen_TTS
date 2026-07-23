@@ -28,6 +28,12 @@ const FFMPEG_TIMEOUT: Duration = Duration::from_secs(20);
 const WHISPER_TIMEOUT: Duration = Duration::from_secs(30);
 const WHISPER_READY_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_TRANSCRIPT_UTF16: usize = 1_800;
+#[cfg(feature = "voice-driver")]
+const LIVE_PCM_SAMPLE_RATE: usize = 48_000;
+#[cfg(feature = "voice-driver")]
+const LIVE_PCM_CHANNELS: usize = 2;
+#[cfg(feature = "voice-driver")]
+const LIVE_MAX_SECONDS: usize = 20;
 
 #[derive(Debug, Clone)]
 pub struct TranscriptionRuntimeOptions {
@@ -113,12 +119,27 @@ impl WhisperSidecar {
         &self,
         wav_path: &Path,
     ) -> Result<AttachmentTranscript, TranscriptionError> {
+        self.transcribe_with_language(wav_path, None).await
+    }
+
+    pub async fn transcribe_with_language(
+        &self,
+        wav_path: &Path,
+        language: Option<&str>,
+    ) -> Result<AttachmentTranscript, TranscriptionError> {
         let mut guard = self.state.lock().await;
         if guard.is_none() {
             *guard = Some(self.spawn_locked().await?);
         }
         let state = guard.as_mut().ok_or(TranscriptionError::Unavailable)?;
-        let request = format!("{}\n", wav_path.display());
+        let request = match language.map(str::trim).filter(|value| !value.is_empty()) {
+            Some(language) => serde_json::json!({
+                "path": wav_path.display().to_string(),
+                "lang": language,
+            })
+            .to_string(),
+            None => wav_path.display().to_string(),
+        } + "\n";
         if state.stdin.write_all(request.as_bytes()).await.is_err() {
             *guard = None;
             return Err(TranscriptionError::Unavailable);
@@ -212,6 +233,96 @@ impl AttachmentTranscriber {
         let _ = tokio::fs::remove_dir_all(&workspace).await;
         drop(permit);
         result
+    }
+
+    /// Transcribes one bounded, consented live utterance captured by Songbird. The input format
+    /// matches Node's receiver exactly: signed little-endian 16-bit PCM, 48 kHz, stereo. The raw
+    /// buffer is converted to the same 24 kHz mono WAV used by attachment transcription and is
+    /// removed together with the WAV before this method returns.
+    #[cfg(feature = "voice-driver")]
+    pub async fn transcribe_pcm(
+        &self,
+        pcm: &[i16],
+        duration_ms: u64,
+        language: Option<&str>,
+    ) -> Result<AttachmentTranscript, TranscriptionError> {
+        let max_samples = LIVE_PCM_SAMPLE_RATE
+            .saturating_mul(LIVE_PCM_CHANNELS)
+            .saturating_mul(LIVE_MAX_SECONDS);
+        if pcm.is_empty() || pcm.len() > max_samples {
+            return Err(TranscriptionError::Rejected("duration".into()));
+        }
+        let permit = self
+            .semaphore
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| TranscriptionError::Busy)?;
+        let workspace = std::env::temp_dir().join(format!("vozen-stt-live-{}", Uuid::new_v4()));
+        tokio::fs::create_dir(&workspace)
+            .await
+            .map_err(|_| TranscriptionError::Processing)?;
+        let raw = workspace.join("input.raw");
+        let wav = workspace.join("output.wav");
+        let result = self
+            .run_pcm_pipeline(pcm, duration_ms, language, &raw, &wav)
+            .await;
+        let _ = tokio::fs::remove_dir_all(&workspace).await;
+        drop(permit);
+        result
+    }
+
+    #[cfg(feature = "voice-driver")]
+    async fn run_pcm_pipeline(
+        &self,
+        pcm: &[i16],
+        duration_ms: u64,
+        language: Option<&str>,
+        raw: &Path,
+        wav: &Path,
+    ) -> Result<AttachmentTranscript, TranscriptionError> {
+        let mut bytes = Vec::with_capacity(pcm.len().saturating_mul(2));
+        for sample in pcm {
+            bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        let mut file = tokio::fs::File::create(raw)
+            .await
+            .map_err(|_| TranscriptionError::Processing)?;
+        file.write_all(&bytes)
+            .await
+            .map_err(|_| TranscriptionError::Processing)?;
+        file.flush()
+            .await
+            .map_err(|_| TranscriptionError::Processing)?;
+        let status = timeout(
+            FFMPEG_TIMEOUT,
+            Command::new(&self.ffmpeg)
+                .args([
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "s16le",
+                    "-ar",
+                    "48000",
+                    "-ac",
+                    "2",
+                    "-i",
+                ])
+                .arg(raw)
+                .args(["-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", "-f", "wav"])
+                .arg(wav)
+                .arg("-y")
+                .output(),
+        )
+        .await
+        .map_err(|_| TranscriptionError::Processing)?
+        .map_err(|_| TranscriptionError::Processing)?;
+        if !status.status.success() {
+            return Err(TranscriptionError::Processing);
+        }
+        let mut transcript = self.sidecar.transcribe_with_language(wav, language).await?;
+        transcript.duration_ms = duration_ms.min((LIVE_MAX_SECONDS as u64) * 1_000);
+        Ok(transcript)
     }
 
     async fn run_pipeline(

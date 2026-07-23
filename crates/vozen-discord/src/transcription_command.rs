@@ -12,6 +12,12 @@ use crate::{CommandArea, command_path_from_options, route_command};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TranscriptionControlCommand;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranscriptionSessionCommand {
+    Start { language: Option<String> },
+    Stop,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum TranscriptionControlCommandError {
     #[error("incoming command does not match the registered command contract: {0}")]
@@ -41,6 +47,50 @@ pub fn parse_transcription_control_command(
         return Err(TranscriptionControlCommandError::InvalidShape);
     }
     Ok(Some(TranscriptionControlCommand))
+}
+
+/// Parses the live-session leaves without claiming ownership of the consent-only `revoke` leaf.
+/// The generated command contract is checked first and the option shape is then validated
+/// strictly, so an interaction cannot smuggle an arbitrary value into the Rust session.
+pub fn parse_transcription_session_command(
+    command: &CommandData,
+) -> Result<Option<TranscriptionSessionCommand>, TranscriptionControlCommandError> {
+    let path = command_path_from_options(&command.options);
+    let area = route_command(&command.name, command.kind.into(), &path)?;
+    if command.name != "transcribe" || area != CommandArea::Transcription {
+        return Ok(None);
+    }
+    let Some(subcommand) = command.options.first() else {
+        return Err(TranscriptionControlCommandError::InvalidShape);
+    };
+    let CommandDataOptionValue::SubCommand(options) = &subcommand.value else {
+        return Err(TranscriptionControlCommandError::InvalidShape);
+    };
+    match subcommand.name.as_str() {
+        "stop" => {
+            if options.is_empty() {
+                Ok(Some(TranscriptionSessionCommand::Stop))
+            } else {
+                Err(TranscriptionControlCommandError::InvalidShape)
+            }
+        }
+        "start" => {
+            if options.is_empty() {
+                return Ok(Some(TranscriptionSessionCommand::Start { language: None }));
+            }
+            if options.len() != 1 || options[0].name != "language" {
+                return Err(TranscriptionControlCommandError::InvalidShape);
+            }
+            let CommandDataOptionValue::String(language) = &options[0].value else {
+                return Err(TranscriptionControlCommandError::InvalidShape);
+            };
+            Ok(Some(TranscriptionSessionCommand::Start {
+                language: Some(language.clone()),
+            }))
+        }
+        "revoke" => Ok(None),
+        _ => Err(TranscriptionControlCommandError::InvalidShape),
+    }
 }
 
 #[cfg(test)]
@@ -82,6 +132,44 @@ mod tests {
             parse_transcription_control_command(&command(
                 r#"{"id":"1","name":"transcribe","type":1,"options":[{"type":1,"name":"revoke","options":[{"type":3,"name":"unexpected","value":"x"}]}]}"#,
             )),
+            Err(TranscriptionControlCommandError::InvalidShape)
+        ));
+    }
+
+    #[test]
+    fn parses_start_language_and_stop_without_claiming_revoke() {
+        let start = command(
+            r#"{"id":"1","name":"transcribe","type":1,"options":[{"type":1,"name":"start","options":[{"type":3,"name":"language","value":"pt"}]}]}"#,
+        );
+        assert_eq!(
+            parse_transcription_session_command(&start).expect("start"),
+            Some(TranscriptionSessionCommand::Start {
+                language: Some("pt".into())
+            })
+        );
+        let stop = command(
+            r#"{"id":"1","name":"transcribe","type":1,"options":[{"type":1,"name":"stop","options":[]}]}"#,
+        );
+        assert_eq!(
+            parse_transcription_session_command(&stop).expect("stop"),
+            Some(TranscriptionSessionCommand::Stop)
+        );
+        let revoke = command(
+            r#"{"id":"1","name":"transcribe","type":1,"options":[{"type":1,"name":"revoke","options":[]}]}"#,
+        );
+        assert_eq!(
+            parse_transcription_session_command(&revoke).expect("revoke"),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_start_arguments() {
+        let forged = command(
+            r#"{"id":"1","name":"transcribe","type":1,"options":[{"type":1,"name":"start","options":[{"type":3,"name":"language","value":"pt"},{"type":3,"name":"unexpected","value":"x"}]}]}"#,
+        );
+        assert!(matches!(
+            parse_transcription_session_command(&forged),
             Err(TranscriptionControlCommandError::InvalidShape)
         ));
     }

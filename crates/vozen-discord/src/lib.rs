@@ -370,8 +370,8 @@ pub use transcribe_message_command::{
     parse_transcribe_message_command,
 };
 pub use transcription_command::{
-    TranscriptionControlCommand, TranscriptionControlCommandError,
-    parse_transcription_control_command,
+    TranscriptionControlCommand, TranscriptionControlCommandError, TranscriptionSessionCommand,
+    parse_transcription_control_command, parse_transcription_session_command,
 };
 pub use translate_message_command::{
     TRANSLATE_MESSAGE_COMMAND, TranslateMessageCommand, TranslateMessageCommandError,
@@ -441,6 +441,18 @@ pub trait GatewayEventSink: Send + Sync {
         context: Context,
         interaction: serenity::model::application::Interaction,
     ) -> Result<(), GatewayEventDispatchError>;
+
+    /// Runs after the transient gateway voice map has been updated. Sinks that own a live
+    /// session may use this to enforce call-membership and auto-stop policies; other sinks keep
+    /// the default no-op so adding the hook does not widen their authority.
+    async fn on_voice_state_update(
+        &self,
+        _context: Context,
+        _old: Option<serenity::model::voice::VoiceState>,
+        _new: serenity::model::voice::VoiceState,
+    ) -> Result<(), GatewayEventDispatchError> {
+        Ok(())
+    }
 
     async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError>;
 }
@@ -932,8 +944,8 @@ impl EventHandler for VozenGatewayHandler {
 
     async fn voice_state_update(
         &self,
-        _context: Context,
-        _old: Option<serenity::model::voice::VoiceState>,
+        context: Context,
+        old: Option<serenity::model::voice::VoiceState>,
         new: serenity::model::voice::VoiceState,
     ) {
         let Some(guild_id) = new.guild_id else {
@@ -945,6 +957,9 @@ impl EventHandler for VozenGatewayHandler {
             new.channel_id
                 .map(|channel_id| channel_id.get().to_string()),
         );
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_voice_state_update(context, old, new).await;
+        }
     }
 
     async fn message(&self, context: Context, message: serenity::model::channel::Message) {
