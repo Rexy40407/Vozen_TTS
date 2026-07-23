@@ -5,6 +5,7 @@
 mod abbreviations;
 mod accent_restoration;
 mod automatic_translation_policy;
+mod game_guess_language;
 mod game_hangman;
 mod game_heads_or_tails;
 mod game_math;
@@ -37,6 +38,9 @@ pub use accent_restoration::restore_accents;
 pub use automatic_translation_policy::{
     AutomaticTranslationDecision, AutomaticTranslationDenial, AutomaticTranslationFacts,
     admit_automatic_translation,
+};
+pub use game_guess_language::{
+    GuessLanguageEvent, GuessLanguageGame, GuessLanguageScore, LanguagePrompt,
 };
 pub use game_hangman::{HangmanEvent, HangmanGame};
 pub use game_heads_or_tails::{
