@@ -32,6 +32,7 @@ mod optout;
 mod premium;
 mod premium_code;
 mod pronunciation;
+mod stt_consent;
 mod talk_stats;
 mod telemetry;
 mod translation;
@@ -72,6 +73,7 @@ pub use pronunciation::{
     AddPronunciationResult, SERVER_PRON_LIMIT, SERVER_PRON_LIMIT_PREMIUM, USER_PRON_LIMIT_FREE,
     USER_PRON_LIMIT_PREMIUM,
 };
+pub use stt_consent::SttConsent;
 pub use talk_stats::{GuildTalkStreak, TalkBump, TalkRow};
 pub use telemetry::{
     ConfiguredEngineResolver, DailyOperationalMetric, DominantTalkUsage, DominantTalkUsageOptions,
@@ -139,6 +141,8 @@ pub enum StoreError {
     InvalidGcloudLimit,
     #[error("invalid Discord guild id")]
     InvalidGuildId,
+    #[error("invalid STT consent identity")]
+    InvalidSttIdentity,
     #[error("guild departure grace period must be non-negative")]
     InvalidDepartureGrace,
     #[error("invalid translation mapping")]
