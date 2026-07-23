@@ -98,6 +98,28 @@ impl VoiceDisplayCatalog {
         }
     }
 
+    /// Returns only the localized language/region portion used as a `/voice list` group header.
+    #[must_use]
+    pub fn language_name(
+        &self,
+        interaction_locale: Option<&str>,
+        available_models: &[String],
+        model: &str,
+    ) -> String {
+        self.voice_name(interaction_locale, available_models, model)
+            .split_once(" — ")
+            .map_or_else(
+                || self.voice_name(interaction_locale, available_models, model),
+                |(language, _)| language.to_owned(),
+            )
+    }
+
+    /// Returns the friendly voice label without its language prefix.
+    #[must_use]
+    pub fn voice_label(model: &str) -> String {
+        voice_label(model).unwrap_or_else(|| model.to_owned())
+    }
+
     fn supported_locale(&self, raw: &str) -> Option<&str> {
         let base = raw.split('-').next()?.to_ascii_lowercase();
         self.supported_locales.get(&base).map(String::as_str)

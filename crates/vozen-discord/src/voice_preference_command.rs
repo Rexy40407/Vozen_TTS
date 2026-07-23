@@ -1,4 +1,4 @@
-//! Strict parser for the mutation-only subset of `/voice`.
+//! Strict parser for the textual preference subset of `/voice`.
 //!
 //! Browsing, previews and the interactive configuration panel still require Discord UI adapters,
 //! so they deliberately remain with Node.  These preference mutations have a complete SQLite
@@ -12,6 +12,7 @@ use crate::{CommandArea, command_path_from_options, route_command};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VoicePreferenceCommand {
+    List,
     Set {
         model: String,
         speed: Option<f64>,
@@ -53,7 +54,7 @@ pub enum VoicePreferenceCommandError {
     InvalidOption,
 }
 
-/// Parses preference mutations only.  A valid command that still needs a rich Discord UI returns
+/// Parses textual preference commands only.  A valid command that still needs a rich Discord UI returns
 /// `None`, which is the staged-migration signal for the Node runtime to retain ownership.
 pub fn parse_voice_preference_command(
     command: &CommandData,
@@ -66,6 +67,7 @@ pub fn parse_voice_preference_command(
     }
     let (name, options) = subcommand(&command.options)?;
     match name {
+        "list" => empty(options).map(|()| Some(VoicePreferenceCommand::List)),
         "set" => parse_set(options).map(Some),
         "favorite" => {
             parse_model(options).map(|model| Some(VoicePreferenceCommand::Favorite { model }))
@@ -229,6 +231,10 @@ mod tests {
         assert_eq!(
             parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"favorite","type":1,"options":[{"name":"model","type":3,"value":"en_US-amy-medium"}]}]}"#)).expect("favorite"),
             Some(VoicePreferenceCommand::Favorite { model: "en_US-amy-medium".into() })
+        );
+        assert_eq!(
+            parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"list","type":1,"options":[]}]}"#)).expect("list"),
+            Some(VoicePreferenceCommand::List)
         );
         assert_eq!(
             parse_voice_preference_command(&command(r#"{"id":"1","name":"voice","type":1,"options":[{"name":"detection","type":1,"options":[{"name":"active","type":5,"value":true}]}]}"#)).expect("detection"),

@@ -126,6 +126,8 @@ const KEYS = [
   'ttsFile.failed',
   'voice.unknownModel',
   'voice.badSpeed',
+  'voice.listHeader',
+  'voice.listEmpty',
   'voice.set',
   'voice.engine.gcloudLocked',
   'voice.engine.kokoroLocked',

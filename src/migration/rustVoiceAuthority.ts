@@ -415,7 +415,8 @@ export function rustVoicePreferencesOwnCommand(
     enabled?.trim().toLowerCase() === 'true' &&
     rustPiperCompatible(ttsEngine) &&
     commandName === 'voice' &&
-    (subcommand === 'set' ||
+    (subcommand === 'list' ||
+      subcommand === 'set' ||
       subcommand === 'favorite' ||
       subcommand === 'unfavorite' ||
       subcommand === 'favorites' ||
