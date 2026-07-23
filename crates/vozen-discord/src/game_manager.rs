@@ -26,6 +26,7 @@ pub enum GameDriverAction {
     Finished,
     TextQuiz(crate::text_quiz_driver::TextQuizDriverAction),
     Hangman(crate::hangman_driver::HangmanDriverAction),
+    Wordle(crate::wordle_driver::WordleDriverAction),
 }
 
 /// A single game implementation behind the lifecycle boundary.
