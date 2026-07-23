@@ -262,6 +262,14 @@ export function rustBirthdayOwnsCommand(
   );
 }
 
+/** Aggregated server statistics remain behind an explicit canary during migration. */
+export function rustServerStatsOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_SERVER_STATS_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'server-stats';
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

@@ -77,6 +77,7 @@ mod pronunciation_service;
 mod queue_command;
 mod queue_control;
 mod rejoin_service;
+mod server_stats_command;
 mod songbird_transport;
 mod speech_preparation;
 mod top_speakers_command;
@@ -231,6 +232,9 @@ pub use queue_control::{
     QueueControlInvocation, QueueControlOutcome, QueueControlPlayback, QueueControlService,
 };
 pub use rejoin_service::{PlannedRejoinError, PlannedRejoinOutcome, PlannedRejoinService};
+pub use server_stats_command::{
+    ServerStatsCommand, ServerStatsCommandError, parse_server_stats_command,
+};
 pub use songbird_transport::SongbirdVoiceSessionTransport;
 pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,

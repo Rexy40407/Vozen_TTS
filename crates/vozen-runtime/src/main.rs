@@ -28,6 +28,7 @@ mod invite_sink;
 mod piper_adapter;
 mod privacy_sink;
 mod pronunciation_sink;
+mod server_stats_sink;
 mod top_speakers_sink;
 mod topgg_metrics;
 mod translation_preference_sink;
@@ -117,6 +118,7 @@ struct RuntimeConfig {
     vote_client_id: Option<String>,
     top_speakers: bool,
     birthday: bool,
+    server_stats: bool,
     privacy: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
@@ -338,6 +340,8 @@ impl RuntimeConfig {
         let top_speakers =
             top_speakers_enabled(env::var("RUST_TOP_SPEAKERS_ENABLED").ok().as_deref());
         let birthday = birthday_enabled(env::var("RUST_BIRTHDAY_ENABLED").ok().as_deref());
+        let server_stats =
+            server_stats_enabled(env::var("RUST_SERVER_STATS_ENABLED").ok().as_deref());
         let privacy = privacy_enabled(env::var("RUST_PRIVACY_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
@@ -377,6 +381,7 @@ impl RuntimeConfig {
             vote_client_id,
             top_speakers,
             birthday,
+            server_stats,
             privacy,
             automatic_translation,
             dashboard,
@@ -610,6 +615,10 @@ fn top_speakers_enabled(raw: Option<&str>) -> bool {
 }
 
 fn birthday_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn server_stats_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1029,6 +1038,21 @@ fn birthday_event_sink(
     )))
 }
 
+fn server_stats_event_sink(
+    enabled: bool,
+    client_id: Option<String>,
+    redemption_secret: Option<String>,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        server_stats_sink::ServerStatsGatewaySink::new(store, client_id, redemption_secret)
+            .map_err(|_| RuntimeError::ServerStatsGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -1209,6 +1233,8 @@ enum RuntimeError {
     TopSpeakersGateway,
     #[error("birthday gateway initialisation failed")]
     BirthdayGateway,
+    #[error("server-stats gateway initialisation failed")]
+    ServerStatsGateway,
     #[error("privacy gateway initialisation failed")]
     PrivacyGateway,
     #[error("config default voice gateway initialisation failed")]
@@ -1351,6 +1377,14 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = birthday_event_sink(config.birthday, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = server_stats_event_sink(
+        config.server_stats,
+        config.vote_client_id.clone(),
+        config.vote_redemption_secret.clone(),
+        store.clone(),
+    )? {
         event_sinks.push(sink);
     }
     if let Some(sink) = privacy_event_sink(config.privacy, store.clone())? {
@@ -1946,6 +1980,15 @@ mod tests {
         assert!(!birthday_enabled(Some("1")));
         assert!(!birthday_enabled(Some("yes")));
         assert!(!birthday_enabled(None));
+    }
+
+    #[test]
+    fn server_stats_promotion_is_exactly_opt_in() {
+        assert!(server_stats_enabled(Some("true")));
+        assert!(server_stats_enabled(Some(" TRUE ")));
+        assert!(!server_stats_enabled(Some("1")));
+        assert!(!server_stats_enabled(Some("yes")));
+        assert!(!server_stats_enabled(None));
     }
 
     #[test]

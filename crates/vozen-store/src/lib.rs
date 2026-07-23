@@ -39,7 +39,7 @@ mod voice_presence;
 mod vote_reward;
 
 pub use admin_passes::{AdminPassRow, AdminPassesView, AdminPlusRow};
-pub use admin_stats::{AdminGuildStats, AdminTopTalkerRow};
+pub use admin_stats::{AdminGuildStats, AdminTopTalkerRow, GuildGamePlayerRow, GuildGameStats};
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
 pub use channel_profile::{ChannelProfile, ChannelProfilePatch, MAX_CHANNEL_PROFILES_PER_GUILD};
 pub use data_lifecycle::{GUILD_PURGE_TABLES, USER_ERASE_TABLES};
