@@ -26,6 +26,7 @@ import {
   rustPremiumInfoOwnsCommand,
   rustPremiumMutationOwnsCommand,
   rustRedeemOwnsCommand,
+  rustGameListOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -222,6 +223,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustRedeemOwnsCommand('redeem')).toBe(false);
     expect(rustRedeemOwnsCommand('redeem', 'true')).toBe(true);
     expect(rustRedeemOwnsCommand('premium', 'true')).toBe(false);
+  });
+
+  it('promotes only the read-only game list leaf behind its own canary', () => {
+    expect(rustGameListOwnsCommand('game', 'list')).toBe(false);
+    expect(rustGameListOwnsCommand('game', 'list', 'true')).toBe(true);
+    expect(rustGameListOwnsCommand('game', 'play', 'true')).toBe(false);
+    expect(rustGameListOwnsCommand('game', 'leaderboard', 'true')).toBe(false);
+    expect(rustGameListOwnsCommand('help', 'list', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

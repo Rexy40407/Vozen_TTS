@@ -302,6 +302,17 @@ export function rustRedeemOwnsCommand(
   return enabled?.trim().toLowerCase() === 'true' && commandName === 'redeem';
 }
 
+/** The read-only `/game list` leaf is promoted independently from the live game manager. */
+export function rustGameListOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_GAME_LIST_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' && commandName === 'game' && subcommand === 'list'
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

@@ -76,6 +76,7 @@ import {
   rustPremiumInfoOwnsCommand,
   rustPremiumMutationOwnsCommand,
   rustRedeemOwnsCommand,
+  rustGameListOwnsCommand,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
@@ -371,6 +372,10 @@ export async function handleInteraction(
       i.commandName === 'premium' ? i.options.getSubcommand(false) : null,
     ) ||
     rustRedeemOwnsCommand(i.commandName) ||
+    rustGameListOwnsCommand(
+      i.commandName,
+      i.commandName === 'game' ? i.options.getSubcommand(false) : null,
+    ) ||
     rustTranslationOwnsCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
