@@ -8,6 +8,7 @@ mod automatic_translation_policy;
 mod game_heads_or_tails;
 mod game_math;
 mod game_skip_count;
+mod game_tictactoe;
 mod kofi;
 mod language_detection;
 mod message_guard;
@@ -35,6 +36,7 @@ pub use game_heads_or_tails::{
 };
 pub use game_math::{MathGame, MathGuessResult, MathOperation, MathProblem, first_integer};
 pub use game_skip_count::{NumberSequence, SkipCountGame, SkipCountGuessResult};
+pub use game_tictactoe::{Mark, TicTacToeGame, TicTacToeMove};
 pub use kofi::{
     KofiEvent, KofiGrant, KofiPlan, PREMIUM_MAX_SEATS, PREMIUM_PASS_SEATS, ShopProduct,
     extract_kofi_discord_id, hash_kofi_email, map_kofi_to_grant, parse_kofi_payload,
