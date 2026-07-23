@@ -19,6 +19,7 @@ import {
   rustInviteOwnsCommand,
   rustHelpOwnsCommand,
   rustVoteOwnsCommand,
+  rustTopSpeakersOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -169,6 +170,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoteOwnsCommand('vote')).toBe(false);
     expect(rustVoteOwnsCommand('vote', 'true')).toBe(true);
     expect(rustVoteOwnsCommand('help', 'true')).toBe(false);
+  });
+
+  it('promotes only public top-speakers behind its own canary', () => {
+    expect(rustTopSpeakersOwnsCommand('top-speakers')).toBe(false);
+    expect(rustTopSpeakersOwnsCommand('top-speakers', 'true')).toBe(true);
+    expect(rustTopSpeakersOwnsCommand('server-stats', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

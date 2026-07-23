@@ -230,6 +230,14 @@ export function rustVoteOwnsCommand(
   return enabled?.trim().toLowerCase() === 'true' && commandName === 'vote';
 }
 
+/** Public, read-only ranking; stored aggregates remain the only data source. */
+export function rustTopSpeakersOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_TOP_SPEAKERS_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'top-speakers';
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

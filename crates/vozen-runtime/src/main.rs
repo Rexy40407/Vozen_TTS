@@ -26,6 +26,7 @@ mod help_sink;
 mod invite_sink;
 mod piper_adapter;
 mod pronunciation_sink;
+mod top_speakers_sink;
 mod topgg_metrics;
 mod translation_preference_sink;
 mod translation_provider;
@@ -112,6 +113,7 @@ struct RuntimeConfig {
     help_support_url: String,
     vote: bool,
     vote_client_id: Option<String>,
+    top_speakers: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -329,6 +331,8 @@ impl RuntimeConfig {
             .unwrap_or_else(|| "https://discord.gg/4kYw2WUbNN".to_owned());
         let vote = vote_enabled(env::var("RUST_VOTE_ENABLED").ok().as_deref());
         let vote_client_id = nonempty_env("CLIENT_ID");
+        let top_speakers =
+            top_speakers_enabled(env::var("RUST_TOP_SPEAKERS_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -365,6 +369,7 @@ impl RuntimeConfig {
             help_support_url,
             vote,
             vote_client_id,
+            top_speakers,
             automatic_translation,
             dashboard,
             admin,
@@ -589,6 +594,10 @@ fn help_enabled(raw: Option<&str>) -> bool {
 }
 
 fn vote_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn top_speakers_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -966,6 +975,19 @@ fn vote_event_sink(
     )))
 }
 
+fn top_speakers_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        top_speakers_sink::TopSpeakersGatewaySink::new(store)
+            .map_err(|_| RuntimeError::TopSpeakersGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -1142,6 +1164,8 @@ enum RuntimeError {
     HelpGateway,
     #[error("vote gateway initialisation failed")]
     VoteGateway,
+    #[error("top-speakers gateway initialisation failed")]
+    TopSpeakersGateway,
     #[error("config default voice gateway initialisation failed")]
     ConfigDefaultVoiceGateway,
     #[error("config channel gateway initialisation failed")]
@@ -1276,6 +1300,9 @@ async fn run() -> Result<(), RuntimeError> {
         config.vote_redemption_secret.clone(),
         store.clone(),
     )? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = top_speakers_event_sink(config.top_speakers, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1841,6 +1868,15 @@ mod tests {
         assert!(!vote_enabled(Some("1")));
         assert!(!vote_enabled(Some("yes")));
         assert!(!vote_enabled(None));
+    }
+
+    #[test]
+    fn top_speakers_promotion_is_exactly_opt_in() {
+        assert!(top_speakers_enabled(Some("true")));
+        assert!(top_speakers_enabled(Some(" TRUE ")));
+        assert!(!top_speakers_enabled(Some("1")));
+        assert!(!top_speakers_enabled(Some("yes")));
+        assert!(!top_speakers_enabled(None));
     }
 
     #[test]

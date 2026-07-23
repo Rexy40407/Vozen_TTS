@@ -69,6 +69,7 @@ import {
   rustInviteOwnsCommand,
   rustHelpOwnsCommand,
   rustVoteOwnsCommand,
+  rustTopSpeakersOwnsCommand,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
@@ -345,6 +346,7 @@ export async function handleInteraction(
     rustInviteOwnsCommand(i.commandName) ||
     rustHelpOwnsCommand(i.commandName) ||
     rustVoteOwnsCommand(i.commandName) ||
+    rustTopSpeakersOwnsCommand(i.commandName) ||
     rustTranslationOwnsCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,

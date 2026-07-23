@@ -77,6 +77,7 @@ mod queue_control;
 mod rejoin_service;
 mod songbird_transport;
 mod speech_preparation;
+mod top_speakers_command;
 mod translation_command;
 mod translation_preference_command;
 mod uptime_command;
@@ -230,6 +231,9 @@ pub use songbird_transport::SongbirdVoiceSessionTransport;
 pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
     begin_message_speech, finish_message_speech, prepare_message_speech,
+};
+pub use top_speakers_command::{
+    TopSpeakersCommand, TopSpeakersCommandError, parse_top_speakers_command,
 };
 pub use translation_command::{
     TranslateTextCommand, TranslateTextCommandError, parse_translate_text_command,
