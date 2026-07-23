@@ -14,7 +14,9 @@ use axum::{
     routing::any,
 };
 use serde_json::json;
-use vozen_core::{TopggWebhookDecision, TopggWebhookRejection, verify_topgg_webhook};
+use vozen_core::{
+    RuntimeMetrics, TopggWebhookDecision, TopggWebhookRejection, verify_topgg_webhook,
+};
 use vozen_store::{SqliteStore, TopggVoteRewardResult, VOTE_REDEMPTION_SECRET_MIN_LENGTH};
 
 const BODY_MAX_BYTES: usize = 64_000;
@@ -24,6 +26,9 @@ pub struct TopggWebhookConfig {
     pub redemption_secret: String,
     pub expected_bot_id: String,
     pub store: Arc<Mutex<SqliteStore>>,
+    /// Optional process-local observability. The route remains usable by API-only callers that
+    /// do not expose `/stats`; when present, only authenticated, non-duplicate upvotes count.
+    pub metrics: Option<Arc<RuntimeMetrics>>,
     pub now: Arc<dyn Fn() -> i64 + Send + Sync>,
 }
 
@@ -33,6 +38,7 @@ struct TopggWebhookState {
     redemption_secret: Arc<str>,
     expected_bot_id: Arc<str>,
     store: Arc<Mutex<SqliteStore>>,
+    metrics: Option<Arc<RuntimeMetrics>>,
     now: Arc<dyn Fn() -> i64 + Send + Sync>,
 }
 
@@ -80,6 +86,7 @@ pub fn topgg_webhook_router(config: TopggWebhookConfig) -> Result<Router, TopggW
             redemption_secret: Arc::from(config.redemption_secret),
             expected_bot_id: Arc::from(config.expected_bot_id),
             store: config.store,
+            metrics: config.metrics,
             now: config.now,
         }))
 }
@@ -125,7 +132,12 @@ async fn topgg_webhook(
                 Ok(TopggVoteRewardResult::DuplicateEvent) => status(StatusCode::OK, "duplicate"),
                 Ok(
                     TopggVoteRewardResult::Granted { .. } | TopggVoteRewardResult::AlreadyRedeemed,
-                ) => status(StatusCode::OK, "ok"),
+                ) => {
+                    if let Some(metrics) = &state.metrics {
+                        metrics.record_vote();
+                    }
+                    status(StatusCode::OK, "ok")
+                }
                 Err(_) => status(StatusCode::INTERNAL_SERVER_ERROR, "reward_failed"),
             },
             Err(_) => status(StatusCode::INTERNAL_SERVER_ERROR, "reward_failed"),
@@ -163,11 +175,19 @@ mod tests {
     const USER: &str = "12345678901234567";
 
     fn router(store: Arc<Mutex<SqliteStore>>) -> Router {
+        router_with_metrics(store, None)
+    }
+
+    fn router_with_metrics(
+        store: Arc<Mutex<SqliteStore>>,
+        metrics: Option<Arc<RuntimeMetrics>>,
+    ) -> Router {
         topgg_webhook_router(TopggWebhookConfig {
             webhook_secret: SECRET.into(),
             redemption_secret: REDEMPTION_SECRET.into(),
             expected_bot_id: BOT.into(),
             store,
+            metrics,
             now: Arc::new(|| NOW),
         })
         .expect("router")
@@ -185,13 +205,16 @@ mod tests {
     #[tokio::test]
     async fn authenticated_upvote_grants_once_and_retries_are_safe() {
         let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
-        let body = format!(r#"{{"type":"upvote","user":"{USER}","bot":"{BOT}"}}"#);
-        let first = router(store.clone())
+        let metrics = Arc::new(RuntimeMetrics::default());
+        let body = format!(
+            r#"{{"type":"vote.create","data":{{"id":"event-1","user":{{"platform_id":"{USER}"}},"project":{{"platform_id":"{BOT}"}}}}}}"#
+        );
+        let first = router_with_metrics(store.clone(), Some(metrics.clone()))
             .oneshot(request(body.clone()))
             .await
             .expect("response");
         assert_eq!(first.status(), StatusCode::OK);
-        let replay = router(store.clone())
+        let replay = router_with_metrics(store.clone(), Some(metrics.clone()))
             .oneshot(request(body))
             .await
             .expect("response");
@@ -203,6 +226,7 @@ mod tests {
                 .is_user_premium(USER, NOW + 1)
                 .expect("premium")
         );
+        assert_eq!(metrics.snapshot().votes, 1);
     }
 
     #[tokio::test]
@@ -271,6 +295,7 @@ mod tests {
             redemption_secret: REDEMPTION_SECRET.into(),
             expected_bot_id: BOT.into(),
             store: store.clone(),
+            metrics: None,
             now: Arc::new(|| NOW),
         };
         assert!(matches!(

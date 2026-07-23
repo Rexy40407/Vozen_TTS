@@ -1654,6 +1654,7 @@ fn build_http_router(
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
 ) -> Result<axum::Router, RuntimeError> {
+    let runtime_metrics = gateway_state.metrics();
     let public_status = public_status.map(|config| {
         public_status_provider(store.clone(), gateway_state.clone(), config.incident)
     });
@@ -1676,6 +1677,7 @@ fn build_http_router(
                 redemption_secret: config.redemption_secret,
                 expected_bot_id: config.client_id,
                 store,
+                metrics: Some(runtime_metrics.clone()),
                 now: Arc::new(system_now_ms),
             }),
         })
@@ -1779,6 +1781,7 @@ fn build_http_router(
             redemption_secret: config.redemption_secret,
             expected_bot_id: config.client_id,
             store: store.clone(),
+            metrics: Some(runtime_metrics),
             now: Arc::new(system_now_ms),
         }),
     })
