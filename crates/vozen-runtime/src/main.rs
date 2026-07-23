@@ -22,6 +22,7 @@ mod config_toggle_sink;
 mod core_voice_sink;
 mod engine_router;
 mod file_export_sink;
+mod invite_sink;
 mod piper_adapter;
 mod pronunciation_sink;
 mod topgg_metrics;
@@ -103,6 +104,8 @@ struct RuntimeConfig {
     config_reset: bool,
     config_show: bool,
     uptime: bool,
+    invite: bool,
+    invite_client_id: Option<String>,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -313,6 +316,8 @@ impl RuntimeConfig {
             config_reset_enabled(env::var("RUST_CONFIG_RESET_ENABLED").ok().as_deref());
         let config_show = config_show_enabled(env::var("RUST_CONFIG_SHOW_ENABLED").ok().as_deref());
         let uptime = uptime_enabled(env::var("RUST_UPTIME_ENABLED").ok().as_deref());
+        let invite = invite_enabled(env::var("RUST_INVITE_ENABLED").ok().as_deref());
+        let invite_client_id = nonempty_env("CLIENT_ID");
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -343,6 +348,8 @@ impl RuntimeConfig {
             config_reset,
             config_show,
             uptime,
+            invite,
+            invite_client_id,
             automatic_translation,
             dashboard,
             admin,
@@ -555,6 +562,10 @@ fn config_reset_enabled(raw: Option<&str>) -> bool {
 }
 
 fn uptime_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn invite_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -893,6 +904,18 @@ fn uptime_event_sink(enabled: bool) -> Result<Option<Arc<dyn GatewayEventSink>>,
     )))
 }
 
+fn invite_event_sink(
+    enabled: bool,
+    client_id: Option<String>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        invite_sink::InviteGatewaySink::new(client_id).map_err(|_| RuntimeError::InviteGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -1063,6 +1086,8 @@ enum RuntimeError {
     ConfigResetGateway,
     #[error("uptime gateway initialisation failed")]
     UptimeGateway,
+    #[error("invite gateway initialisation failed")]
+    InviteGateway,
     #[error("config default voice gateway initialisation failed")]
     ConfigDefaultVoiceGateway,
     #[error("config channel gateway initialisation failed")]
@@ -1183,6 +1208,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = uptime_event_sink(config.uptime)? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = invite_event_sink(config.invite, config.invite_client_id.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1721,6 +1749,15 @@ mod tests {
         assert!(!uptime_enabled(Some("1")));
         assert!(!uptime_enabled(Some("yes")));
         assert!(!uptime_enabled(None));
+    }
+
+    #[test]
+    fn invite_promotion_is_exactly_opt_in() {
+        assert!(invite_enabled(Some("true")));
+        assert!(invite_enabled(Some(" TRUE ")));
+        assert!(!invite_enabled(Some("1")));
+        assert!(!invite_enabled(Some("yes")));
+        assert!(!invite_enabled(None));
     }
 
     #[test]

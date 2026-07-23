@@ -62,6 +62,7 @@ mod file_export_service;
 mod gateway_composite;
 mod guild_synthesis_coordinator;
 mod interaction_dispatch;
+mod invite_command;
 mod message_admission;
 mod message_interaction;
 mod message_media;
@@ -200,6 +201,7 @@ pub use guild_synthesis_coordinator::GuildSynthesisCoordinator;
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
 };
+pub use invite_command::{InviteCommand, InviteCommandError, parse_invite_command};
 pub use message_admission::{DiscordMessageFacts, admit_discord_message};
 pub use message_interaction::DiscordMessageFactsOwned;
 pub use message_media::collect_message_media;

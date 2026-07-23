@@ -206,6 +206,14 @@ export function rustUptimeOwnsCommand(
   return enabled?.trim().toLowerCase() === 'true' && commandName === 'uptime';
 }
 
+/** Invite generation is public and isolated from OAuth/payment authority. */
+export function rustInviteOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_INVITE_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'invite';
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
