@@ -6,6 +6,7 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -28,6 +29,11 @@ use vozen_store::{
 const BODY_MAX_BYTES: usize = 4_000;
 const CLAIM_RATE_MAX: usize = 5;
 const CLAIM_RATE_WINDOW_MS: i64 = 10 * 60 * 1_000;
+const CLAIM_HELP_RATE_MAX: usize = 8;
+const CLAIM_HELP_RATE_WINDOW_MS: i64 = 10 * 60 * 1_000;
+const CLAIM_HELP_DEDUPE_WINDOW_MS: i64 = 24 * 60 * 60 * 1_000;
+const CLAIM_HELP_DEDUPE_CAP: usize = 1_000;
+const MAX_EMAIL_BYTES: usize = 254;
 const RATE_MAX_ENTRIES: usize = 2_048;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +71,51 @@ pub trait DiscordIdentityVerifier: Send + Sync {
     ) -> Result<ActivationIdentity, ActivationIdentityError>;
 }
 
+/// Sends the manual activation-help notification. The email is a lookup hint only; this
+/// boundary deliberately has no activation or grant capability.
+#[async_trait]
+pub trait ClaimHelpNotifier: Send + Sync {
+    async fn send(&self, discord_id: &str, email: &str) -> bool;
+}
+
+/// Production notifier for the operator's Discord webhook. It never logs the email and keeps
+/// mentions disabled in the payload, matching the Node implementation during the cutover.
+pub struct DiscordClaimHelpNotifier {
+    webhook_url: String,
+    client: reqwest::Client,
+}
+
+impl DiscordClaimHelpNotifier {
+    pub fn new(webhook_url: impl Into<String>) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        Self {
+            webhook_url: webhook_url.into(),
+            client,
+        }
+    }
+}
+
+#[async_trait]
+impl ClaimHelpNotifier for DiscordClaimHelpNotifier {
+    async fn send(&self, discord_id: &str, email: &str) -> bool {
+        if self.webhook_url.trim().is_empty() {
+            return false;
+        }
+        self.client
+            .post(&self.webhook_url)
+            .json(&json!({
+                "content": build_claim_help_message(discord_id, email),
+                "allowed_mentions": {"parse": []}
+            }))
+            .send()
+            .await
+            .is_ok_and(|response| response.status().is_success())
+    }
+}
+
 pub struct PremiumApiConfig {
     /// Exact public site origin, normally `https://vozen.org`.
     pub origin: String,
@@ -75,6 +126,9 @@ pub struct PremiumApiConfig {
     pub store: Arc<Mutex<SqliteStore>>,
     pub identity_verifier: Arc<dyn DiscordIdentityVerifier>,
     pub now: Arc<dyn Fn() -> i64 + Send + Sync>,
+    /// Optional manual activation-help destination. When absent, the endpoint returns 503 and
+    /// the site can show its copy-to-support fallback, exactly as the Node endpoint does.
+    pub claim_help_notifier: Option<Arc<dyn ClaimHelpNotifier>>,
 }
 
 #[derive(Clone)]
@@ -85,6 +139,8 @@ struct PremiumApiState {
     identity_verifier: Arc<dyn DiscordIdentityVerifier>,
     now: Arc<dyn Fn() -> i64 + Send + Sync>,
     rate: Arc<Mutex<HashMap<String, RateState>>>,
+    claim_help_seen: Arc<Mutex<HashMap<String, i64>>>,
+    claim_help_notifier: Option<Arc<dyn ClaimHelpNotifier>>,
 }
 
 #[derive(Clone, Copy)]
@@ -101,6 +157,7 @@ pub fn premium_router(config: PremiumApiConfig) -> Result<Router, PremiumApiConf
     Ok(Router::new()
         .route("/api/link", any(link_request))
         .route("/api/activate", any(activate_request))
+        .route("/api/claim-help", any(claim_help_request))
         .with_state(PremiumApiState {
             origin,
             kofi_webhook_token: config
@@ -111,6 +168,8 @@ pub fn premium_router(config: PremiumApiConfig) -> Result<Router, PremiumApiConf
             identity_verifier: config.identity_verifier,
             now: config.now,
             rate: Arc::new(Mutex::new(HashMap::new())),
+            claim_help_seen: Arc::new(Mutex::new(HashMap::new())),
+            claim_help_notifier: config.claim_help_notifier,
         }))
 }
 
@@ -346,6 +405,155 @@ async fn activate_request(
     }
 }
 
+async fn claim_help_request(
+    State(state): State<PremiumApiState>,
+    method: Method,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if method == Method::OPTIONS {
+        return preflight(&state);
+    }
+    if method != Method::POST {
+        return text_response(StatusCode::METHOD_NOT_ALLOWED, "method not allowed", &state);
+    }
+    if body.len() > BODY_MAX_BYTES {
+        return text_response(StatusCode::PAYLOAD_TOO_LARGE, "too large", &state);
+    }
+    if rate_limited_with(
+        &state,
+        client_ip(&headers),
+        (state.now)(),
+        CLAIM_HELP_RATE_MAX,
+        CLAIM_HELP_RATE_WINDOW_MS,
+    ) {
+        return json_response(
+            StatusCode::TOO_MANY_REQUESTS,
+            json!({"error":"rate_limited"}),
+            &state,
+        );
+    }
+    let raw_email = match parse_claim_help_email(&body) {
+        Ok(email) => email.unwrap_or_default(),
+        Err(()) => {
+            return json_response(
+                StatusCode::BAD_REQUEST,
+                json!({"error":"bad_request"}),
+                &state,
+            );
+        }
+    };
+    let Some(bearer) = bearer_token(&headers) else {
+        return json_response(
+            StatusCode::UNAUTHORIZED,
+            json!({"error":"no_token"}),
+            &state,
+        );
+    };
+    let email = sanitize_claim_help_email(&raw_email);
+    if !valid_claim_help_email(&email) {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({"error":"bad_email"}),
+            &state,
+        );
+    }
+    let identity = match state.identity_verifier.resolve_identity(bearer).await {
+        Ok(identity) => identity,
+        Err(()) => {
+            return json_response(
+                StatusCode::UNAUTHORIZED,
+                json!({"error":"invalid_token"}),
+                &state,
+            );
+        }
+    };
+    let now = (state.now)();
+    if !should_send_claim_help(&state, &identity.id, &email, now) {
+        return json_response(StatusCode::OK, json!({"ok":true,"deduped":true}), &state);
+    }
+    let sent = match state.claim_help_notifier.as_ref() {
+        Some(notifier) => notifier.send(&identity.id, &email).await,
+        None => false,
+    };
+    if !sent {
+        return json_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            json!({"error":"not_sent"}),
+            &state,
+        );
+    }
+    json_response(StatusCode::OK, json!({"ok":true}), &state)
+}
+
+fn parse_claim_help_email(body: &[u8]) -> Result<Option<String>, ()> {
+    let value = serde_json::from_slice::<Value>(body).map_err(|_| ())?;
+    Ok(value
+        .as_object()
+        .and_then(|object| object.get("email"))
+        .and_then(Value::as_str)
+        .map(str::to_owned))
+}
+
+fn sanitize_claim_help_email(raw: &str) -> String {
+    raw.trim()
+        .chars()
+        .filter(|character| {
+            character.is_ascii_alphanumeric()
+                || matches!(character, '.' | '_' | '%' | '+' | '@' | '-')
+        })
+        .take(MAX_EMAIL_BYTES)
+        .collect()
+}
+
+fn valid_claim_help_email(email: &str) -> bool {
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.is_empty()
+        && !domain.contains('@')
+        && !email.chars().any(char::is_whitespace)
+}
+
+fn build_claim_help_message(discord_id: &str, email: &str) -> String {
+    [
+        "🆘 **Activation help requested**".to_owned(),
+        format!("Discord ID: `{discord_id}`"),
+        format!("Ko-fi email (typed by the requester — NOT verified): `{email}`"),
+        String::new(),
+        "⚠️ The email is not proof of purchase — anyone can type an address they know bought Vozen."
+            .to_owned(),
+        "Find the paid order by this email in your Ko-fi transactions, then confirm THIS requester is"
+            .to_owned(),
+        "the buyer (e.g. have them reply from the Ko-fi receipt email, or state the exact amount + date)"
+            .to_owned(),
+        "before you `/premium grant` for the Discord ID above.".to_owned(),
+    ]
+    .join("\n")
+}
+
+fn should_send_claim_help(
+    state: &PremiumApiState,
+    discord_id: &str,
+    email: &str,
+    now: i64,
+) -> bool {
+    let Ok(mut seen) = state.claim_help_seen.lock() else {
+        return false;
+    };
+    seen.retain(|_, timestamp| now - *timestamp < CLAIM_HELP_DEDUPE_WINDOW_MS);
+    let key = format!("{discord_id}:{email}");
+    if seen.contains_key(&key) {
+        return false;
+    }
+    if seen.len() >= CLAIM_HELP_DEDUPE_CAP {
+        seen.clear();
+    }
+    seen.insert(key, now);
+    true
+}
+
 fn store_claim(
     state: &PremiumApiState,
     discord_id: &str,
@@ -438,6 +646,16 @@ fn client_ip(headers: &HeaderMap) -> String {
 }
 
 fn rate_limited(state: &PremiumApiState, client_ip: String, now: i64) -> bool {
+    rate_limited_with(state, client_ip, now, CLAIM_RATE_MAX, CLAIM_RATE_WINDOW_MS)
+}
+
+fn rate_limited_with(
+    state: &PremiumApiState,
+    client_ip: String,
+    now: i64,
+    max: usize,
+    window_ms: i64,
+) -> bool {
     let Ok(mut rate) = state.rate.lock() else {
         return true;
     };
@@ -453,16 +671,16 @@ fn rate_limited(state: &PremiumApiState, client_ip: String, now: i64) -> bool {
     }
     let entry = rate.entry(client_ip).or_insert(RateState {
         count: 0,
-        reset: now + CLAIM_RATE_WINDOW_MS,
+        reset: now + window_ms,
     });
     if entry.reset <= now {
         *entry = RateState {
             count: 0,
-            reset: now + CLAIM_RATE_WINDOW_MS,
+            reset: now + window_ms,
         };
     }
     entry.count += 1;
-    entry.count > CLAIM_RATE_MAX
+    entry.count > max
 }
 
 fn preflight(state: &PremiumApiState) -> Response {
@@ -517,6 +735,22 @@ mod tests {
 
     struct Identities;
 
+    struct TestNotifier {
+        calls: Arc<Mutex<Vec<(String, String)>>>,
+        result: bool,
+    }
+
+    #[async_trait]
+    impl ClaimHelpNotifier for TestNotifier {
+        async fn send(&self, discord_id: &str, email: &str) -> bool {
+            self.calls
+                .lock()
+                .expect("notifier lock")
+                .push((discord_id.to_owned(), email.to_owned()));
+            self.result
+        }
+    }
+
     #[async_trait]
     impl DiscordIdentityVerifier for Identities {
         async fn resolve_identity(&self, bearer: &str) -> Result<DiscordIdentity, ()> {
@@ -551,6 +785,7 @@ mod tests {
             store,
             identity_verifier: Arc::new(Identities),
             now: Arc::new(|| NOW),
+            claim_help_notifier: None,
         })
         .expect("router")
     }
@@ -575,6 +810,19 @@ mod tests {
             HeaderValue::from_str(forwarded_for).expect("header"),
         );
         request
+    }
+
+    fn claim_help_app(notifier: Option<Arc<dyn ClaimHelpNotifier>>) -> Router {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        premium_router(PremiumApiConfig {
+            origin: "https://vozen.org".into(),
+            kofi_webhook_token: None,
+            store,
+            identity_verifier: Arc::new(Identities),
+            now: Arc::new(|| NOW),
+            claim_help_notifier: notifier,
+        })
+        .expect("router")
     }
 
     #[tokio::test]
@@ -686,6 +934,7 @@ mod tests {
             store: store.clone(),
             identity_verifier: Arc::new(Identities),
             now: Arc::new(|| NOW),
+            claim_help_notifier: None,
         })
         .expect("router without Ko-fi token");
 
@@ -809,5 +1058,98 @@ mod tests {
             blocked.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
             Some(&HeaderValue::from_static("https://vozen.org"))
         );
+    }
+
+    #[tokio::test]
+    async fn claim_help_requires_auth_valid_email_and_notifies_once_per_pair() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let notifier = Arc::new(TestNotifier {
+            calls: calls.clone(),
+            result: true,
+        });
+        let app = claim_help_app(Some(notifier));
+
+        let no_token = app
+            .clone()
+            .oneshot(request(
+                "/api/claim-help",
+                None,
+                r#"{"email":"buyer@example.com"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(no_token.status(), StatusCode::UNAUTHORIZED);
+
+        let bad_email = app
+            .clone()
+            .oneshot(request(
+                "/api/claim-help",
+                Some("Bearer valid"),
+                r#"{"email":"not-an-email"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(bad_email.status(), StatusCode::BAD_REQUEST);
+
+        let sent = app
+            .clone()
+            .oneshot(request(
+                "/api/claim-help",
+                Some("Bearer valid"),
+                r#"{"email":"buyer+tag@example.com"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(sent.status(), StatusCode::OK);
+
+        let deduped = app
+            .oneshot(request(
+                "/api/claim-help",
+                Some("Bearer valid"),
+                r#"{"email":"buyer+tag@example.com"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(deduped.status(), StatusCode::OK);
+        let body = to_bytes(deduped.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&body).expect("json"),
+            json!({"ok":true,"deduped":true})
+        );
+        assert_eq!(
+            calls.lock().expect("calls").as_slice(),
+            &[("discord-user".into(), "buyer+tag@example.com".into())]
+        );
+    }
+
+    #[tokio::test]
+    async fn claim_help_keeps_pii_out_of_the_route_and_returns_not_sent_without_webhook() {
+        assert_eq!(
+            sanitize_claim_help_email(" buyer+tag@example.com\n"),
+            "buyer+tag@example.com"
+        );
+        assert_eq!(
+            sanitize_claim_help_email("buyer`@example.com"),
+            "buyer@example.com"
+        );
+        assert!(valid_claim_help_email("buyer@example.com"));
+        assert!(!valid_claim_help_email("buyer@@example.com"));
+
+        let app = claim_help_app(None);
+        let response = app
+            .oneshot(request(
+                "/api/claim-help",
+                Some("Bearer valid"),
+                r#"{"email":"buyer@example.com"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        assert_eq!(&body[..], br#"{"error":"not_sent"}"#);
     }
 }

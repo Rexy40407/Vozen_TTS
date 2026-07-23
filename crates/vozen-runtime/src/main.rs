@@ -71,7 +71,7 @@ use vozen_api::{
     discord_oauth::DiscordOAuthVerifier,
     kofi_webhook::KofiWebhookConfig,
     map_public_status,
-    premium_api::PremiumApiConfig,
+    premium_api::{ClaimHelpNotifier, DiscordClaimHelpNotifier, PremiumApiConfig},
     runtime_router,
     topgg_webhook::TopggWebhookConfig,
 };
@@ -150,6 +150,7 @@ struct PremiumHttpConfig {
     origin: String,
     kofi_webhook_token: Option<String>,
     kofi_shop_map: Option<String>,
+    claim_help_webhook_url: Option<String>,
 }
 
 struct TopggWebhookRuntimeConfig {
@@ -1387,6 +1388,8 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
         origin,
         kofi_webhook_token: nonempty_env("KOFI_WEBHOOK_TOKEN"),
         kofi_shop_map: nonempty_env("KOFI_SHOP_MAP"),
+        claim_help_webhook_url: nonempty_env("CLAIM_HELP_WEBHOOK_URL")
+            .or_else(|| nonempty_env("ERROR_WEBHOOK_URL")),
     }))
 }
 
@@ -1870,6 +1873,10 @@ fn build_http_router(
             store: store.clone(),
             identity_verifier: verifier,
             now,
+            claim_help_notifier: config
+                .claim_help_webhook_url
+                .map(DiscordClaimHelpNotifier::new)
+                .map(|notifier| Arc::new(notifier) as Arc<dyn ClaimHelpNotifier>),
         }),
         // Only `RUST_DASHBOARD_ENABLED=true` produces this route. Its authorizer rechecks
         // OAuth audience/scope, Manage Guild and current bot presence before the options
