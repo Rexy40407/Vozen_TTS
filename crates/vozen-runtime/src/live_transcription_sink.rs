@@ -302,6 +302,7 @@ impl LiveTranscriptionGatewaySink {
         result
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn start_inner(
         &self,
         context: &Context,
@@ -356,10 +357,9 @@ impl LiveTranscriptionGatewaySink {
                 .ok()
                 .and_then(|store| store.has_stt_consent(&user_id, &guild_key).ok())
                 .unwrap_or(false)
+                && let Ok(user_id) = user_id.parse::<u64>()
             {
-                if let Ok(user_id) = user_id.parse::<u64>() {
-                    self.consent_registry.grant(&guild_key, user_id);
-                }
+                self.consent_registry.grant(&guild_key, user_id);
             }
         }
         let registry = self.consent_registry.clone();
@@ -490,14 +490,13 @@ impl LiveTranscriptionGatewaySink {
             return Ok(false);
         };
         session.receiver.stop();
-        if let Ok(parsed) = guild_id.parse::<u64>() {
-            if let Some(call) = songbird::get(context)
+        if let Ok(parsed) = guild_id.parse::<u64>()
+            && let Some(call) = songbird::get(context)
                 .await
                 .and_then(|manager| manager.get(GuildId::new(parsed)))
-            {
-                let mut handler = call.lock().await;
-                let _ = handler.deafen(true).await;
-            }
+        {
+            let mut handler = call.lock().await;
+            let _ = handler.deafen(true).await;
         }
         if announce {
             let _ = session

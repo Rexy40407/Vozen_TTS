@@ -49,7 +49,7 @@ use vozen_discord::{
     parse_cast_component_id, parse_fill_component_id, parse_game_play_command,
     parse_game_stop_command, parse_modal_options, parse_queue_command, parse_randomizer_command,
     parse_setup_command, parse_speak_message_command, pick_option, render_game_action,
-    render_game_finish, sanitize_speaker_name,
+    render_game_finish,
 };
 use vozen_store::{GuildConfigPatch, SqliteStore};
 
@@ -192,6 +192,7 @@ impl GameRuntime {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn send_rendered_actions(
         &self,
         context: &Context,
@@ -237,7 +238,7 @@ impl GameRuntime {
                 .speak_text_with_voice(
                     &facts,
                     &speech.text,
-                    &model,
+                    model,
                     speed,
                     SynthesisEngine::Piper,
                     false,
@@ -247,6 +248,7 @@ impl GameRuntime {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn send_actions(
         &self,
         context: &Context,
@@ -467,6 +469,7 @@ impl GameRuntime {
             .map(|channel| channel.id.get().to_string())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn start_game(
         &self,
         context: &Context,
@@ -1220,7 +1223,7 @@ impl CoreVoiceGatewaySink {
         };
         let today = time::OffsetDateTime::now_utc().date();
         let is_birthday = birthday.is_some_and(|birthday| {
-            u8::from(today.month()) == birthday.month && today.day() == u8::from(birthday.day)
+            u8::from(today.month()) == birthday.month && today.day() == birthday.day
         });
         if !config.enabled || (!is_birthday && !config.greet_on_join) {
             return;
@@ -1231,9 +1234,10 @@ impl CoreVoiceGatewaySink {
         let raw_name = nickname
             .or_else(|| Some(member.display_name().to_owned()))
             .unwrap_or_else(|| member.user.name.clone());
+        let safe_name = sanitize_speaker_name(&raw_name).unwrap_or_else(|| "someone".to_owned());
         let greeting = build_greeting(
             &config.greet_locale,
-            &sanitize_speaker_name(&raw_name),
+            &safe_name,
             &self.options.settings.available_models,
             if config.default_voice.trim().is_empty() {
                 &self.options.settings.default_voice
@@ -2708,20 +2712,20 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                         return Ok(());
                     }
                 }
-                Interaction::Command(command) if command.data.name == "game" => {
-                    if game.handle_command(&context, command).await? {
-                        return Ok(());
-                    }
+                Interaction::Command(command)
+                    if command.data.name == "game"
+                        && game.handle_command(&context, command).await? =>
+                {
+                    return Ok(());
                 }
                 _ => {}
             }
         }
         if self.options.setup_enabled
-            && matches!(&interaction, Interaction::Command(command) if command.data.name == "setup")
+            && let Interaction::Command(command) = &interaction
+            && command.data.name == "setup"
         {
-            if let Interaction::Command(command) = interaction {
-                return self.handle_setup_command(&context, &command).await;
-            }
+            return self.handle_setup_command(&context, command).await;
         }
         if self.options.randomizer_enabled || self.options.cast_enabled {
             match &interaction {

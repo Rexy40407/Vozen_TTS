@@ -48,13 +48,13 @@ impl VoiceSessionTransport for SongbirdVoiceSessionTransport {
         // normal Rust voice canary does not pay the receive CPU cost or collect audio; the live
         // STT promotion enables it with `RUST_TRANSCRIBE_LIVE_ENABLED=true` and installs its
         // consent-gated receiver on the same call.
-        if live_receive_enabled() {
-            if let Some(call) = manager.get(GuildId::new(guild_id)) {
-                let mut handler = call.lock().await;
-                handler.set_config(songbird::Config::default().decode_mode(
-                    songbird::driver::DecodeMode::Decode(songbird::driver::DecodeConfig::default()),
-                ));
-            }
+        if live_receive_enabled()
+            && let Some(call) = manager.get(GuildId::new(guild_id))
+        {
+            let mut handler = call.lock().await;
+            handler.set_config(songbird::Config::default().decode_mode(
+                songbird::driver::DecodeMode::Decode(songbird::driver::DecodeConfig::default()),
+            ));
         }
         // Discord places bots in Stage channels as audience by default. Match Node's best-effort
         // behaviour: first self-promote, then request to speak if a moderator must approve it.
