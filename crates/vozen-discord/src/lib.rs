@@ -67,6 +67,7 @@ mod file_export_service;
 mod game_catalog;
 mod game_command;
 mod game_list_command;
+mod game_play_admission;
 mod game_score_command;
 mod game_session;
 mod gateway_composite;
@@ -245,6 +246,9 @@ pub use game_command::{
     parse_game_stop_command,
 };
 pub use game_list_command::{GameListCommand, GameListCommandError, parse_game_list_command};
+pub use game_play_admission::{
+    GamePlayAdmission, GamePlayAdmissionFacts, admit_game_play, game_definition,
+};
 pub use game_score_command::{GameScoreCommand, GameScoreCommandError, parse_game_score_command};
 pub use game_session::{GameScore, GameSession, GameSessionStore, StartGameResult};
 pub use gateway_composite::CompositeGatewayEventSink;
