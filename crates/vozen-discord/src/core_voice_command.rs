@@ -22,6 +22,16 @@ pub enum CoreVoiceCommand {
         language: String,
         laughter: bool,
     },
+    /// Premium pickup lines use the same language catalog as `/joke` and may append a
+    /// repository-curated WAV effect.
+    Rizz {
+        language: String,
+        sound: bool,
+    },
+    /// Curated soundboard clip; omitting the name requests the public discovery list.
+    Sound {
+        name: Option<String>,
+    },
     /// Public micro-fun commands may speak a short answer when the caller is in Vozen's call,
     /// while still replying in text when no call is active.
     MicroFun {
@@ -60,6 +70,14 @@ pub enum CoreVoiceCommandError {
     MissingLaughter,
     #[error("the joke command has a non-boolean laughter option")]
     InvalidLaughter,
+    #[error("the rizz command is missing its required sound option")]
+    MissingSound,
+    #[error("the rizz command has a non-boolean sound option")]
+    InvalidSound,
+    #[error("the sound command contains an invalid option shape")]
+    InvalidSoundOptions,
+    #[error("the sound command has a non-string name option")]
+    InvalidSoundName,
     #[error("the micro-fun command contains an undeclared option")]
     InvalidMicroFunOptions,
     #[error("the 8-ball command is missing its required question option")]
@@ -85,7 +103,7 @@ pub fn parse_promoted_core_voice(
     if area != CommandArea::CoreVoice
         && !(matches!(
             command.name.as_str(),
-            "laugh" | "joke" | "8-ball" | "fortune" | "fact" | "wyr"
+            "laugh" | "joke" | "rizz" | "sound" | "8-ball" | "fortune" | "fact" | "wyr"
         ) && area == CommandArea::Fun)
     {
         return Ok(None);
@@ -95,6 +113,8 @@ pub fn parse_promoted_core_voice(
         "leave" => Ok(Some(CoreVoiceCommand::Leave)),
         "laugh" => Ok(Some(CoreVoiceCommand::Laugh)),
         "joke" => parse_joke(&command.options).map(Some),
+        "rizz" => parse_rizz(&command.options).map(Some),
+        "sound" => parse_sound(&command.options).map(Some),
         "8-ball" => parse_microfun(&command.options, MicroFunKind::EightBall).map(Some),
         "fortune" => parse_microfun(&command.options, MicroFunKind::Fortune).map(Some),
         "fact" => parse_microfun(&command.options, MicroFunKind::Fact).map(Some),
@@ -183,6 +203,52 @@ fn parse_joke(
     Ok(CoreVoiceCommand::Joke { language, laughter })
 }
 
+fn parse_rizz(
+    options: &[serenity::model::application::CommandDataOption],
+) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
+    if options.len() != 2
+        || options
+            .iter()
+            .any(|option| option.name != "language" && option.name != "sound")
+    {
+        return Err(CoreVoiceCommandError::UnexpectedOption);
+    }
+    let language = options
+        .iter()
+        .find(|option| option.name == "language")
+        .ok_or(CoreVoiceCommandError::MissingLanguage)
+        .and_then(|option| match &option.value {
+            CommandDataOptionValue::String(language) => Ok(language.clone()),
+            _ => Err(CoreVoiceCommandError::InvalidLanguage),
+        })?;
+    let sound = options
+        .iter()
+        .find(|option| option.name == "sound")
+        .ok_or(CoreVoiceCommandError::MissingSound)
+        .and_then(|option| match option.value {
+            CommandDataOptionValue::Boolean(sound) => Ok(sound),
+            _ => Err(CoreVoiceCommandError::InvalidSound),
+        })?;
+    Ok(CoreVoiceCommand::Rizz { language, sound })
+}
+
+fn parse_sound(
+    options: &[serenity::model::application::CommandDataOption],
+) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
+    if options.is_empty() {
+        return Ok(CoreVoiceCommand::Sound { name: None });
+    }
+    if options.len() != 1 || options[0].name != "name" {
+        return Err(CoreVoiceCommandError::InvalidSoundOptions);
+    }
+    let CommandDataOptionValue::String(name) = &options[0].value else {
+        return Err(CoreVoiceCommandError::InvalidSoundName);
+    };
+    Ok(CoreVoiceCommand::Sound {
+        name: Some(name.clone()),
+    })
+}
+
 fn parse_voice_preview(
     options: &[serenity::model::application::CommandDataOption],
 ) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
@@ -267,6 +333,20 @@ mod tests {
                 kind: MicroFunKind::Fortune,
                 question: None,
             })
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"rizz","type":1,"options":[{"name":"language","type":3,"value":"pt"},{"name":"sound","type":5,"value":true}]}"#
+            ))
+            .expect("rizz"),
+            Some(CoreVoiceCommand::Rizz { language: "pt".into(), sound: true })
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"sound","type":1,"options":[]}"#
+            ))
+            .expect("sound list"),
+            Some(CoreVoiceCommand::Sound { name: None })
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
@@ -371,6 +451,24 @@ mod tests {
                 r#"{"id":"1","name":"fortune","type":1,"options":[{"name":"unexpected","type":3,"value":"x"}]}"#
             )),
             Err(CoreVoiceCommandError::InvalidMicroFunOptions)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"rizz","type":1,"options":[{"name":"language","type":3,"value":"pt"}]}"#
+            )),
+            Err(CoreVoiceCommandError::UnexpectedOption)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"sound","type":1,"options":[{"name":"name","type":4,"value":42}]}"#
+            )),
+            Err(CoreVoiceCommandError::InvalidSoundName)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"rizz","type":1,"options":[{"name":"language","type":3,"value":"pt"},{"name":"sound","type":3,"value":"yes"}]}"#
+            )),
+            Err(CoreVoiceCommandError::InvalidSound)
         );
     }
 }

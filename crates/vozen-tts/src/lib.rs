@@ -202,6 +202,9 @@ impl<R: PiperRunner> PiperEngine<R> {
 
     /// Returns the cached immutable WAV path, synthesising at most `concurrency` misses.
     pub async fn synth(&self, request: &SynthRequest) -> Result<PathBuf, TtsError> {
+        if let Some(asset_path) = request.asset_path.as_deref() {
+            return validate_asset_wav(asset_path).await;
+        }
         let Some(segments) = request
             .segments
             .as_deref()
@@ -338,6 +341,7 @@ fn single_segment_request(
     SynthRequest {
         text: segment.text.clone(),
         model: segment.model.clone(),
+        asset_path: None,
         speed: request.speed,
         engine: request.engine,
         segments: None,
@@ -353,6 +357,19 @@ async fn non_empty_file(path: &Path) -> Result<bool, std::io::Error> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error),
     }
+}
+
+/// Direct assets are only accepted when they are regular, non-empty WAV files. The command
+/// layer supplies paths from the curated repository catalogue; this second gate prevents a
+/// future caller from turning the synthesis boundary into an arbitrary file reader.
+async fn validate_asset_wav(path: &Path) -> Result<PathBuf, TtsError> {
+    let metadata = tokio::fs::metadata(path).await?;
+    if !metadata.is_file() || metadata.len() == 0 {
+        return Err(TtsError::EmptyOutput);
+    }
+    let bytes = tokio::fs::read(path).await?;
+    parse_wav(&bytes).map_err(TtsError::Wav)?;
+    Ok(path.to_owned())
 }
 
 fn cache_key(request: &SynthRequest) -> String {
@@ -428,6 +445,7 @@ mod tests {
         SynthRequest {
             text: "hello".into(),
             model: "en_US-amy-medium".into(),
+            asset_path: None,
             speed: 1.0,
             engine: vozen_core::SynthesisEngine::Default,
             segments: None,
@@ -452,6 +470,41 @@ mod tests {
             Err(TtsError::InvalidModel)
         ));
         assert_eq!(runner.calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn returns_curated_wav_assets_without_touching_piper_or_models() {
+        let root = temp_dir("asset");
+        tokio::fs::create_dir_all(&root).await.expect("root");
+        let asset = root.join("clip.wav");
+        tokio::fs::write(&asset, silence_wav(1))
+            .await
+            .expect("asset");
+        let runner = Arc::new(FakeRunner {
+            calls: AtomicUsize::new(0),
+            bytes: b"not used".to_vec(),
+        });
+        let engine = PiperEngine::new(
+            runner.clone(),
+            root.join("missing-models"),
+            root.join("cache"),
+            1,
+        );
+        let mut request = request();
+        request.asset_path = Some(asset.clone());
+        let output = engine.synth(&request).await.expect("asset output");
+        assert_eq!(output, asset);
+        assert_eq!(runner.calls.load(Ordering::Relaxed), 0);
+
+        request.asset_path = Some(root.join("invalid.wav"));
+        tokio::fs::write(request.asset_path.as_ref().expect("path"), b"nope")
+            .await
+            .expect("invalid asset");
+        assert!(matches!(
+            engine.synth(&request).await,
+            Err(TtsError::Wav(_))
+        ));
+        let _ = tokio::fs::remove_dir_all(root).await;
     }
 
     #[tokio::test]

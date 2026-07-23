@@ -126,9 +126,51 @@ pub enum CoreJokeOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreRizzOutcome {
+    PremiumLocked,
+    NotInPlayer,
+    NotInSameVoice,
+    UnknownLanguage,
+    RateLimited,
+    Busy,
+    Queued,
+    SynthesisFailed,
+    PlaybackFailed,
+    StoreUnavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreJokeResult {
     pub outcome: CoreJokeOutcome,
     pub joke: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreRizzResult {
+    pub outcome: CoreRizzOutcome,
+    pub line: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreSoundOutcome {
+    Disabled,
+    List,
+    Unknown,
+    NotInVoice,
+    NotInSameVoice,
+    RateLimited,
+    Busy,
+    Queued,
+    SynthesisFailed,
+    PlaybackFailed,
+    StoreUnavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreSoundResult {
+    pub outcome: CoreSoundOutcome,
+    pub name: Option<String>,
+    pub sounds: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,6 +187,8 @@ pub enum CoreVoiceOutcome {
     Left(LeaveVoiceOutcome),
     Laugh(CorePreviewOutcome),
     Joke(CoreJokeResult),
+    Rizz(CoreRizzResult),
+    Sound(CoreSoundResult),
     MicroFun(CoreMicroFunResult),
     Tts(CoreTtsOutcome),
     Preview(CorePreviewOutcome),
@@ -264,6 +308,12 @@ where
             }
             CoreVoiceCommand::Joke { language, laughter } => {
                 CoreVoiceOutcome::Joke(self.execute_joke(invocation, language, *laughter).await)
+            }
+            CoreVoiceCommand::Rizz { language, sound } => {
+                CoreVoiceOutcome::Rizz(self.execute_rizz(invocation, language, *sound).await)
+            }
+            CoreVoiceCommand::Sound { name } => {
+                CoreVoiceOutcome::Sound(self.execute_sound(invocation, name.as_deref()).await)
             }
             CoreVoiceCommand::MicroFun { kind, question } => CoreVoiceOutcome::MicroFun(
                 self.execute_microfun(invocation, *kind, question.clone())
@@ -411,6 +461,7 @@ where
         let request = SynthRequest {
             text: sample.to_owned(),
             model,
+            asset_path: None,
             speed,
             engine,
             segments: None,
@@ -603,6 +654,7 @@ where
         let request = SynthRequest {
             text: result.text.clone(),
             model,
+            asset_path: None,
             speed,
             engine,
             segments: None,
@@ -616,6 +668,332 @@ where
             CorePreviewOutcome::Queued
         );
         result
+    }
+
+    /// `/rizz` keeps the Node order: Premium gate, live player, same-call admission, language
+    /// validation, rate limit, then line synthesis and an optional best-effort WAV effect.
+    async fn execute_rizz(
+        &self,
+        invocation: CoreVoiceInvocation<'_>,
+        language: &str,
+        sound: bool,
+    ) -> CoreRizzResult {
+        let now = (self.now_ms)();
+        let premium = {
+            let Ok(store) = self.store.lock() else {
+                return CoreRizzResult {
+                    outcome: CoreRizzOutcome::StoreUnavailable,
+                    line: None,
+                };
+            };
+            match store
+                .is_user_premium(invocation.user_id, now)
+                .and_then(|user| {
+                    store
+                        .is_guild_premium(invocation.guild_id, now)
+                        .map(|guild| user || guild)
+                }) {
+                Ok(premium) => premium,
+                Err(_) => {
+                    return CoreRizzResult {
+                        outcome: CoreRizzOutcome::StoreUnavailable,
+                        line: None,
+                    };
+                }
+            }
+        };
+        if !premium {
+            return CoreRizzResult {
+                outcome: CoreRizzOutcome::PremiumLocked,
+                line: None,
+            };
+        }
+        let Ok(CommandPlaybackState::Active | CommandPlaybackState::Idle) =
+            self.playback.state(invocation.guild_id).await
+        else {
+            return CoreRizzResult {
+                outcome: CoreRizzOutcome::NotInPlayer,
+                line: None,
+            };
+        };
+        let Some(language_info) = joke_lang_by_key(language) else {
+            return CoreRizzResult {
+                outcome: CoreRizzOutcome::UnknownLanguage,
+                line: None,
+            };
+        };
+        let roles = invocation
+            .member_role_ids
+            .map(|roles| roles.iter().map(String::as_str).collect::<Vec<_>>());
+        let (model, speed, engine, lane) = {
+            let Ok(store) = self.store.lock() else {
+                return CoreRizzResult {
+                    outcome: CoreRizzOutcome::StoreUnavailable,
+                    line: None,
+                };
+            };
+            let Ok(config) = store.guild_config(invocation.guild_id) else {
+                return CoreRizzResult {
+                    outcome: CoreRizzOutcome::StoreUnavailable,
+                    line: None,
+                };
+            };
+            let policy = RolePolicy {
+                priority_role_id: config.priority_role_id.as_deref(),
+                blocked_role_id: config.blocked_role_id.as_deref(),
+            };
+            let lane = match admit_user_speech(
+                self.gateway_state
+                    .voice_channel_id(invocation.guild_id, invocation.user_id)
+                    .as_deref(),
+                self.gateway_state
+                    .bot_voice_channel_id(invocation.guild_id)
+                    .as_deref(),
+                roles.as_deref(),
+                policy,
+            ) {
+                UserSpeechAdmission::Allowed { lane } => lane,
+                UserSpeechAdmission::Denied { .. } => {
+                    return CoreRizzResult {
+                        outcome: CoreRizzOutcome::NotInSameVoice,
+                        line: None,
+                    };
+                }
+            };
+            let Ok(mut limiters) = self.preview_limiters.lock() else {
+                return CoreRizzResult {
+                    outcome: CoreRizzOutcome::StoreUnavailable,
+                    line: None,
+                };
+            };
+            if !limiters.allow(
+                invocation.guild_id,
+                invocation.user_id,
+                config.rate_per_min,
+                now,
+            ) {
+                return CoreRizzResult {
+                    outcome: CoreRizzOutcome::RateLimited,
+                    line: None,
+                };
+            }
+            let stored = store
+                .get_user_voice(invocation.guild_id, invocation.user_id)
+                .ok()
+                .flatten();
+            let model = self
+                .settings
+                .available_models
+                .iter()
+                .find(|model| model.starts_with(language_info.prefix))
+                .cloned()
+                .or_else(|| {
+                    (!config.default_voice.trim().is_empty()).then(|| config.default_voice.clone())
+                })
+                .unwrap_or_else(|| self.settings.default_voice.clone());
+            let speed = stored
+                .as_ref()
+                .map(|voice| voice.speed)
+                .filter(|speed| speed.is_finite())
+                .unwrap_or(self.settings.default_speed);
+            let engine = resolve_preview_engine(
+                &store,
+                invocation.guild_id,
+                invocation.user_id,
+                stored.as_ref().map(|voice| voice.engine),
+                now,
+            );
+            (model, speed, engine, lane)
+        };
+        let line = crate::pick_line(language, now);
+        let request = SynthRequest {
+            text: line.clone(),
+            model: model.clone(),
+            asset_path: None,
+            speed,
+            engine,
+            segments: None,
+            single_voice: Some(true),
+            emphasis_source: None,
+            lead_silence_ms: 0,
+        };
+        let outcome = self
+            .enqueue_synth_request(invocation.guild_id, invocation.user_id, lane, request)
+            .await;
+        if outcome == CorePreviewOutcome::Queued && sound {
+            let effect = SynthRequest {
+                text: String::new(),
+                model,
+                asset_path: Some(std::path::PathBuf::from("assets/sfx/rizz.wav")),
+                speed,
+                // Curated WAVs bypass the user's TTS provider. Keeping this as `Default` lets the
+                // Piper adapter accept the asset even when the pickup line used a paid engine.
+                engine: SynthesisEngine::Default,
+                segments: None,
+                single_voice: Some(true),
+                emphasis_source: None,
+                lead_silence_ms: 0,
+            };
+            let _ = self
+                .enqueue_synth_request(invocation.guild_id, invocation.user_id, lane, effect)
+                .await;
+        }
+        CoreRizzResult {
+            outcome: match outcome {
+                CorePreviewOutcome::Queued => CoreRizzOutcome::Queued,
+                CorePreviewOutcome::Busy => CoreRizzOutcome::Busy,
+                CorePreviewOutcome::SynthesisFailed => CoreRizzOutcome::SynthesisFailed,
+                CorePreviewOutcome::PlaybackFailed => CoreRizzOutcome::PlaybackFailed,
+                CorePreviewOutcome::NotInPlayer => CoreRizzOutcome::NotInPlayer,
+                CorePreviewOutcome::NotInSameVoice => CoreRizzOutcome::NotInSameVoice,
+                CorePreviewOutcome::RateLimited => CoreRizzOutcome::RateLimited,
+                CorePreviewOutcome::UnknownModel => CoreRizzOutcome::SynthesisFailed,
+                CorePreviewOutcome::StoreUnavailable => CoreRizzOutcome::StoreUnavailable,
+            },
+            line: Some(line),
+        }
+    }
+
+    /// `/sound` is limited to the fixed asset catalog and keeps Node's discovery behavior: a
+    /// missing name returns the list without requiring a call, while playback requires the same
+    /// live-call and per-user rate gates as every other audible command.
+    async fn execute_sound(
+        &self,
+        invocation: CoreVoiceInvocation<'_>,
+        name: Option<&str>,
+    ) -> CoreSoundResult {
+        let config = {
+            let Ok(store) = self.store.lock() else {
+                return CoreSoundResult {
+                    outcome: CoreSoundOutcome::StoreUnavailable,
+                    name: None,
+                    sounds: None,
+                };
+            };
+            let Ok(config) = store.guild_config(invocation.guild_id) else {
+                return CoreSoundResult {
+                    outcome: CoreSoundOutcome::StoreUnavailable,
+                    name: None,
+                    sounds: None,
+                };
+            };
+            config
+        };
+        if !config.soundboard {
+            return CoreSoundResult {
+                outcome: CoreSoundOutcome::Disabled,
+                name: None,
+                sounds: None,
+            };
+        }
+        let Some(name) = name else {
+            return CoreSoundResult {
+                outcome: CoreSoundOutcome::List,
+                name: None,
+                sounds: Some(crate::sound_list()),
+            };
+        };
+        let Some(clip) = crate::sound_by_key(name) else {
+            return CoreSoundResult {
+                outcome: CoreSoundOutcome::Unknown,
+                name: None,
+                sounds: None,
+            };
+        };
+        let Ok(CommandPlaybackState::Active | CommandPlaybackState::Idle) =
+            self.playback.state(invocation.guild_id).await
+        else {
+            return CoreSoundResult {
+                outcome: CoreSoundOutcome::NotInVoice,
+                name: Some(clip.name.to_owned()),
+                sounds: None,
+            };
+        };
+        let roles = invocation
+            .member_role_ids
+            .map(|roles| roles.iter().map(String::as_str).collect::<Vec<_>>());
+        let (lane, model) = {
+            let policy = RolePolicy {
+                priority_role_id: config.priority_role_id.as_deref(),
+                blocked_role_id: config.blocked_role_id.as_deref(),
+            };
+            let lane = match admit_user_speech(
+                self.gateway_state
+                    .voice_channel_id(invocation.guild_id, invocation.user_id)
+                    .as_deref(),
+                self.gateway_state
+                    .bot_voice_channel_id(invocation.guild_id)
+                    .as_deref(),
+                roles.as_deref(),
+                policy,
+            ) {
+                UserSpeechAdmission::Allowed { lane } => lane,
+                UserSpeechAdmission::Denied { .. } => {
+                    return CoreSoundResult {
+                        outcome: CoreSoundOutcome::NotInSameVoice,
+                        name: Some(clip.name.to_owned()),
+                        sounds: None,
+                    };
+                }
+            };
+            let Ok(mut limiters) = self.preview_limiters.lock() else {
+                return CoreSoundResult {
+                    outcome: CoreSoundOutcome::StoreUnavailable,
+                    name: Some(clip.name.to_owned()),
+                    sounds: None,
+                };
+            };
+            if !limiters.allow(
+                invocation.guild_id,
+                invocation.user_id,
+                config.rate_per_min,
+                (self.now_ms)(),
+            ) {
+                return CoreSoundResult {
+                    outcome: CoreSoundOutcome::RateLimited,
+                    name: Some(clip.name.to_owned()),
+                    sounds: None,
+                };
+            }
+            let model = if config.default_voice.trim().is_empty() {
+                self.settings.default_voice.clone()
+            } else {
+                config.default_voice.clone()
+            };
+            (lane, model)
+        };
+        let request = SynthRequest {
+            text: String::new(),
+            model,
+            asset_path: Some(std::path::PathBuf::from(format!(
+                "assets/sfx/{}.wav",
+                clip.key
+            ))),
+            speed: self.settings.default_speed,
+            engine: SynthesisEngine::Default,
+            segments: None,
+            single_voice: Some(true),
+            emphasis_source: None,
+            lead_silence_ms: 0,
+        };
+        let outcome = self
+            .enqueue_synth_request(invocation.guild_id, invocation.user_id, lane, request)
+            .await;
+        CoreSoundResult {
+            outcome: match outcome {
+                CorePreviewOutcome::Queued => CoreSoundOutcome::Queued,
+                CorePreviewOutcome::Busy => CoreSoundOutcome::Busy,
+                CorePreviewOutcome::SynthesisFailed => CoreSoundOutcome::SynthesisFailed,
+                CorePreviewOutcome::PlaybackFailed => CoreSoundOutcome::PlaybackFailed,
+                CorePreviewOutcome::NotInPlayer => CoreSoundOutcome::NotInVoice,
+                CorePreviewOutcome::NotInSameVoice => CoreSoundOutcome::NotInSameVoice,
+                CorePreviewOutcome::RateLimited => CoreSoundOutcome::RateLimited,
+                CorePreviewOutcome::UnknownModel => CoreSoundOutcome::SynthesisFailed,
+                CorePreviewOutcome::StoreUnavailable => CoreSoundOutcome::StoreUnavailable,
+            },
+            name: Some(clip.name.to_owned()),
+            sounds: None,
+        }
     }
 
     /// `/joke` keeps Node's language-first model selection and queues the optional laugh as a
@@ -755,6 +1133,7 @@ where
         let joke_request = SynthRequest {
             text: joke.clone(),
             model: model.clone(),
+            asset_path: None,
             speed,
             engine,
             segments: None,
@@ -809,6 +1188,7 @@ where
                         .prefix,
                 ),
                 model,
+                asset_path: None,
                 speed,
                 engine,
                 segments: None,
@@ -1417,6 +1797,186 @@ mod tests {
         );
         assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
         assert_eq!(service.playback.reservations.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn rizz_requires_premium_and_then_queues_line_and_optional_asset() {
+        let (service, store, state) = service(true);
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::Rizz {
+                        language: "pt".into(),
+                        sound: true,
+                    },
+                )
+                .await,
+            CoreVoiceOutcome::Rizz(CoreRizzResult {
+                outcome: CoreRizzOutcome::PremiumLocked,
+                line: None,
+            })
+        );
+        store
+            .lock()
+            .expect("store")
+            .grant_user_premium("user", 30, "test", 0)
+            .expect("premium");
+        let outcome = service
+            .execute(
+                invocation(),
+                &CoreVoiceCommand::Rizz {
+                    language: "pt".into(),
+                    sound: true,
+                },
+            )
+            .await;
+        assert_eq!(
+            outcome,
+            CoreVoiceOutcome::Rizz(CoreRizzResult {
+                outcome: CoreRizzOutcome::Queued,
+                line: Some(crate::pick_line("pt", 0)),
+            })
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 2);
+        let requests = service.synthesizer.requests.lock().expect("requests");
+        assert_eq!(requests[0].text, crate::pick_line("pt", 0));
+        assert_eq!(requests[0].asset_path, None);
+        assert_eq!(
+            requests[1].asset_path,
+            Some(PathBuf::from("assets/sfx/rizz.wav"))
+        );
+        assert_eq!(requests[1].engine, SynthesisEngine::Default);
+    }
+
+    #[tokio::test]
+    async fn rizz_unknown_language_does_not_spend_speech_capacity() {
+        let (service, store, state) = service(true);
+        store
+            .lock()
+            .expect("store")
+            .grant_user_premium("user", 30, "test", 0)
+            .expect("premium");
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        assert!(matches!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::Rizz {
+                        language: "missing".into(),
+                        sound: false,
+                    },
+                )
+                .await,
+            CoreVoiceOutcome::Rizz(CoreRizzResult {
+                outcome: CoreRizzOutcome::UnknownLanguage,
+                line: None,
+            })
+        ));
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn sound_lists_without_a_call_and_queues_only_curated_assets() {
+        let (service, _, state) = service(true);
+        let listed = service
+            .execute(invocation(), &CoreVoiceCommand::Sound { name: None })
+            .await;
+        let CoreVoiceOutcome::Sound(listed) = listed else {
+            panic!("expected sound list")
+        };
+        assert_eq!(listed.outcome, CoreSoundOutcome::List);
+        assert!(listed.sounds.expect("sound list").contains("airhorn"));
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
+
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        let queued = service
+            .execute(
+                invocation(),
+                &CoreVoiceCommand::Sound {
+                    name: Some("airhorn".into()),
+                },
+            )
+            .await;
+        assert_eq!(
+            queued,
+            CoreVoiceOutcome::Sound(CoreSoundResult {
+                outcome: CoreSoundOutcome::Queued,
+                name: Some("Air horn".into()),
+                sounds: None,
+            })
+        );
+        let requests = service.synthesizer.requests.lock().expect("requests");
+        assert_eq!(requests[0].text, "");
+        assert_eq!(
+            requests[0].asset_path,
+            Some(PathBuf::from("assets/sfx/airhorn.wav"))
+        );
+    }
+
+    #[tokio::test]
+    async fn sound_kill_switch_and_same_call_gate_fail_closed() {
+        let (service, store, state) = service(true);
+        store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    soundboard: Some(false),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("config");
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::Sound {
+                        name: Some("airhorn".into()),
+                    },
+                )
+                .await,
+            CoreVoiceOutcome::Sound(CoreSoundResult {
+                outcome: CoreSoundOutcome::Disabled,
+                name: None,
+                sounds: None,
+            })
+        );
+
+        store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    soundboard: Some(true),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("config");
+        state.update_voice_state("guild", "user", Some("other".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::Sound {
+                        name: Some("airhorn".into()),
+                    },
+                )
+                .await,
+            CoreVoiceOutcome::Sound(CoreSoundResult {
+                outcome: CoreSoundOutcome::NotInSameVoice,
+                name: Some("Air horn".into()),
+                sounds: None,
+            })
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
     }
 
     #[tokio::test]

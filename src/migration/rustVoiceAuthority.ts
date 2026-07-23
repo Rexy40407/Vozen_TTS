@@ -12,6 +12,8 @@ const RUST_CORE_VOICE_COMMANDS = new Set([
   'tts',
   'laugh',
   'joke',
+  'rizz',
+  'sound',
   '8-ball',
   'fortune',
   'fact',

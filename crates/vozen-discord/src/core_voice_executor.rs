@@ -114,6 +114,8 @@ impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P> {
                 crate::CoreVoiceCommand::Tts { .. }
                     | crate::CoreVoiceCommand::Laugh
                     | crate::CoreVoiceCommand::Joke { .. }
+                    | crate::CoreVoiceCommand::Rizz { .. }
+                    | crate::CoreVoiceCommand::Sound { .. }
                     | crate::CoreVoiceCommand::VoicePreview { .. },
             )
         ))
@@ -151,6 +153,8 @@ where
             crate::CoreVoiceCommand::Tts { .. }
                 | crate::CoreVoiceCommand::Laugh
                 | crate::CoreVoiceCommand::Joke { .. }
+                | crate::CoreVoiceCommand::Rizz { .. }
+                | crate::CoreVoiceCommand::Sound { .. }
                 | crate::CoreVoiceCommand::VoicePreview { .. }
         );
         let defer_public = matches!(command, crate::CoreVoiceCommand::MicroFun { .. });
@@ -209,6 +213,14 @@ where
             CoreVoiceOutcome::Joke(result) => result.joke.clone(),
             _ => None,
         };
+        let rizz_line = match &outcome {
+            CoreVoiceOutcome::Rizz(result) => result.line.clone(),
+            _ => None,
+        };
+        let sound_details = match &outcome {
+            CoreVoiceOutcome::Sound(result) => Some((result.name.clone(), result.sounds.clone())),
+            _ => None,
+        };
         let microfun = match &outcome {
             CoreVoiceOutcome::MicroFun(result) => {
                 Some((result.kind, result.question.clone(), result.text.clone()))
@@ -259,6 +271,17 @@ where
         }
         if let Some(joke) = joke_text {
             parameters.insert("joke", joke);
+        }
+        if let Some(line) = rizz_line {
+            parameters.insert("line", line);
+        }
+        if let Some((name, sounds)) = sound_details {
+            if let Some(name) = name {
+                parameters.insert("name", name);
+            }
+            if let Some(sounds) = sounds {
+                parameters.insert("sounds", sounds);
+            }
         }
         if let Some((kind, question, text)) = microfun {
             if let Some(question) = question {

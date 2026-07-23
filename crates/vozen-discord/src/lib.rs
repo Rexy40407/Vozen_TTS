@@ -77,6 +77,7 @@ mod message_media;
 mod message_pipeline;
 mod message_voice_service;
 mod microfun_text;
+mod pickup_text;
 mod planned_rejoin;
 mod premium_command;
 mod privacy_command;
@@ -88,6 +89,7 @@ mod redeem_command;
 mod rejoin_service;
 mod server_stats_command;
 mod songbird_transport;
+mod sound_text;
 mod speech_preparation;
 mod stats_command;
 mod top_speakers_command;
@@ -199,8 +201,9 @@ pub use core_voice_response::{CoreVoiceResponse, core_voice_response};
 pub use core_voice_service::{
     CommandPlaybackError, CommandPlaybackState, CommandSpeechSynthesizer, CommandSynthesisError,
     CommandVoicePlayback, CoreJokeOutcome, CoreJokeResult, CoreMicroFunResult,
-    CorePlaybackControlOutcome, CorePreviewOutcome, CoreTtsOutcome, CoreVoiceInvocation,
-    CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
+    CorePlaybackControlOutcome, CorePreviewOutcome, CoreRizzOutcome, CoreRizzResult,
+    CoreSoundOutcome, CoreSoundResult, CoreTtsOutcome, CoreVoiceInvocation, CoreVoiceOutcome,
+    CoreVoiceService, CoreVoiceSettings,
 };
 pub use dashboard_options::{
     DiscordDashboardOption, DiscordDashboardOptions, DiscordDashboardOptionsProvider,
@@ -232,6 +235,7 @@ pub use message_media::collect_message_media;
 pub use message_pipeline::{MessagePipelineOutcome, MessageSpeechPipeline};
 pub use message_voice_service::{MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService};
 pub use microfun_text::{MicroFunKind, pick_microfun};
+pub use pickup_text::{line_counts as pickup_line_counts, pick_line};
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
@@ -257,6 +261,7 @@ pub use server_stats_command::{
     ServerStatsCommand, ServerStatsCommandError, parse_server_stats_command,
 };
 pub use songbird_transport::SongbirdVoiceSessionTransport;
+pub use sound_text::{SOUNDS, SoundClip, sound_by_key, sound_list};
 pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
     begin_message_speech, finish_message_speech, prepare_message_speech,

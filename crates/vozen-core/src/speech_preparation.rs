@@ -84,6 +84,7 @@ pub fn prepare_speech(input: SpeechPreparationInput<'_>) -> PreparedSpeech {
             request: SynthRequest {
                 text: spoken.clone(),
                 model: preferred,
+                asset_path: None,
                 speed,
                 engine,
                 segments: None,
@@ -183,6 +184,7 @@ fn prepare_detected(
         request: SynthRequest {
             text: spoken.clone(),
             model,
+            asset_path: None,
             speed,
             engine,
             segments: (has_english && has_other).then_some(segments),

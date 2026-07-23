@@ -34,6 +34,8 @@ pub enum SynthesisEngine {
 pub struct SynthRequest {
     pub text: String,
     pub model: String,
+    /// Trusted, repository-curated WAV to enqueue directly instead of invoking TTS.
+    pub asset_path: Option<std::path::PathBuf>,
     pub speed: f64,
     pub engine: SynthesisEngine,
     pub segments: Option<Vec<SpeechSegment>>,
@@ -116,6 +118,7 @@ pub fn redact_request(request: &SynthRequest, blocklist: &[String]) -> SynthRequ
     SynthRequest {
         text: redact_blocked(&request.text, blocklist),
         model: request.model.clone(),
+        asset_path: request.asset_path.clone(),
         speed: request.speed,
         engine: request.engine,
         segments,
@@ -155,6 +158,7 @@ pub fn cap_synth_request(request: &SynthRequest) -> SynthRequest {
     SynthRequest {
         text: take_code_points(&request.text, MAX_SYNTH_CHARS),
         model: request.model.clone(),
+        asset_path: request.asset_path.clone(),
         speed: request.speed,
         engine: request.engine,
         segments,
@@ -228,6 +232,7 @@ mod tests {
         SynthRequest {
             text: text.to_owned(),
             model: "en_US-amy-medium".to_owned(),
+            asset_path: None,
             speed: 1.0,
             engine: SynthesisEngine::Default,
             segments: None,

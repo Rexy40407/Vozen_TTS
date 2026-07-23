@@ -136,6 +136,7 @@ mod tests {
         SynthRequest {
             text: "private text".into(),
             model: "en_US-amy-medium".into(),
+            asset_path: None,
             speed: 1.0,
             engine: SynthesisEngine::Default,
             segments: None,

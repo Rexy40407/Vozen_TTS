@@ -5,8 +5,8 @@
 //! downgrading command responses to English.
 
 use crate::{
-    CoreJokeOutcome, CorePlaybackControlOutcome, CorePreviewOutcome, CoreTtsOutcome,
-    CoreVoiceOutcome, JoinVoiceOutcome, LeaveVoiceOutcome,
+    CoreJokeOutcome, CorePlaybackControlOutcome, CorePreviewOutcome, CoreRizzOutcome,
+    CoreSoundOutcome, CoreTtsOutcome, CoreVoiceOutcome, JoinVoiceOutcome, LeaveVoiceOutcome,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +30,21 @@ pub enum CoreVoiceResponse {
     JokeBusy,
     JokePlaying,
     JokeFailed,
+    RizzPremiumLocked,
+    RizzNotInVoice,
+    RizzUnknownLanguage,
+    RizzRateLimited,
+    RizzBusy,
+    RizzPlaying,
+    RizzFailed,
+    SoundDisabled,
+    SoundList,
+    SoundUnknown,
+    SoundNotInVoice,
+    SoundRateLimited,
+    SoundBusy,
+    SoundPlaying,
+    SoundFailed,
     MicroFunEightBall,
     MicroFunFortune,
     MicroFunFact,
@@ -100,6 +115,21 @@ impl CoreVoiceResponse {
             Self::JokeRateLimited => "tts.tooFast",
             Self::JokeBusy => "tts.busy",
             Self::JokePlaying => "joke.playing",
+            Self::RizzPremiumLocked => "rizz.locked",
+            Self::RizzNotInVoice => "tts.notInVoice",
+            Self::RizzUnknownLanguage => "rizz.unknownLang",
+            Self::RizzRateLimited => "tts.tooFast",
+            Self::RizzBusy => "tts.busy",
+            Self::RizzPlaying => "rizz.playing",
+            Self::RizzFailed => "error.generic",
+            Self::SoundDisabled => "sound.disabled",
+            Self::SoundList => "sound.list",
+            Self::SoundUnknown => "sound.unknown",
+            Self::SoundNotInVoice => "tts.notInVoice",
+            Self::SoundRateLimited => "tts.tooFast",
+            Self::SoundBusy => "tts.busy",
+            Self::SoundPlaying => "sound.playing",
+            Self::SoundFailed => "error.generic",
             Self::MicroFunEightBall => "fun.eightball",
             Self::MicroFunFortune => "fun.fortune",
             Self::MicroFunFact => "fun.fact",
@@ -170,6 +200,33 @@ pub fn core_voice_response(outcome: CoreVoiceOutcome) -> CoreVoiceResponse {
                 CoreVoiceResponse::JokeFailed
             }
             CoreJokeOutcome::StoreUnavailable => CoreVoiceResponse::StoreUnavailable,
+        },
+        CoreVoiceOutcome::Rizz(result) => match result.outcome {
+            CoreRizzOutcome::PremiumLocked => CoreVoiceResponse::RizzPremiumLocked,
+            CoreRizzOutcome::NotInPlayer | CoreRizzOutcome::NotInSameVoice => {
+                CoreVoiceResponse::RizzNotInVoice
+            }
+            CoreRizzOutcome::UnknownLanguage => CoreVoiceResponse::RizzUnknownLanguage,
+            CoreRizzOutcome::RateLimited => CoreVoiceResponse::RizzRateLimited,
+            CoreRizzOutcome::Busy => CoreVoiceResponse::RizzBusy,
+            CoreRizzOutcome::Queued => CoreVoiceResponse::RizzPlaying,
+            CoreRizzOutcome::SynthesisFailed
+            | CoreRizzOutcome::PlaybackFailed
+            | CoreRizzOutcome::StoreUnavailable => CoreVoiceResponse::RizzFailed,
+        },
+        CoreVoiceOutcome::Sound(result) => match result.outcome {
+            CoreSoundOutcome::Disabled => CoreVoiceResponse::SoundDisabled,
+            CoreSoundOutcome::List => CoreVoiceResponse::SoundList,
+            CoreSoundOutcome::Unknown => CoreVoiceResponse::SoundUnknown,
+            CoreSoundOutcome::NotInVoice | CoreSoundOutcome::NotInSameVoice => {
+                CoreVoiceResponse::SoundNotInVoice
+            }
+            CoreSoundOutcome::RateLimited => CoreVoiceResponse::SoundRateLimited,
+            CoreSoundOutcome::Busy => CoreVoiceResponse::SoundBusy,
+            CoreSoundOutcome::Queued => CoreVoiceResponse::SoundPlaying,
+            CoreSoundOutcome::SynthesisFailed
+            | CoreSoundOutcome::PlaybackFailed
+            | CoreSoundOutcome::StoreUnavailable => CoreVoiceResponse::SoundFailed,
         },
         CoreVoiceOutcome::MicroFun(result) => match result.kind {
             crate::MicroFunKind::EightBall => CoreVoiceResponse::MicroFunEightBall,
@@ -287,6 +344,21 @@ mod tests {
         assert_eq!(
             CoreVoiceResponse::MicroFunFact.catalog_key(),
             Some("fun.fact")
+        );
+        assert_eq!(
+            core_voice_response(CoreVoiceOutcome::Rizz(crate::CoreRizzResult {
+                outcome: CoreRizzOutcome::Queued,
+                line: Some("line".into()),
+            })),
+            CoreVoiceResponse::RizzPlaying
+        );
+        assert_eq!(
+            core_voice_response(CoreVoiceOutcome::Sound(crate::CoreSoundResult {
+                outcome: CoreSoundOutcome::List,
+                name: None,
+                sounds: Some("sounds".into()),
+            })),
+            CoreVoiceResponse::SoundList
         );
     }
 

@@ -46,6 +46,8 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoiceOwnsCommand('shut-up', 'true')).toBe(true);
     expect(rustVoiceOwnsCommand('laugh', 'true')).toBe(true);
     expect(rustVoiceOwnsCommand('joke', 'true')).toBe(true);
+    expect(rustVoiceOwnsCommand('rizz', 'true')).toBe(true);
+    expect(rustVoiceOwnsCommand('sound', 'true')).toBe(true);
     expect(rustVoiceOwnsCommand('8-ball', 'true')).toBe(true);
     expect(rustVoiceOwnsCommand('fortune', 'true')).toBe(true);
     expect(rustVoiceOwnsCommand('fact', 'true')).toBe(true);
