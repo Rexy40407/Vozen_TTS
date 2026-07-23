@@ -64,6 +64,7 @@ mod dashboard_options;
 mod explicit_translation;
 mod file_export_command;
 mod file_export_service;
+mod game_command;
 mod game_list_command;
 mod game_score_command;
 mod game_session;
@@ -235,6 +236,10 @@ pub use explicit_translation::{
 pub use file_export_command::{TtsFileCommand, TtsFileCommandError, parse_tts_file_command};
 pub use file_export_service::{
     MAX_TTS_FILE_CHARS, TtsFileExportInvocation, TtsFileExportOutcome, TtsFileExportService,
+};
+pub use game_command::{
+    GameCommandError, GamePlayCommand, GameStopCommand, parse_game_play_command,
+    parse_game_stop_command,
 };
 pub use game_list_command::{GameListCommand, GameListCommandError, parse_game_list_command};
 pub use game_score_command::{GameScoreCommand, GameScoreCommandError, parse_game_score_command};
