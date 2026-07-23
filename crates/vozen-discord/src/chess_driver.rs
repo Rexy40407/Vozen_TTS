@@ -45,6 +45,7 @@ pub enum ChessDriverAction {
     },
     Resigned {
         user_id: String,
+        user_name: String,
         winner_id: String,
         winner_name: String,
         fen: String,
@@ -218,12 +219,14 @@ impl ChessDriver {
             }
             ChessEvent::Resigned {
                 user_id,
+                user_name,
                 winner_id,
                 winner_name,
             } => {
                 self.deadline_ms = None;
                 ChessDriverAction::Resigned {
                     user_id,
+                    user_name,
                     winner_id,
                     winner_name,
                     fen: self.game.board_fen(),

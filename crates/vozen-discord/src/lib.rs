@@ -65,6 +65,7 @@ mod dashboard_options;
 mod explicit_translation;
 mod file_export_command;
 mod file_export_service;
+mod game_action;
 mod game_catalog;
 mod game_command;
 mod game_content;
@@ -258,6 +259,7 @@ pub use file_export_command::{TtsFileCommand, TtsFileCommandError, parse_tts_fil
 pub use file_export_service::{
     MAX_TTS_FILE_CHARS, TtsFileExportInvocation, TtsFileExportOutcome, TtsFileExportService,
 };
+pub use game_action::{GameSpeech, RenderedGameAction, render_game_action};
 pub use game_catalog::{GAME_CATALOG, GameDefinition, game_by_id};
 pub use game_command::{
     GameCommandError, GamePlayCommand, GameStopCommand, parse_game_play_command,

@@ -50,6 +50,7 @@ pub enum ChessEvent {
     },
     Resigned {
         user_id: String,
+        user_name: String,
         winner_id: String,
         winner_name: String,
     },
@@ -120,7 +121,7 @@ impl ChessGame {
         }
         let text = raw.trim();
         if is_resignation(text) {
-            return self.resign(user_id);
+            return self.resign(user_id, name);
         }
         if !looks_like_move(text) {
             return ChessEvent::Ignored;
@@ -209,7 +210,7 @@ impl ChessGame {
         None
     }
 
-    fn resign(&mut self, user_id: &str) -> ChessEvent {
+    fn resign(&mut self, user_id: &str, user_name: &str) -> ChessEvent {
         let Some(color) = self.color_of(user_id) else {
             return ChessEvent::Ignored;
         };
@@ -232,6 +233,7 @@ impl ChessGame {
         self.over = true;
         ChessEvent::Resigned {
             user_id: user_id.to_owned(),
+            user_name: user_name.to_owned(),
             winner_id,
             winner_name,
         }

@@ -36,6 +36,11 @@ pub struct VozenSaysGame {
 
 impl VozenSaysGame {
     #[must_use]
+    pub fn rounds() -> u8 {
+        ROUNDS
+    }
+
+    #[must_use]
     pub fn new(items: Vec<String>, seed: i64) -> Self {
         let mut rng = XorShift::new(seed);
         let items = seeded_shuffle(items, &mut rng);

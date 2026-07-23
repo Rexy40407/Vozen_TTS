@@ -15,6 +15,7 @@ pub enum ReflexesDriverAction {
     },
     FalseStart {
         user_id: String,
+        name: String,
     },
     Winner {
         round: u8,
@@ -117,7 +118,7 @@ impl ReflexesDriver {
     }
 
     pub fn play_at(&mut self, now_ms: i64, user_id: &str, name: &str) -> ReflexesDriverAction {
-        map_event(self.game.play_at(user_id, name, now_ms))
+        map_event_with_name(self.game.play_at(user_id, name, now_ms), Some(name))
     }
 
     pub fn play_at_actions(
@@ -127,7 +128,7 @@ impl ReflexesDriver {
         name: &str,
     ) -> Vec<ReflexesDriverAction> {
         let event = self.game.play_at(user_id, name, now_ms);
-        let mut actions = vec![map_event(event.clone())];
+        let mut actions = vec![map_event_with_name(event.clone(), Some(name))];
         if matches!(event, ReflexesEvent::Winner { .. }) && !self.game.is_finished() {
             actions.push(self.ready_action(now_ms));
         }
@@ -156,12 +157,19 @@ impl ReflexesDriver {
 }
 
 fn map_event(event: ReflexesEvent) -> ReflexesDriverAction {
+    map_event_with_name(event, None)
+}
+
+fn map_event_with_name(event: ReflexesEvent, actor_name: Option<&str>) -> ReflexesDriverAction {
     match event {
         ReflexesEvent::RoundReady { round, delay_ms } => {
             ReflexesDriverAction::RoundReady { round, delay_ms }
         }
         ReflexesEvent::Opened { round } => ReflexesDriverAction::Opened { round },
-        ReflexesEvent::FalseStart { user_id } => ReflexesDriverAction::FalseStart { user_id },
+        ReflexesEvent::FalseStart { user_id } => ReflexesDriverAction::FalseStart {
+            name: actor_name.unwrap_or(&user_id).to_owned(),
+            user_id,
+        },
         ReflexesEvent::Winner {
             round,
             user_id,
@@ -194,7 +202,8 @@ mod tests {
         assert_eq!(
             driver.play_at(2_000, "early", "Early"),
             ReflexesDriverAction::FalseStart {
-                user_id: "early".into()
+                user_id: "early".into(),
+                name: "Early".into(),
             }
         );
         assert_eq!(driver.deadline_ms(), deadline);

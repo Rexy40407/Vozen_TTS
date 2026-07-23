@@ -15,6 +15,7 @@ pub enum WordChainDriverAction {
     LobbyOpened {
         language: String,
         deadline_ms: i64,
+        duration_ms: i64,
     },
     Joined {
         user_id: String,
@@ -23,6 +24,7 @@ pub enum WordChainDriverAction {
     Turn {
         user_id: String,
         name: String,
+        language: String,
         letter: char,
         min_length: usize,
         turn_ms: u64,
@@ -177,6 +179,7 @@ impl WordChainDriver {
         vec![WordChainDriverAction::LobbyOpened {
             language: self.language.clone(),
             deadline_ms: self.deadline_ms.unwrap_or(now_ms),
+            duration_ms: LOBBY_MS,
         }]
     }
 
@@ -327,6 +330,7 @@ impl WordChainDriver {
         WordChainDriverAction::Turn {
             user_id: user_id.to_owned(),
             name: self.names.get(user_id).cloned().unwrap_or_default(),
+            language: self.language.clone(),
             letter: engine.required_letter(),
             min_length: engine.min_length(),
             turn_ms: engine.turn_ms(),

@@ -8,6 +8,7 @@ use crate::{GameDriver, GameDriverAction, GameMessage};
 pub enum VozenSaysDriverAction {
     RoundOpened {
         round: u8,
+        total: u8,
         item: String,
         real: bool,
         delay_ms: i64,
@@ -161,6 +162,7 @@ impl VozenSaysDriver {
             VozenSaysEvent::RoundOpened { round, item, real } => {
                 VozenSaysDriverAction::RoundOpened {
                     round,
+                    total: VozenSaysGame::rounds(),
                     item,
                     real,
                     delay_ms: self.game.deadline_ms().saturating_sub(now_ms),
@@ -183,6 +185,7 @@ impl VozenSaysDriver {
     fn round_action(&self, now_ms: i64) -> VozenSaysDriverAction {
         VozenSaysDriverAction::RoundOpened {
             round: self.game.round(),
+            total: VozenSaysGame::rounds(),
             item: self.game.item().to_owned(),
             real: self.game.real(),
             delay_ms: self.game.deadline_ms().saturating_sub(now_ms),
