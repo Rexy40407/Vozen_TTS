@@ -88,6 +88,7 @@ import {
   rustCastOwnsCommand,
   rustVoicePreferencesOwnCommand,
   rustPublicCommandsOwnCommand,
+  rustOwnerCommandsOwnCommand,
 } from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
 import { handleTranslate } from './handlers/translation';
@@ -308,6 +309,7 @@ export async function handleInteraction(
   // flag is active. Returning before any defer/write prevents a double response from the two
   // Discord gateway sessions; every other command remains Node-owned.
   if (
+    rustOwnerCommandsOwnCommand(i.commandName) ||
     rustPublicCommandsOwnCommand(
       i.commandName,
       i.commandName === 'game' ? i.options.getSubcommand(false) : null,

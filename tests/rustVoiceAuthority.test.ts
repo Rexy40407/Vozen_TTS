@@ -38,6 +38,7 @@ import {
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
   rustPublicCommandsOwnCommand,
+  rustOwnerCommandsOwnCommand,
   rustTranscriptionOwnsCommand,
   rustSpeakContextOwnsCommand,
   rustTranslateContextOwnsCommand,
@@ -46,6 +47,15 @@ import {
 } from '../src/migration/rustVoiceAuthority';
 
 describe('Rust core voice migration ownership', () => {
+  it('keeps owner commands on Node until both identity guards are present', () => {
+    expect(rustOwnerCommandsOwnCommand('vozen-grant', 'true', 'owner', 'guild')).toBe(true);
+    expect(rustOwnerCommandsOwnCommand('generate-code', 'true', 'owner', 'guild')).toBe(true);
+    expect(rustOwnerCommandsOwnCommand('vozen-grant', 'true', '', 'guild')).toBe(false);
+    expect(rustOwnerCommandsOwnCommand('vozen-grant', 'true', 'owner', '')).toBe(false);
+    expect(rustOwnerCommandsOwnCommand('redeem', 'true', 'owner', 'guild')).toBe(false);
+    expect(rustOwnerCommandsOwnCommand('vozen-grant', 'yes', 'owner', 'guild')).toBe(false);
+  });
+
   it('groups only read-only/control-plane commands behind the public canary', () => {
     expect(rustPublicCommandsOwnCommand('help', null, 'true')).toBe(true);
     expect(rustPublicCommandsOwnCommand('game', 'leaderboard', 'true')).toBe(true);

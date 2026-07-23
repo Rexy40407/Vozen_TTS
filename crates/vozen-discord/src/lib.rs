@@ -95,6 +95,7 @@ mod message_pipeline;
 mod message_voice_service;
 mod microfun_text;
 mod numeric_quiz_driver;
+mod owner_command;
 mod pickup_text;
 mod planned_rejoin;
 mod premium_command;
@@ -308,6 +309,7 @@ pub use microfun_text::{MicroFunKind, pick_microfun};
 pub use numeric_quiz_driver::{
     MathRound, NumericQuizAction, NumericQuizDriver, NumericQuizGameDriver, NumericQuizMode,
 };
+pub use owner_command::{OwnerCommand, OwnerCommandError, OwnerPlan, parse_owner_command};
 pub use pickup_text::{line_counts as pickup_line_counts, pick_line};
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,

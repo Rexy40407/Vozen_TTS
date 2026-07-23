@@ -29,6 +29,7 @@ mod game_score_sink;
 mod guild_lifecycle_sink;
 mod help_sink;
 mod invite_sink;
+mod owner_command_sink;
 mod piper_adapter;
 mod premium_sink;
 mod privacy_sink;
@@ -88,6 +89,7 @@ use vozen_store::{
     DEPARTURE_GRACE_MS, ProviderHealth as StoreProviderHealth, SqliteStore, month_key_utc,
 };
 
+use crate::owner_command_sink::OwnerCommandRuntimeOptions;
 use crate::topgg_metrics::{
     ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats, sync_topgg_commands,
 };
@@ -104,6 +106,7 @@ struct RuntimeConfig {
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
     topgg_metrics: Option<TopggMetricsRuntimeConfig>,
     vote_redemption_secret: Option<String>,
+    owner_commands: Option<OwnerCommandRuntimeOptions>,
     core_voice: Option<CoreVoiceRuntimeOptions>,
     tts_file: Option<TtsFileRuntimeOptions>,
     transcription: Option<TranscriptionRuntimeOptions>,
@@ -323,6 +326,7 @@ impl RuntimeConfig {
         let topgg_webhook = topgg_webhook_from_environment()?;
         let topgg_metrics = topgg_metrics_from_environment()?;
         let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
+        let owner_commands = owner_commands_from_environment();
         let core_voice = core_voice_from_environment()?;
         let tts_file = tts_file_from_environment()?;
         let transcription = transcription_from_environment()?;
@@ -399,6 +403,7 @@ impl RuntimeConfig {
             topgg_webhook,
             topgg_metrics,
             vote_redemption_secret,
+            owner_commands,
             core_voice,
             tts_file,
             transcription,
@@ -621,6 +626,22 @@ fn core_voice_enabled(raw: Option<&str>) -> bool {
 /// Bundles only read-only/control-plane handlers. Voice, live games, STT, payments and
 /// destructive privacy actions deliberately remain on independent canaries.
 fn public_commands_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+/// The Rust owner sink is inert unless the operator explicitly enables it and supplies both
+/// identity guards. This mirrors the Node handler's fail-closed owner resolution.
+fn owner_commands_from_environment() -> Option<OwnerCommandRuntimeOptions> {
+    if !owner_commands_enabled(env::var("RUST_OWNER_COMMANDS_ENABLED").ok().as_deref()) {
+        return None;
+    }
+    Some(OwnerCommandRuntimeOptions {
+        owner_id: nonempty_env("OWNER_ID")?,
+        owner_guild_id: nonempty_env("OWNER_GUILD_ID")?,
+    })
+}
+
+fn owner_commands_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -931,6 +952,19 @@ fn transcription_event_sink(
         .map_err(|_| RuntimeError::TranscriptionGateway)?;
     Ok(Some(Arc::new(
         transcription_sink::TranscriptionGatewaySink::new(store, transcriber),
+    )))
+}
+
+fn owner_command_event_sink(
+    options: Option<OwnerCommandRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    let Some(options) = options else {
+        return Ok(None);
+    };
+    Ok(Some(Arc::new(
+        owner_command_sink::OwnerCommandGatewaySink::new(store, options)
+            .map_err(|_| RuntimeError::OwnerCommandGateway)?,
     )))
 }
 
@@ -1490,6 +1524,8 @@ enum RuntimeError {
     TranslationGateway,
     #[error("message transcription gateway initialisation failed")]
     TranscriptionGateway,
+    #[error("owner command gateway initialisation failed")]
+    OwnerCommandGateway,
     #[error("translation preference gateway initialisation failed")]
     TranslationPreferenceGateway,
     #[error("voice preference gateway initialisation failed")]
@@ -1607,6 +1643,9 @@ async fn run() -> Result<(), RuntimeError> {
     event_sinks.push(Arc::new(
         guild_lifecycle_sink::GuildLifecycleGatewaySink::new(store.clone()),
     ));
+    if let Some(sink) = owner_command_event_sink(config.owner_commands, store.clone())? {
+        event_sinks.push(sink);
+    }
     if let Some(sink) =
         core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?
     {
@@ -2434,6 +2473,15 @@ mod tests {
         assert!(!register_commands_enabled(Some("1")));
         assert!(!register_commands_enabled(Some("yes")));
         assert!(!register_commands_enabled(None));
+    }
+
+    #[test]
+    fn owner_commands_are_exactly_opt_in() {
+        assert!(owner_commands_enabled(Some("true")));
+        assert!(owner_commands_enabled(Some(" TRUE ")));
+        assert!(!owner_commands_enabled(Some("1")));
+        assert!(!owner_commands_enabled(Some("yes")));
+        assert!(!owner_commands_enabled(None));
     }
 
     #[test]

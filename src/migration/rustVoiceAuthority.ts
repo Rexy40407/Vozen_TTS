@@ -23,6 +23,23 @@ const RUST_CORE_VOICE_COMMANDS = new Set([
 ]);
 const RUST_PRIVATE_TTS_FILE_COMMANDS = new Set(['tts-file']);
 
+/** Owner-only monetization commands require both explicit promotion and the two defense-in-depth
+ * identity values used by the Rust gateway. If either value is missing, Node remains authoritative
+ * so an incomplete Rust environment can never turn a valid owner command into a denial. */
+export function rustOwnerCommandsOwnCommand(
+  commandName: string,
+  enabled = process.env.RUST_OWNER_COMMANDS_ENABLED,
+  ownerId = process.env.OWNER_ID,
+  ownerGuildId = process.env.OWNER_GUILD_ID,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    (ownerId?.trim().length ?? 0) > 0 &&
+    (ownerGuildId?.trim().length ?? 0) > 0 &&
+    (commandName === 'vozen-grant' || commandName === 'generate-code')
+  );
+}
+
 /** Read-only/control-plane commands that can be promoted together once Rust is live. */
 const RUST_PUBLIC_COMMANDS = new Set([
   'uptime',
