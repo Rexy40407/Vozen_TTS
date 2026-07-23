@@ -1769,6 +1769,7 @@ async fn run() -> Result<(), RuntimeError> {
     // Opening the store verifies/migrates the exact Node SQLite schema before the Rust gateway
     // does any work. Keep the handle alive for the whole process; future adapters share it.
     let store = Arc::new(Mutex::new(SqliteStore::open(&config.database_path)?));
+    run_startup_data_hygiene(&config.database_path);
     if let Some(redemption_secret) = config.vote_redemption_secret.as_deref() {
         store
             .lock()
@@ -2248,6 +2249,29 @@ fn system_now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().try_into().unwrap_or(i64::MAX))
         .unwrap_or_default()
+}
+
+/// Reconciles files that cannot be cleaned up transactionally after a hard process stop. The
+/// operation is deliberately best-effort and narrow: only Rust/Vozen-owned STT prefixes and the
+/// exact legacy `voice-clones` directory beside the configured database are touched.
+fn run_startup_data_hygiene(database_path: &std::path::Path) {
+    let removed = transcription_adapter::sweep_orphan_stt_temps(&env::temp_dir(), system_now_ms());
+    if removed > 0 {
+        eprintln!("[retention] removed {removed} orphaned STT workspace(s)");
+    }
+
+    let Some(parent) = database_path.parent() else {
+        return;
+    };
+    let legacy_voice_clones = parent.join("voice-clones");
+    if !legacy_voice_clones.is_dir() {
+        return;
+    }
+    if let Err(error) = fs::remove_dir_all(&legacy_voice_clones) {
+        eprintln!("[retention] legacy voice-clones cleanup failed: {error}");
+    } else {
+        eprintln!("[retention] removed legacy voice-clones directory");
+    }
 }
 
 fn system_local_day() -> String {

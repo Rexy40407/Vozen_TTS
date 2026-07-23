@@ -5,10 +5,14 @@
 //! on success and failure.
 
 use std::{
+    fs,
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
+    time::{Duration, UNIX_EPOCH},
 };
+
+#[cfg(test)]
+use std::time::SystemTime;
 
 use serde::Deserialize;
 use tokio::{
@@ -28,6 +32,7 @@ const FFMPEG_TIMEOUT: Duration = Duration::from_secs(20);
 const WHISPER_TIMEOUT: Duration = Duration::from_secs(30);
 const WHISPER_READY_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_TRANSCRIPT_UTF16: usize = 1_800;
+const STT_ORPHAN_MIN_AGE_MS: i64 = 5 * 60 * 1_000;
 #[cfg(feature = "voice-driver")]
 const LIVE_PCM_SAMPLE_RATE: usize = 48_000;
 #[cfg(feature = "voice-driver")]
@@ -63,6 +68,56 @@ pub enum TranscriptionError {
     Unavailable,
 }
 
+/// Removes temporary STT workspaces left by a process that was killed between conversion and
+/// cleanup. Only entries created by this runtime (`vozen-stt-*`) and older than five minutes are
+/// eligible. Recent entries and symlinks are deliberately skipped so a live session or an
+/// unexpected filesystem link can never be removed by startup hygiene.
+pub fn sweep_orphan_stt_temps(dir: &Path, now_ms: i64) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !name.starts_with("vozen-stt-") {
+            continue;
+        }
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        let Ok(modified) = metadata.modified() else {
+            continue;
+        };
+        let modified_ms = modified
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|duration| i64::try_from(duration.as_millis()).ok());
+        let Some(modified_ms) = modified_ms else {
+            continue;
+        };
+        if now_ms.saturating_sub(modified_ms) < STT_ORPHAN_MIN_AGE_MS {
+            continue;
+        }
+        let result = if file_type.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+        if result.is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 struct SidecarState {
     child: Child,
     stdin: ChildStdin,
@@ -73,6 +128,58 @@ struct SidecarState {
 pub struct WhisperSidecar {
     options: TranscriptionRuntimeOptions,
     state: Mutex<Option<SidecarState>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_directory() -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!("vozen-stt-sweep-{}-{nonce}", std::process::id()))
+    }
+
+    #[test]
+    fn sweep_removes_prefixed_workspaces_and_preserves_unrelated_data() {
+        let root = test_directory();
+        fs::create_dir_all(&root).expect("test root");
+        let old = root.join("vozen-stt-old");
+        let another = root.join("vozen-stt-another");
+        let unrelated = root.join("other-process-data");
+        fs::create_dir_all(&old).expect("old workspace");
+        fs::create_dir_all(&another).expect("another workspace");
+        fs::write(&unrelated, b"keep").expect("unrelated file");
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_millis() as i64;
+
+        assert_eq!(
+            sweep_orphan_stt_temps(&root, now_ms + STT_ORPHAN_MIN_AGE_MS + 1),
+            2
+        );
+        assert!(!old.exists());
+        assert!(!another.exists());
+        assert!(unrelated.exists());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn sweep_keeps_recent_workspace() {
+        let root = test_directory();
+        fs::create_dir_all(root.join("vozen-stt-live")).expect("workspace");
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_millis() as i64;
+
+        assert_eq!(sweep_orphan_stt_temps(&root, now_ms), 0);
+        assert!(root.join("vozen-stt-live").exists());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
 }
 
 impl WhisperSidecar {
