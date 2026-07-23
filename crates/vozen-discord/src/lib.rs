@@ -77,6 +77,7 @@ mod songbird_transport;
 mod speech_preparation;
 mod translation_command;
 mod translation_preference_command;
+mod uptime_command;
 mod voice_display;
 mod voice_i18n;
 mod voice_playback;
@@ -232,6 +233,7 @@ pub use translation_preference_command::{
     TranslationPreferenceCommand, TranslationPreferenceCommandError,
     parse_translation_preference_command,
 };
+pub use uptime_command::{UptimeCommand, UptimeCommandError, parse_uptime_command};
 pub use voice_display::{VoiceDisplayCatalog, VoiceDisplayError};
 pub use voice_i18n::{VoiceResponseLocalizer, VoiceResponseLocalizerError};
 pub use voice_playback::{

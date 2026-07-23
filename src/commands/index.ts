@@ -65,6 +65,7 @@ import {
   rustConfigBlockwordOwnsCommand,
   rustConfigShowOwnsCommand,
   rustConfigResetOwnsCommand,
+  rustUptimeOwnsCommand,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
@@ -337,6 +338,7 @@ export async function handleInteraction(
       i.commandName,
       i.commandName === 'config' ? i.options.getSubcommand(false) : null,
     ) ||
+    rustUptimeOwnsCommand(i.commandName) ||
     rustTranslationOwnsCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,

@@ -198,6 +198,14 @@ export function rustConfigResetOwnsCommand(
   );
 }
 
+/** Public uptime has no guild or payment state and can be enabled independently. */
+export function rustUptimeOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_UPTIME_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'uptime';
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

@@ -130,6 +130,7 @@ const KEYS = [
   'config.showRateLimit',
   'config.showBlocklist',
   'config.reset',
+  'uptime.text',
   'config.valueNone',
   'config.valueAny',
   'config.valueAutoDetect',

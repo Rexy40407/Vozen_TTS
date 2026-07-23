@@ -15,6 +15,7 @@ import {
   rustConfigBlockwordOwnsCommand,
   rustConfigShowOwnsCommand,
   rustConfigResetOwnsCommand,
+  rustUptimeOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -141,6 +142,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigResetOwnsCommand('config', 'reset', 'true')).toBe(true);
     expect(rustConfigResetOwnsCommand('config', 'show', 'true')).toBe(false);
     expect(rustConfigResetOwnsCommand('voice', 'reset', 'true')).toBe(false);
+  });
+
+  it('promotes only public uptime behind its own canary', () => {
+    expect(rustUptimeOwnsCommand('uptime')).toBe(false);
+    expect(rustUptimeOwnsCommand('uptime', 'true')).toBe(true);
+    expect(rustUptimeOwnsCommand('bot-stats', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {
