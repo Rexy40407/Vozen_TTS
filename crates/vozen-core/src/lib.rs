@@ -7,6 +7,7 @@ mod accent_restoration;
 mod automatic_translation_policy;
 mod game_heads_or_tails;
 mod game_math;
+mod game_reflexes;
 mod game_skip_count;
 mod game_tictactoe;
 mod kofi;
@@ -35,6 +36,7 @@ pub use game_heads_or_tails::{
     CoinReveal, CoinSide, GameWinner, GuessResult, HeadsOrTailsGame, parse_coin_side,
 };
 pub use game_math::{MathGame, MathGuessResult, MathOperation, MathProblem, first_integer};
+pub use game_reflexes::{ReflexesEvent, ReflexesGame, ReflexesScore};
 pub use game_skip_count::{NumberSequence, SkipCountGame, SkipCountGuessResult};
 pub use game_tictactoe::{Mark, TicTacToeGame, TicTacToeMove};
 pub use kofi::{
