@@ -70,6 +70,7 @@ mod message_media;
 mod message_pipeline;
 mod message_voice_service;
 mod planned_rejoin;
+mod privacy_command;
 mod pronunciation_command;
 mod pronunciation_service;
 mod queue_command;
@@ -215,6 +216,7 @@ pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
 };
+pub use privacy_command::{PrivacyCommandError, PrivacyEraseCommand, parse_privacy_erase_command};
 pub use pronunciation_command::{
     PronunciationCommand, PronunciationCommandError, PronunciationScope,
     parse_pronunciation_command,

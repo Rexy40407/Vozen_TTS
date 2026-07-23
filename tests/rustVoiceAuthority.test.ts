@@ -20,6 +20,7 @@ import {
   rustHelpOwnsCommand,
   rustVoteOwnsCommand,
   rustTopSpeakersOwnsCommand,
+  rustPrivacyOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -176,6 +177,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTopSpeakersOwnsCommand('top-speakers')).toBe(false);
     expect(rustTopSpeakersOwnsCommand('top-speakers', 'true')).toBe(true);
     expect(rustTopSpeakersOwnsCommand('server-stats', 'true')).toBe(false);
+  });
+
+  it('promotes only privacy erase behind its own canary', () => {
+    expect(rustPrivacyOwnsCommand('privacy', 'erase')).toBe(false);
+    expect(rustPrivacyOwnsCommand('privacy', 'erase', 'true')).toBe(true);
+    expect(rustPrivacyOwnsCommand('privacy', null, 'true')).toBe(false);
+    expect(rustPrivacyOwnsCommand('help', 'erase', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {
