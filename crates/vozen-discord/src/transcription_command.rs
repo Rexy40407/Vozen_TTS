@@ -1,7 +1,7 @@
 //! Contract-backed parser for the consent-only `/transcribe revoke` leaf.
 //!
-//! Live session start/stop stays in the Node runtime until Rust has an equivalent receiver
-//! implementation. Revoke is independent: it only removes the invoking user's consent row.
+//! Live session start/stop is parsed by the consent-gated Rust receiver when its runtime canary is
+//! enabled. Revoke remains independent so consent can be withdrawn while that canary is disabled.
 
 use serenity::model::application::{CommandData, CommandDataOptionValue};
 use thiserror::Error;

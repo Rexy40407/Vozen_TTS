@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-//! Public, unauthenticated HTTP surface shared with vozen.org.
+//! HTTP surface shared with vozen.org.
 //!
-//! Authentication, dashboard and payment webhooks remain on the Node runtime until their
-//! individual contracts and security tests have been ported. This crate starts with the narrow
-//! health/status surface because it has no identity or payment authority.
+//! The routers in this crate carry the Rust-side contracts for account OAuth, payments, dashboard,
+//! admin and webhook traffic. Each sensitive router is still opt-in at runtime and fails closed
+//! when its required verifier, secret or listener is absent.
 
 use std::sync::Arc;
 

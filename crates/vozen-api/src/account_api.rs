@@ -1,7 +1,7 @@
 //! Read-only account status endpoint used by the Vozen site.
 //!
-//! It is deliberately a separate router until the Rust HTTP runtime becomes the production
-//! listener. This avoids exposing a partially migrated endpoint during the staged cutover.
+//! It is deliberately a separate router so the runtime can compose it only when the authenticated
+//! HTTP surface is explicitly enabled during the staged cutover.
 
 use std::{
     collections::HashMap,
