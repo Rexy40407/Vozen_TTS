@@ -9,7 +9,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use async_trait::async_trait;
@@ -26,6 +26,8 @@ pub use wav_concat::{
 };
 
 pub const PIPER_TIMEOUT: Duration = Duration::from_secs(15);
+/// Matches the Node AudioCache default. WAVs are regenerable and must not grow without bound.
+pub const DEFAULT_MAX_CACHE_FILES: usize = 500;
 
 #[derive(Debug, Error)]
 pub enum TtsError {
@@ -296,7 +298,11 @@ impl<R: PiperRunner> PiperEngine<R> {
         }
         // A simultaneous matching request can win the race. Its immutable cache result is valid.
         match tokio::fs::rename(&temporary, &destination).await {
-            Ok(()) => Ok(destination),
+            Ok(()) => {
+                let _ =
+                    evict_cache_files(&self.cache_dir, &destination, DEFAULT_MAX_CACHE_FILES).await;
+                Ok(destination)
+            }
             Err(_error) if non_empty_file(&destination).await.unwrap_or(false) => {
                 let _ = tokio::fs::remove_file(&temporary).await;
                 Ok(destination)
@@ -321,7 +327,11 @@ impl<R: PiperRunner> PiperEngine<R> {
         let temporary = self.cache_dir.join(format!(".{}.wav", Uuid::new_v4()));
         tokio::fs::write(&temporary, wav).await?;
         match tokio::fs::rename(&temporary, &destination).await {
-            Ok(()) => Ok(destination),
+            Ok(()) => {
+                let _ =
+                    evict_cache_files(&self.cache_dir, &destination, DEFAULT_MAX_CACHE_FILES).await;
+                Ok(destination)
+            }
             Err(_error) if non_empty_file(&destination).await.unwrap_or(false) => {
                 let _ = tokio::fs::remove_file(&temporary).await;
                 Ok(destination)
@@ -357,6 +367,48 @@ async fn non_empty_file(path: &Path) -> Result<bool, std::io::Error> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error),
     }
+}
+
+/// Keeps only the oldest `max_files` completed WAVs. Cleanup is deliberately best-effort: cache
+/// eviction is never allowed to turn a successful synthesis into a Discord-visible failure.
+async fn evict_cache_files(
+    dir: &Path,
+    just_written: &Path,
+    max_files: usize,
+) -> Result<(), std::io::Error> {
+    let mut entries = tokio::fs::read_dir(dir).await?;
+    let mut files = Vec::new();
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if name.starts_with('.') || path.extension().and_then(|ext| ext.to_str()) != Some("wav") {
+            continue;
+        }
+        let metadata = match entry.metadata().await {
+            Ok(metadata) if metadata.is_file() => metadata,
+            _ => continue,
+        };
+        let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+        files.push((path, modified));
+    }
+    if files.len() <= max_files {
+        return Ok(());
+    }
+    files.sort_by_key(|(_, modified)| *modified);
+    let mut remaining = files.len().saturating_sub(max_files);
+    for (path, _) in files {
+        if remaining == 0 {
+            break;
+        }
+        if path == just_written {
+            continue;
+        }
+        let _ = tokio::fs::remove_file(path).await;
+        remaining -= 1;
+    }
+    Ok(())
 }
 
 /// Direct assets are only accepted when they are regular, non-empty WAV files. The command
@@ -635,6 +687,31 @@ mod tests {
         let parsed = parse_wav(&delayed_wav).expect("parsed");
         assert_eq!(parsed.data.len(), 44 + 44_100);
         assert!(parsed.data[..44_100].iter().all(|sample| *sample == 0));
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn cache_eviction_keeps_the_bound_and_new_file() {
+        let root = temp_dir("eviction");
+        tokio::fs::create_dir_all(&root).await.expect("cache dir");
+        for name in ["old.wav", "middle.wav", "new.wav"] {
+            tokio::fs::write(root.join(name), b"wav")
+                .await
+                .expect("cache entry");
+        }
+        let just_written = root.join("new.wav");
+        evict_cache_files(&root, &just_written, 2)
+            .await
+            .expect("eviction");
+        let mut count = 0;
+        let mut entries = tokio::fs::read_dir(&root).await.expect("read cache");
+        while let Some(entry) = entries.next_entry().await.expect("entry") {
+            if entry.path().extension().and_then(|ext| ext.to_str()) == Some("wav") {
+                count += 1;
+            }
+        }
+        assert_eq!(count, 2);
+        assert!(just_written.is_file());
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 
