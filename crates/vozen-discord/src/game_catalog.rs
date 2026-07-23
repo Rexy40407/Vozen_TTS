@@ -16,7 +16,7 @@ pub struct GameDefinition {
 
 pub const GAME_CATALOG: &[GameDefinition] = &[
     definition(
-        "guessLanguage",
+        "guess-language",
         "game.guessLanguage.name",
         "game.guessLanguage.desc",
         true,
@@ -32,7 +32,7 @@ pub const GAME_CATALOG: &[GameDefinition] = &[
         false,
     ),
     definition(
-        "skipCount",
+        "skip-count",
         "game.skipCount.name",
         "game.skipCount.desc",
         true,
@@ -48,7 +48,7 @@ pub const GAME_CATALOG: &[GameDefinition] = &[
         false,
     ),
     definition(
-        "spellOut",
+        "spell-out",
         "game.spellOut.name",
         "game.spellOut.desc",
         true,
@@ -56,7 +56,7 @@ pub const GAME_CATALOG: &[GameDefinition] = &[
         false,
     ),
     definition(
-        "fastSpeech",
+        "fast-speech",
         "game.fastSpeech.name",
         "game.fastSpeech.desc",
         true,
@@ -64,7 +64,7 @@ pub const GAME_CATALOG: &[GameDefinition] = &[
         false,
     ),
     definition(
-        "accentSwap",
+        "accent-swap",
         "game.accentSwap.name",
         "game.accentSwap.desc",
         true,
@@ -80,7 +80,7 @@ pub const GAME_CATALOG: &[GameDefinition] = &[
         false,
     ),
     definition(
-        "vozenSays",
+        "vozen-says",
         "game.vozenSays.name",
         "game.vozenSays.desc",
         true,
@@ -128,7 +128,7 @@ pub const GAME_CATALOG: &[GameDefinition] = &[
         false,
     ),
     definition(
-        "wordChain",
+        "word-chain",
         "game.wordChain.name",
         "game.wordChain.descr",
         false,
@@ -175,14 +175,37 @@ mod tests {
     #[test]
     fn registry_matches_node_order_and_metadata() {
         assert_eq!(GAME_CATALOG.len(), 16);
-        assert_eq!(GAME_CATALOG[0].id, "guessLanguage");
-        assert_eq!(GAME_CATALOG[14].id, "wordChain");
+        let ids = GAME_CATALOG.iter().map(|game| game.id).collect::<Vec<_>>();
+        assert_eq!(
+            ids,
+            vec![
+                "guess-language",
+                "math",
+                "skip-count",
+                "spelling",
+                "spell-out",
+                "fast-speech",
+                "accent-swap",
+                "reflexes",
+                "vozen-says",
+                "roulette",
+                "hangman",
+                "wordle",
+                "tictactoe",
+                "chess",
+                "word-chain",
+                "headsOrTails",
+            ]
+        );
+        assert_eq!(GAME_CATALOG[0].id, "guess-language");
+        assert_eq!(GAME_CATALOG[14].id, "word-chain");
         assert_eq!(GAME_CATALOG[14].desc_key, "game.wordChain.descr");
         assert_eq!(GAME_CATALOG[15].id, "headsOrTails");
         assert!(GAME_CATALOG[11].premium);
         assert!(GAME_CATALOG[14].uses_language);
         assert!(!GAME_CATALOG[10].needs_voice);
         assert!(game_by_id("headsOrTails").is_some());
+        assert!(game_by_id("word-chain").is_some());
         assert!(game_by_id("not-a-game").is_none());
     }
 }

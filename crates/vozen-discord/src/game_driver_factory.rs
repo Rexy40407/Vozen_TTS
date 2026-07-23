@@ -68,7 +68,7 @@ impl GameDriverFactory {
         let locale_words = self.words_for_locale();
         let model = (!self.default_voice.trim().is_empty()).then(|| self.default_voice.clone());
         let driver: Box<dyn GameDriver> = match id {
-            "guessLanguage" => {
+            "guess-language" => {
                 let (prompts, models) = self.language_prompts();
                 if prompts.is_empty() {
                     return Err(GameFactoryError::NoContent(id.to_owned()));
@@ -76,18 +76,18 @@ impl GameDriverFactory {
                 Box::new(GuessLanguageGameDriver::new(prompts, models))
             }
             "math" => Box::new(NumericQuizGameDriver::math(seed)),
-            "skipCount" => Box::new(NumericQuizGameDriver::skip_count(seed)),
+            "skip-count" => Box::new(NumericQuizGameDriver::skip_count(seed)),
             "spelling" => Box::new(TextQuizGameDriver::new(
                 TextQuizMode::Spelling,
                 pairs(&word_source, seed),
                 model.clone(),
             )),
-            "spellOut" => Box::new(TextQuizGameDriver::new(
+            "spell-out" => Box::new(TextQuizGameDriver::new(
                 TextQuizMode::SpellOut,
                 pairs(&word_source, seed),
                 model.clone(),
             )),
-            "fastSpeech" => Box::new(TextQuizGameDriver::new(
+            "fast-speech" => Box::new(TextQuizGameDriver::new(
                 TextQuizMode::FastSpeech,
                 pairs(
                     self.content
@@ -99,13 +99,13 @@ impl GameDriverFactory {
                 ),
                 model.clone(),
             )),
-            "accentSwap" => Box::new(TextQuizGameDriver::new(
+            "accent-swap" => Box::new(TextQuizGameDriver::new(
                 TextQuizMode::AccentSwap,
                 pairs(&word_source, seed),
                 model.clone(),
             )),
             "reflexes" => Box::new(ReflexesGameDriver::new(seed)),
-            "vozenSays" => Box::new(VozenSaysGameDriver::new(
+            "vozen-says" => Box::new(VozenSaysGameDriver::new(
                 take_rotated(&word_source, seed),
                 seed,
                 model.clone(),
@@ -126,7 +126,7 @@ impl GameDriverFactory {
             }
             "tictactoe" => Box::new(TicTacToeGameDriver::new()),
             "chess" => Box::new(ChessGameDriver::new()),
-            "wordChain" => Box::new(WordChainGameDriver::new(
+            "word-chain" => Box::new(WordChainGameDriver::new(
                 word_chain_language(language, &self.locale),
                 locale_words,
                 seed as u64,
@@ -320,7 +320,7 @@ mod tests {
             Err(GameFactoryError::UnknownGame(game)) if game == "not-a-game"
         ));
         assert!(matches!(
-            factory.create("guessLanguage", None, 1),
+            factory.create("guess-language", None, 1),
             Err(GameFactoryError::NoContent(_))
         ));
     }
@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn word_chain_language_falls_back_to_supported_locale() {
         let factory = GameDriverFactory::new(Vec::new(), "", "pt-PT");
-        let mut driver = factory.create("wordChain", None, 1).expect("driver");
+        let mut driver = factory.create("word-chain", None, 1).expect("driver");
         assert!(!driver.on_start(0).is_empty());
     }
 }
