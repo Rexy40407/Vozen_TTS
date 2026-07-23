@@ -71,6 +71,7 @@ import { createAdminApi, type AdminUserBrief } from './premium/adminApi';
 import { startVoteWebhookServer } from './vote';
 import { listProviderHealth } from './store/operationalMetrics';
 import { claimTopggEvent, purgeExpiredTopggEvents, releaseTopggEvent } from './store/topggEvents';
+import { rustRuntimeFullEnabled } from './migration/rustVoiceAuthority';
 
 function discoverModels(modelsDir: string): string[] {
   if (!existsSync(modelsDir)) return [];
@@ -81,6 +82,16 @@ function discoverModels(modelsDir: string): string[] {
 }
 
 async function main(): Promise<void> {
+  // A valid full-mode contract means the Rust process is the sole gateway authority. Refuse to
+  // start a second discord.js session instead of letting both processes race interactions/voice.
+  // Rust validates the same contract before opening SQLite or Discord, so a partial configuration
+  // keeps the legacy runtime available for safe hybrid operation.
+  if (rustRuntimeFullEnabled()) {
+    log.error(
+      '[index] RUST_RUNTIME_MODE=full is active; refusing the legacy Node gateway. Start vozen-runtime as the sole bot process.',
+    );
+    return;
+  }
   const config = loadConfig();
   // Event-loop blocking watchdog (diagnosis of "Failed to load options"):
   // stalls go to the log + metrics.loopStalls. Timer unref'd — never holds the process.

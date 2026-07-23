@@ -37,6 +37,7 @@ mod premium_sink;
 mod privacy_sink;
 mod pronunciation_sink;
 mod redeem_sink;
+mod runtime_mode;
 mod server_stats_sink;
 mod stats_sink;
 mod top_speakers_sink;
@@ -93,6 +94,7 @@ use vozen_store::{
 };
 
 use crate::owner_command_sink::OwnerCommandRuntimeOptions;
+use crate::runtime_mode::RuntimeMode;
 use crate::topgg_metrics::{
     ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats, sync_topgg_commands,
 };
@@ -306,6 +308,8 @@ struct AutomaticTranslationRuntimeOptions {
 
 impl RuntimeConfig {
     fn from_environment() -> Result<Self, RuntimeError> {
+        let runtime_mode = RuntimeMode::from_environment()?;
+        runtime_mode.validate_environment()?;
         let discord_token = env::var("DISCORD_TOKEN").map_err(|_| RuntimeError::MissingToken)?;
         if discord_token.trim().is_empty() {
             return Err(RuntimeError::MissingToken);
@@ -1583,6 +1587,8 @@ fn nonempty_env(name: &str) -> Option<String> {
 
 #[derive(Debug, Error)]
 enum RuntimeError {
+    #[error("invalid or incomplete Rust runtime mode: {0}")]
+    RuntimeMode(#[from] runtime_mode::RuntimeModeError),
     #[error("DISCORD_TOKEN is required to start the Rust gateway")]
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]

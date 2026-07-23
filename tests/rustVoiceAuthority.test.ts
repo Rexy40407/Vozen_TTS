@@ -46,9 +46,27 @@ import {
   rustTranslateContextOwnsCommand,
   rustRandomizerOwnsCommand,
   rustCastOwnsCommand,
+  rustRuntimeFullEnabled,
+  FULL_RUST_RUNTIME_FLAGS,
 } from '../src/migration/rustVoiceAuthority';
 
 describe('Rust core voice migration ownership', () => {
+  it('keeps the final cutover off for shadow and partial configurations', () => {
+    expect(rustRuntimeFullEnabled({ RUST_RUNTIME_MODE: 'shadow' })).toBe(false);
+    expect(
+      rustRuntimeFullEnabled({
+        RUST_RUNTIME_MODE: 'full',
+        RUST_CORE_VOICE_ENABLED: 'true',
+      }),
+    ).toBe(false);
+    expect(FULL_RUST_RUNTIME_FLAGS).toContain('RUST_GAME_PLAY_ENABLED');
+  });
+
+  it('recognises a complete explicit cutover contract without reading process.env', () => {
+    const env = Object.fromEntries(FULL_RUST_RUNTIME_FLAGS.map((name) => [name, 'true']));
+    expect(rustRuntimeFullEnabled({ ...env, RUST_RUNTIME_MODE: 'FULL' })).toBe(true);
+  });
+
   it('keeps owner commands on Node until both identity guards are present', () => {
     expect(rustOwnerCommandsOwnCommand('vozen-grant', 'true', 'owner', 'guild')).toBe(true);
     expect(rustOwnerCommandsOwnCommand('generate-code', 'true', 'owner', 'guild')).toBe(true);

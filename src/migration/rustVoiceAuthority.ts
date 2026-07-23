@@ -6,6 +6,72 @@
  * answer it. Each promoted slice stays OFF unless the operator deliberately starts its matching
  * Rust runtime configuration.
  */
+/**
+ * The final cutover is intentionally stricter than any individual canary. Keeping this list in
+ * the Node boundary as well as the Rust startup validator means a legacy process can refuse to
+ * become a second gateway only after the exact same operator contract is satisfied.
+ */
+export const FULL_RUST_RUNTIME_FLAGS = [
+  'RUST_RUNTIME_READY',
+  'RUST_REGISTER_COMMANDS_ENABLED',
+  'RUST_CORE_VOICE_ENABLED',
+  'RUST_QUEUE_ENABLED',
+  'RUST_PRONUNCIATION_ENABLED',
+  'RUST_CONFIG_LANGUAGE_ENABLED',
+  'RUST_CONFIG_TOGGLES_ENABLED',
+  'RUST_CONFIG_NUMERIC_ENABLED',
+  'RUST_CONFIG_ROLE_ENABLED',
+  'RUST_CONFIG_DEFAULT_VOICE_ENABLED',
+  'RUST_CONFIG_CHANNEL_ENABLED',
+  'RUST_CONFIG_QUEUE_ROLES_ENABLED',
+  'RUST_CONFIG_GREET_LANGUAGE_ENABLED',
+  'RUST_CONFIG_BLOCKWORD_ENABLED',
+  'RUST_CONFIG_SHOW_ENABLED',
+  'RUST_CONFIG_RESET_ENABLED',
+  'RUST_UPTIME_ENABLED',
+  'RUST_INVITE_ENABLED',
+  'RUST_HELP_ENABLED',
+  'RUST_VOTE_ENABLED',
+  'RUST_TOP_SPEAKERS_ENABLED',
+  'RUST_BIRTHDAY_ENABLED',
+  'RUST_BOT_STATS_ENABLED',
+  'RUST_SERVER_STATS_ENABLED',
+  'RUST_STATS_ENABLED',
+  'RUST_PREMIUM_ENABLED',
+  'RUST_REDEEM_ENABLED',
+  'RUST_PRIVACY_ENABLED',
+  'RUST_GAME_LIST_ENABLED',
+  'RUST_GAME_SCORES_ENABLED',
+  'RUST_GAME_PLAY_ENABLED',
+  'RUST_PUBLIC_COMMANDS_ENABLED',
+  'RUST_TTS_FILE_ENABLED',
+  'RUST_TRANSCRIBE_MESSAGE_ENABLED',
+  'RUST_TRANSCRIBE_LIVE_ENABLED',
+  'RUST_TRANSCRIBE_CONTROL_ENABLED',
+  'RUST_SPEAK_CONTEXT_ENABLED',
+  'RUST_VOICE_PREFERENCES_ENABLED',
+  'RUST_TRANSLATE_TEXT_ENABLED',
+  'RUST_TRANSLATE_CONTEXT_ENABLED',
+  'RUST_TRANSLATION_ADMIN_ENABLED',
+  'RUST_TRANSLATION_PREFERENCES_ENABLED',
+  'RUST_AUTOMATIC_TRANSLATION_ENABLED',
+  'RUST_MESSAGE_AUTOREAD_ENABLED',
+  'RUST_RANDOMIZER_ENABLED',
+  'RUST_CAST_ENABLED',
+  'RUST_SETUP_ENABLED',
+  'RUST_OWNER_COMMANDS_ENABLED',
+  'RUST_DASHBOARD_ENABLED',
+  'RUST_ADMIN_API_ENABLED',
+] as const;
+
+/** True only for an explicit, complete cutover configuration. A typo or partial list is false. */
+export function rustRuntimeFullEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (
+    env.RUST_RUNTIME_MODE?.trim().toLowerCase() === 'full' &&
+    FULL_RUST_RUNTIME_FLAGS.every((name) => env[name]?.trim().toLowerCase() === 'true')
+  );
+}
+
 const RUST_CORE_VOICE_COMMANDS = new Set([
   'join',
   'leave',
