@@ -150,6 +150,19 @@ export function rustConfigQueueRolesOwnCommand(
   );
 }
 
+/** Join greeting language uses its own 19-locale catalogue and canary. */
+export function rustConfigGreetLanguageOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_CONFIG_GREET_LANGUAGE_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'config' &&
+    subcommand === 'greet-language'
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

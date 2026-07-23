@@ -148,7 +148,8 @@
     "config.priorityRoleCleared",
     "config.blockedRoleSet",
     "config.blockedRoleCleared",
-    "config.rolesConflict"
+    "config.rolesConflict",
+    "config.greetLangSet"
   ],
   "messages": {
     "en": {
@@ -260,7 +261,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Join greeting language set to **{language}**."
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -371,7 +373,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Língua da saudação de entrada definida para **{language}**."
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -482,7 +485,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Idioma del saludo de entrada configurado en **{language}**."
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -593,7 +597,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Langue du message d'accueil à l'arrivée définie sur **{language}**."
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -704,7 +709,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Sprache der Beitrittsbegrüßung auf **{language}** gesetzt."
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -815,7 +821,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Taal van de begroeting bij binnenkomst ingesteld op **{language}**."
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -926,7 +933,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Język powitania przy wejściu ustawiony na **{language}**."
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -1037,7 +1045,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Katılım selamlama dili **{language}** olarak ayarlandı."
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -1148,7 +1157,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Jazyk pozdravu při připojení nastaven na **{language}**."
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -1259,7 +1269,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Språk för välkomsthälsning satt till **{language}**."
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -1370,7 +1381,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Liittymistervehdyksen kieleksi asetettu **{language}**."
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -1481,7 +1493,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Sprog for velkomsthilsen sat til **{language}**."
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -1592,7 +1605,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Limba salutului de intrare setată la **{language}**."
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -1703,7 +1717,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ A csatlakozási köszöntés nyelve beállítva: **{language}**."
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -1814,7 +1829,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Iaith cyfarch wrth ymuno wedi'i gosod i **{language}**."
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -1925,7 +1941,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Tungumál innkomukveðju stillt á **{language}**."
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -2036,7 +2053,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Sprooch fir d'Begréissung beim Bäitrëtt op **{language}** gesat."
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -2147,7 +2165,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Pievienošanās sveiciena valoda iestatīta uz **{language}**."
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -2258,7 +2277,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Jazyk pozdravu pri pripojení nastavený na **{language}**."
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -2369,7 +2389,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Jezik pozdrava ob prihodu nastavljen na **{language}**."
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -2480,7 +2501,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Lugha ya salamu ya kujiunga imewekwa kuwa **{language}**."
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -2591,7 +2613,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Đã đặt ngôn ngữ lời chào khi vào thành **{language}**."
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -2702,7 +2725,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Llengua de la salutació d'entrada establerta a **{language}**."
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -2813,7 +2837,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Lingua del saluto d'ingresso impostata su **{language}**."
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -2924,7 +2949,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Η γλώσσα χαιρετισμού εισόδου ορίστηκε σε **{language}**."
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -3035,7 +3061,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Язык приветствия при входе установлен на **{language}**."
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -3146,7 +3173,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Мову вітання при вході встановлено на **{language}**."
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -3257,7 +3285,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Кіру сәлемдесуінің тілі **{language}** болып орнатылды."
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -3368,7 +3397,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ Језик поздрава при уласку постављен на **{language}**."
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -3479,7 +3509,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ تم تعيين لغة تحية الانضمام إلى **{language}**."
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -3590,7 +3621,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ زبان خوش‌آمدِ ورود روی **{language}** تنظیم شد."
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -3701,7 +3733,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ შესვლის მისალმების ენად დაყენდა **{language}**."
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -3812,7 +3845,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ जोडिँदाको अभिवादन भाषा **{language}** मा सेट भयो।"
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -3923,7 +3957,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ 加入问候语言已设为 **{language}**。"
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -4034,7 +4069,8 @@
       "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
       "config.blockedRoleSet": "Queue block set to {role}.",
       "config.blockedRoleCleared": "Queue block role cleared.",
-      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked.",
+      "config.greetLangSet": "✅ 参加時の挨拶の言語を **{language}** に設定しました。"
     }
   }
 }

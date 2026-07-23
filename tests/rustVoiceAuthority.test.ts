@@ -11,6 +11,7 @@ import {
   rustConfigDefaultVoiceOwnsCommand,
   rustConfigChannelOwnsCommand,
   rustConfigQueueRolesOwnCommand,
+  rustConfigGreetLanguageOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -104,6 +105,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigQueueRolesOwnCommand('config', 'blocked-role', 'true')).toBe(true);
     expect(rustConfigQueueRolesOwnCommand('config', 'role', 'true')).toBe(false);
     expect(rustConfigQueueRolesOwnCommand('voice', 'priority-role', 'true')).toBe(false);
+  });
+
+  it('promotes only the greeting language leaf behind its own canary', () => {
+    expect(rustConfigGreetLanguageOwnsCommand('config', 'greet-language')).toBe(false);
+    expect(rustConfigGreetLanguageOwnsCommand('config', 'greet-language', 'true')).toBe(true);
+    expect(rustConfigGreetLanguageOwnsCommand('config', 'language', 'true')).toBe(false);
+    expect(rustConfigGreetLanguageOwnsCommand('voice', 'greet-language', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

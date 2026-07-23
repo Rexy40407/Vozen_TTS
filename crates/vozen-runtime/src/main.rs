@@ -9,6 +9,7 @@
 mod automatic_translation_sink;
 mod config_channel_sink;
 mod config_default_voice_sink;
+mod config_greet_language_sink;
 mod config_language_sink;
 mod config_numeric_sink;
 mod config_queue_role_sink;
@@ -88,6 +89,7 @@ struct RuntimeConfig {
     config_default_voice: Option<ConfigDefaultVoiceRuntimeOptions>,
     config_channel: bool,
     config_queue_roles: bool,
+    config_greet_language: bool,
     pronunciation: bool,
     config_language: bool,
     config_toggles: bool,
@@ -283,6 +285,11 @@ impl RuntimeConfig {
             config_channel_enabled(env::var("RUST_CONFIG_CHANNEL_ENABLED").ok().as_deref());
         let config_queue_roles =
             config_queue_roles_enabled(env::var("RUST_CONFIG_QUEUE_ROLES_ENABLED").ok().as_deref());
+        let config_greet_language = config_greet_language_enabled(
+            env::var("RUST_CONFIG_GREET_LANGUAGE_ENABLED")
+                .ok()
+                .as_deref(),
+        );
         let pronunciation =
             pronunciation_enabled(env::var("RUST_PRONUNCIATION_ENABLED").ok().as_deref());
         let config_language =
@@ -312,6 +319,7 @@ impl RuntimeConfig {
             config_default_voice,
             config_channel,
             config_queue_roles,
+            config_greet_language,
             pronunciation,
             config_language,
             config_toggles,
@@ -489,6 +497,10 @@ fn config_channel_enabled(raw: Option<&str>) -> bool {
 }
 
 fn config_queue_roles_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn config_greet_language_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -786,6 +798,19 @@ fn config_queue_role_event_sink(
     )))
 }
 
+fn config_greet_language_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        config_greet_language_sink::ConfigGreetLanguageGatewaySink::new(store)
+            .map_err(|_| RuntimeError::ConfigGreetLanguageGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -956,6 +981,8 @@ enum RuntimeError {
     ConfigChannelGateway,
     #[error("config queue role gateway initialisation failed")]
     ConfigQueueRoleGateway,
+    #[error("config greet language gateway initialisation failed")]
+    ConfigGreetLanguageGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -1049,6 +1076,11 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = config_queue_role_event_sink(config.config_queue_roles, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) =
+        config_greet_language_event_sink(config.config_greet_language, store.clone())?
+    {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1542,6 +1574,15 @@ mod tests {
         assert!(!config_queue_roles_enabled(Some("1")));
         assert!(!config_queue_roles_enabled(Some("yes")));
         assert!(!config_queue_roles_enabled(None));
+    }
+
+    #[test]
+    fn config_greet_language_promotion_is_exactly_opt_in() {
+        assert!(config_greet_language_enabled(Some("true")));
+        assert!(config_greet_language_enabled(Some(" TRUE ")));
+        assert!(!config_greet_language_enabled(Some("1")));
+        assert!(!config_greet_language_enabled(Some("yes")));
+        assert!(!config_greet_language_enabled(None));
     }
 
     #[test]
