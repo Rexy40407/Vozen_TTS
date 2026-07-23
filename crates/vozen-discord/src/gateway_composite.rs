@@ -31,6 +31,16 @@ impl GatewayEventSink for CompositeGatewayEventSink {
         Ok(())
     }
 
+    async fn on_entitlement_change(
+        &self,
+        context: Context,
+    ) -> Result<(), GatewayEventDispatchError> {
+        for sink in &self.sinks {
+            sink.on_entitlement_change(context.clone()).await?;
+        }
+        Ok(())
+    }
+
     async fn on_guild_create(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
         for sink in &self.sinks {
             sink.on_guild_create(guild_id).await?;

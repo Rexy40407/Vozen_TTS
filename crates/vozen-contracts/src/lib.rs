@@ -13,7 +13,7 @@ pub const VOICE_RESPONSE_I18N_CONTRACT_VERSION: u16 = 1;
 /// Generated from the Node i18n catalogue. It contains only strings that a promoted Rust voice
 /// interaction can currently emit, retaining the Node locale fallback semantics without a second
 /// handwritten translation table.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct VoiceResponseCatalog {
     pub schema_version: u16,
     pub generated_from: String,

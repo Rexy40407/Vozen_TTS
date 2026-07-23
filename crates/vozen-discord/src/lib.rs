@@ -18,7 +18,11 @@ use std::{
 use serenity::{
     async_trait,
     client::{Client, Context, EventHandler},
-    model::gateway::{GatewayIntents, Ready},
+    gateway::ActivityData,
+    model::{
+        gateway::{GatewayIntents, Ready},
+        user::OnlineStatus,
+    },
 };
 use songbird::serenity::SerenityInit;
 use thiserror::Error;
@@ -424,6 +428,16 @@ pub trait GatewayEventSink: Send + Sync {
         Ok(())
     }
 
+    /// Runs when Discord reports a Premium App entitlement change. The event carries no
+    /// user-controlled message content; sinks that use native monetization should reconcile the
+    /// complete entitlement list rather than trusting the single event as an authoritative set.
+    async fn on_entitlement_change(
+        &self,
+        _context: Context,
+    ) -> Result<(), GatewayEventDispatchError> {
+        Ok(())
+    }
+
     /// Runs when Discord confirms that the bot is present in a guild again. Lifecycle sinks use
     /// this to cancel a pending departure purge; other sinks deliberately ignore the hook.
     async fn on_guild_create(&self, _guild_id: &str) -> Result<(), GatewayEventDispatchError> {
@@ -773,6 +787,9 @@ pub fn vozen_gateway_intents() -> GatewayIntents {
         | GatewayIntents::MESSAGE_CONTENT
 }
 
+/// Matches the Node runtime's subtle brand presence and real onboarding CTA.
+pub const DEFAULT_PRESENCE_TEXT: &str = "type it, hear it. • /setup";
+
 /// Extracts only the subcommand/group chain from a Serenity interaction option tree.
 /// Leaf argument values are deliberately excluded; their validation belongs to the handler.
 pub fn command_path_from_options(
@@ -815,6 +832,7 @@ pub fn validate_command_interaction(
 /// `Debug`, preventing accidental log exposure.
 pub struct DiscordRuntimeConfig {
     token: String,
+    presence_text: String,
 }
 
 impl DiscordRuntimeConfig {
@@ -827,7 +845,15 @@ impl DiscordRuntimeConfig {
         if token.trim().is_empty() {
             return Err(DiscordRuntimeError::MissingToken);
         }
-        Ok(Self { token })
+        let presence_text = env::var("PRESENCE_TEXT")
+            .ok()
+            .map(|text| text.trim().to_owned())
+            .filter(|text| !text.is_empty())
+            .unwrap_or_else(|| DEFAULT_PRESENCE_TEXT.to_owned());
+        Ok(Self {
+            token,
+            presence_text,
+        })
     }
 }
 
@@ -872,6 +898,7 @@ pub async fn run_discord_gateway_with_state_and_sink(
         .event_handler(VozenGatewayHandler {
             gateway_state,
             event_sink,
+            presence_text: config.presence_text,
         })
         .await
         .map_err(|error| DiscordRuntimeError::Serenity(Box::new(error)))?;
@@ -885,6 +912,7 @@ pub async fn run_discord_gateway_with_state_and_sink(
 struct VozenGatewayHandler {
     gateway_state: GatewayState,
     event_sink: Option<Arc<dyn GatewayEventSink>>,
+    presence_text: String,
 }
 
 #[async_trait]
@@ -896,8 +924,42 @@ impl EventHandler for VozenGatewayHandler {
             .remember_bot_user(ready.user.id.get().to_string());
         self.gateway_state
             .replace_guilds(ready.guilds.iter().map(|guild| guild.id.get().to_string()));
+        context.set_presence(
+            Some(ActivityData::listening(self.presence_text.clone())),
+            OnlineStatus::Online,
+        );
         if let Some(event_sink) = &self.event_sink {
             let _ = event_sink.on_ready(context).await;
+        }
+    }
+
+    async fn entitlement_create(
+        &self,
+        context: Context,
+        _entitlement: serenity::model::monetization::Entitlement,
+    ) {
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_entitlement_change(context).await;
+        }
+    }
+
+    async fn entitlement_update(
+        &self,
+        context: Context,
+        _entitlement: serenity::model::monetization::Entitlement,
+    ) {
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_entitlement_change(context).await;
+        }
+    }
+
+    async fn entitlement_delete(
+        &self,
+        context: Context,
+        _entitlement: serenity::model::monetization::Entitlement,
+    ) {
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_entitlement_change(context).await;
         }
     }
 

@@ -19,6 +19,7 @@ pub enum VoiceResponseLocalizerError {
     Contract(#[from] VoiceResponseContractError),
 }
 
+#[derive(Clone)]
 pub struct VoiceResponseLocalizer {
     catalog: VoiceResponseCatalog,
 }

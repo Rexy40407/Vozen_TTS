@@ -1773,6 +1773,9 @@ async fn run() -> Result<(), RuntimeError> {
     // bounded monthly retention as the Node runtime without letting an old row block startup.
     spawn_gcloud_retention(store.clone());
     spawn_guild_retention(store.clone());
+    // Ko-fi pending purchases are temporary attribution records. Keep the Node retention
+    // boundary (90 days) so abandoned or already-claimed rows do not accumulate indefinitely.
+    spawn_kofi_pending_retention(store.clone());
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
@@ -2282,6 +2285,27 @@ fn spawn_guild_retention(store: Arc<Mutex<SqliteStore>>) {
             interval.tick().await;
             if let Ok(store) = store.lock() {
                 let _ = store.purge_departed_guilds(system_now_ms(), DEPARTURE_GRACE_MS);
+            }
+        }
+    });
+}
+
+const KOFI_PENDING_RETENTION_MS: i64 = 90 * 86_400_000;
+
+fn purge_kofi_pending_retention(
+    store: &SqliteStore,
+    now: i64,
+) -> Result<usize, vozen_store::StoreError> {
+    store.purge_old_kofi_pending(now.saturating_sub(KOFI_PENDING_RETENTION_MS))
+}
+
+fn spawn_kofi_pending_retention(store: Arc<Mutex<SqliteStore>>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
+        loop {
+            interval.tick().await;
+            if let Ok(store) = store.lock() {
+                let _ = purge_kofi_pending_retention(&store, system_now_ms());
             }
         }
     });

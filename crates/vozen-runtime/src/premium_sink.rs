@@ -20,10 +20,13 @@ use vozen_discord::{
     GatewayEventDispatchError, GatewayEventSink, PremiumCommand, VoiceResponseLocalizer,
     parse_premium_command,
 };
-use vozen_store::{ActivateStatus, SqliteStore, VOTE_REDEMPTION_SECRET_MIN_LENGTH};
+use vozen_store::{
+    ActivateStatus, EntitlementGrant, PremiumKind, SqliteStore, VOTE_REDEMPTION_SECRET_MIN_LENGTH,
+};
 
 const ACTIVATION_TTL_SECONDS: i64 = 30;
 
+#[derive(Clone)]
 pub struct PremiumGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
     kofi_url: String,
@@ -32,6 +35,7 @@ pub struct PremiumGatewaySink {
     guild_sku_id: Option<u64>,
     user_sku_id: Option<u64>,
     localizer: VoiceResponseLocalizer,
+    entitlement_sync_state: Arc<Mutex<EntitlementSyncState>>,
 }
 
 impl PremiumGatewaySink {
@@ -52,6 +56,7 @@ impl PremiumGatewaySink {
             user_sku_id,
             localizer: VoiceResponseLocalizer::from_generated_contract()
                 .map_err(|_| GatewayEventDispatchError)?,
+            entitlement_sync_state: Arc::new(Mutex::new(EntitlementSyncState::default())),
         })
     }
 
@@ -202,6 +207,143 @@ impl PremiumGatewaySink {
         let issued = parts.next()?.parse().ok()?;
         (parts.next().is_none() && matches!(action, "yes" | "no"))
             .then_some((action, user, guild, issued))
+    }
+
+    fn spawn_entitlement_sync(&self, context: Context) {
+        if self.guild_sku_id.is_none() && self.user_sku_id.is_none() {
+            return;
+        }
+        let should_start = {
+            let Ok(mut state) = self.entitlement_sync_state.lock() else {
+                eprintln!("[premium] Discord entitlement synchronization state is poisoned.");
+                return;
+            };
+            if state.running {
+                state.queued = true;
+                false
+            } else {
+                state.running = true;
+                true
+            }
+        };
+        if !should_start {
+            return;
+        }
+        let sink = self.clone();
+        tokio::spawn(async move {
+            loop {
+                if sink.sync_discord_entitlements(&context).await.is_err() {
+                    eprintln!(
+                        "[premium] Discord entitlement synchronization failed; keeping the previous projection."
+                    );
+                }
+                let continue_sync = {
+                    let Ok(mut state) = sink.entitlement_sync_state.lock() else {
+                        eprintln!(
+                            "[premium] Discord entitlement synchronization state is poisoned."
+                        );
+                        break;
+                    };
+                    if state.queued {
+                        state.queued = false;
+                        true
+                    } else {
+                        state.running = false;
+                        false
+                    }
+                };
+                if !continue_sync {
+                    break;
+                }
+            }
+        });
+    }
+
+    /// Fetches the complete Discord Premium Apps entitlement set before replacing the Rust
+    /// projection. A partial page must never be written: `sync_discord_entitlements` removes
+    /// stale Discord grants by design, so an API failure or pagination bug must preserve the
+    /// previous state instead of revoking paying users.
+    async fn sync_discord_entitlements(
+        &self,
+        context: &Context,
+    ) -> Result<(), GatewayEventDispatchError> {
+        if self.guild_sku_id.is_none() && self.user_sku_id.is_none() {
+            return Ok(());
+        }
+        const PAGE_SIZE: u8 = 100;
+        const MAX_PAGES: usize = 1_000;
+
+        let sku_ids = [self.guild_sku_id, self.user_sku_id]
+            .into_iter()
+            .flatten()
+            .map(serenity::model::id::SkuId::new)
+            .collect::<Vec<_>>();
+        let mut after = None;
+        let mut entitlements = Vec::new();
+        for _ in 0..MAX_PAGES {
+            let page = context
+                .http
+                .get_entitlements(
+                    None,
+                    Some(sku_ids.clone()),
+                    None,
+                    after,
+                    Some(PAGE_SIZE),
+                    None,
+                    None,
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            let page_len = page.len();
+            after = page.last().map(|entitlement| entitlement.id);
+            entitlements.extend(page);
+            if page_len < PAGE_SIZE as usize {
+                break;
+            }
+        }
+        if entitlements.len() >= PAGE_SIZE as usize * MAX_PAGES {
+            // Hitting the guard means the endpoint never produced a terminating page. Do not
+            // replace the projection with an incomplete list.
+            return Err(GatewayEventDispatchError);
+        }
+
+        let now = now_ms();
+        let grants = entitlements
+            .into_iter()
+            .filter_map(|entitlement| {
+                map_entitlement_grant(
+                    entitlement.sku_id.get(),
+                    entitlement
+                        .guild_id
+                        .map(|id| id.get().to_string())
+                        .as_deref(),
+                    entitlement
+                        .user_id
+                        .map(|id| id.get().to_string())
+                        .as_deref(),
+                    entitlement.deleted,
+                    entitlement
+                        .ends_at
+                        .map(|timestamp| timestamp.unix_timestamp()),
+                    now,
+                    EntitlementSkuIds {
+                        guild: self.guild_sku_id,
+                        user: self.user_sku_id,
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let result = self
+            .store
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .sync_discord_entitlements(&grants)
+            .map_err(|_| GatewayEventDispatchError)?;
+        eprintln!(
+            "[premium] Discord entitlements synchronized: {} guild(s), {} user(s), {} revoked.",
+            result.guilds_active, result.users_active, result.revoked
+        );
+        Ok(())
     }
 
     fn activate_response(
@@ -360,8 +502,68 @@ impl PremiumGatewaySink {
     }
 }
 
+#[derive(Default)]
+struct EntitlementSyncState {
+    running: bool,
+    queued: bool,
+}
+
+#[derive(Clone, Copy)]
+struct EntitlementSkuIds {
+    guild: Option<u64>,
+    user: Option<u64>,
+}
+
+fn map_entitlement_grant(
+    sku_id: u64,
+    guild_id: Option<&str>,
+    user_id: Option<&str>,
+    deleted: bool,
+    ends_at_seconds: Option<i64>,
+    now_ms: i64,
+    skus: EntitlementSkuIds,
+) -> Option<EntitlementGrant> {
+    if deleted {
+        return None;
+    }
+    let expires_at = ends_at_seconds
+        .map(|seconds| seconds.saturating_mul(1_000))
+        .unwrap_or_else(|| now_ms.saturating_add(100 * 365 * 24 * 60 * 60 * 1_000));
+    if expires_at <= now_ms {
+        return None;
+    }
+    if skus.guild == Some(sku_id) {
+        return guild_id.map(|id| EntitlementGrant {
+            kind: PremiumKind::Guild,
+            id: id.to_owned(),
+            expires_at,
+        });
+    }
+    if skus.user == Some(sku_id) {
+        return user_id.map(|id| EntitlementGrant {
+            kind: PremiumKind::User,
+            id: id.to_owned(),
+            expires_at,
+        });
+    }
+    None
+}
+
 #[async_trait::async_trait]
 impl GatewayEventSink for PremiumGatewaySink {
+    async fn on_ready(&self, context: Context) -> Result<(), GatewayEventDispatchError> {
+        self.spawn_entitlement_sync(context);
+        Ok(())
+    }
+
+    async fn on_entitlement_change(
+        &self,
+        context: Context,
+    ) -> Result<(), GatewayEventDispatchError> {
+        self.spawn_entitlement_sync(context);
+        Ok(())
+    }
+
     async fn on_message(
         &self,
         _context: Context,
@@ -525,4 +727,74 @@ fn now_ms() -> i64 {
 
 fn now_seconds() -> i64 {
     now_ms().div_euclid(1_000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entitlement_mapping_preserves_paid_targets_and_expiry_rules() {
+        assert_eq!(
+            map_entitlement_grant(
+                10,
+                Some("guild"),
+                None,
+                false,
+                Some(2_000),
+                1_000_000,
+                EntitlementSkuIds {
+                    guild: Some(10),
+                    user: Some(20),
+                },
+            ),
+            Some(EntitlementGrant {
+                kind: PremiumKind::Guild,
+                id: "guild".into(),
+                expires_at: 2_000_000,
+            })
+        );
+        assert_eq!(
+            map_entitlement_grant(
+                20,
+                None,
+                Some("user"),
+                false,
+                None,
+                1_000_000,
+                EntitlementSkuIds {
+                    guild: Some(10),
+                    user: Some(20),
+                },
+            )
+            .map(|grant| (grant.kind, grant.id)),
+            Some((PremiumKind::User, "user".into()))
+        );
+    }
+
+    #[test]
+    fn entitlement_mapping_ignores_unknown_expired_deleted_and_missing_targets() {
+        for input in [
+            (99, Some("guild"), None, false, Some(2_000_000)),
+            (10, Some("guild"), None, false, Some(999)),
+            (10, Some("guild"), None, true, Some(2_000_000)),
+            (10, None, None, false, Some(2_000_000)),
+        ] {
+            assert!(
+                map_entitlement_grant(
+                    input.0,
+                    input.1,
+                    input.2,
+                    input.3,
+                    input.4,
+                    1_000_000,
+                    EntitlementSkuIds {
+                        guild: Some(10),
+                        user: Some(20),
+                    },
+                )
+                .is_none()
+            );
+        }
+    }
 }
