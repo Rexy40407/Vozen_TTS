@@ -38,6 +38,7 @@ import {
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
   rustTranscriptionOwnsCommand,
+  rustSpeakContextOwnsCommand,
   rustRandomizerOwnsCommand,
   rustCastOwnsCommand,
 } from '../src/migration/rustVoiceAuthority';
@@ -48,6 +49,15 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranscriptionOwnsCommand('Transcribe voice message', 3, 'true')).toBe(true);
     expect(rustTranscriptionOwnsCommand('Transcribe voice message', 2, 'true')).toBe(false);
     expect(rustTranscriptionOwnsCommand('Translate', 3, 'true')).toBe(false);
+  });
+
+  it('keeps the Speak context menu behind core, Piper, and its own canary', () => {
+    expect(rustSpeakContextOwnsCommand('Speak', 3, 'false', 'true', 'piper')).toBe(false);
+    expect(rustSpeakContextOwnsCommand('Speak', 3, 'true', 'false', 'piper')).toBe(false);
+    expect(rustSpeakContextOwnsCommand('Speak', 3, 'true', 'true', 'google')).toBe(false);
+    expect(rustSpeakContextOwnsCommand('Speak', 2, 'true', 'true', 'piper')).toBe(false);
+    expect(rustSpeakContextOwnsCommand('Translate', 3, 'true', 'true', 'piper')).toBe(false);
+    expect(rustSpeakContextOwnsCommand('Speak', 3, 'true', 'true', 'piper')).toBe(true);
   });
 
   it('keeps randomizer behind the core Piper canary', () => {

@@ -28,7 +28,10 @@ import { localeForUser, reply } from '../helpers';
 import { editCard, replyCard } from '../../ui/messages';
 import { makeTemporaryMediaCopy } from '../../media/temporaryMedia';
 import { admitUserSpeech } from '../../voice/admission';
-import { rustTranscriptionOwnsCommand } from '../../migration/rustVoiceAuthority';
+import {
+  rustSpeakContextOwnsCommand,
+  rustTranscriptionOwnsCommand,
+} from '../../migration/rustVoiceAuthority';
 
 /** File exports are intentionally shorter than normal in-call TTS. */
 const MAX_TTS_FILE_CHARS = 500;
@@ -359,8 +362,9 @@ export async function handleMessageContextMenu(
   deps: BotDeps,
 ): Promise<void> {
   try {
-    // The Rust gateway replies to this context menu only when its explicit STT canary is on.
-    // Returning before defer prevents two gateway sessions from racing the same interaction.
+    // Rust replies to promoted context menus only when their explicit canary is on. Returning
+    // before defer prevents two gateway sessions from racing the same interaction.
+    if (rustSpeakContextOwnsCommand(i.commandName)) return;
     if (rustTranscriptionOwnsCommand(i.commandName)) return;
     if (i.commandName === 'Translate') {
       await handleTranslateMessage(i, deps);

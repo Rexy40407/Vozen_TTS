@@ -94,6 +94,7 @@ mod server_stats_command;
 mod setup_command;
 mod songbird_transport;
 mod sound_text;
+mod speak_message_command;
 mod speech_preparation;
 mod stats_command;
 mod top_speakers_command;
@@ -284,6 +285,10 @@ pub use server_stats_command::{
 pub use setup_command::{SetupCommand, SetupCommandError, parse_setup_command};
 pub use songbird_transport::SongbirdVoiceSessionTransport;
 pub use sound_text::{SOUNDS, SoundClip, sound_by_key, sound_list};
+pub use speak_message_command::{
+    SPEAK_MESSAGE_COMMAND, SpeakMessageCommand, SpeakMessageCommandError,
+    parse_speak_message_command,
+};
 pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
     begin_message_speech, finish_message_speech, prepare_message_speech,

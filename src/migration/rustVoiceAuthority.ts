@@ -37,6 +37,23 @@ export function rustTranscriptionOwnsCommand(
   );
 }
 
+/** The Speak message context menu uses the core TTS admission path and has its own canary. */
+export function rustSpeakContextOwnsCommand(
+  commandName: string,
+  commandType = 3,
+  coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
+  enabled = process.env.RUST_SPEAK_CONTEXT_ENABLED,
+  ttsEngine = process.env.TTS_ENGINE,
+): boolean {
+  return (
+    coreEnabled?.trim().toLowerCase() === 'true' &&
+    enabled?.trim().toLowerCase() === 'true' &&
+    rustPiperCompatible(ttsEngine) &&
+    commandType === 3 &&
+    commandName === 'Speak'
+  );
+}
+
 /** `/randomizer` owns a short-lived menu/modal flow inside the Rust voice sink. */
 export function rustRandomizerOwnsCommand(
   commandName: string,

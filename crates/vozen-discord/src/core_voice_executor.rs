@@ -218,6 +218,43 @@ where
             .await
     }
 
+    /// Localizes the outcome of a message context-menu Speak invocation using the same response
+    /// mapping and guild-locale fallback as the promoted slash-command path.
+    pub fn render_speak_outcome(
+        &self,
+        outcome: CoreVoiceOutcome,
+        facts: &CoreVoiceInteractionFacts,
+        interaction_locale: Option<&str>,
+    ) -> Result<String, CoreVoiceExecutionError> {
+        let (response, parameters, guild_locale) = self.response_context(outcome, facts);
+        self.localizer
+            .render(
+                response,
+                interaction_locale,
+                guild_locale.as_deref(),
+                &parameters,
+            )
+            .ok_or(CoreVoiceExecutionError::MissingResponse)
+    }
+
+    /// Renders a fixed response-catalog key for a voice-adjacent interaction outcome.
+    pub fn render_key(
+        &self,
+        key: &str,
+        facts: &CoreVoiceInteractionFacts,
+        interaction_locale: Option<&str>,
+    ) -> Result<String, CoreVoiceExecutionError> {
+        let guild_locale = self.guild_locale(facts);
+        self.localizer
+            .render_key(
+                key,
+                interaction_locale,
+                guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )
+            .ok_or(CoreVoiceExecutionError::MissingResponse)
+    }
+
     /// Joins the caller's current voice channel without requiring a synthetic Discord command
     /// payload. Used by the atomic `/setup` onboarding flow after its permission checklist.
     pub async fn join_for_setup(&self, facts: &CoreVoiceInteractionFacts) -> CoreVoiceOutcome {

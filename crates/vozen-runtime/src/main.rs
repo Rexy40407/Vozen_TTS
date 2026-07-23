@@ -245,6 +245,7 @@ struct CoreVoiceRuntimeOptions {
     randomizer_enabled: bool,
     cast_enabled: bool,
     setup_enabled: bool,
+    speak_context_enabled: bool,
     settings: CoreVoiceSettings,
 }
 
@@ -458,6 +459,9 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
         randomizer_enabled: randomizer_enabled(env::var("RUST_RANDOMIZER_ENABLED").ok().as_deref()),
         cast_enabled: cast_enabled(env::var("RUST_CAST_ENABLED").ok().as_deref()),
         setup_enabled: setup_enabled(env::var("RUST_SETUP_ENABLED").ok().as_deref()),
+        speak_context_enabled: speak_context_enabled(
+            env::var("RUST_SPEAK_CONTEXT_ENABLED").ok().as_deref(),
+        ),
         settings: CoreVoiceSettings {
             available_models: Vec::new(),
             default_voice,
@@ -476,6 +480,10 @@ fn cast_enabled(raw: Option<&str>) -> bool {
 }
 
 fn setup_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn speak_context_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -2355,6 +2363,15 @@ mod tests {
         assert!(!message_autoread_enabled(Some("1")));
         assert!(!message_autoread_enabled(Some("yes")));
         assert!(!message_autoread_enabled(None));
+    }
+
+    #[test]
+    fn rust_speak_context_is_exactly_opt_in() {
+        assert!(speak_context_enabled(Some("true")));
+        assert!(speak_context_enabled(Some(" TRUE ")));
+        assert!(!speak_context_enabled(Some("1")));
+        assert!(!speak_context_enabled(Some("yes")));
+        assert!(!speak_context_enabled(None));
     }
 
     #[test]

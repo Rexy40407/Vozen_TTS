@@ -25,7 +25,9 @@ use serenity::{
     client::Context,
     model::{
         Permissions,
-        application::{ButtonStyle, ComponentInteractionDataKind, InputTextStyle, Interaction},
+        application::{
+            ButtonStyle, CommandType, ComponentInteractionDataKind, InputTextStyle, Interaction,
+        },
         channel::ChannelType,
         id::{ChannelId, GuildId, UserId},
     },
@@ -42,7 +44,7 @@ use vozen_discord::{
     SongbirdCommandPlayback, SongbirdVoiceSessionTransport, VoiceResponseLocalizer,
     collect_message_media, consume_planned_rejoin_marker, parse_amount_component_id,
     parse_cast_component_id, parse_fill_component_id, parse_modal_options, parse_queue_command,
-    parse_randomizer_command, parse_setup_command, pick_option,
+    parse_randomizer_command, parse_setup_command, parse_speak_message_command, pick_option,
 };
 use vozen_store::{GuildConfigPatch, SqliteStore};
 
@@ -57,6 +59,13 @@ type Executor = CoreVoiceInteractionExecutor<
     SongbirdCommandPlayback,
 >;
 type MessageService = MessageVoiceService<PerUserCommandSynthesizer, SongbirdCommandPlayback>;
+
+fn no_mentions() -> CreateAllowedMentions {
+    CreateAllowedMentions::new()
+        .all_users(false)
+        .all_roles(false)
+        .everyone(false)
+}
 
 struct VoiceDependencies {
     synthesizer: PerUserCommandSynthesizer,
@@ -1630,6 +1639,12 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         let Interaction::Command(command) = interaction else {
             return Ok(());
         };
+        if self.options.speak_context_enabled
+            && command.data.kind == CommandType::Message
+            && command.data.name == vozen_discord::SPEAK_MESSAGE_COMMAND
+        {
+            return self.handle_speak_context(&context, &command).await;
+        }
         let Some(facts) = CoreVoiceInteractionFacts::from_command(&command) else {
             return Ok(());
         };
@@ -1687,6 +1702,46 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 .map_err(|_| GatewayEventDispatchError)?;
         }
         Ok(())
+    }
+
+    async fn handle_speak_context(
+        &self,
+        context: &Context,
+        command: &serenity::model::application::CommandInteraction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let Some(parsed) =
+            parse_speak_message_command(&command.data).map_err(|_| GatewayEventDispatchError)?
+        else {
+            return Ok(());
+        };
+        let Some(facts) = CoreVoiceInteractionFacts::from_command(command) else {
+            return Ok(());
+        };
+        let executor = self.executor(context)?;
+        command
+            .defer_ephemeral(context)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let raw = parsed.message.content.trim();
+        let content = if raw.is_empty() {
+            executor
+                .render_key("speak.emptyMessage", &facts, Some(&command.locale))
+                .map_err(|_| GatewayEventDispatchError)?
+        } else {
+            let outcome = executor.speak_text(&facts, raw).await;
+            executor
+                .render_speak_outcome(outcome, &facts, Some(&command.locale))
+                .map_err(|_| GatewayEventDispatchError)?
+        };
+        command
+            .edit_response(
+                context,
+                EditInteractionResponse::new()
+                    .content(content)
+                    .allowed_mentions(no_mentions()),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)
     }
 
     async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {

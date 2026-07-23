@@ -40,6 +40,7 @@
     "ja"
   ],
   "keys": [
+    "speak.emptyMessage",
     "birthday.set",
     "birthday.invalid",
     "birthday.cleared",
@@ -340,6 +341,7 @@
   ],
   "messages": {
     "en": {
+      "speak.emptyMessage": "That message has no text to read out loud.",
       "birthday.set": "🎂 Birthday saved: **{day}/{month}**. I'll wish you a happy birthday when you join a voice channel that day!",
       "birthday.invalid": "That's not a real date. Check the day and month.",
       "birthday.cleared": "🎂 Birthday removed.",
@@ -639,6 +641,7 @@
       "config.unblocked": "Unblocked: {word}."
     },
     "pt": {
+      "speak.emptyMessage": "Essa mensagem não tem texto para ler em voz alta.",
       "birthday.set": "🎂 Aniversário guardado: **{day}/{month}**. Digo-te parabéns quando entrares numa call nesse dia!",
       "birthday.invalid": "Essa data não existe. Verifica o dia e o mês.",
       "birthday.cleared": "🎂 Aniversário removido.",
@@ -938,6 +941,7 @@
       "config.unblocked": "Desbloqueado: {word}."
     },
     "es": {
+      "speak.emptyMessage": "Ese mensaje no tiene texto para leer en voz alta.",
       "birthday.set": "🎂 Cumpleaños guardado: **{day}/{month}**. ¡Te felicitaré cuando entres en un canal de voz ese día!",
       "birthday.invalid": "Esa fecha no existe. Revisa el día y el mes.",
       "birthday.cleared": "🎂 Cumpleaños eliminado.",
@@ -1237,6 +1241,7 @@
       "config.unblocked": "Desbloqueada: {word}."
     },
     "fr": {
+      "speak.emptyMessage": "Ce message n'a pas de texte à lire à voix haute.",
       "birthday.set": "🎂 Anniversaire enregistré : **{day}/{month}**. Je vous souhaiterai un joyeux anniversaire quand vous rejoindrez un salon vocal ce jour-là !",
       "birthday.invalid": "Ce n'est pas une date valide. Vérifiez le jour et le mois.",
       "birthday.cleared": "🎂 Anniversaire supprimé.",
@@ -1536,6 +1541,7 @@
       "config.unblocked": "Débloqué : {word}."
     },
     "de": {
+      "speak.emptyMessage": "Diese Nachricht hat keinen Text zum Vorlesen.",
       "birthday.set": "🎂 Geburtstag gespeichert: **{day}/{month}**. Ich wünsche dir alles Gute zum Geburtstag, wenn du an dem Tag einem Sprachkanal beitrittst!",
       "birthday.invalid": "Das ist kein echtes Datum. Überprüfe Tag und Monat.",
       "birthday.cleared": "🎂 Geburtstag entfernt.",
@@ -1835,6 +1841,7 @@
       "config.unblocked": "Freigegeben: {word}."
     },
     "nl": {
+      "speak.emptyMessage": "Dat bericht heeft geen tekst om hardop voor te lezen.",
       "birthday.set": "🎂 Verjaardag opgeslagen: **{day}/{month}**. Ik wens je een fijne verjaardag wanneer je op die dag bij een spraakkanaal aansluit!",
       "birthday.invalid": "Dat is geen echte datum. Controleer de dag en de maand.",
       "birthday.cleared": "🎂 Verjaardag verwijderd.",
@@ -2134,6 +2141,7 @@
       "config.unblocked": "Gedeblokkeerd: {word}."
     },
     "pl": {
+      "speak.emptyMessage": "Ta wiadomość nie ma tekstu do przeczytania na głos.",
       "birthday.set": "🎂 Urodziny zapisane: **{day}/{month}**. Złożę ci życzenia, gdy tego dnia dołączysz do kanału głosowego!",
       "birthday.invalid": "To nie jest prawdziwa data. Sprawdź dzień i miesiąc.",
       "birthday.cleared": "🎂 Urodziny usunięte.",
@@ -2433,6 +2441,7 @@
       "config.unblocked": "Odblokowano: {word}."
     },
     "tr": {
+      "speak.emptyMessage": "Bu mesajda sesli okunacak metin yok.",
       "birthday.set": "🎂 Doğum günü kaydedildi: **{day}/{month}**. O gün bir ses kanalına katıldığında sana mutlu yıllar dilerim!",
       "birthday.invalid": "Bu geçerli bir tarih değil. Günü ve ayı kontrol et.",
       "birthday.cleared": "🎂 Doğum günü kaldırıldı.",
@@ -2732,6 +2741,7 @@
       "config.unblocked": "Engel kaldırıldı: {word}."
     },
     "cs": {
+      "speak.emptyMessage": "Tato zpráva nemá žádný text ke čtení nahlas.",
       "birthday.set": "🎂 Narozeniny uloženy: **{day}/{month}**. V ten den ti popřeju k narozeninám, až se připojíš k hlasovému kanálu!",
       "birthday.invalid": "To není platné datum. Zkontroluj den a měsíc.",
       "birthday.cleared": "🎂 Narozeniny odstraněny.",
@@ -3031,6 +3041,7 @@
       "config.unblocked": "Odblokováno: {word}."
     },
     "sv": {
+      "speak.emptyMessage": "Det meddelandet har ingen text att läsa upp.",
       "birthday.set": "🎂 Födelsedag sparad: **{day}/{month}**. Jag önskar dig grattis när du går med i en röstkanal den dagen!",
       "birthday.invalid": "Det är inget riktigt datum. Kontrollera dag och månad.",
       "birthday.cleared": "🎂 Födelsedag borttagen.",
@@ -3330,6 +3341,7 @@
       "config.unblocked": "Avblockerade: {word}."
     },
     "fi": {
+      "speak.emptyMessage": "Tuossa viestissä ei ole ääneen luettavaa tekstiä.",
       "birthday.set": "🎂 Syntymäpäivä tallennettu: **{day}/{month}**. Toivotan sinulle hyvää syntymäpäivää, kun liityt puhekanavalle sinä päivänä!",
       "birthday.invalid": "Tuo ei ole oikea päivämäärä. Tarkista päivä ja kuukausi.",
       "birthday.cleared": "🎂 Syntymäpäivä poistettu.",
@@ -3629,6 +3641,7 @@
       "config.unblocked": "Esto poistettu: {word}."
     },
     "da": {
+      "speak.emptyMessage": "Den besked har ingen tekst at læse højt.",
       "birthday.set": "🎂 Fødselsdag gemt: **{day}/{month}**. Jeg ønsker dig tillykke med fødselsdagen, når du går ind i en talekanal den dag!",
       "birthday.invalid": "Det er ikke en rigtig dato. Tjek dag og måned.",
       "birthday.cleared": "🎂 Fødselsdag fjernet.",
@@ -3928,6 +3941,7 @@
       "config.unblocked": "Fjernet blokering: {word}."
     },
     "ro": {
+      "speak.emptyMessage": "Acel mesaj nu are text de citit cu voce tare.",
       "birthday.set": "🎂 Zi de naștere salvată: **{day}/{month}**. Îți voi ura la mulți ani când intri într-un canal de voce în acea zi!",
       "birthday.invalid": "Aceea nu e o dată reală. Verifică ziua și luna.",
       "birthday.cleared": "🎂 Zi de naștere eliminată.",
@@ -4227,6 +4241,7 @@
       "config.unblocked": "Deblocat: {word}."
     },
     "hu": {
+      "speak.emptyMessage": "Ennek az üzenetnek nincs felolvasható szövege.",
       "birthday.set": "🎂 Születésnap mentve: **{day}/{month}**. Boldog születésnapot kívánok, amikor azon a napon csatlakozol egy hangcsatornához!",
       "birthday.invalid": "Ez nem valós dátum. Ellenőrizd a napot és a hónapot.",
       "birthday.cleared": "🎂 Születésnap eltávolítva.",
@@ -4526,6 +4541,7 @@
       "config.unblocked": "Feloldva: {word}."
     },
     "cy": {
+      "speak.emptyMessage": "Does dim testun yn y neges yna i'w ddarllen yn uchel.",
       "birthday.set": "🎂 Pen-blwydd wedi'i gadw: **{day}/{month}**. Bydda i'n dymuno pen-blwydd hapus i ti pan ymuni â sianel lais y diwrnod hwnnw!",
       "birthday.invalid": "Nid yw hwnna'n ddyddiad go iawn. Gwiria'r diwrnod a'r mis.",
       "birthday.cleared": "🎂 Pen-blwydd wedi'i dynnu.",
@@ -4825,6 +4841,7 @@
       "config.unblocked": "Wedi'i ddadrwystro: {word}."
     },
     "is": {
+      "speak.emptyMessage": "Þessi skilaboð hafa engan texta til að lesa upphátt.",
       "birthday.set": "🎂 Afmælisdagur vistaður: **{day}/{month}**. Ég óska þér til hamingju með afmælið þegar þú ferð inn í talrás þann dag!",
       "birthday.invalid": "Þetta er ekki raunveruleg dagsetning. Athugaðu daginn og mánuðinn.",
       "birthday.cleared": "🎂 Afmælisdagur fjarlægður.",
@@ -5124,6 +5141,7 @@
       "config.unblocked": "Afbannað: {word}."
     },
     "lb": {
+      "speak.emptyMessage": "Dëse Message huet keen Text fir haart virzeliesen.",
       "birthday.set": "🎂 Gebuertsdag gespäichert: **{day}/{month}**. Ech wënschen dir e schéine Gebuertsdag, wann s du op deem Dag an ee Sproochkanal kënns!",
       "birthday.invalid": "Dat ass keen echt Datum. Kontrolléier den Dag an de Mount.",
       "birthday.cleared": "🎂 Gebuertsdag ewechgeholl.",
@@ -5423,6 +5441,7 @@
       "config.unblocked": "Entspaart: {word}."
     },
     "lv": {
+      "speak.emptyMessage": "Šai ziņai nav teksta, ko nolasīt skaļi.",
       "birthday.set": "🎂 Dzimšanas diena saglabāta: **{day}/{month}**. Es tev novēlēšu daudz laimes dzimšanas dienā, kad tajā dienā pievienosies balss kanālam!",
       "birthday.invalid": "Tāda datuma nav. Pārbaudi dienu un mēnesi.",
       "birthday.cleared": "🎂 Dzimšanas diena noņemta.",
@@ -5722,6 +5741,7 @@
       "config.unblocked": "Atbloķēts: {word}."
     },
     "sk": {
+      "speak.emptyMessage": "Táto správa nemá žiadny text na čítanie nahlas.",
       "birthday.set": "🎂 Narodeniny uložené: **{day}/{month}**. V ten deň ti zaželám všetko najlepšie, keď sa pripojíš do hlasového kanála!",
       "birthday.invalid": "To nie je platný dátum. Skontroluj deň a mesiac.",
       "birthday.cleared": "🎂 Narodeniny odstránené.",
@@ -6021,6 +6041,7 @@
       "config.unblocked": "Odblokované: {word}."
     },
     "sl": {
+      "speak.emptyMessage": "To sporočilo nima besedila za branje na glas.",
       "birthday.set": "🎂 Rojstni dan shranjen: **{day}/{month}**. Ob tvojem prihodu v glasovni kanal tega dne ti bom zaželel vse najboljše!",
       "birthday.invalid": "To ni veljaven datum. Preveri dan in mesec.",
       "birthday.cleared": "🎂 Rojstni dan odstranjen.",
@@ -6320,6 +6341,7 @@
       "config.unblocked": "Deblokirano: {word}."
     },
     "sw": {
+      "speak.emptyMessage": "Ujumbe huo hauna maandishi ya kusoma kwa sauti.",
       "birthday.set": "🎂 Siku ya kuzaliwa imehifadhiwa: **{day}/{month}**. Nitakutakia siku njema ya kuzaliwa utakapoingia kwenye kituo cha sauti siku hiyo!",
       "birthday.invalid": "Hiyo si tarehe halisi. Angalia siku na mwezi.",
       "birthday.cleared": "🎂 Siku ya kuzaliwa imeondolewa.",
@@ -6619,6 +6641,7 @@
       "config.unblocked": "Limeruhusiwa: {word}."
     },
     "vi": {
+      "speak.emptyMessage": "Tin nhắn đó không có văn bản để đọc to.",
       "birthday.set": "🎂 Đã lưu ngày sinh: **{day}/{month}**. Tôi sẽ chúc mừng sinh nhật bạn khi bạn vào kênh thoại vào ngày đó!",
       "birthday.invalid": "Đó không phải ngày có thật. Hãy kiểm tra ngày và tháng.",
       "birthday.cleared": "🎂 Đã xóa ngày sinh.",
@@ -6918,6 +6941,7 @@
       "config.unblocked": "Đã bỏ chặn: {word}."
     },
     "ca": {
+      "speak.emptyMessage": "Aquest missatge no té text per llegir en veu alta.",
       "birthday.set": "🎂 Aniversari desat: **{day}/{month}**. Et felicitaré l'aniversari quan entris en un canal de veu aquell dia!",
       "birthday.invalid": "Aquesta data no existeix. Comprova el dia i el mes.",
       "birthday.cleared": "🎂 Aniversari eliminat.",
@@ -7217,6 +7241,7 @@
       "config.unblocked": "Desbloquejada: {word}."
     },
     "it": {
+      "speak.emptyMessage": "Quel messaggio non ha testo da leggere ad alta voce.",
       "birthday.set": "🎂 Compleanno salvato: **{day}/{month}**. Ti farò gli auguri quando entrerai in un canale vocale quel giorno!",
       "birthday.invalid": "Quella non è una data valida. Controlla il giorno e il mese.",
       "birthday.cleared": "🎂 Compleanno rimosso.",
@@ -7516,6 +7541,7 @@
       "config.unblocked": "Sbloccata: {word}."
     },
     "el": {
+      "speak.emptyMessage": "Αυτό το μήνυμα δεν έχει κείμενο για ανάγνωση δυνατά.",
       "birthday.set": "🎂 Τα γενέθλια αποθηκεύτηκαν: **{day}/{month}**. Θα σου ευχηθώ χρόνια πολλά όταν μπεις σε φωνητικό κανάλι εκείνη τη μέρα!",
       "birthday.invalid": "Αυτή δεν είναι πραγματική ημερομηνία. Έλεγξε την ημέρα και τον μήνα.",
       "birthday.cleared": "🎂 Τα γενέθλια αφαιρέθηκαν.",
@@ -7815,6 +7841,7 @@
       "config.unblocked": "Απο-αποκλείστηκε: {word}."
     },
     "ru": {
+      "speak.emptyMessage": "В этом сообщении нет текста, который можно прочитать вслух.",
       "birthday.set": "🎂 День рождения сохранён: **{day}/{month}**. Я поздравлю вас, когда вы зайдёте в голосовой канал в этот день!",
       "birthday.invalid": "Такой даты не существует. Проверьте день и месяц.",
       "birthday.cleared": "🎂 День рождения удалён.",
@@ -8114,6 +8141,7 @@
       "config.unblocked": "Разблокировано: {word}."
     },
     "uk": {
+      "speak.emptyMessage": "У цьому повідомленні немає тексту для читання вголос.",
       "birthday.set": "🎂 День народження збережено: **{day}/{month}**. Я привітаю вас із днем народження, коли ви зайдете до голосового каналу того дня!",
       "birthday.invalid": "Це не справжня дата. Перевірте день і місяць.",
       "birthday.cleared": "🎂 День народження видалено.",
@@ -8413,6 +8441,7 @@
       "config.unblocked": "Розблоковано: {word}."
     },
     "kk": {
+      "speak.emptyMessage": "Бұл хабарламада дауыстап оқитын мәтін жоқ.",
       "birthday.set": "🎂 Туған күн сақталды: **{day}/{month}**. Сол күні дауыстық арнаға кіргеніңізде сізді туған күніңізбен құттықтаймын!",
       "birthday.invalid": "Бұл нақты күн емес. Күн мен айды тексеріңіз.",
       "birthday.cleared": "🎂 Туған күн жойылды.",
@@ -8712,6 +8741,7 @@
       "config.unblocked": "Бұғаттан шығарылды: {word}."
     },
     "sr": {
+      "speak.emptyMessage": "Та порука нема текст за читање наглас.",
       "birthday.set": "🎂 Рођендан сачуван: **{day}/{month}**. Честитаћу ти рођендан када уђеш у гласовни канал тог дана!",
       "birthday.invalid": "То није стварни датум. Провери дан и месец.",
       "birthday.cleared": "🎂 Рођендан уклоњен.",
@@ -9011,6 +9041,7 @@
       "config.unblocked": "Одблокирано: {word}."
     },
     "ar": {
+      "speak.emptyMessage": "هذه الرسالة لا تحتوي على نص لقراءته بصوت عالٍ.",
       "birthday.set": "🎂 حُفظ تاريخ الميلاد: **{day}/{month}**. سأتمنى لك عيد ميلاد سعيداً عندما تنضم إلى قناة صوتية في ذلك اليوم!",
       "birthday.invalid": "هذا ليس تاريخاً حقيقياً. تحقق من اليوم والشهر.",
       "birthday.cleared": "🎂 أُزيل تاريخ الميلاد.",
@@ -9310,6 +9341,7 @@
       "config.unblocked": "أُلغي الحظر عن: {word}."
     },
     "fa": {
+      "speak.emptyMessage": "این پیام متنی برای خواندن با صدای بلند ندارد.",
       "birthday.set": "🎂 تاریخ تولد ذخیره شد: **{day}/{month}**. آن روز وقتی وارد یک کانال صوتی شوی، تولدت را تبریک می‌گویم!",
       "birthday.invalid": "این تاریخ واقعی نیست. روز و ماه را بررسی کن.",
       "birthday.cleared": "🎂 تاریخ تولد حذف شد.",
@@ -9609,6 +9641,7 @@
       "config.unblocked": "رفع مسدودی شد: {word}."
     },
     "ka": {
+      "speak.emptyMessage": "ამ შეტყობინებას ხმამაღლა წასაკითხი ტექსტი არ აქვს.",
       "birthday.set": "🎂 დაბადების დღე შენახულია: **{day}/{month}**. იმ დღეს ხმოვან არხში შესვლისას გილოცავ დაბადების დღეს!",
       "birthday.invalid": "ეს რეალური თარიღი არ არის. შეამოწმეთ დღე და თვე.",
       "birthday.cleared": "🎂 დაბადების დღე წაიშალა.",
@@ -9908,6 +9941,7 @@
       "config.unblocked": "განბლოკილია: {word}."
     },
     "ne": {
+      "speak.emptyMessage": "त्यो सन्देशमा ठूलो स्वरमा पढ्ने कुनै पाठ छैन।",
       "birthday.set": "🎂 जन्मदिन सुरक्षित भयो: **{day}/{month}**। त्यस दिन तपाईं भ्वाइस च्यानलमा जोडिँदा म तपाईंलाई जन्मदिनको शुभकामना दिनेछु!",
       "birthday.invalid": "त्यो सही मिति होइन। दिन र महिना जाँच्नुहोस्।",
       "birthday.cleared": "🎂 जन्मदिन हटाइयो।",
@@ -10207,6 +10241,7 @@
       "config.unblocked": "रोक हटाइयो: {word}।"
     },
     "zh": {
+      "speak.emptyMessage": "那条消息没有可朗读的文字。",
       "birthday.set": "🎂 生日已保存：**{day}/{month}**。那天你加入语音频道时，我会祝你生日快乐！",
       "birthday.invalid": "这不是一个有效的日期。请检查日和月。",
       "birthday.cleared": "🎂 生日已移除。",
@@ -10506,6 +10541,7 @@
       "config.unblocked": "已解除屏蔽：{word}。"
     },
     "ja": {
+      "speak.emptyMessage": "そのメッセージには読み上げるテキストがありません。",
       "birthday.set": "🎂 誕生日を保存しました：**{day}/{month}**。その日にボイスチャンネルに参加したら、お誕生日おめでとうと言いますね！",
       "birthday.invalid": "それは実在しない日付です。日と月を確認してください。",
       "birthday.cleared": "🎂 誕生日を削除しました。",
