@@ -219,6 +219,11 @@ fn grant(body: Bytes, state: &AdminState) -> Response {
             json!({"ok":true,"expiresAt":expires_at}),
             state,
         ),
+        Err(AdminGrantError::Store) => response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            json!({"error":"internal"}),
+            state,
+        ),
         Err(error) => response(
             StatusCode::BAD_REQUEST,
             json!({"error":grant_error(error)}),
