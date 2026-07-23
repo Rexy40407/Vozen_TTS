@@ -116,13 +116,17 @@ impl TextQuizGameDriver {
 
 impl GameDriver for TextQuizGameDriver {
     fn on_start(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
-        vec![GameDriverAction::TextQuiz(self.inner.start(now_ms))]
+        to_manager_actions(self.inner.start(now_ms))
     }
 
     fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {
+        self.on_message_at(message, 0)
+    }
+
+    fn on_message_at(&mut self, message: &GameMessage, now_ms: i64) -> Vec<GameDriverAction> {
         self.inner
             .answer(
-                0,
+                now_ms,
                 &message.author_id,
                 &message.author_name,
                 &message.content,
@@ -415,5 +419,91 @@ mod tests {
             Some(GameManagerEvent::Finished { session })
                 if session.scores.iter().any(|score| score.user_id == "u1" && score.points == 1)
         ));
+    }
+
+    #[test]
+    fn manager_adapter_uses_message_clock_for_the_next_deadline() {
+        let mut manager = GameManager::new();
+        let session = GameSession {
+            guild_id: "guild".into(),
+            channel_id: "game".into(),
+            game_id: "spelling".into(),
+            starter_id: "starter".into(),
+            locale: "en".into(),
+            needs_voice: true,
+            parent_channel_id: None,
+            scores: Vec::new(),
+        };
+        let (_, initial) = manager.start_at(
+            session,
+            Box::new(TextQuizGameDriver::new(
+                TextQuizMode::Spelling,
+                vec![
+                    ("first".into(), "first".into()),
+                    ("second".into(), "second".into()),
+                ],
+                None,
+            )),
+            10_000,
+        );
+        assert!(matches!(
+            initial.as_slice(),
+            [GameDriverAction::TextQuiz(
+                TextQuizDriverAction::RoundOpened { .. }
+            )]
+        ));
+        let event = manager.handle_message_at(
+            &GameMessage {
+                guild_id: "guild".into(),
+                channel_id: "game".into(),
+                author_id: "u1".into(),
+                author_name: "Ana".into(),
+                content: "first".into(),
+                can_trigger_speech: true,
+            },
+            20_000,
+        );
+        assert!(matches!(event, Some(GameManagerEvent::Consumed { .. })));
+        assert!(matches!(
+            manager.advance(44_999).as_slice(),
+            [GameManagerEvent::Consumed { .. }]
+        ));
+        assert!(matches!(
+            manager.advance(45_000).as_slice(),
+            [GameManagerEvent::Finished { .. }]
+        ));
+    }
+
+    #[test]
+    fn empty_quiz_finishes_during_start_without_a_ghost_session() {
+        let mut manager = GameManager::new();
+        let session = GameSession {
+            guild_id: "guild".into(),
+            channel_id: "game".into(),
+            game_id: "spelling".into(),
+            starter_id: "starter".into(),
+            locale: "en".into(),
+            needs_voice: false,
+            parent_channel_id: None,
+            scores: Vec::new(),
+        };
+        let (status, actions) = manager.start_at(
+            session,
+            Box::new(TextQuizGameDriver::new(
+                TextQuizMode::Spelling,
+                Vec::new(),
+                None,
+            )),
+            0,
+        );
+        assert_eq!(status, StartGameResult::Started);
+        assert!(matches!(
+            actions.as_slice(),
+            [
+                GameDriverAction::TextQuiz(TextQuizDriverAction::Finished),
+                GameDriverAction::Finished
+            ]
+        ));
+        assert!(!manager.active("guild"));
     }
 }

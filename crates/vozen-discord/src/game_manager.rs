@@ -35,6 +35,12 @@ pub trait GameDriver: Send {
 
     fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction>;
 
+    /// Clock-aware message hook for drivers with round deadlines. The compatibility hook keeps
+    /// existing adapters source-compatible while runtimes can provide their monotonic timestamp.
+    fn on_message_at(&mut self, message: &GameMessage, _now_ms: i64) -> Vec<GameDriverAction> {
+        self.on_message(message)
+    }
+
     fn on_tick(&mut self, _now_ms: i64) -> Vec<GameDriverAction> {
         Vec::new()
     }
@@ -107,7 +113,17 @@ impl GameManager {
         match self.sessions.start(session) {
             StartGameResult::Started => {
                 let actions = driver.on_start(now_ms);
-                self.drivers.insert(guild_id, ActiveDriver { driver });
+                self.drivers
+                    .insert(guild_id.clone(), ActiveDriver { driver });
+                // A driver with no content can finish during its initial transition. Apply that
+                // transition immediately so an empty game never leaves a ghost session behind.
+                if actions
+                    .iter()
+                    .any(|action| matches!(action, GameDriverAction::Finished))
+                {
+                    let actions_for_state = actions.clone();
+                    let _ = self.apply_actions(&guild_id, actions_for_state);
+                }
                 (StartGameResult::Started, actions)
             }
             already_active => (already_active, Vec::new()),
@@ -117,6 +133,16 @@ impl GameManager {
     /// Routes only the active match channel. A routed message is consumed even if the driver
     /// ignores its text, so normal TTS never reads player guesses aloud.
     pub fn handle_message(&mut self, message: &GameMessage) -> Option<GameManagerEvent> {
+        self.handle_message_at(message, 0)
+    }
+
+    /// Routes a message with the caller's monotonic clock. This is the preferred entry point for
+    /// timed games; `handle_message` remains as a source-compatible zero-clock wrapper.
+    pub fn handle_message_at(
+        &mut self,
+        message: &GameMessage,
+        now_ms: i64,
+    ) -> Option<GameManagerEvent> {
         if !self
             .sessions
             .channel_matches(&message.guild_id, &message.channel_id)
@@ -126,7 +152,7 @@ impl GameManager {
         let actions = self
             .drivers
             .get_mut(&message.guild_id)
-            .map(|active| active.driver.on_message(message))
+            .map(|active| active.driver.on_message_at(message, now_ms))
             .unwrap_or_default();
         self.apply_actions(&message.guild_id, actions)
     }
