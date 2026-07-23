@@ -5,6 +5,7 @@ import {
   rustTranslationPreferencesOwnCommand,
   rustQueueOwnsCommand,
   rustPronunciationOwnsCommand,
+  rustConfigLanguageOwnsCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
@@ -42,6 +43,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustPronunciationOwnsCommand('server-pronunciation', 'add', true, 'true')).toBe(true);
     expect(rustPronunciationOwnsCommand('server-pronunciation', 'list', false, 'yes')).toBe(false);
     expect(rustPronunciationOwnsCommand('queue', 'list', true, 'true')).toBe(false);
+  });
+
+  it('promotes only the config language leaf', () => {
+    expect(rustConfigLanguageOwnsCommand('config', 'language')).toBe(false);
+    expect(rustConfigLanguageOwnsCommand('config', 'language', 'true')).toBe(true);
+    expect(rustConfigLanguageOwnsCommand('config', 'show', 'true')).toBe(false);
+    expect(rustConfigLanguageOwnsCommand('voice', 'language', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

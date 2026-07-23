@@ -40,6 +40,19 @@ export function rustPronunciationOwnsCommand(
   return subcommand === 'list' || subcommand === 'remove';
 }
 
+/** `/config` is a broad admin surface; only its validated language leaf is promoted here. */
+export function rustConfigLanguageOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_CONFIG_LANGUAGE_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'config' &&
+    subcommand === 'language'
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

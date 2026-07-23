@@ -106,7 +106,9 @@
     "spron.set",
     "spron.removed",
     "spron.notFound",
-    "spron.limitHit"
+    "spron.limitHit",
+    "config.language.set",
+    "config.language.unsupported"
   ],
   "messages": {
     "en": {
@@ -176,7 +178,9 @@
       "spron.set": "✅ Saved for the whole server! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ Removed “{term}” from the server.",
       "spron.notFound": "The server has no pronunciation for “{term}”.",
-      "spron.limitHit": "🔒 The server reached its limit of **{limit}** pronunciations. Remove one with `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 The server reached its limit of **{limit}** pronunciations. Remove one with `/server-pronunciation remove`.",
+      "config.language.set": "Interface language set to {language}.",
+      "config.language.unsupported": "That language isn't supported yet."
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -245,7 +249,9 @@
       "spron.set": "✅ Guardado para o servidor inteiro! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” removido do servidor.",
       "spron.notFound": "O servidor não tem nenhuma pronúncia para “{term}”.",
-      "spron.limitHit": "🔒 O servidor atingiu o limite de **{limit}** pronúncias. Remove uma com `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 O servidor atingiu o limite de **{limit}** pronúncias. Remove uma com `/server-pronunciation remove`.",
+      "config.language.set": "Idioma da interface definido para {language}.",
+      "config.language.unsupported": "Esse idioma ainda nao e suportado."
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -314,7 +320,9 @@
       "spron.set": "✅ ¡Guardado para todo el servidor! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” eliminado del servidor.",
       "spron.notFound": "El servidor no tiene ninguna pronunciación para “{term}”.",
-      "spron.limitHit": "🔒 El servidor alcanzó su límite de **{limit}** pronunciaciones. Elimina una con `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 El servidor alcanzó su límite de **{limit}** pronunciaciones. Elimina una con `/server-pronunciation remove`.",
+      "config.language.set": "Idioma de la interfaz configurado en {language}.",
+      "config.language.unsupported": "Ese idioma aún no es compatible."
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -383,7 +391,9 @@
       "spron.set": "✅ Enregistré pour tout le serveur ! « {term} » → « {replacement} ».",
       "spron.removed": "🗑️ « {term} » supprimé du serveur.",
       "spron.notFound": "Le serveur n'a aucune prononciation pour « {term} ».",
-      "spron.limitHit": "🔒 Le serveur a atteint sa limite de **{limit}** prononciations. Supprimez-en une avec `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Le serveur a atteint sa limite de **{limit}** prononciations. Supprimez-en une avec `/server-pronunciation remove`.",
+      "config.language.set": "Langue de l'interface définie sur {language}.",
+      "config.language.unsupported": "Cette langue n'est pas encore prise en charge."
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -452,7 +462,9 @@
       "spron.set": "✅ Für den ganzen Server gespeichert! „{term}“ → „{replacement}“.",
       "spron.removed": "🗑️ „{term}“ vom Server entfernt.",
       "spron.notFound": "Der Server hat keine Aussprache für „{term}“.",
-      "spron.limitHit": "🔒 Der Server hat sein Limit von **{limit}** Aussprachen erreicht. Entferne eine mit `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Der Server hat sein Limit von **{limit}** Aussprachen erreicht. Entferne eine mit `/server-pronunciation remove`.",
+      "config.language.set": "Oberflächensprache auf {language} gesetzt.",
+      "config.language.unsupported": "Diese Sprache wird noch nicht unterstützt."
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -521,7 +533,9 @@
       "spron.set": "✅ Opgeslagen voor de hele server! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” verwijderd van de server.",
       "spron.notFound": "De server heeft geen uitspraak voor “{term}”.",
-      "spron.limitHit": "🔒 De server heeft zijn limiet van **{limit}** uitspraken bereikt. Verwijder er een met `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 De server heeft zijn limiet van **{limit}** uitspraken bereikt. Verwijder er een met `/server-pronunciation remove`.",
+      "config.language.set": "Interfacetaal ingesteld op {language}.",
+      "config.language.unsupported": "Die taal wordt nog niet ondersteund."
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -590,7 +604,9 @@
       "spron.set": "✅ Zapisano dla całego serwera! „{term}” → „{replacement}”.",
       "spron.removed": "🗑️ Usunięto „{term}” z serwera.",
       "spron.notFound": "Serwer nie ma wymowy dla „{term}”.",
-      "spron.limitHit": "🔒 Serwer osiągnął limit **{limit}** wymów. Usuń jedną poleceniem `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Serwer osiągnął limit **{limit}** wymów. Usuń jedną poleceniem `/server-pronunciation remove`.",
+      "config.language.set": "Język interfejsu ustawiony na {language}.",
+      "config.language.unsupported": "Ten język nie jest jeszcze obsługiwany."
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -659,7 +675,9 @@
       "spron.set": "✅ Tüm sunucu için kaydedildi! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” sunucudan kaldırıldı.",
       "spron.notFound": "Sunucunun “{term}” için bir telaffuzu yok.",
-      "spron.limitHit": "🔒 Sunucu **{limit}** telaffuz sınırına ulaştı. `/server-pronunciation remove` ile birini kaldır."
+      "spron.limitHit": "🔒 Sunucu **{limit}** telaffuz sınırına ulaştı. `/server-pronunciation remove` ile birini kaldır.",
+      "config.language.set": "Arayüz dili {language} olarak ayarlandı.",
+      "config.language.unsupported": "Bu dil henüz desteklenmiyor."
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -728,7 +746,9 @@
       "spron.set": "✅ Uloženo pro celý server! „{term}“ → „{replacement}“.",
       "spron.removed": "🗑️ „{term}“ odstraněno ze serveru.",
       "spron.notFound": "Server nemá žádnou výslovnost pro „{term}“.",
-      "spron.limitHit": "🔒 Server dosáhl svého limitu **{limit}** výslovností. Odeber jednu pomocí `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Server dosáhl svého limitu **{limit}** výslovností. Odeber jednu pomocí `/server-pronunciation remove`.",
+      "config.language.set": "Jazyk rozhraní nastaven na {language}.",
+      "config.language.unsupported": "Tento jazyk zatím není podporován."
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -797,7 +817,9 @@
       "spron.set": "✅ Sparat för hela servern! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ Tog bort “{term}” från servern.",
       "spron.notFound": "Servern har inget uttal för “{term}”.",
-      "spron.limitHit": "🔒 Servern nådde sin gräns på **{limit}** uttal. Ta bort ett med `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Servern nådde sin gräns på **{limit}** uttal. Ta bort ett med `/server-pronunciation remove`.",
+      "config.language.set": "Gränssnittsspråk satt till {language}.",
+      "config.language.unsupported": "Det språket stöds inte ännu."
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -866,7 +888,9 @@
       "spron.set": "✅ Tallennettu koko palvelimelle! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ Poistettu “{term}” palvelimelta.",
       "spron.notFound": "Palvelimella ei ole ääntämystä termille “{term}”.",
-      "spron.limitHit": "🔒 Palvelin saavutti rajansa **{limit}** ääntämystä. Poista yksi komennolla `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Palvelin saavutti rajansa **{limit}** ääntämystä. Poista yksi komennolla `/server-pronunciation remove`.",
+      "config.language.set": "Käyttöliittymän kieleksi asetettu {language}.",
+      "config.language.unsupported": "Tuota kieltä ei vielä tueta."
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -935,7 +959,9 @@
       "spron.set": "✅ Gemt for hele serveren! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ Fjernede “{term}” fra serveren.",
       "spron.notFound": "Serveren har ingen udtale for “{term}”.",
-      "spron.limitHit": "🔒 Serveren har nået sin grænse på **{limit}** udtaler. Fjern en med `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Serveren har nået sin grænse på **{limit}** udtaler. Fjern en med `/server-pronunciation remove`.",
+      "config.language.set": "Grænsefladens sprog sat til {language}.",
+      "config.language.unsupported": "Det sprog understøttes ikke endnu."
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -1004,7 +1030,9 @@
       "spron.set": "✅ Salvat pentru tot serverul! „{term}” → „{replacement}”.",
       "spron.removed": "🗑️ Am eliminat „{term}” din server.",
       "spron.notFound": "Serverul nu are nicio pronunție pentru „{term}”.",
-      "spron.limitHit": "🔒 Serverul a atins limita de **{limit}** pronunții. Elimină una cu `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Serverul a atins limita de **{limit}** pronunții. Elimină una cu `/server-pronunciation remove`.",
+      "config.language.set": "Limba interfeței setată la {language}.",
+      "config.language.unsupported": "Limba aceea nu este încă acceptată."
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -1073,7 +1101,9 @@
       "spron.set": "✅ Mentve az egész szerverre! „{term}\" → „{replacement}\".",
       "spron.removed": "🗑️ „{term}\" eltávolítva a szerverről.",
       "spron.notFound": "A szervernek nincs kiejtése a(z) „{term}\" szóhoz.",
-      "spron.limitHit": "🔒 A szerver elérte a(z) **{limit}** kiejtésből álló korlátját. Távolíts el egyet a `/server-pronunciation remove` paranccsal."
+      "spron.limitHit": "🔒 A szerver elérte a(z) **{limit}** kiejtésből álló korlátját. Távolíts el egyet a `/server-pronunciation remove` paranccsal.",
+      "config.language.set": "A felület nyelve beállítva: {language}.",
+      "config.language.unsupported": "Ez a nyelv még nem támogatott."
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -1142,7 +1172,9 @@
       "spron.set": "✅ Wedi'i gadw ar gyfer y gweinydd cyfan! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ Tynnwyd “{term}” o'r gweinydd.",
       "spron.notFound": "Does gan y gweinydd ddim ynganiad ar gyfer “{term}”.",
-      "spron.limitHit": "🔒 Cyrhaeddodd y gweinydd ei derfyn o **{limit}** ynganiad. Tynna un gyda `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Cyrhaeddodd y gweinydd ei derfyn o **{limit}** ynganiad. Tynna un gyda `/server-pronunciation remove`.",
+      "config.language.set": "Iaith y rhyngwyneb wedi'i gosod i {language}.",
+      "config.language.unsupported": "Nid yw'r iaith yna'n cael ei chefnogi eto."
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -1211,7 +1243,9 @@
       "spron.set": "✅ Vistað fyrir allan netþjóninn! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ Fjarlægði “{term}” af netþjóninum.",
       "spron.notFound": "Netþjónninn hefur engan framburð fyrir “{term}”.",
-      "spron.limitHit": "🔒 Netþjónninn náði hámarki sínu af **{limit}** framburðum. Fjarlægðu einn með `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Netþjónninn náði hámarki sínu af **{limit}** framburðum. Fjarlægðu einn með `/server-pronunciation remove`.",
+      "config.language.set": "Viðmótstungumál stillt á {language}.",
+      "config.language.unsupported": "Þetta tungumál er ekki stutt enn."
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -1280,7 +1314,9 @@
       "spron.set": "✅ Fir de ganze Server gespäichert! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” vum Server ewechgeholl.",
       "spron.notFound": "De Server huet keng Aussprooch fir “{term}”.",
-      "spron.limitHit": "🔒 De Server huet seng Limitt vu **{limit}** Aussproochen erreecht. Läsch eng mat `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 De Server huet seng Limitt vu **{limit}** Aussproochen erreecht. Läsch eng mat `/server-pronunciation remove`.",
+      "config.language.set": "Interface-Sprooch op {language} gesat.",
+      "config.language.unsupported": "Dës Sprooch gëtt nach net ënnerstëtzt."
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -1349,7 +1385,9 @@
       "spron.set": "✅ Saglabāts visam serverim! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” noņemts no servera.",
       "spron.notFound": "Serverim nav izrunas vārdam “{term}”.",
-      "spron.limitHit": "🔒 Serveris sasniedza savu **{limit}** izrunu limitu. Noņem kādu ar `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Serveris sasniedza savu **{limit}** izrunu limitu. Noņem kādu ar `/server-pronunciation remove`.",
+      "config.language.set": "Saskarnes valoda iestatīta uz {language}.",
+      "config.language.unsupported": "Šī valoda vēl netiek atbalstīta."
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -1418,7 +1456,9 @@
       "spron.set": "✅ Uložené pre celý server! „{term}“ → „{replacement}“.",
       "spron.removed": "🗑️ „{term}“ odstránené zo servera.",
       "spron.notFound": "Server nemá žiadnu výslovnosť pre „{term}“.",
-      "spron.limitHit": "🔒 Server dosiahol svoj limit **{limit}** výslovností. Odstráň jednu cez `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Server dosiahol svoj limit **{limit}** výslovností. Odstráň jednu cez `/server-pronunciation remove`.",
+      "config.language.set": "Jazyk rozhrania nastavený na {language}.",
+      "config.language.unsupported": "Tento jazyk zatiaľ nie je podporovaný."
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -1487,7 +1527,9 @@
       "spron.set": "✅ Shranjeno za celoten strežnik! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” odstranjeno s strežnika.",
       "spron.notFound": "Strežnik nima izgovorjave za “{term}”.",
-      "spron.limitHit": "🔒 Strežnik je dosegel omejitev **{limit}** izgovorjav. Eno odstrani z `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Strežnik je dosegel omejitev **{limit}** izgovorjav. Eno odstrani z `/server-pronunciation remove`.",
+      "config.language.set": "Jezik vmesnika je nastavljen na {language}.",
+      "config.language.unsupported": "Ta jezik še ni podprt."
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -1556,7 +1598,9 @@
       "spron.set": "✅ Imehifadhiwa kwa seva nzima! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” imeondolewa kutoka seva.",
       "spron.notFound": "Seva haina matamshi ya “{term}”.",
-      "spron.limitHit": "🔒 Seva imefikia kikomo chake cha matamshi **{limit}**. Ondoa moja kwa `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Seva imefikia kikomo chake cha matamshi **{limit}**. Ondoa moja kwa `/server-pronunciation remove`.",
+      "config.language.set": "Lugha ya kiolesura imewekwa kuwa {language}.",
+      "config.language.unsupported": "Lugha hiyo bado haitumiki."
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -1625,7 +1669,9 @@
       "spron.set": "✅ Đã lưu cho toàn máy chủ! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ Đã xóa “{term}” khỏi máy chủ.",
       "spron.notFound": "Máy chủ không có cách phát âm nào cho “{term}”.",
-      "spron.limitHit": "🔒 Máy chủ đã đạt giới hạn **{limit}** cách phát âm. Hãy xóa một mục với `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Máy chủ đã đạt giới hạn **{limit}** cách phát âm. Hãy xóa một mục với `/server-pronunciation remove`.",
+      "config.language.set": "Đã đặt ngôn ngữ giao diện thành {language}.",
+      "config.language.unsupported": "Ngôn ngữ đó chưa được hỗ trợ."
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -1694,7 +1740,9 @@
       "spron.set": "✅ Desada per a tot el servidor! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” eliminada del servidor.",
       "spron.notFound": "El servidor no té cap pronunciació per a “{term}”.",
-      "spron.limitHit": "🔒 El servidor ha arribat al seu límit de **{limit}** pronunciacions. Elimina'n una amb `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 El servidor ha arribat al seu límit de **{limit}** pronunciacions. Elimina'n una amb `/server-pronunciation remove`.",
+      "config.language.set": "Llengua de la interfície establerta a {language}.",
+      "config.language.unsupported": "Aquesta llengua encara no és compatible."
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -1763,7 +1811,9 @@
       "spron.set": "✅ Salvato per l'intero server! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ “{term}” rimosso dal server.",
       "spron.notFound": "Il server non ha nessuna pronuncia per “{term}”.",
-      "spron.limitHit": "🔒 Il server ha raggiunto il limite di **{limit}** pronunce. Rimuovine una con `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Il server ha raggiunto il limite di **{limit}** pronunce. Rimuovine una con `/server-pronunciation remove`.",
+      "config.language.set": "Lingua dell'interfaccia impostata su {language}.",
+      "config.language.unsupported": "Quella lingua non è ancora supportata."
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -1832,7 +1882,9 @@
       "spron.set": "✅ Αποθηκεύτηκε για όλο τον διακομιστή! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ Αφαιρέθηκε το “{term}” από τον διακομιστή.",
       "spron.notFound": "Ο διακομιστής δεν έχει προφορά για το “{term}”.",
-      "spron.limitHit": "🔒 Ο διακομιστής έφτασε το όριό του των **{limit}** προφορών. Αφαίρεσε μία με `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Ο διακομιστής έφτασε το όριό του των **{limit}** προφορών. Αφαίρεσε μία με `/server-pronunciation remove`.",
+      "config.language.set": "Η γλώσσα διεπαφής ορίστηκε σε {language}.",
+      "config.language.unsupported": "Αυτή η γλώσσα δεν υποστηρίζεται ακόμη."
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -1901,7 +1953,9 @@
       "spron.set": "✅ Сохранено для всего сервера! «{term}» → «{replacement}».",
       "spron.removed": "🗑️ «{term}» удалено с сервера.",
       "spron.notFound": "На сервере нет произношения для «{term}».",
-      "spron.limitHit": "🔒 Сервер достиг лимита в **{limit}** произношений. Удалите одно через `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Сервер достиг лимита в **{limit}** произношений. Удалите одно через `/server-pronunciation remove`.",
+      "config.language.set": "Язык интерфейса установлен на {language}.",
+      "config.language.unsupported": "Этот язык пока не поддерживается."
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -1970,7 +2024,9 @@
       "spron.set": "✅ Збережено для всього сервера! «{term}» → «{replacement}».",
       "spron.removed": "🗑️ «{term}» видалено із сервера.",
       "spron.notFound": "На сервері немає вимови для «{term}».",
-      "spron.limitHit": "🔒 Сервер досяг свого ліміту в **{limit}** вимов. Видаліть одну за допомогою `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Сервер досяг свого ліміту в **{limit}** вимов. Видаліть одну за допомогою `/server-pronunciation remove`.",
+      "config.language.set": "Мову інтерфейсу встановлено на {language}.",
+      "config.language.unsupported": "Ця мова поки що не підтримується."
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -2039,7 +2095,9 @@
       "spron.set": "✅ Бүкіл сервер үшін сақталды! «{term}» → «{replacement}».",
       "spron.removed": "🗑️ «{term}» серверден жойылды.",
       "spron.notFound": "Серверде «{term}» үшін айтылым жоқ.",
-      "spron.limitHit": "🔒 Сервер **{limit}** айтылым шегіне жетті. Біреуін `/server-pronunciation remove` арқылы жойыңыз."
+      "spron.limitHit": "🔒 Сервер **{limit}** айтылым шегіне жетті. Біреуін `/server-pronunciation remove` арқылы жойыңыз.",
+      "config.language.set": "Интерфейс тілі {language} болып орнатылды.",
+      "config.language.unsupported": "Бұл тіл әзірге қолдау таппайды."
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -2108,7 +2166,9 @@
       "spron.set": "✅ Сачувано за цео сервер! „{term}“ → „{replacement}“.",
       "spron.removed": "🗑️ Уклоњено „{term}“ са сервера.",
       "spron.notFound": "Сервер нема изговор за „{term}“.",
-      "spron.limitHit": "🔒 Сервер је достигао свој лимит од **{limit}** изговора. Уклони један помоћу `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 Сервер је достигао свој лимит од **{limit}** изговора. Уклони један помоћу `/server-pronunciation remove`.",
+      "config.language.set": "Језик интерфејса постављен на {language}.",
+      "config.language.unsupported": "Тај језик још није подржан."
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -2177,7 +2237,9 @@
       "spron.set": "✅ حُفظ للخادم بأكمله! “{term}” → “{replacement}”.",
       "spron.removed": "🗑️ أُزيل “{term}” من الخادم.",
       "spron.notFound": "الخادم ليس لديه نطق لـ“{term}”.",
-      "spron.limitHit": "🔒 بلغ الخادم حدّه وهو **{limit}** نطق. أزل واحداً عبر `/server-pronunciation remove`."
+      "spron.limitHit": "🔒 بلغ الخادم حدّه وهو **{limit}** نطق. أزل واحداً عبر `/server-pronunciation remove`.",
+      "config.language.set": "تم تعيين لغة الواجهة إلى {language}.",
+      "config.language.unsupported": "هذه اللغة غير مدعومة بعد."
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -2246,7 +2308,9 @@
       "spron.set": "✅ برای کل سرور ذخیره شد! «{term}» → «{replacement}».",
       "spron.removed": "🗑️ «{term}» از سرور حذف شد.",
       "spron.notFound": "سرور برای «{term}» تلفظی ندارد.",
-      "spron.limitHit": "🔒 سرور به سقف **{limit}** تلفظ رسید. یکی را با `/server-pronunciation remove` حذف کن."
+      "spron.limitHit": "🔒 سرور به سقف **{limit}** تلفظ رسید. یکی را با `/server-pronunciation remove` حذف کن.",
+      "config.language.set": "زبان رابط روی {language} تنظیم شد.",
+      "config.language.unsupported": "این زبان هنوز پشتیبانی نمی‌شود."
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -2315,7 +2379,9 @@
       "spron.set": "✅ შენახულია მთელი სერვერისთვის! „{term}“ → „{replacement}“.",
       "spron.removed": "🗑️ „{term}“ წაიშალა სერვერიდან.",
       "spron.notFound": "სერვერს არ აქვს გამოთქმა „{term}“-სთვის.",
-      "spron.limitHit": "🔒 სერვერმა მიაღწია **{limit}** გამოთქმის ლიმიტს. წაშალეთ ერთი `/server-pronunciation remove`-ით."
+      "spron.limitHit": "🔒 სერვერმა მიაღწია **{limit}** გამოთქმის ლიმიტს. წაშალეთ ერთი `/server-pronunciation remove`-ით.",
+      "config.language.set": "ინტერფეისის ენა დაყენდა {language}-ზე.",
+      "config.language.unsupported": "ეს ენა ჯერ არ არის მხარდაჭერილი."
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -2384,7 +2450,9 @@
       "spron.set": "✅ सिंगो सर्भरका लागि सुरक्षित भयो! “{term}” → “{replacement}”।",
       "spron.removed": "🗑️ सर्भरबाट “{term}” हटाइयो।",
       "spron.notFound": "सर्भरसँग “{term}” का लागि कुनै उच्चारण छैन।",
-      "spron.limitHit": "🔒 सर्भर **{limit}** उच्चारणको आफ्नो सीमामा पुग्यो। `/server-pronunciation remove` ले एउटा हटाउनुहोस्।"
+      "spron.limitHit": "🔒 सर्भर **{limit}** उच्चारणको आफ्नो सीमामा पुग्यो। `/server-pronunciation remove` ले एउटा हटाउनुहोस्।",
+      "config.language.set": "इन्टरफेस भाषा {language} मा सेट भयो।",
+      "config.language.unsupported": "त्यो भाषा अझै समर्थित छैन।"
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -2453,7 +2521,9 @@
       "spron.set": "✅ 已为整个服务器保存！“{term}” → “{replacement}”。",
       "spron.removed": "🗑️ 已从服务器移除“{term}”。",
       "spron.notFound": "服务器没有为“{term}”设置发音。",
-      "spron.limitHit": "🔒 服务器已达到 **{limit}** 个发音的上限。用 `/server-pronunciation remove` 移除一个。"
+      "spron.limitHit": "🔒 服务器已达到 **{limit}** 个发音的上限。用 `/server-pronunciation remove` 移除一个。",
+      "config.language.set": "界面语言已设为 {language}。",
+      "config.language.unsupported": "暂不支持该语言。"
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -2522,7 +2592,9 @@
       "spron.set": "✅ サーバー全体に保存しました！ 「{term}」→「{replacement}」。",
       "spron.removed": "🗑️ サーバーから「{term}」を削除しました。",
       "spron.notFound": "サーバーには「{term}」の発音がありません。",
-      "spron.limitHit": "🔒 サーバーは発音の上限（**{limit}** 件）に達しました。`/server-pronunciation remove` でひとつ削除してください。"
+      "spron.limitHit": "🔒 サーバーは発音の上限（**{limit}** 件）に達しました。`/server-pronunciation remove` でひとつ削除してください。",
+      "config.language.set": "インターフェースの言語を {language} に設定しました。",
+      "config.language.unsupported": "その言語はまだ対応していません。"
     }
   }
 }

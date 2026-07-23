@@ -54,6 +54,7 @@ import {
   rustTranslationPreferencesOwnCommand,
   rustQueueOwnsCommand,
   rustPronunciationOwnsCommand,
+  rustConfigLanguageOwnsCommand,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
@@ -280,6 +281,10 @@ export async function handleInteraction(
       i.commandName,
       pronunciationSubcommand,
       pronunciationHasCompleteAdd,
+    ) ||
+    rustConfigLanguageOwnsCommand(
+      i.commandName,
+      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
     ) ||
     rustTranslationOwnsCommand(
       i.commandName,

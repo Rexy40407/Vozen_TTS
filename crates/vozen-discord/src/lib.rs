@@ -28,6 +28,8 @@ mod automatic_translation_service;
 mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
+mod config_language_command;
+mod config_language_service;
 mod core_voice_command;
 mod core_voice_executor;
 mod core_voice_interaction;
@@ -73,6 +75,12 @@ pub use command_registration::{
 pub use command_routing::{CommandArea, command_area, route_command};
 pub use command_speech_pipeline::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline,
+};
+pub use config_language_command::{
+    ConfigLanguageCommand, ConfigLanguageCommandError, parse_config_language_command,
+};
+pub use config_language_service::{
+    ConfigLanguageInvocation, ConfigLanguageOutcome, ConfigLanguageService,
 };
 pub use core_voice_command::{CoreVoiceCommand, CoreVoiceCommandError, parse_promoted_core_voice};
 pub use core_voice_executor::{

@@ -78,6 +78,8 @@ const KEYS = [
   'spron.removed',
   'spron.notFound',
   'spron.limitHit',
+  'config.language.set',
+  'config.language.unsupported',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };
