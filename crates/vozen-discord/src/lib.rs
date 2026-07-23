@@ -351,11 +351,17 @@ impl GatewayState {
         self.messages_spoken.load(Ordering::Relaxed)
     }
 
-    /// Records a speech item only after synthesis and queue admission succeed. Songbird remains
-    /// the playback authority; the counter is intentionally process-local observability, not a
-    /// durable usage record.
+    /// Records a speech item explicitly. The Songbird adapter normally updates this counter from
+    /// its `Playable` event; this hook remains useful for deterministic integration tests. The
+    /// metric is process-local observability, not a durable usage record.
     pub fn record_message_spoken(&self) {
         self.messages_spoken.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Shares the process-local speech counter with the Songbird adapter so it can record a
+    /// track only once it becomes playable. The atomic contains no content or identity data.
+    pub fn message_counter(&self) -> Arc<AtomicU64> {
+        self.messages_spoken.clone()
     }
 
     /// Whether this process received Discord's READY event. The value contains no guild or user

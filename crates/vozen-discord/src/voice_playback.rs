@@ -5,12 +5,13 @@
 //! Node voice path.
 
 use std::path::Path;
+use std::sync::{Arc, atomic::AtomicU64};
 
 #[cfg(any(feature = "voice-driver", test))]
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(feature = "voice-driver")]
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -28,6 +29,9 @@ use vozen_core::{PublicQueueItem, QueueLane, QueueSource};
 #[cfg(any(feature = "voice-driver", test))]
 use uuid::Uuid;
 
+#[cfg(feature = "voice-driver")]
+use songbird::events::{Event, EventContext, EventData, EventHandler, TrackEvent};
+
 /// Private track bookkeeping. It deliberately excludes synthesized text, voice model and WAV
 /// path; only the opaque values required for the existing `/queue` controls are retained.
 #[cfg(any(feature = "voice-driver", test))]
@@ -37,6 +41,18 @@ struct QueueTrackMetadata {
     source: QueueSource,
     lane: QueueLane,
     created_at_ms: u64,
+}
+
+#[cfg(feature = "voice-driver")]
+struct SpokenTrackCounter(Arc<AtomicU64>);
+
+#[cfg(feature = "voice-driver")]
+#[async_trait]
+impl EventHandler for SpokenTrackCounter {
+    async fn act(&self, _context: &EventContext<'_>) -> Option<Event> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Some(Event::Cancel)
+    }
 }
 
 /// Bounded metadata mirror of Songbird's queue. Songbird is the playback authority; this only
@@ -222,13 +238,19 @@ pub struct SongbirdCommandPlayback {
     reservations: Arc<Mutex<QueueReservations>>,
     #[cfg(feature = "voice-driver")]
     queue_metadata: Arc<Mutex<QueueTrackLedger>>,
+    #[cfg(feature = "voice-driver")]
+    messages_spoken: Arc<AtomicU64>,
 }
 
 impl SongbirdCommandPlayback {
     #[must_use]
-    pub fn new(context: serenity::client::Context, maximum_queue_items: usize) -> Self {
+    pub fn new(
+        context: serenity::client::Context,
+        maximum_queue_items: usize,
+        messages_spoken: Arc<AtomicU64>,
+    ) -> Self {
         #[cfg(not(feature = "voice-driver"))]
-        let _ = (context, maximum_queue_items);
+        let _ = (context, maximum_queue_items, messages_spoken);
 
         Self {
             #[cfg(feature = "voice-driver")]
@@ -241,6 +263,8 @@ impl SongbirdCommandPlayback {
             reservations: Arc::new(Mutex::new(QueueReservations::default())),
             #[cfg(feature = "voice-driver")]
             queue_metadata: Arc::new(Mutex::new(QueueTrackLedger::default())),
+            #[cfg(feature = "voice-driver")]
+            messages_spoken,
         }
     }
 
@@ -342,12 +366,16 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
                 created_at_ms: options.created_at_ms,
             },
         )?;
-        handler
-            .enqueue(songbird::tracks::Track::new_with_uuid(
-                songbird::input::File::new(wav).into(),
-                id,
-            ))
-            .await;
+        let mut track =
+            songbird::tracks::Track::new_with_uuid(songbird::input::File::new(wav).into(), id);
+        track.events.add_event(
+            EventData::new(
+                Event::Track(TrackEvent::Playable),
+                SpokenTrackCounter(self.messages_spoken.clone()),
+            ),
+            std::time::Duration::ZERO,
+        );
+        handler.enqueue(track).await;
         Ok(())
     }
 

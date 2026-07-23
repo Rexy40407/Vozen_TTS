@@ -101,7 +101,11 @@ impl CoreVoiceGatewaySink {
                     options.piper_concurrency,
                 ),
             ),
-            playback: SongbirdCommandPlayback::new(context.clone(), options.queue_cap),
+            playback: SongbirdCommandPlayback::new(
+                context.clone(),
+                options.queue_cap,
+                self.gateway_state.message_counter(),
+            ),
             synthesis: GuildSynthesisCoordinator::default(),
         });
         *current = Some(dependencies.clone());
@@ -282,9 +286,6 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 resolve_channel: &resolve_channel,
             })
             .await;
-        if outcome == MessageVoiceOutcome::Queued {
-            self.gateway_state.record_message_spoken();
-        }
         if outcome == MessageVoiceOutcome::Queued
             && let Ok(mut speakers) = self.last_speakers.lock()
         {
