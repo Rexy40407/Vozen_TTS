@@ -14,8 +14,8 @@ use thiserror::Error;
 use vozen_store::SqliteStore;
 
 use crate::{
-    CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceInteractionFacts, CoreVoiceOutcome,
-    CoreVoiceResponse, CoreVoiceService, CoreVoiceSettings, GatewayState,
+    CommandSpeechSynthesizer, CommandVoicePlayback, CoreTtsOutcome, CoreVoiceInteractionFacts,
+    CoreVoiceOutcome, CoreVoiceResponse, CoreVoiceService, CoreVoiceSettings, GatewayState,
     GuildSynthesisCoordinator, VoiceResponseLocalizer, VoiceResponseLocalizerError,
     VoiceSessionTransport, core_voice_response, parse_promoted_core_voice,
 };
@@ -137,6 +137,9 @@ where
             .service
             .execute(facts.invocation(resolve_user, resolve_channel), &command)
             .await;
+        if matches!(outcome, CoreVoiceOutcome::Tts(CoreTtsOutcome::Queued)) {
+            self.gateway_state.record_message_spoken();
+        }
         let (response, parameters, guild_locale) = self.response_context(outcome, facts);
         let content = self
             .localizer

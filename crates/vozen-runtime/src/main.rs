@@ -8,6 +8,7 @@
 
 mod automatic_translation_sink;
 mod birthday_sink;
+mod bot_stats_sink;
 mod config_blockword_sink;
 mod config_channel_sink;
 mod config_default_voice_sink;
@@ -122,6 +123,7 @@ struct RuntimeConfig {
     vote_client_id: Option<String>,
     top_speakers: bool,
     birthday: bool,
+    bot_stats: bool,
     server_stats: bool,
     premium: bool,
     redeem: bool,
@@ -348,6 +350,7 @@ impl RuntimeConfig {
         let top_speakers =
             top_speakers_enabled(env::var("RUST_TOP_SPEAKERS_ENABLED").ok().as_deref());
         let birthday = birthday_enabled(env::var("RUST_BIRTHDAY_ENABLED").ok().as_deref());
+        let bot_stats = bot_stats_enabled(env::var("RUST_BOT_STATS_ENABLED").ok().as_deref());
         let server_stats =
             server_stats_enabled(env::var("RUST_SERVER_STATS_ENABLED").ok().as_deref());
         let premium = premium_enabled(env::var("RUST_PREMIUM_ENABLED").ok().as_deref());
@@ -393,6 +396,7 @@ impl RuntimeConfig {
             vote_client_id,
             top_speakers,
             birthday,
+            bot_stats,
             server_stats,
             premium,
             redeem,
@@ -631,6 +635,10 @@ fn top_speakers_enabled(raw: Option<&str>) -> bool {
 }
 
 fn birthday_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn bot_stats_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1070,6 +1078,19 @@ fn birthday_event_sink(
     )))
 }
 
+fn bot_stats_event_sink(
+    enabled: bool,
+    gateway_state: GatewayState,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        bot_stats_sink::BotStatsGatewaySink::new(gateway_state)
+            .map_err(|_| RuntimeError::BotStatsGateway)?,
+    )))
+}
+
 fn server_stats_event_sink(
     enabled: bool,
     client_id: Option<String>,
@@ -1323,6 +1344,8 @@ enum RuntimeError {
     TopSpeakersGateway,
     #[error("birthday gateway initialisation failed")]
     BirthdayGateway,
+    #[error("bot-stats gateway initialisation failed")]
+    BotStatsGateway,
     #[error("server-stats gateway initialisation failed")]
     ServerStatsGateway,
     #[error("premium gateway initialisation failed")]
@@ -1475,6 +1498,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = birthday_event_sink(config.birthday, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = bot_stats_event_sink(config.bot_stats, gateway_state.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = server_stats_event_sink(
@@ -2095,6 +2121,15 @@ mod tests {
         assert!(!birthday_enabled(Some("1")));
         assert!(!birthday_enabled(Some("yes")));
         assert!(!birthday_enabled(None));
+    }
+
+    #[test]
+    fn bot_stats_promotion_is_exactly_opt_in() {
+        assert!(bot_stats_enabled(Some("true")));
+        assert!(bot_stats_enabled(Some(" TRUE ")));
+        assert!(!bot_stats_enabled(Some("1")));
+        assert!(!bot_stats_enabled(Some("yes")));
+        assert!(!bot_stats_enabled(None));
     }
 
     #[test]

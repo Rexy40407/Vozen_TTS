@@ -11,7 +11,7 @@ use std::{
     env,
     sync::{
         Arc, LazyLock, RwLock,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -26,6 +26,7 @@ use vozen_contracts::{ContractError, DiscordCommandCatalog};
 
 mod automatic_translation_service;
 mod birthday_command;
+mod bot_stats_command;
 mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
@@ -101,6 +102,7 @@ pub use automatic_translation_service::{
     AutomaticTranslationService, MAX_AUTOMATIC_TRANSLATION_IN_FLIGHT,
 };
 pub use birthday_command::{BirthdayCommand, BirthdayCommandError, parse_birthday_command};
+pub use bot_stats_command::{BotStatsCommand, BotStatsCommandError, parse_bot_stats_command};
 pub use command_registration::{
     CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
     CommandRegistrationOutcome, DiscordHttpCommandRegistrationClient, register_commands,
@@ -330,6 +332,7 @@ pub struct GatewayGuildSnapshot {
 #[derive(Clone, Default)]
 pub struct GatewayState {
     ready: Arc<AtomicBool>,
+    messages_spoken: Arc<AtomicU64>,
     bot_user_id: Arc<RwLock<Option<String>>>,
     guild_ids: Arc<RwLock<BTreeSet<String>>>,
     guild_names: Arc<RwLock<BTreeMap<String, String>>>,
@@ -341,6 +344,20 @@ pub struct GatewayState {
 }
 
 impl GatewayState {
+    /// Number of Rust-owned speech items accepted by the playback queue since process start.
+    /// This deliberately mirrors the public Node metric's lifecycle (process-local and reset on
+    /// restart) without persisting message content or user identifiers.
+    pub fn messages_spoken(&self) -> u64 {
+        self.messages_spoken.load(Ordering::Relaxed)
+    }
+
+    /// Records a speech item only after synthesis and queue admission succeed. Songbird remains
+    /// the playback authority; the counter is intentionally process-local observability, not a
+    /// durable usage record.
+    pub fn record_message_spoken(&self) {
+        self.messages_spoken.fetch_add(1, Ordering::Relaxed);
+    }
+
     /// Whether this process received Discord's READY event. The value contains no guild or user
     /// identifiers and is safe to consume in the coarse public status mapper.
     pub fn is_ready(&self) -> bool {
@@ -813,6 +830,15 @@ mod tests {
             state.bot_voice_sessions(),
             vec![("guild-c".into(), "voice".into())]
         );
+    }
+
+    #[test]
+    fn gateway_state_metrics_are_process_local_and_monotonic() {
+        let state = GatewayState::default();
+        assert_eq!(state.messages_spoken(), 0);
+        state.record_message_spoken();
+        state.record_message_spoken();
+        assert_eq!(state.messages_spoken(), 2);
     }
 
     #[test]

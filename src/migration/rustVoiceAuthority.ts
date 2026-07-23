@@ -270,6 +270,14 @@ export function rustServerStatsOwnsCommand(
   return enabled?.trim().toLowerCase() === 'true' && commandName === 'server-stats';
 }
 
+/** Public process statistics use the Rust gateway state behind their own canary. */
+export function rustBotStatsOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_BOT_STATS_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'bot-stats';
+}
+
 /** Read-only Premium status is promoted independently from activate/deactivate mutations. */
 export function rustPremiumInfoOwnsCommand(
   commandName: string,

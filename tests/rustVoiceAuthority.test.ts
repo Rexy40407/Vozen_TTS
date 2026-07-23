@@ -22,6 +22,7 @@ import {
   rustTopSpeakersOwnsCommand,
   rustPrivacyOwnsCommand,
   rustBirthdayOwnsCommand,
+  rustBotStatsOwnsCommand,
   rustServerStatsOwnsCommand,
   rustPremiumInfoOwnsCommand,
   rustPremiumMutationOwnsCommand,
@@ -205,6 +206,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustServerStatsOwnsCommand('server-stats')).toBe(false);
     expect(rustServerStatsOwnsCommand('server-stats', 'true')).toBe(true);
     expect(rustServerStatsOwnsCommand('stats', 'true')).toBe(false);
+  });
+
+  it('promotes only public bot stats behind its own canary', () => {
+    expect(rustBotStatsOwnsCommand('bot-stats')).toBe(false);
+    expect(rustBotStatsOwnsCommand('bot-stats', 'true')).toBe(true);
+    expect(rustBotStatsOwnsCommand('stats', 'true')).toBe(false);
   });
 
   it('promotes only premium info behind its own canary', () => {

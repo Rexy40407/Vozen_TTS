@@ -26,28 +26,57 @@ export interface Entry {
 export const catalog: Record<string, Entry> = {
   // Private `/translate text` responses. Automatic translation has separate configuration.
   // Other locales fall back to the canonical English copy until their local catalogue adds them.
-  'translation.ready': { en: '**Translation · {locale}**\n{text}' },
-  'translation.invalidLocale': { en: 'That locale is not supported.' },
-  'translation.quota': { en: 'Your rolling 30-day translation limit has been reached.' },
+  'translation.ready': {
+    en: '**Translation · {locale}**\n{text}',
+    pt: '**Tradução · {locale}**\n{text}',
+  },
+  'translation.invalidLocale': {
+    en: 'That locale is not supported.',
+    pt: 'Esse idioma não é suportado.',
+  },
+  'translation.quota': {
+    en: 'Your rolling 30-day translation limit has been reached.',
+    pt: 'Atingiste o limite de traduções dos últimos 30 dias.',
+  },
   'translation.disabled': {
     en: 'Translation is temporarily unavailable because no provider is configured.',
+    pt: 'A tradução está temporariamente indisponível porque não há nenhum fornecedor configurado.',
   },
-  'translation.empty': { en: 'Provide readable text to translate.' },
-  'translation.unavailable': { en: 'Translation is temporarily unavailable.' },
-  'translation.guildOnly': { en: 'This translation setting is available only in a server.' },
+  'translation.empty': {
+    en: 'Provide readable text to translate.',
+    pt: 'Indica texto legível para traduzir.',
+  },
+  'translation.unavailable': {
+    en: 'Translation is temporarily unavailable.',
+    pt: 'A tradução está temporariamente indisponível.',
+  },
+  'translation.guildOnly': {
+    en: 'This translation setting is available only in a server.',
+    pt: 'Esta definição de tradução só está disponível num servidor.',
+  },
   'translation.invalidSpeakLocale': {
     en: 'That locale is not supported. Use `off` to disable this preference.',
+    pt: 'Esse idioma não é suportado. Usa `off` para desativar esta preferência.',
   },
-  'translation.defaultSaved': { en: 'Your default translation language is now **{locale}**.' },
-  'translation.speakOff': { en: 'Translate-before-speaking is now off.' },
+  'translation.defaultSaved': {
+    en: 'Your default translation language is now **{locale}**.',
+    pt: 'O teu idioma de tradução predefinido passou a ser **{locale}**.',
+  },
+  'translation.speakOff': {
+    en: 'Translate-before-speaking is now off.',
+    pt: 'A tradução antes de falar está desligada.',
+  },
   'translation.speakOn': {
     en: 'Vozen will translate your readable messages to **{locale}** before speaking. If translation is unavailable, it safely reads the original text.',
+    pt: 'O Vozen vai traduzir as tuas mensagens para **{locale}** antes de as ler. Se a tradução estiver indisponível, lê o texto original em segurança.',
   },
   'translation.optedOut': {
     en: 'You are opted out of automatic translations in this server.',
+    pt: 'Deixaste de receber traduções automáticas neste servidor.',
   },
   'translation.optedIn': {
     en: 'You are opted back in to configured automatic translations in this server.',
+    pt: 'Voltaste a receber as traduções automáticas configuradas neste servidor.',
   },
   // ── generico ──────────────────────────────────────────────────────────────
   'error.generic': {
@@ -854,18 +883,23 @@ export const catalog: Record<string, Entry> = {
   },
   'config.priorityRoleSet': {
     en: 'Accessibility queue priority set to {role}.',
+    pt: 'A prioridade da fila de acessibilidade foi definida para {role}.',
   },
   'config.priorityRoleCleared': {
     en: 'Accessibility queue priority role cleared.',
+    pt: 'A role de prioridade da fila de acessibilidade foi removida.',
   },
   'config.blockedRoleSet': {
     en: 'Queue block set to {role}.',
+    pt: 'O bloqueio da fila foi definido para {role}.',
   },
   'config.blockedRoleCleared': {
     en: 'Queue block role cleared.',
+    pt: 'A role de bloqueio da fila foi removida.',
   },
   'config.rolesConflict': {
     en: 'Choose a different role: a role cannot be both priority and blocked.',
+    pt: 'Escolhe outra role: uma role não pode ser simultaneamente de prioridade e de bloqueio.',
   },
   'config.enabledOn': {
     en: 'TTS is now **on** for this server.',

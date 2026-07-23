@@ -282,6 +282,9 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 resolve_channel: &resolve_channel,
             })
             .await;
+        if outcome == MessageVoiceOutcome::Queued {
+            self.gateway_state.record_message_spoken();
+        }
         if outcome == MessageVoiceOutcome::Queued
             && let Ok(mut speakers) = self.last_speakers.lock()
         {

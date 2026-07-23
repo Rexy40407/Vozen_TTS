@@ -72,6 +72,7 @@ import {
   rustTopSpeakersOwnsCommand,
   rustPrivacyOwnsCommand,
   rustBirthdayOwnsCommand,
+  rustBotStatsOwnsCommand,
   rustServerStatsOwnsCommand,
   rustPremiumInfoOwnsCommand,
   rustPremiumMutationOwnsCommand,
@@ -363,6 +364,7 @@ export async function handleInteraction(
       i.commandName,
       i.commandName === 'birthday' ? i.options.getSubcommand(false) : null,
     ) ||
+    rustBotStatsOwnsCommand(i.commandName) ||
     rustServerStatsOwnsCommand(i.commandName) ||
     rustPremiumInfoOwnsCommand(
       i.commandName,
