@@ -59,8 +59,16 @@ pub trait GameDriver: Send {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum GameManagerEvent {
-    Consumed { actions: Vec<GameDriverAction> },
-    Finished { session: GameSession },
+    Consumed {
+        actions: Vec<GameDriverAction>,
+    },
+    /// A normal finish carries both the terminal driver actions (winner/reveal text) and the
+    /// session scores.  Dropping the actions here would make the Rust transport silently omit
+    /// the final answer even though the Node manager sends it before persisting the match.
+    Finished {
+        session: GameSession,
+        actions: Vec<GameDriverAction>,
+    },
     Stopped,
     NoActiveGame,
     VoiceLeft,
@@ -104,6 +112,14 @@ impl GameManager {
     #[must_use]
     pub fn is_starter(&self, guild_id: &str, user_id: &str) -> bool {
         self.sessions.is_starter(guild_id, user_id)
+    }
+
+    /// Returns a short-lived snapshot for transport cleanup before a forced stop.  The
+    /// coordinator never exposes the internal map itself, and callers must treat this as stale
+    /// immediately after any other lifecycle operation.
+    #[must_use]
+    pub fn session(&self, guild_id: &str) -> Option<GameSession> {
+        self.sessions.session(guild_id).cloned()
     }
 
     /// Installs the driver only when the session lock is acquired. A rejected start leaves both
@@ -171,6 +187,16 @@ impl GameManager {
     /// Advances all drivers whose adapter has time-based rounds. The caller owns the clock and
     /// can invoke this from one process-wide tick without creating per-game ghost timers.
     pub fn advance(&mut self, now_ms: i64) -> Vec<GameManagerEvent> {
+        self.advance_with_guild(now_ms)
+            .into_iter()
+            .map(|(_, event)| event)
+            .collect()
+    }
+
+    /// Clock advancement with the owning guild attached.  The plain `advance` method remains
+    /// source-compatible for transport-free callers, while a gateway can route each rendered
+    /// action to the correct channel when several guilds tick in the same interval.
+    pub fn advance_with_guild(&mut self, now_ms: i64) -> Vec<(String, GameManagerEvent)> {
         let guilds = self.drivers.keys().cloned().collect::<Vec<_>>();
         let mut events = Vec::new();
         for guild_id in guilds {
@@ -183,7 +209,7 @@ impl GameManager {
                 continue;
             }
             if let Some(event) = self.apply_actions(&guild_id, actions) {
-                events.push(event);
+                events.push((guild_id, event));
             }
         }
         events
@@ -239,7 +265,7 @@ impl GameManager {
             return self
                 .sessions
                 .finish(guild_id)
-                .map(|session| GameManagerEvent::Finished { session });
+                .map(|session| GameManagerEvent::Finished { session, actions });
         }
         Some(GameManagerEvent::Consumed { actions })
     }
@@ -328,8 +354,9 @@ mod tests {
         ));
         assert!(matches!(
             manager.handle_message(&message("game-channel", "u", "finish")),
-            Some(GameManagerEvent::Finished { session })
+            Some(GameManagerEvent::Finished { session, actions })
                 if session.scores == vec![GameScore { user_id: "u".into(), points: 2 }]
+                    && actions == vec![GameDriverAction::Finished]
         ));
         assert!(!manager.active("guild"));
 

@@ -345,7 +345,7 @@ mod tests {
         ));
         assert!(matches!(
             manager.advance(305_000).as_slice(),
-            [GameManagerEvent::Finished { session }] if session.scores.is_empty()
+            [GameManagerEvent::Finished { session, .. }] if session.scores.is_empty()
         ));
     }
 }

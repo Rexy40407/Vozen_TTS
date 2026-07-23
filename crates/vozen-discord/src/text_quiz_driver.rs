@@ -416,7 +416,7 @@ mod tests {
         });
         assert!(matches!(
             event,
-            Some(GameManagerEvent::Finished { session })
+            Some(GameManagerEvent::Finished { session, .. })
                 if session.scores.iter().any(|score| score.user_id == "u1" && score.points == 1)
         ));
     }

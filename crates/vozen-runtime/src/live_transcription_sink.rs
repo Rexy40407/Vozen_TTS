@@ -102,39 +102,37 @@ impl LiveTranscriptionGatewaySink {
             .is_some_and(|permissions| permissions.contains(Permissions::MANAGE_GUILD))
     }
 
-    fn send_ephemeral(
+    async fn send_ephemeral(
         &self,
         context: &Context,
         command: &serenity::model::application::CommandInteraction,
         content: String,
-    ) -> impl std::future::Future<Output = Result<(), GatewayEventDispatchError>> + '_ {
-        async move {
-            command
-                .create_response(
-                    context,
-                    CreateInteractionResponse::Message(
-                        CreateInteractionResponseMessage::new()
-                            .content(content)
-                            .ephemeral(true),
-                    ),
-                )
-                .await
-                .map_err(|_| GatewayEventDispatchError)
-        }
+    ) -> Result<(), GatewayEventDispatchError> {
+        command
+            .create_response(
+                context,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(content)
+                        .ephemeral(true),
+                ),
+            )
+            .await
+            .map(|_| ())
+            .map_err(|_| GatewayEventDispatchError)
     }
 
-    fn edit_response(
+    async fn edit_response(
         &self,
         context: &Context,
         command: &serenity::model::application::CommandInteraction,
         content: String,
-    ) -> impl std::future::Future<Output = Result<(), GatewayEventDispatchError>> + '_ {
-        async move {
-            command
-                .edit_response(context, EditInteractionResponse::new().content(content))
-                .await
-                .map_err(|_| GatewayEventDispatchError)
-        }
+    ) -> Result<(), GatewayEventDispatchError> {
+        command
+            .edit_response(context, EditInteractionResponse::new().content(content))
+            .await
+            .map(|_| ())
+            .map_err(|_| GatewayEventDispatchError)
     }
 
     async fn start(

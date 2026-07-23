@@ -166,7 +166,7 @@ mod songbird_adapter {
                     EventContext::SpeakingStateUpdate(update) => update
                         .user_id
                         .map(|user| {
-                            state.map_ssrc(update.ssrc, user.get());
+                            state.map_ssrc(update.ssrc, user.0);
                             Vec::new()
                         })
                         .unwrap_or_default(),
@@ -189,7 +189,7 @@ mod songbird_adapter {
                         output
                     }
                     EventContext::ClientDisconnect(disconnect) => state
-                        .disconnect_user(disconnect.user_id.get())
+                        .disconnect_user(disconnect.user_id.0)
                         .into_iter()
                         .collect(),
                     _ => Vec::new(),

@@ -59,13 +59,26 @@ impl GameDriverFactory {
         language: Option<&str>,
         seed: i64,
     ) -> Result<Box<dyn GameDriver>, GameFactoryError> {
+        self.create_for_locale(game_id, language, &self.locale, seed)
+    }
+
+    /// Creates a driver for the locale of the user who started the match.  The Node game
+    /// manager stores that locale per session; keeping this override here prevents a global
+    /// factory locale from making every guild use the same word/roulette bank.
+    pub fn create_for_locale(
+        &self,
+        game_id: &str,
+        language: Option<&str>,
+        locale: &str,
+        seed: i64,
+    ) -> Result<Box<dyn GameDriver>, GameFactoryError> {
         let id = game_id.trim();
         if !GAME_CATALOG.iter().any(|game| game.id == id) {
             return Err(GameFactoryError::UnknownGame(id.to_owned()));
         }
 
         let word_source = self.words_for_voice();
-        let locale_words = self.words_for_locale();
+        let locale_words = self.words_for_locale(locale);
         let model = (!self.default_voice.trim().is_empty()).then(|| self.default_voice.clone());
         let driver: Box<dyn GameDriver> = match id {
             "guess-language" => {
@@ -111,7 +124,7 @@ impl GameDriverFactory {
                 model.clone(),
             )),
             "roulette" => Box::new(RouletteGameDriver::new(
-                pick_locale_bank(&self.content.roulette_prompts, &self.locale, seed)
+                pick_locale_bank(&self.content.roulette_prompts, locale, seed)
                     .ok_or_else(|| GameFactoryError::NoContent(id.to_owned()))?,
             )),
             "hangman" => {
@@ -120,14 +133,14 @@ impl GameDriverFactory {
                 Box::new(HangmanGameDriver::new(&word))
             }
             "wordle" => {
-                let word = pick_wordle(&self.content.wordle_words, &self.locale, seed)
+                let word = pick_wordle(&self.content.wordle_words, locale, seed)
                     .ok_or_else(|| GameFactoryError::NoContent(id.to_owned()))?;
                 Box::new(WordleGameDriver::new(&word))
             }
             "tictactoe" => Box::new(TicTacToeGameDriver::new()),
             "chess" => Box::new(ChessGameDriver::new()),
             "word-chain" => Box::new(WordChainGameDriver::new(
-                word_chain_language(language, &self.locale),
+                word_chain_language(language, locale),
                 locale_words,
                 seed as u64,
             )),
@@ -148,8 +161,8 @@ impl GameDriverFactory {
             .unwrap_or_default()
     }
 
-    fn words_for_locale(&self) -> Vec<String> {
-        let base = locale_base(&self.locale);
+    fn words_for_locale(&self, locale: &str) -> Vec<String> {
+        let base = locale_base(locale);
         self.content
             .word_bank
             .get(&base)

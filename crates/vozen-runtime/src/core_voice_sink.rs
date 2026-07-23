@@ -10,6 +10,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use uuid::Uuid;
@@ -19,8 +20,8 @@ use serenity::{
     builder::{
         CreateActionRow, CreateAllowedMentions, CreateButton, CreateInputText,
         CreateInteractionResponse, CreateInteractionResponseFollowup,
-        CreateInteractionResponseMessage, CreateModal, CreateSelectMenu, CreateSelectMenuKind,
-        CreateSelectMenuOption, EditInteractionResponse,
+        CreateInteractionResponseMessage, CreateMessage, CreateModal, CreateSelectMenu,
+        CreateSelectMenuKind, CreateSelectMenuOption, CreateThread, EditInteractionResponse,
     },
     client::Context,
     model::{
@@ -35,16 +36,19 @@ use serenity::{
 use vozen_core::{PublicQueueItem, QueueLane, QueueSource, SynthesisEngine, detect_language};
 use vozen_discord::{
     CAST_LANGUAGE_CHOICES, CAST_MAX_MEMBERS, CAST_THEMES, CastAction, CastMember, CastSession,
-    CoreTtsOutcome, CoreVoiceCommand, CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor,
+    CoreTtsOutcome, CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor,
     CoreVoiceInteractionFacts, CoreVoiceOutcome, DiscordDashboardOptionsProvider,
-    DiscordMessageFactsOwned, GatewayEventDispatchError, GatewayEventSink, GatewayState,
-    GuildSynthesisCoordinator, JoinVoiceOutcome, MessageVoiceInvocation, MessageVoiceOutcome,
-    MessageVoiceService, PlannedRejoinService, QueueControlInvocation, QueueControlOutcome,
-    QueueControlService, RandomizerCommand, RandomizerSession, RejoinChannelState,
-    SongbirdCommandPlayback, SongbirdVoiceSessionTransport, VoiceResponseLocalizer,
-    collect_message_media, consume_planned_rejoin_marker, parse_amount_component_id,
-    parse_cast_component_id, parse_fill_component_id, parse_modal_options, parse_queue_command,
-    parse_randomizer_command, parse_setup_command, parse_speak_message_command, pick_option,
+    DiscordMessageFactsOwned, GAME_CATALOG, GameCoordinator, GameDriverFactory, GameManagerEvent,
+    GamePlayAdmission, GamePlayRequest, GameStanding, GameStartOutcome, GatewayEventDispatchError,
+    GatewayEventSink, GatewayState, GuildSynthesisCoordinator, JoinVoiceOutcome,
+    MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService, PlannedRejoinService,
+    QueueControlInvocation, QueueControlOutcome, QueueControlService, RandomizerCommand,
+    RandomizerSession, RejoinChannelState, RenderedGameAction, SongbirdCommandPlayback,
+    SongbirdVoiceSessionTransport, VoiceResponseLocalizer, collect_message_media,
+    consume_planned_rejoin_marker, parse_amount_component_id, parse_cast_component_id,
+    parse_fill_component_id, parse_game_play_command, parse_game_stop_command, parse_modal_options,
+    parse_queue_command, parse_randomizer_command, parse_setup_command,
+    parse_speak_message_command, pick_option, render_game_action, render_game_finish,
 };
 use vozen_store::{GuildConfigPatch, SqliteStore};
 
@@ -73,6 +77,36 @@ struct VoiceDependencies {
     synthesis: GuildSynthesisCoordinator,
 }
 
+const GAME_PICK_TTL_MS: i64 = 60_000;
+const GAME_THREAD_DELETE_DELAY: Duration = Duration::from_secs(5);
+
+#[derive(Clone)]
+struct PendingGamePick {
+    guild_id: String,
+    parent_channel_id: String,
+    user_id: String,
+    language: Option<String>,
+    locale: String,
+    guild_locale: Option<String>,
+    issued_at_ms: i64,
+}
+
+/// Runtime state for the live `/game play|stop` surface. It lives beside the core voice sink so
+/// games reuse the already-authorized Piper/Songbird executor instead of creating a second
+/// synthesis queue. The coordinator itself remains transport-free in `vozen-discord`.
+struct GameRuntime {
+    store: Arc<Mutex<SqliteStore>>,
+    gateway_state: GatewayState,
+    coordinator: Arc<Mutex<GameCoordinator>>,
+    pending_picks: Mutex<BTreeMap<String, PendingGamePick>>,
+    localizer: VoiceResponseLocalizer,
+    available_models: Vec<String>,
+    default_voice: String,
+    default_speed: f64,
+    executor: Mutex<Option<Arc<Executor>>>,
+    tick_started: AtomicBool,
+}
+
 pub struct CoreVoiceGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
@@ -84,6 +118,909 @@ pub struct CoreVoiceGatewaySink {
     randomizer_sessions: Mutex<BTreeMap<String, RandomizerSession>>,
     cast_sessions: Mutex<BTreeMap<String, CastSession>>,
     rejoin_attempted: AtomicBool,
+    game_runtime: Option<Arc<GameRuntime>>,
+}
+
+impl GameRuntime {
+    fn render(
+        &self,
+        key: &str,
+        locale: Option<&str>,
+        guild_locale: Option<&str>,
+        parameters: &BTreeMap<&str, String>,
+    ) -> Result<String, GatewayEventDispatchError> {
+        self.localizer
+            .render_key(key, locale, guild_locale, parameters)
+            .ok_or(GatewayEventDispatchError)
+    }
+
+    fn prune_picks(&self, now_ms: i64) {
+        if let Ok(mut picks) = self.pending_picks.lock() {
+            picks.retain(|_, pick| now_ms.saturating_sub(pick.issued_at_ms) <= GAME_PICK_TTL_MS);
+            if picks.len() > 1024 {
+                let mut old = picks
+                    .iter()
+                    .map(|(id, pick)| (id.clone(), pick.issued_at_ms))
+                    .collect::<Vec<_>>();
+                old.sort_by_key(|(_, issued_at)| *issued_at);
+                for (id, _) in old.into_iter().take(picks.len() - 1024) {
+                    picks.remove(&id);
+                }
+            }
+        }
+    }
+
+    fn bot_speech_facts(
+        &self,
+        guild_id: &str,
+        channel_id: &str,
+    ) -> Option<CoreVoiceInteractionFacts> {
+        let bot_id = self.gateway_state.bot_user_id()?;
+        self.gateway_state
+            .bot_voice_channel_id(guild_id)
+            .map(|_| CoreVoiceInteractionFacts {
+                guild_id: guild_id.to_owned(),
+                channel_id: channel_id.to_owned(),
+                user_id: bot_id,
+                member_role_ids: None,
+            })
+    }
+
+    async fn send_content(
+        &self,
+        context: &Context,
+        channel_id: &str,
+        content: String,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let channel_id = channel_id
+            .parse::<u64>()
+            .map(ChannelId::new)
+            .map_err(|_| GatewayEventDispatchError)?;
+        channel_id
+            .send_message(
+                &context.http,
+                CreateMessage::new()
+                    .content(content)
+                    .allowed_mentions(no_mentions()),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(())
+    }
+
+    async fn send_rendered_actions(
+        &self,
+        context: &Context,
+        guild_id: &str,
+        channel_id: &str,
+        locale: &str,
+        guild_locale: Option<&str>,
+        actions: &[RenderedGameAction],
+        speech_allowed: bool,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let executor = self
+            .executor
+            .lock()
+            .ok()
+            .and_then(|current| current.clone());
+        for rendered in actions {
+            if let Some(content) = rendered.content(&self.localizer, Some(locale), guild_locale) {
+                self.send_content(context, channel_id, content).await?;
+            }
+            let Some(speech) = rendered.speech.as_ref() else {
+                continue;
+            };
+            if !speech_allowed {
+                continue;
+            }
+            let Some(executor) = executor.clone() else {
+                continue;
+            };
+            let Some(facts) = self.bot_speech_facts(guild_id, channel_id) else {
+                continue;
+            };
+            let model = speech
+                .model
+                .as_deref()
+                .filter(|model| {
+                    self.available_models
+                        .iter()
+                        .any(|candidate| candidate == model)
+                })
+                .unwrap_or(self.default_voice.as_str());
+            let speed = speech.speed.unwrap_or(self.default_speed);
+            let _ = executor
+                .speak_text_with_voice(
+                    &facts,
+                    &speech.text,
+                    &model,
+                    speed,
+                    SynthesisEngine::Piper,
+                    false,
+                )
+                .await;
+        }
+        Ok(())
+    }
+
+    async fn send_actions(
+        &self,
+        context: &Context,
+        guild_id: &str,
+        channel_id: &str,
+        locale: &str,
+        guild_locale: Option<&str>,
+        actions: &[vozen_discord::GameDriverAction],
+        speech_allowed: bool,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let rendered = actions
+            .iter()
+            .filter_map(render_game_action)
+            .collect::<Vec<_>>();
+        self.send_rendered_actions(
+            context,
+            guild_id,
+            channel_id,
+            locale,
+            guild_locale,
+            &rendered,
+            speech_allowed,
+        )
+        .await
+    }
+
+    async fn schedule_thread_delete(&self, context: &Context, channel_id: String) {
+        let http = context.http.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(GAME_THREAD_DELETE_DELAY).await;
+            let _ = ChannelId::new(channel_id.parse::<u64>().unwrap_or_default())
+                .delete(&http)
+                .await;
+        });
+    }
+
+    async fn cleanup_forced(
+        &self,
+        context: &Context,
+        session: Option<vozen_discord::GameSession>,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let Some(session) = session else {
+            return Ok(());
+        };
+        let Some(parent) = session.parent_channel_id else {
+            return Ok(());
+        };
+        let content = self.render(
+            "game.thread.ended",
+            Some(&session.locale),
+            None,
+            &BTreeMap::new(),
+        )?;
+        self.send_content(context, &parent, content).await?;
+        self.schedule_thread_delete(context, session.channel_id)
+            .await;
+        Ok(())
+    }
+
+    async fn dispatch_event(
+        &self,
+        context: &Context,
+        event: GameManagerEvent,
+        speech_allowed: bool,
+        guild_hint: Option<&str>,
+    ) -> Result<(), GatewayEventDispatchError> {
+        match event {
+            GameManagerEvent::Consumed { actions } => {
+                let (guild_id, channel_id, locale) = {
+                    let coordinator = self
+                        .coordinator
+                        .lock()
+                        .map_err(|_| GatewayEventDispatchError)?;
+                    let Some(guild_id) = guild_hint else {
+                        return Ok(());
+                    };
+                    let Some(session) = coordinator.session(guild_id) else {
+                        return Ok(());
+                    };
+                    (session.guild_id, session.channel_id, session.locale)
+                };
+                self.send_actions(
+                    context,
+                    &guild_id,
+                    &channel_id,
+                    &locale,
+                    None,
+                    &actions,
+                    speech_allowed,
+                )
+                .await?;
+            }
+            GameManagerEvent::Finished { session, actions } => {
+                self.send_actions(
+                    context,
+                    &session.guild_id,
+                    &session.channel_id,
+                    &session.locale,
+                    None,
+                    &actions,
+                    speech_allowed,
+                )
+                .await?;
+                let points = session
+                    .scores
+                    .iter()
+                    .map(|score| (score.user_id.clone(), score.points))
+                    .collect::<Vec<_>>();
+                if let Ok(store) = self.store.lock() {
+                    let _ = store.persist_game_scores(&session.guild_id, &points);
+                }
+                let standings = session
+                    .scores
+                    .iter()
+                    .map(|score| GameStanding {
+                        name: format!("<@{}>", score.user_id),
+                        points: score.points,
+                    })
+                    .collect::<Vec<_>>();
+                let finish = render_game_finish(&standings);
+                self.send_rendered_actions(
+                    context,
+                    &session.guild_id,
+                    &session.channel_id,
+                    &session.locale,
+                    None,
+                    &finish,
+                    false,
+                )
+                .await?;
+                if let Some(parent) = session.parent_channel_id {
+                    let winner = session
+                        .scores
+                        .iter()
+                        .filter(|score| score.points > 0)
+                        .max_by_key(|score| score.points)
+                        .map(|score| format!("<@{}>", score.user_id));
+                    let content = if let Some(winner) = winner {
+                        let mut parameters = BTreeMap::new();
+                        parameters.insert("winner", winner);
+                        self.render(
+                            "game.thread.winner",
+                            Some(&session.locale),
+                            None,
+                            &parameters,
+                        )?
+                    } else {
+                        self.render(
+                            "game.thread.ended",
+                            Some(&session.locale),
+                            None,
+                            &BTreeMap::new(),
+                        )?
+                    };
+                    self.send_content(context, &parent, content).await?;
+                    self.schedule_thread_delete(context, session.channel_id)
+                        .await;
+                }
+            }
+            GameManagerEvent::VoiceLeft => {
+                self.cleanup_forced(context, None).await?;
+            }
+            GameManagerEvent::Stopped | GameManagerEvent::NoActiveGame => {}
+        }
+        Ok(())
+    }
+
+    fn start_tick(self: &Arc<Self>, context: Context, executor: Arc<Executor>) {
+        if self.tick_started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        if let Ok(mut current) = self.executor.lock() {
+            *current = Some(executor);
+        }
+        let runtime = self.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_millis(250));
+            loop {
+                ticker.tick().await;
+                let events = runtime
+                    .coordinator
+                    .lock()
+                    .map(|mut coordinator| coordinator.advance_with_guild(system_now_ms()))
+                    .unwrap_or_default();
+                for (guild_id, event) in events {
+                    let speech_allowed = runtime
+                        .gateway_state
+                        .bot_voice_channel_id(&guild_id)
+                        .is_some();
+                    let _ = runtime
+                        .dispatch_event(&context, event, speech_allowed, Some(&guild_id))
+                        .await;
+                }
+            }
+        });
+    }
+
+    async fn create_game_thread(
+        &self,
+        context: &Context,
+        parent_channel_id: &str,
+        game_name: &str,
+    ) -> Option<String> {
+        let parent = parent_channel_id.parse::<u64>().ok().map(ChannelId::new)?;
+        let name = format!("🎮 {}", game_name)
+            .chars()
+            .take(100)
+            .collect::<String>();
+        parent
+            .create_thread(
+                &context.http,
+                CreateThread::new(name)
+                    .kind(ChannelType::PublicThread)
+                    .audit_log_reason("Vozen game session"),
+            )
+            .await
+            .ok()
+            .map(|channel| channel.id.get().to_string())
+    }
+
+    async fn start_game(
+        &self,
+        context: &Context,
+        guild_id: String,
+        parent_channel_id: String,
+        user_id: String,
+        locale: String,
+        guild_locale: Option<String>,
+        game_id: Option<String>,
+        language: Option<String>,
+    ) -> Result<String, GatewayEventDispatchError> {
+        let Some(game_id) = game_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        else {
+            return self.render(
+                "game.pickPrompt",
+                Some(&locale),
+                guild_locale.as_deref(),
+                &BTreeMap::new(),
+            );
+        };
+        let bot_voice_channel_id = self.gateway_state.bot_voice_channel_id(&guild_id);
+        let now = system_now_ms();
+        let (user_premium, guild_premium) = self
+            .store
+            .lock()
+            .ok()
+            .map(|store| {
+                (
+                    store.is_user_premium(&user_id, now).unwrap_or(false),
+                    store.is_guild_premium(&guild_id, now).unwrap_or(false),
+                )
+            })
+            .unwrap_or((false, false));
+        let active_channel_id = self
+            .coordinator
+            .lock()
+            .ok()
+            .and_then(|coordinator| coordinator.channel_of(&guild_id).map(str::to_owned));
+        let admission = vozen_discord::admit_game_play(vozen_discord::GamePlayAdmissionFacts {
+            guild_id: Some(&guild_id),
+            game_id: Some(game_id),
+            bot_voice_channel_id: bot_voice_channel_id.as_deref(),
+            active_channel_id: active_channel_id.as_deref(),
+            user_premium,
+            guild_premium,
+        });
+        if !matches!(admission, GamePlayAdmission::Allowed { .. }) {
+            return self.render_admission(
+                admission,
+                &locale,
+                guild_locale.as_deref(),
+                game_id,
+                active_channel_id.as_deref(),
+            );
+        }
+        let game_name = vozen_discord::game_definition(game_id)
+            .and_then(|definition| {
+                self.render(
+                    definition.name_key,
+                    Some(&locale),
+                    guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )
+                .ok()
+            })
+            .unwrap_or_else(|| game_id.to_owned());
+        let thread_id = self
+            .create_game_thread(context, &parent_channel_id, &game_name)
+            .await;
+        let game_channel_id = thread_id
+            .clone()
+            .unwrap_or_else(|| parent_channel_id.clone());
+        let outcome = self
+            .coordinator
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .start(GamePlayRequest {
+                guild_id: Some(guild_id.clone()),
+                parent_channel_id: parent_channel_id.clone(),
+                game_channel_id: game_channel_id.clone(),
+                starter_id: user_id,
+                game_id: Some(game_id.to_owned()),
+                language,
+                locale: locale.clone(),
+                bot_voice_channel_id,
+                user_premium,
+                guild_premium,
+                seed: now,
+                now_ms: now,
+            })
+            .map_err(|_| GatewayEventDispatchError)?;
+        let actions = match &outcome {
+            GameStartOutcome::Started { actions, .. } => actions.clone(),
+            GameStartOutcome::PickRequired | GameStartOutcome::Rejected(_) => {
+                if let Some(thread_id) = thread_id {
+                    let _ = ChannelId::new(thread_id.parse::<u64>().unwrap_or_default())
+                        .delete(&context.http)
+                        .await;
+                }
+                return self.render_admission(
+                    match &outcome {
+                        GameStartOutcome::PickRequired => GamePlayAdmission::PickRequired,
+                        GameStartOutcome::Rejected(reason) => *reason,
+                        GameStartOutcome::Started { .. } => unreachable!(),
+                    },
+                    &locale,
+                    guild_locale.as_deref(),
+                    game_id,
+                    active_channel_id.as_deref(),
+                );
+            }
+        };
+        let speech_allowed = self.gateway_state.bot_voice_channel_id(&guild_id).is_some();
+        self.send_actions(
+            context,
+            &guild_id,
+            &game_channel_id,
+            &locale,
+            guild_locale.as_deref(),
+            &actions,
+            speech_allowed,
+        )
+        .await?;
+        if let Some(thread_id) = thread_id {
+            let mut parameters = BTreeMap::new();
+            parameters.insert("game", game_name);
+            parameters.insert("channel", thread_id);
+            self.render(
+                "game.start.startedThread",
+                Some(&locale),
+                guild_locale.as_deref(),
+                &parameters,
+            )
+        } else {
+            let mut parameters = BTreeMap::new();
+            parameters.insert("game", game_name);
+            self.render(
+                "game.start.started",
+                Some(&locale),
+                guild_locale.as_deref(),
+                &parameters,
+            )
+        }
+    }
+
+    fn render_admission(
+        &self,
+        admission: GamePlayAdmission,
+        locale: &str,
+        guild_locale: Option<&str>,
+        game_id: &str,
+        active_channel_id: Option<&str>,
+    ) -> Result<String, GatewayEventDispatchError> {
+        match admission {
+            GamePlayAdmission::UnknownGame => {
+                let mut parameters = BTreeMap::new();
+                parameters.insert("game", game_id.to_owned());
+                self.render("game.unknownGame", Some(locale), guild_locale, &parameters)
+            }
+            GamePlayAdmission::AlreadyActive => {
+                let mut parameters = BTreeMap::new();
+                parameters.insert(
+                    "channel",
+                    active_channel_id
+                        .map(|channel| format!("<#{}>", channel))
+                        .unwrap_or_else(|| "the current game".to_owned()),
+                );
+                self.render(
+                    "game.start.alreadyActive",
+                    Some(locale),
+                    guild_locale,
+                    &parameters,
+                )
+            }
+            GamePlayAdmission::VoiceUnavailable => self.render(
+                "game.start.needVoice",
+                Some(locale),
+                guild_locale,
+                &BTreeMap::new(),
+            ),
+            GamePlayAdmission::PremiumRequired => {
+                let mut parameters = BTreeMap::new();
+                parameters.insert("game", game_id.to_owned());
+                self.render(
+                    "game.start.premiumLocked",
+                    Some(locale),
+                    guild_locale,
+                    &parameters,
+                )
+            }
+            GamePlayAdmission::PickRequired => self.render(
+                "game.pickPrompt",
+                Some(locale),
+                guild_locale,
+                &BTreeMap::new(),
+            ),
+            GamePlayAdmission::GuildOnly => self.render(
+                "error.generic",
+                Some(locale),
+                guild_locale,
+                &BTreeMap::new(),
+            ),
+            GamePlayAdmission::Allowed { .. } => self.render(
+                "error.generic",
+                Some(locale),
+                guild_locale,
+                &BTreeMap::new(),
+            ),
+        }
+    }
+
+    async fn handle_command(
+        &self,
+        context: &Context,
+        command: &serenity::model::application::CommandInteraction,
+    ) -> Result<bool, GatewayEventDispatchError> {
+        let Some(guild_id) = command.guild_id else {
+            return Ok(false);
+        };
+        let guild_id = guild_id.get().to_string();
+        if let Some(play) =
+            parse_game_play_command(&command.data).map_err(|_| GatewayEventDispatchError)?
+        {
+            if play.game.is_none() {
+                let custom_id = format!("gamePick:{}", command.id.get());
+                let locale = command.locale.clone();
+                let guild_locale = command.guild_locale.clone();
+                let prompt = self.render(
+                    "game.pickPrompt",
+                    Some(&locale),
+                    guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?;
+                let placeholder = self.render(
+                    "game.pickPlaceholder",
+                    Some(&locale),
+                    guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?;
+                let options = GAME_CATALOG
+                    .iter()
+                    .map(|game| {
+                        let label = self
+                            .render(
+                                game.name_key,
+                                Some(&locale),
+                                guild_locale.as_deref(),
+                                &BTreeMap::new(),
+                            )
+                            .unwrap_or_else(|_| game.id.to_owned());
+                        let description = self
+                            .render(
+                                game.desc_key,
+                                Some(&locale),
+                                guild_locale.as_deref(),
+                                &BTreeMap::new(),
+                            )
+                            .unwrap_or_default();
+                        CreateSelectMenuOption::new(label, game.id)
+                            .description(description.chars().take(100).collect::<String>())
+                    })
+                    .collect::<Vec<_>>();
+                if let Ok(mut picks) = self.pending_picks.lock() {
+                    picks.insert(
+                        custom_id.clone(),
+                        PendingGamePick {
+                            guild_id: guild_id.clone(),
+                            parent_channel_id: command.channel_id.get().to_string(),
+                            user_id: command.user.id.get().to_string(),
+                            language: play.language,
+                            locale,
+                            guild_locale,
+                            issued_at_ms: system_now_ms(),
+                        },
+                    );
+                }
+                let select =
+                    CreateSelectMenu::new(custom_id, CreateSelectMenuKind::String { options })
+                        .placeholder(placeholder)
+                        .min_values(1)
+                        .max_values(1);
+                command
+                    .create_response(
+                        context,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .content(prompt)
+                                .ephemeral(true)
+                                .components(vec![CreateActionRow::SelectMenu(select)]),
+                        ),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                return Ok(true);
+            }
+            command
+                .defer_ephemeral(context)
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            let content = self
+                .start_game(
+                    context,
+                    guild_id,
+                    command.channel_id.get().to_string(),
+                    command.user.id.get().to_string(),
+                    command.locale.clone(),
+                    command.guild_locale.clone(),
+                    play.game,
+                    play.language,
+                )
+                .await?;
+            command
+                .edit_response(context, EditInteractionResponse::new().content(content))
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(true);
+        }
+        let Some(_stop) =
+            parse_game_stop_command(&command.data).map_err(|_| GatewayEventDispatchError)?
+        else {
+            return Ok(false);
+        };
+        let user_id = command.user.id.get().to_string();
+        let can_manage = command
+            .member
+            .as_ref()
+            .and_then(|member| member.permissions)
+            .is_some_and(|permissions| permissions.contains(Permissions::MANAGE_GUILD));
+        let can_stop = can_manage
+            || self
+                .coordinator
+                .lock()
+                .map(|coordinator| coordinator.is_starter(&guild_id, &user_id))
+                .unwrap_or(false);
+        let session = self
+            .coordinator
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .session(&guild_id);
+        let result = self
+            .coordinator
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .stop(&guild_id, &user_id, can_stop);
+        match result {
+            Err(_) => {
+                let content = self.render(
+                    "error.needManageGuild",
+                    Some(&command.locale),
+                    command.guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?;
+                command
+                    .create_response(
+                        context,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .content(content)
+                                .ephemeral(true),
+                        ),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+            }
+            Ok(GameManagerEvent::Stopped) => {
+                let content = self.render(
+                    "game.stop.ok",
+                    Some(&command.locale),
+                    command.guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?;
+                command
+                    .create_response(
+                        context,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .content(content)
+                                .ephemeral(true),
+                        ),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                self.cleanup_forced(context, session).await?;
+            }
+            Ok(GameManagerEvent::NoActiveGame) => {
+                let content = self.render(
+                    "game.stop.none",
+                    Some(&command.locale),
+                    command.guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?;
+                command
+                    .create_response(
+                        context,
+                        CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new()
+                                .content(content)
+                                .ephemeral(true),
+                        ),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+            }
+            Ok(GameManagerEvent::VoiceLeft)
+            | Ok(GameManagerEvent::Consumed { .. })
+            | Ok(GameManagerEvent::Finished { .. }) => {}
+        }
+        Ok(true)
+    }
+
+    async fn handle_component(
+        &self,
+        context: &Context,
+        component: serenity::model::application::ComponentInteraction,
+    ) -> Result<bool, GatewayEventDispatchError> {
+        let Some(id) = component.data.custom_id.strip_prefix("gamePick:") else {
+            return Ok(false);
+        };
+        component
+            .defer(context)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        self.prune_picks(system_now_ms());
+        let key = format!("gamePick:{id}");
+        let pick = self
+            .pending_picks
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .remove(&key);
+        let valid = pick.as_ref().is_some_and(|pick| {
+            component
+                .guild_id
+                .is_some_and(|guild| guild.get().to_string() == pick.guild_id)
+                && component.user.id.get().to_string() == pick.user_id
+        });
+        let Some(pick) = pick.filter(|_| valid) else {
+            let content = self.render(
+                "game.pickTimeout",
+                Some(&component.locale),
+                component.guild_locale.as_deref(),
+                &BTreeMap::new(),
+            )?;
+            component
+                .edit_response(context, EditInteractionResponse::new().content(content))
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(true);
+        };
+        let Some(game_id) = (match &component.data.kind {
+            ComponentInteractionDataKind::StringSelect { values } if values.len() == 1 => {
+                Some(values[0].clone())
+            }
+            _ => None,
+        }) else {
+            return Ok(true);
+        };
+        let content = self
+            .start_game(
+                context,
+                pick.guild_id,
+                pick.parent_channel_id,
+                pick.user_id,
+                pick.locale,
+                pick.guild_locale,
+                Some(game_id),
+                pick.language,
+            )
+            .await?;
+        component
+            .edit_response(context, EditInteractionResponse::new().content(content))
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        Ok(true)
+    }
+
+    async fn handle_message(
+        &self,
+        context: &Context,
+        message: &serenity::model::channel::Message,
+    ) -> Result<bool, GatewayEventDispatchError> {
+        if message.author.bot {
+            return Ok(false);
+        }
+        let Some(guild_id) = message.guild_id else {
+            return Ok(false);
+        };
+        let guild_id = guild_id.get().to_string();
+        let user_id = message.author.id.get().to_string();
+        let bot_channel = self.gateway_state.bot_voice_channel_id(&guild_id);
+        let caller_channel = self.gateway_state.voice_channel_id(&guild_id, &user_id);
+        let speech_allowed = bot_channel.is_some() && caller_channel == bot_channel;
+        let event = self
+            .coordinator
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .handle_message_at(
+                &vozen_discord::GameMessage {
+                    guild_id: guild_id.clone(),
+                    channel_id: message.channel_id.get().to_string(),
+                    author_id: user_id,
+                    author_name: message.author.name.clone(),
+                    content: message.content.clone(),
+                    can_trigger_speech: speech_allowed,
+                },
+                system_now_ms(),
+            );
+        let Some(event) = event else {
+            return Ok(false);
+        };
+        let _ = self
+            .dispatch_event(context, event, speech_allowed, Some(&guild_id))
+            .await;
+        Ok(true)
+    }
+
+    async fn on_voice_state_update(
+        &self,
+        context: &Context,
+        new: &serenity::model::voice::VoiceState,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let new_user_id = new.user_id.get().to_string();
+        if new.channel_id.is_some()
+            || self.gateway_state.bot_user_id().as_deref() != Some(new_user_id.as_str())
+        {
+            return Ok(());
+        }
+        let Some(guild_id) = new.guild_id else {
+            return Ok(());
+        };
+        let guild_id = guild_id.get().to_string();
+        let session = self
+            .coordinator
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .session(&guild_id);
+        let event = self
+            .coordinator
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .on_voice_left(&guild_id);
+        if matches!(event, GameManagerEvent::VoiceLeft) {
+            self.cleanup_forced(context, session).await?;
+        }
+        Ok(())
+    }
+
+    fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
+        if let Ok(mut coordinator) = self.coordinator.lock() {
+            coordinator.end_guild(guild_id);
+        }
+        if let Ok(mut picks) = self.pending_picks.lock() {
+            picks.retain(|_, pick| pick.guild_id != guild_id);
+        }
+        Ok(())
+    }
 }
 
 impl CoreVoiceGatewaySink {
@@ -93,6 +1030,33 @@ impl CoreVoiceGatewaySink {
         gateway_state: GatewayState,
         options: CoreVoiceRuntimeOptions,
     ) -> Self {
+        let game_runtime = options
+            .game_play_enabled
+            .then(|| {
+                VoiceResponseLocalizer::from_generated_contract()
+                    .ok()
+                    .map(|localizer| {
+                        Arc::new(GameRuntime {
+                            store: store.clone(),
+                            gateway_state: gateway_state.clone(),
+                            coordinator: Arc::new(Mutex::new(GameCoordinator::new(
+                                GameDriverFactory::new(
+                                    options.settings.available_models.clone(),
+                                    options.settings.default_voice.clone(),
+                                    "en",
+                                ),
+                            ))),
+                            pending_picks: Mutex::new(BTreeMap::new()),
+                            localizer,
+                            available_models: options.settings.available_models.clone(),
+                            default_voice: options.settings.default_voice.clone(),
+                            default_speed: options.settings.default_speed,
+                            executor: Mutex::new(None),
+                            tick_started: AtomicBool::new(false),
+                        })
+                    })
+            })
+            .flatten();
         Self {
             store,
             gateway_state,
@@ -104,6 +1068,7 @@ impl CoreVoiceGatewaySink {
             randomizer_sessions: Mutex::new(BTreeMap::new()),
             cast_sessions: Mutex::new(BTreeMap::new()),
             rejoin_attempted: AtomicBool::new(false),
+            game_runtime,
         }
     }
 
@@ -1516,7 +2481,12 @@ impl CoreVoiceGatewaySink {
 #[async_trait]
 impl GatewayEventSink for CoreVoiceGatewaySink {
     async fn on_ready(&self, context: Context) -> Result<(), GatewayEventDispatchError> {
-        self.recover_planned_sessions(&context).await
+        self.recover_planned_sessions(&context).await?;
+        if let Some(game) = &self.game_runtime {
+            let executor = self.executor(&context)?;
+            game.start_tick(context.clone(), executor);
+        }
+        Ok(())
     }
 
     async fn on_message(
@@ -1524,6 +2494,11 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         context: Context,
         message: serenity::model::channel::Message,
     ) -> Result<(), GatewayEventDispatchError> {
+        if let Some(game) = &self.game_runtime
+            && game.handle_message(&context, &message).await?
+        {
+            return Ok(());
+        }
         if !self.options.message_autoread
             || self
                 .gateway_state
@@ -1588,6 +2563,21 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         context: Context,
         interaction: Interaction,
     ) -> Result<(), GatewayEventDispatchError> {
+        if let Some(game) = &self.game_runtime {
+            match &interaction {
+                Interaction::Component(component) => {
+                    if game.handle_component(&context, component.clone()).await? {
+                        return Ok(());
+                    }
+                }
+                Interaction::Command(command) if command.data.name == "game" => {
+                    if game.handle_command(&context, command).await? {
+                        return Ok(());
+                    }
+                }
+                _ => {}
+            }
+        }
         if self.options.setup_enabled
             && matches!(&interaction, Interaction::Command(command) if command.data.name == "setup")
         {
@@ -1704,6 +2694,43 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         Ok(())
     }
 
+    async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
+        if let Some(game) = &self.game_runtime {
+            game.on_guild_delete(guild_id)?;
+        }
+        if let Ok(executor) = self.executor.lock()
+            && let Some(executor) = executor.as_ref()
+        {
+            executor.forget_guild(guild_id);
+        }
+        if let Ok(service) = self.message_service.lock()
+            && let Some(service) = service.as_ref()
+        {
+            service.forget_guild(guild_id);
+        }
+        if let Ok(mut speakers) = self.last_speakers.lock() {
+            speakers.remove(guild_id);
+        }
+        if let Ok(mut sessions) = self.cast_sessions.lock() {
+            sessions.retain(|_, session| session.guild_id != guild_id);
+        }
+        Ok(())
+    }
+
+    async fn on_voice_state_update(
+        &self,
+        context: Context,
+        _old: Option<serenity::model::voice::VoiceState>,
+        new: serenity::model::voice::VoiceState,
+    ) -> Result<(), GatewayEventDispatchError> {
+        if let Some(game) = &self.game_runtime {
+            game.on_voice_state_update(&context, &new).await?;
+        }
+        Ok(())
+    }
+}
+
+impl CoreVoiceGatewaySink {
     async fn handle_speak_context(
         &self,
         context: &Context,
@@ -1741,31 +2768,10 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                     .allowed_mentions(no_mentions()),
             )
             .await
+            .map(|_| ())
             .map_err(|_| GatewayEventDispatchError)
     }
 
-    async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
-        if let Ok(executor) = self.executor.lock()
-            && let Some(executor) = executor.as_ref()
-        {
-            executor.forget_guild(guild_id);
-        }
-        if let Ok(service) = self.message_service.lock()
-            && let Some(service) = service.as_ref()
-        {
-            service.forget_guild(guild_id);
-        }
-        if let Ok(mut speakers) = self.last_speakers.lock() {
-            speakers.remove(guild_id);
-        }
-        if let Ok(mut sessions) = self.cast_sessions.lock() {
-            sessions.retain(|_, session| session.guild_id != guild_id);
-        }
-        Ok(())
-    }
-}
-
-impl CoreVoiceGatewaySink {
     async fn handle_queue_interaction(
         &self,
         context: &Context,
@@ -1979,6 +2985,9 @@ mod tests {
             message_autoread: false,
             randomizer_enabled: false,
             cast_enabled: false,
+            setup_enabled: false,
+            speak_context_enabled: false,
+            game_play_enabled: false,
             settings: CoreVoiceSettings {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),
@@ -2019,6 +3028,9 @@ mod tests {
                 message_autoread: true,
                 randomizer_enabled: false,
                 cast_enabled: false,
+                setup_enabled: false,
+                speak_context_enabled: false,
+                game_play_enabled: false,
                 settings: CoreVoiceSettings {
                     available_models: vec!["en_US-amy-medium".into()],
                     default_voice: "en_US-amy-medium".into(),

@@ -262,6 +262,7 @@ struct CoreVoiceRuntimeOptions {
     cast_enabled: bool,
     setup_enabled: bool,
     speak_context_enabled: bool,
+    game_play_enabled: bool,
     settings: CoreVoiceSettings,
 }
 
@@ -511,6 +512,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
         speak_context_enabled: speak_context_enabled(
             env::var("RUST_SPEAK_CONTEXT_ENABLED").ok().as_deref(),
         ),
+        game_play_enabled: game_play_enabled(env::var("RUST_GAME_PLAY_ENABLED").ok().as_deref()),
         settings: CoreVoiceSettings {
             available_models: Vec::new(),
             default_voice,
@@ -533,6 +535,10 @@ fn setup_enabled(raw: Option<&str>) -> bool {
 }
 
 fn speak_context_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn game_play_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 

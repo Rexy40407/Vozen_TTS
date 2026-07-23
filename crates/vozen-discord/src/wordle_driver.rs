@@ -306,7 +306,7 @@ mod tests {
                 },
                 2_000,
             ),
-            Some(GameManagerEvent::Finished { session })
+            Some(GameManagerEvent::Finished { session, .. })
                 if session.scores.is_empty()
         ));
         assert!(!manager.active("guild"));

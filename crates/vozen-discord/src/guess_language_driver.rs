@@ -284,7 +284,7 @@ mod tests {
                 content: "es".into(),
                 can_trigger_speech: true,
             }, 1_000),
-            Some(GameManagerEvent::Finished { session })
+            Some(GameManagerEvent::Finished { session, .. })
                 if session.scores.iter().any(|score| score.user_id == "u" && score.points == 1)
         ));
     }

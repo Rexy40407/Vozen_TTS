@@ -81,6 +81,11 @@ impl GameCoordinator {
         self.manager.is_starter(guild_id, user_id)
     }
 
+    #[must_use]
+    pub fn session(&self, guild_id: &str) -> Option<GameSession> {
+        self.manager.session(guild_id)
+    }
+
     /// Runs every pre-session gate before creating a driver or mutating the session lock.
     pub fn start(
         &mut self,
@@ -106,9 +111,12 @@ impl GameCoordinator {
 
         let definition = game_definition(game_id)
             .ok_or_else(|| GameCoordinatorError::MissingDefinition(game_id.to_owned()))?;
-        let driver = self
-            .factory
-            .create(game_id, request.language.as_deref(), request.seed)?;
+        let driver = self.factory.create_for_locale(
+            game_id,
+            request.language.as_deref(),
+            &request.locale,
+            request.seed,
+        )?;
         let parent_channel_id = (request.game_channel_id != request.parent_channel_id)
             .then_some(request.parent_channel_id.clone());
         let session = GameSession {
@@ -146,6 +154,10 @@ impl GameCoordinator {
 
     pub fn advance(&mut self, now_ms: i64) -> Vec<GameManagerEvent> {
         self.manager.advance(now_ms)
+    }
+
+    pub fn advance_with_guild(&mut self, now_ms: i64) -> Vec<(String, GameManagerEvent)> {
+        self.manager.advance_with_guild(now_ms)
     }
 
     pub fn stop(
