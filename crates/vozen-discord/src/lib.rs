@@ -1099,6 +1099,12 @@ struct VozenGatewayHandler {
     presence_text: String,
 }
 
+fn log_event_sink_failure(event: &str) {
+    // GatewayEventDispatchError is intentionally content-free. Keep the log equally narrow:
+    // event type only, never message text, user IDs, guild IDs, or tokens.
+    eprintln!("[gateway] promoted event sink failed during {event}; event ignored");
+}
+
 #[async_trait]
 impl EventHandler for VozenGatewayHandler {
     async fn ready(&self, context: Context, ready: Ready) {
@@ -1112,8 +1118,10 @@ impl EventHandler for VozenGatewayHandler {
             Some(ActivityData::listening(self.presence_text.clone())),
             OnlineStatus::Online,
         );
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_ready(context).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink.on_ready(context).await.is_err()
+        {
+            log_event_sink_failure("ready");
         }
     }
 
@@ -1127,8 +1135,10 @@ impl EventHandler for VozenGatewayHandler {
         context: Context,
         _entitlement: serenity::model::monetization::Entitlement,
     ) {
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_entitlement_change(context).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink.on_entitlement_change(context).await.is_err()
+        {
+            log_event_sink_failure("entitlement_create");
         }
     }
 
@@ -1137,8 +1147,10 @@ impl EventHandler for VozenGatewayHandler {
         context: Context,
         _entitlement: serenity::model::monetization::Entitlement,
     ) {
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_entitlement_change(context).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink.on_entitlement_change(context).await.is_err()
+        {
+            log_event_sink_failure("entitlement_update");
         }
     }
 
@@ -1147,8 +1159,10 @@ impl EventHandler for VozenGatewayHandler {
         context: Context,
         _entitlement: serenity::model::monetization::Entitlement,
     ) {
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_entitlement_change(context).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink.on_entitlement_change(context).await.is_err()
+        {
+            log_event_sink_failure("entitlement_delete");
         }
     }
 
@@ -1167,8 +1181,13 @@ impl EventHandler for VozenGatewayHandler {
                 joined_timestamp: guild.joined_at.unix_timestamp(),
             });
         self.gateway_state.replace_guild_voice_states(&guild);
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_guild_create_details(context, guild).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink
+                .on_guild_create_details(context, guild)
+                .await
+                .is_err()
+        {
+            log_event_sink_failure("guild_create");
         }
     }
 
@@ -1186,8 +1205,10 @@ impl EventHandler for VozenGatewayHandler {
         }
         let guild_id = incomplete.id.get().to_string();
         self.gateway_state.forget_guild(&guild_id);
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_guild_delete(&guild_id).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink.on_guild_delete(&guild_id).await.is_err()
+        {
+            log_event_sink_failure("guild_delete");
         }
     }
 
@@ -1207,20 +1228,29 @@ impl EventHandler for VozenGatewayHandler {
                 .map(|channel_id| channel_id.get().to_string()),
             new.member.as_ref().is_some_and(|member| member.user.bot),
         );
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_voice_state_update(context, old, new).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink
+                .on_voice_state_update(context, old, new)
+                .await
+                .is_err()
+        {
+            log_event_sink_failure("voice_state_update");
         }
     }
 
     async fn message(&self, context: Context, message: serenity::model::channel::Message) {
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_message(context, message).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink.on_message(context, message).await.is_err()
+        {
+            log_event_sink_failure("message");
         }
     }
 
     async fn reaction_add(&self, context: Context, reaction: serenity::model::channel::Reaction) {
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_reaction_add(context, reaction).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink.on_reaction_add(context, reaction).await.is_err()
+        {
+            log_event_sink_failure("reaction_add");
         }
     }
 
@@ -1229,8 +1259,13 @@ impl EventHandler for VozenGatewayHandler {
         context: Context,
         interaction: serenity::model::application::Interaction,
     ) {
-        if let Some(event_sink) = &self.event_sink {
-            let _ = event_sink.on_interaction(context, interaction).await;
+        if let Some(event_sink) = &self.event_sink
+            && event_sink
+                .on_interaction(context, interaction)
+                .await
+                .is_err()
+        {
+            log_event_sink_failure("interaction_create");
         }
     }
 }
