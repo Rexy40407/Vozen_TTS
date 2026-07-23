@@ -109,6 +109,8 @@ const KEYS = [
   'config.maxCharsSet',
   'config.rateLimitRange',
   'config.rateLimitSet',
+  'config.roleSet',
+  'config.roleCleared',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };

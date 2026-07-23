@@ -9,6 +9,7 @@
 mod automatic_translation_sink;
 mod config_language_sink;
 mod config_numeric_sink;
+mod config_role_sink;
 mod config_toggle_sink;
 #[cfg(feature = "voice-driver")]
 mod core_voice_sink;
@@ -85,6 +86,7 @@ struct RuntimeConfig {
     config_language: bool,
     config_toggles: bool,
     config_numeric: bool,
+    config_role: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -272,6 +274,7 @@ impl RuntimeConfig {
             config_toggles_enabled(env::var("RUST_CONFIG_TOGGLES_ENABLED").ok().as_deref());
         let config_numeric =
             config_numeric_enabled(env::var("RUST_CONFIG_NUMERIC_ENABLED").ok().as_deref());
+        let config_role = config_role_enabled(env::var("RUST_CONFIG_ROLE_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -293,6 +296,7 @@ impl RuntimeConfig {
             config_language,
             config_toggles,
             config_numeric,
+            config_role,
             automatic_translation,
             dashboard,
             admin,
@@ -453,6 +457,10 @@ fn config_toggles_enabled(raw: Option<&str>) -> bool {
 }
 
 fn config_numeric_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn config_role_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -673,6 +681,19 @@ fn config_numeric_event_sink(
     )))
 }
 
+fn config_role_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        config_role_sink::ConfigRoleGatewaySink::new(store)
+            .map_err(|_| RuntimeError::ConfigRoleGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -835,6 +856,8 @@ enum RuntimeError {
     ConfigToggleGateway,
     #[error("config numeric gateway initialisation failed")]
     ConfigNumericGateway,
+    #[error("config role gateway initialisation failed")]
+    ConfigRoleGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -915,6 +938,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = config_numeric_event_sink(config.config_numeric, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = config_role_event_sink(config.config_role, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1367,6 +1393,20 @@ mod tests {
         assert!(!config_toggles_enabled(Some("1")));
         assert!(!config_toggles_enabled(Some("yes")));
         assert!(!config_toggles_enabled(None));
+    }
+
+    #[test]
+    fn numeric_and_role_config_promotions_are_exactly_opt_in() {
+        for enabled in [
+            config_numeric_enabled as fn(Option<&str>) -> bool,
+            config_role_enabled as fn(Option<&str>) -> bool,
+        ] {
+            assert!(enabled(Some("true")));
+            assert!(enabled(Some(" TRUE ")));
+            assert!(!enabled(Some("1")));
+            assert!(!enabled(Some("yes")));
+            assert!(!enabled(None));
+        }
     }
 
     #[test]

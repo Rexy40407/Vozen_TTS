@@ -7,6 +7,7 @@ import {
   rustPronunciationOwnsCommand,
   rustConfigLanguageOwnsCommand,
   rustConfigNumericOwnsCommand,
+  rustConfigRoleOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -70,6 +71,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigNumericOwnsCommand('config', 'language', 'true')).toBe(false);
     expect(rustConfigNumericOwnsCommand('config', 'show', 'true')).toBe(false);
     expect(rustConfigNumericOwnsCommand('voice', 'max-chars', 'true')).toBe(false);
+  });
+
+  it('promotes only the simple config role leaf behind its own canary', () => {
+    expect(rustConfigRoleOwnsCommand('config', 'role')).toBe(false);
+    expect(rustConfigRoleOwnsCommand('config', 'role', 'true')).toBe(true);
+    expect(rustConfigRoleOwnsCommand('config', 'priority-role', 'true')).toBe(false);
+    expect(rustConfigRoleOwnsCommand('config', 'blocked-role', 'true')).toBe(false);
+    expect(rustConfigRoleOwnsCommand('config', 'show', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {
