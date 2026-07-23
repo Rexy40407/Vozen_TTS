@@ -426,6 +426,16 @@ impl RuntimeConfig {
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
+        if http_listener_required(
+            health_bind,
+            premium_http.is_some(),
+            dashboard.is_some(),
+            admin.is_some(),
+            topgg_webhook.is_some(),
+            public_status.is_some(),
+        ) {
+            return Err(RuntimeError::HttpListenerRequired);
+        }
         Ok(Self {
             discord_token,
             database_path,
@@ -1595,6 +1605,17 @@ fn nonempty_env(name: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn http_listener_required(
+    health_bind: Option<SocketAddr>,
+    premium_http: bool,
+    dashboard: bool,
+    admin: bool,
+    topgg_webhook: bool,
+    public_status: bool,
+) -> bool {
+    health_bind.is_none() && (premium_http || dashboard || admin || topgg_webhook || public_status)
+}
+
 #[derive(Debug, Error)]
 enum RuntimeError {
     #[error("invalid or incomplete Rust runtime mode: {0}")]
@@ -1603,6 +1624,8 @@ enum RuntimeError {
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
     InvalidHealthPort,
+    #[error("HEALTH_PORT is required when a Rust HTTP/API surface is enabled")]
+    HttpListenerRequired,
     #[error(
         "CLIENT_ID is required when PREMIUM_API_ENABLED=true or TOPGG_WEBHOOK_SECRET is configured"
     )]
@@ -2278,6 +2301,30 @@ mod tests {
         let address = SocketAddr::from(([127, 0, 0, 1], 8080));
         assert!(address.ip().is_loopback());
         assert_eq!(address.port(), 8080);
+    }
+
+    #[test]
+    fn opted_in_http_surfaces_require_a_listener() {
+        assert!(http_listener_required(
+            None, true, false, false, false, false
+        ));
+        assert!(http_listener_required(
+            None, false, true, false, false, false
+        ));
+        assert!(http_listener_required(
+            None, false, false, false, true, false
+        ));
+        assert!(!http_listener_required(
+            Some(SocketAddr::from(([127, 0, 0, 1], 8080))),
+            true,
+            true,
+            true,
+            true,
+            true,
+        ));
+        assert!(!http_listener_required(
+            None, false, false, false, false, false
+        ));
     }
 
     #[test]
