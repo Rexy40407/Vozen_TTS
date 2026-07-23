@@ -3,9 +3,8 @@
 //! Opt-in Rust process entry point used during the Node-to-Rust shadow migration.
 //!
 //! It deliberately starts only the safe shared foundations (SQLite migration, Discord gateway,
-//! optional loopback HTTP route). The account, receipt-claim and Ko-fi webhook adapters are
-//! opt-in. Dashboard routes remain absent until their live Discord option provider has been
-//! migrated and shadow-tested.
+//! optional loopback HTTP route). Account, receipt-claim, Ko-fi webhook, dashboard and admin
+//! adapters are individually opt-in. Voice/message ownership still requires its own canary flag.
 
 mod automatic_translation_sink;
 #[cfg(feature = "voice-driver")]
