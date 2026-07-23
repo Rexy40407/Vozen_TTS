@@ -10,7 +10,7 @@ const check = process.argv.includes('--check');
 
 // These are the only current Rust-promoted voice responses.  Keeping the list here makes adding
 // a new semantic Rust outcome a deliberate review of the existing Node public copy.
-const KEYS = [
+const BASE_KEYS = [
   'speak.emptyMessage',
   'birthday.set',
   'birthday.invalid',
@@ -311,10 +311,17 @@ const KEYS = [
   'config.unblocked',
 ] as const;
 
+// Game drivers are being migrated incrementally. Keep every game message in the shared
+// generated catalogue so a future Rust renderer cannot silently fall back to hard-coded English
+// or invent a second translation source. Existing promoted non-game keys remain explicit above.
+const KEYS = [
+  ...new Set([...BASE_KEYS, ...Object.keys(catalog).filter((key) => key.startsWith('game.'))]),
+] as string[];
+
 type CatalogEntry = { en: string; pt?: string };
 const entries = catalog as Record<string, CatalogEntry>;
 
-function message(locale: string, key: (typeof KEYS)[number]): string {
+function message(locale: string, key: string): string {
   const entry = entries[key];
   if (!entry?.en) throw new Error(`Missing canonical English i18n key: ${key}`);
   return (
