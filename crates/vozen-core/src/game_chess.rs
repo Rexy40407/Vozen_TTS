@@ -104,6 +104,13 @@ impl ChessGame {
         chess_color(self.game.side_to_move())
     }
 
+    /// Current board position in standard FEN form for a transport/rendering adapter. Keeping
+    /// this as a value snapshot avoids exposing the third-party chess board type across crates.
+    #[must_use]
+    pub fn board_fen(&self) -> String {
+        self.game.current_position().to_string()
+    }
+
     /// Applies a move or resignation. The first two distinct users who submit a valid-looking
     /// move take White and Black, matching the Node game; later users become spectators.
     #[must_use]
@@ -417,5 +424,14 @@ mod tests {
                 ));
             }
         }
+    }
+
+    #[test]
+    fn exposes_a_stable_fen_snapshot_without_leaking_the_board_type() {
+        let game = ChessGame::new();
+        assert!(
+            game.board_fen()
+                .starts_with("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w")
+        );
     }
 }

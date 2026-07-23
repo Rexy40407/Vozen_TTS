@@ -30,6 +30,7 @@ mod automatic_translation_service;
 mod birthday_command;
 mod bot_stats_command;
 mod cast;
+mod chess_driver;
 mod command_registration;
 mod command_routing;
 mod command_speech_pipeline;
@@ -139,6 +140,7 @@ pub use cast::{
     CastEntry, CastLanguage, CastMember, CastSession, CastTheme, assign_cast, build_cast_speech,
     cast_theme_by_key, chunk_cast_speech, parse_cast_component_id,
 };
+pub use chess_driver::{ChessDriver, ChessDriverAction, ChessGameDriver};
 pub use command_registration::{
     CommandRegistrationClient, CommandRegistrationConfig, CommandRegistrationError,
     CommandRegistrationOutcome, DiscordHttpCommandRegistrationClient, register_commands,

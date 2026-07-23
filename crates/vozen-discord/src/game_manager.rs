@@ -29,6 +29,7 @@ pub enum GameDriverAction {
     Wordle(crate::wordle_driver::WordleDriverAction),
     TicTacToe(crate::tictactoe_driver::TicTacToeDriverAction),
     Roulette(crate::roulette_driver::RouletteDriverAction),
+    Chess(crate::chess_driver::ChessDriverAction),
 }
 
 /// A single game implementation behind the lifecycle boundary.
