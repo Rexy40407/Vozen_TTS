@@ -81,6 +81,7 @@ mod game_play_admission;
 mod game_score_command;
 mod game_session;
 mod gateway_composite;
+mod greeting;
 mod guess_language_driver;
 mod guild_synthesis_coordinator;
 mod hangman_driver;
@@ -288,6 +289,7 @@ pub use game_play_admission::{
 pub use game_score_command::{GameScoreCommand, GameScoreCommandError, parse_game_score_command};
 pub use game_session::{GameScore, GameSession, GameSessionStore, GameStopDenied, StartGameResult};
 pub use gateway_composite::CompositeGatewayEventSink;
+pub use greeting::{Greeting, build_greeting, is_join_into_channel};
 pub use guess_language_driver::{
     GuessLanguageDriver, GuessLanguageDriverAction, GuessLanguageGameDriver,
 };
@@ -402,7 +404,7 @@ pub use voice_preference_command::{
 };
 pub use voice_preference_service::{
     VoicePreferenceInvocation, VoicePreferenceOutcome, VoicePreferenceService,
-    VoicePreferenceSettings,
+    VoicePreferenceSettings, sanitize_speaker_name,
 };
 #[cfg(feature = "voice-driver")]
 pub use voice_receiver::SongbirdVoiceReceiver;
@@ -501,6 +503,7 @@ pub struct GatewayState {
     guild_names: Arc<RwLock<BTreeMap<String, String>>>,
     guild_snapshots: Arc<RwLock<BTreeMap<String, GatewayGuildSnapshot>>>,
     voice_channels: Arc<RwLock<BTreeMap<String, BTreeMap<String, String>>>>,
+    voice_bots: Arc<RwLock<BTreeMap<String, BTreeMap<String, bool>>>>,
     voice_drops_pending_reconnect: Arc<RwLock<BTreeSet<String>>>,
     /// HTTP is retained after READY only for low-frequency, authorized dashboard option lookups.
     /// It contains no message content or cached guild/member state.
@@ -646,6 +649,31 @@ impl GatewayState {
             .unwrap_or_default()
     }
 
+    /// Counts non-bot members currently observed in a voice channel. Unknown members are
+    /// treated as humans, matching discord.js' count without retaining profiles or content.
+    pub fn human_voice_member_count(&self, guild_id: &str, channel_id: &str) -> usize {
+        let Ok(guilds) = self.voice_channels.read() else {
+            return 0;
+        };
+        let Some(users) = guilds.get(guild_id) else {
+            return 0;
+        };
+        let bot_flags = self
+            .voice_bots
+            .read()
+            .ok()
+            .and_then(|guilds| guilds.get(guild_id).cloned())
+            .unwrap_or_default();
+        users
+            .iter()
+            .filter(|(user_id, current_channel)| {
+                current_channel.as_str() == channel_id
+                    && self.bot_user_id().as_deref() != Some(user_id.as_str())
+                    && !bot_flags.get(*user_id).copied().unwrap_or(false)
+            })
+            .count()
+    }
+
     pub(crate) fn discord_http(&self) -> Option<Arc<serenity::http::Http>> {
         self.http.read().ok()?.clone()
     }
@@ -714,13 +742,38 @@ impl GatewayState {
                     .map(|channel_id| (user_id.get().to_string(), channel_id.get().to_string()))
             })
             .collect::<BTreeMap<_, _>>();
+        let bot_flags = guild
+            .voice_states
+            .iter()
+            .filter_map(|(user_id, state)| {
+                state.channel_id.map(|_| {
+                    (
+                        user_id.get().to_string(),
+                        state.member.as_ref().is_some_and(|member| member.user.bot),
+                    )
+                })
+            })
+            .collect::<BTreeMap<_, _>>();
         if let Ok(mut guilds) = self.voice_channels.write() {
             guilds.insert(guild.id.get().to_string(), voice_states);
+        }
+        if let Ok(mut guilds) = self.voice_bots.write() {
+            guilds.insert(guild.id.get().to_string(), bot_flags);
         }
     }
 
     fn update_voice_state(&self, guild_id: &str, user_id: &str, channel_id: Option<String>) {
-        let is_bot = self.bot_user_id().as_deref() == Some(user_id);
+        self.update_voice_state_with_bot(guild_id, user_id, channel_id, false);
+    }
+
+    fn update_voice_state_with_bot(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        channel_id: Option<String>,
+        member_is_bot: bool,
+    ) {
+        let is_bot = member_is_bot || self.bot_user_id().as_deref() == Some(user_id);
         if let Ok(mut guilds) = self.voice_channels.write() {
             let users = guilds.entry(guild_id.to_owned()).or_default();
             match channel_id {
@@ -735,6 +788,12 @@ impl GatewayState {
                         self.metrics.record_voice_reconnect();
                     }
                     users.insert(user_id.to_owned(), channel_id);
+                    if let Ok(mut bot_guilds) = self.voice_bots.write() {
+                        bot_guilds
+                            .entry(guild_id.to_owned())
+                            .or_default()
+                            .insert(user_id.to_owned(), is_bot);
+                    }
                 }
                 None => {
                     let was_present = users.remove(user_id).is_some();
@@ -746,6 +805,14 @@ impl GatewayState {
                     }
                     if users.is_empty() {
                         guilds.remove(guild_id);
+                    }
+                    if let Ok(mut bot_guilds) = self.voice_bots.write()
+                        && let Some(users) = bot_guilds.get_mut(guild_id)
+                    {
+                        users.remove(user_id);
+                        if users.is_empty() {
+                            bot_guilds.remove(guild_id);
+                        }
                     }
                 }
             }
@@ -764,6 +831,9 @@ impl GatewayState {
         }
         if let Ok(mut voice_channels) = self.voice_channels.write() {
             voice_channels.remove(guild_id);
+        }
+        if let Ok(mut voice_bots) = self.voice_bots.write() {
+            voice_bots.remove(guild_id);
         }
         if let Ok(mut pending) = self.voice_drops_pending_reconnect.write() {
             pending.remove(guild_id);
@@ -1013,11 +1083,12 @@ impl EventHandler for VozenGatewayHandler {
         let Some(guild_id) = new.guild_id else {
             return;
         };
-        self.gateway_state.update_voice_state(
+        self.gateway_state.update_voice_state_with_bot(
             &guild_id.get().to_string(),
             &new.user_id.get().to_string(),
             new.channel_id
                 .map(|channel_id| channel_id.get().to_string()),
+            new.member.as_ref().is_some_and(|member| member.user.bot),
         );
         if let Some(event_sink) = &self.event_sink {
             let _ = event_sink.on_voice_state_update(context, old, new).await;
@@ -1167,6 +1238,16 @@ mod tests {
             vec!["alpha".to_owned(), "gamma".to_owned()]
         );
         assert!(state.voice_member_ids("guild", "missing").is_empty());
+    }
+
+    #[test]
+    fn gateway_state_counts_humans_without_counting_vozen_or_known_bots() {
+        let state = GatewayState::default();
+        state.remember_bot_user("vozen".into());
+        state.update_voice_state("guild", "human", Some("voice".into()));
+        state.update_voice_state_with_bot("guild", "other-bot", Some("voice".into()), true);
+        state.update_voice_state("guild", "vozen", Some("voice".into()));
+        assert_eq!(state.human_voice_member_count("guild", "voice"), 1);
     }
 
     #[test]

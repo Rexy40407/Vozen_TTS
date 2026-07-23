@@ -44,11 +44,12 @@ use vozen_discord::{
     MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService, PlannedRejoinService,
     QueueControlInvocation, QueueControlOutcome, QueueControlService, RandomizerCommand,
     RandomizerSession, RejoinChannelState, RenderedGameAction, SongbirdCommandPlayback,
-    SongbirdVoiceSessionTransport, VoiceResponseLocalizer, collect_message_media,
-    consume_planned_rejoin_marker, parse_amount_component_id, parse_cast_component_id,
-    parse_fill_component_id, parse_game_play_command, parse_game_stop_command, parse_modal_options,
-    parse_queue_command, parse_randomizer_command, parse_setup_command,
-    parse_speak_message_command, pick_option, render_game_action, render_game_finish,
+    SongbirdVoiceSessionTransport, VoiceResponseLocalizer, build_greeting, collect_message_media,
+    consume_planned_rejoin_marker, is_join_into_channel, parse_amount_component_id,
+    parse_cast_component_id, parse_fill_component_id, parse_game_play_command,
+    parse_game_stop_command, parse_modal_options, parse_queue_command, parse_randomizer_command,
+    parse_setup_command, parse_speak_message_command, pick_option, render_game_action,
+    render_game_finish, sanitize_speaker_name,
 };
 use vozen_store::{GuildConfigPatch, SqliteStore};
 
@@ -79,6 +80,8 @@ struct VoiceDependencies {
 
 const GAME_PICK_TTL_MS: i64 = 60_000;
 const GAME_THREAD_DELETE_DELAY: Duration = Duration::from_secs(5);
+const GREET_COOLDOWN_MS: i64 = 5 * 60 * 1_000;
+const GREET_COOLDOWN_MAX_ENTRIES: usize = 10_000;
 
 #[derive(Clone)]
 struct PendingGamePick {
@@ -117,6 +120,7 @@ pub struct CoreVoiceGatewaySink {
     last_speakers: Mutex<BTreeMap<String, String>>,
     randomizer_sessions: Mutex<BTreeMap<String, RandomizerSession>>,
     cast_sessions: Mutex<BTreeMap<String, CastSession>>,
+    greet_cooldown: Mutex<BTreeMap<String, i64>>,
     rejoin_attempted: AtomicBool,
     game_runtime: Option<Arc<GameRuntime>>,
 }
@@ -1067,6 +1071,7 @@ impl CoreVoiceGatewaySink {
             last_speakers: Mutex::new(BTreeMap::new()),
             randomizer_sessions: Mutex::new(BTreeMap::new()),
             cast_sessions: Mutex::new(BTreeMap::new()),
+            greet_cooldown: Mutex::new(BTreeMap::new()),
             rejoin_attempted: AtomicBool::new(false),
             game_runtime,
         }
@@ -1153,6 +1158,139 @@ impl CoreVoiceGatewaySink {
         ));
         *current = Some(service.clone());
         Ok(service)
+    }
+
+    fn greet_cooldown_allows(&self, guild_id: &str, user_id: &str, now_ms: i64) -> bool {
+        let key = format!("{guild_id}:{user_id}");
+        let Ok(mut cooldown) = self.greet_cooldown.lock() else {
+            return false;
+        };
+        if cooldown
+            .get(&key)
+            .is_some_and(|previous| now_ms.saturating_sub(*previous) < GREET_COOLDOWN_MS)
+        {
+            return false;
+        }
+        cooldown.remove(&key);
+        cooldown.insert(key, now_ms);
+        while cooldown.len() > GREET_COOLDOWN_MAX_ENTRIES {
+            let Some(oldest) = cooldown.keys().next().cloned() else {
+                break;
+            };
+            cooldown.remove(&oldest);
+        }
+        true
+    }
+
+    async fn greet_joining_member(
+        &self,
+        context: &Context,
+        old: Option<&serenity::model::voice::VoiceState>,
+        new: &serenity::model::voice::VoiceState,
+        bot_channel_id: &str,
+    ) {
+        let Some(member) = new.member.as_ref() else {
+            return;
+        };
+        if member.user.bot
+            || !is_join_into_channel(
+                old.and_then(|state| state.channel_id.map(|id| id.get().to_string()))
+                    .as_deref(),
+                new.channel_id.map(|id| id.get().to_string()).as_deref(),
+                Some(bot_channel_id),
+            )
+        {
+            return;
+        }
+        let Some(guild_id) = new.guild_id.map(|id| id.get().to_string()) else {
+            return;
+        };
+        let user_id = new.user_id.get().to_string();
+        let now_ms = system_now_ms();
+        let (config, birthday, nickname) = {
+            let Ok(store) = self.store.lock() else {
+                return;
+            };
+            let Ok(config) = store.guild_config(&guild_id) else {
+                return;
+            };
+            let birthday = store.birthday(&guild_id, &user_id).ok().flatten();
+            let nickname = store.nickname(&guild_id, &user_id).ok().flatten();
+            (config, birthday, nickname)
+        };
+        let today = time::OffsetDateTime::now_utc().date();
+        let is_birthday = birthday.is_some_and(|birthday| {
+            u8::from(today.month()) == birthday.month && today.day() == u8::from(birthday.day)
+        });
+        if !config.enabled || (!is_birthday && !config.greet_on_join) {
+            return;
+        }
+        if !self.greet_cooldown_allows(&guild_id, &user_id, now_ms) {
+            return;
+        }
+        let raw_name = nickname
+            .or_else(|| Some(member.display_name().to_owned()))
+            .unwrap_or_else(|| member.user.name.clone());
+        let greeting = build_greeting(
+            &config.greet_locale,
+            &sanitize_speaker_name(&raw_name),
+            &self.options.settings.available_models,
+            if config.default_voice.trim().is_empty() {
+                &self.options.settings.default_voice
+            } else {
+                &config.default_voice
+            },
+            self.options.settings.default_speed,
+            is_birthday,
+        );
+        let Some(bot_id) = self.gateway_state.bot_user_id() else {
+            return;
+        };
+        let facts = CoreVoiceInteractionFacts {
+            guild_id,
+            channel_id: bot_channel_id.to_owned(),
+            user_id: bot_id,
+            member_role_ids: None,
+        };
+        let Ok(executor) = self.executor(context) else {
+            return;
+        };
+        let _ = executor
+            .speak_text_with_voice(
+                &facts,
+                &greeting.text,
+                &greeting.model,
+                greeting.speed,
+                self.options.settings.default_engine,
+                false,
+            )
+            .await;
+    }
+
+    async fn leave_if_alone(&self, context: &Context, guild_id: &str, bot_channel_id: &str) {
+        let humans = self
+            .gateway_state
+            .human_voice_member_count(guild_id, bot_channel_id);
+        if humans > 0 {
+            return;
+        }
+        let stay_in_call = self
+            .store
+            .lock()
+            .ok()
+            .and_then(|store| {
+                let config = store.guild_config(guild_id).ok()?;
+                let premium = store.is_guild_premium(guild_id, system_now_ms()).ok()?;
+                Some(config.stay_in_call && premium)
+            })
+            .unwrap_or(false);
+        if stay_in_call {
+            return;
+        }
+        let Ok(executor) = self.executor(context) else {
+            return;
+        };
+        let _ = executor.leave_for_lifecycle(guild_id).await;
     }
 
     /// Restores calls only once per process and only after checking every persisted channel
@@ -2720,11 +2858,20 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
     async fn on_voice_state_update(
         &self,
         context: Context,
-        _old: Option<serenity::model::voice::VoiceState>,
+        old: Option<serenity::model::voice::VoiceState>,
         new: serenity::model::voice::VoiceState,
     ) -> Result<(), GatewayEventDispatchError> {
         if let Some(game) = &self.game_runtime {
             game.on_voice_state_update(&context, &new).await?;
+        }
+        let Some(guild_id) = new.guild_id.map(|id| id.get().to_string()) else {
+            return Ok(());
+        };
+        if let Some(bot_channel_id) = self.gateway_state.bot_voice_channel_id(&guild_id) {
+            self.greet_joining_member(&context, old.as_ref(), &new, &bot_channel_id)
+                .await;
+            self.leave_if_alone(&context, &guild_id, &bot_channel_id)
+                .await;
         }
         Ok(())
     }

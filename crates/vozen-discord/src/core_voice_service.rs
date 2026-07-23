@@ -421,6 +421,13 @@ where
         }
     }
 
+    /// Leaves a call from a gateway lifecycle rule (for example, when no humans remain).
+    /// It uses the same durable-marker cleanup as `/leave`, so an automatic departure cannot
+    /// unexpectedly turn into a silent rejoin after restart.
+    pub async fn leave_for_lifecycle(&self, guild_id: &str) -> LeaveVoiceOutcome {
+        self.sessions.leave_explicitly(guild_id).await
+    }
+
     /// Executes a deliberately selected voice sample. The gateway supplies the localized sample
     /// phrase; this keeps the semantic service independent from Discord's locale catalog while
     /// preserving the Node precedence of explicit model, saved model, guild default and runtime

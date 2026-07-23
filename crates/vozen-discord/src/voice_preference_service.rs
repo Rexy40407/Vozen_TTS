@@ -439,6 +439,11 @@ fn sanitize_nickname(value: &str) -> String {
     }
 }
 
+/// Sanitizes a display name before it is spoken by a lifecycle greeting.
+pub fn sanitize_speaker_name(value: &str) -> String {
+    sanitize_nickname(value)
+}
+
 /// Detects Discord's `<:name:123>` and `<a:name:123>` markup so its readable identifiers do
 /// not accidentally become part of a spoken nickname.  This is intentionally narrower than
 /// removing arbitrary angle-bracket text, matching Node's custom-emoji-specific replacement.

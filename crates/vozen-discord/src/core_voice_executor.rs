@@ -16,8 +16,9 @@ use vozen_store::SqliteStore;
 use crate::{
     CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceInteractionFacts, CoreVoiceOutcome,
     CoreVoiceResponse, CoreVoiceService, CoreVoiceSettings, GatewayState,
-    GuildSynthesisCoordinator, VoiceResponseLocalizer, VoiceResponseLocalizerError,
-    VoiceSessionTransport, core_voice_response, parse_promoted_core_voice,
+    GuildSynthesisCoordinator, LeaveVoiceOutcome, VoiceResponseLocalizer,
+    VoiceResponseLocalizerError, VoiceSessionTransport, core_voice_response,
+    parse_promoted_core_voice,
 };
 
 #[derive(Debug, Error)]
@@ -264,6 +265,11 @@ where
                 &crate::CoreVoiceCommand::Join,
             )
             .await
+    }
+
+    /// Leaves a call from a gateway lifecycle rule using the same durable cleanup as `/leave`.
+    pub async fn leave_for_lifecycle(&self, guild_id: &str) -> LeaveVoiceOutcome {
+        self.service.leave_for_lifecycle(guild_id).await
     }
 
     /// Speaks a generated line with an explicitly validated model/engine, while retaining the
