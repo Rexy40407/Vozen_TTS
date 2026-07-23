@@ -12,8 +12,9 @@ use thiserror::Error;
 
 /// Rust canaries that must be on before the Node gateway can be stopped.
 ///
-/// `RUST_GAME_PLAY_ENABLED` is intentionally included even though its adapter is not promoted
-/// yet. This keeps a premature full-mode deployment from silently losing `/game play|stop`.
+/// `RUST_GAME_PLAY_ENABLED` is included because full mode must not leave the live game
+/// surface behind. The adapter is implemented, but the operator still has to enable the flag
+/// explicitly.
 pub const FULL_RUNTIME_FLAGS: &[&str] = &[
     "RUST_RUNTIME_READY",
     "RUST_REGISTER_COMMANDS_ENABLED",
@@ -79,10 +80,6 @@ pub enum RuntimeModeError {
     InvalidValue,
     #[error("RUST_RUNTIME_MODE=full requires every Rust canary to be true; missing: {0}")]
     MissingFlags(String),
-    #[error(
-        "RUST_RUNTIME_MODE=full is not available until the Rust /game play|stop adapter is promoted"
-    )]
-    FullRuntimeNotReady,
 }
 
 impl RuntimeMode {
@@ -115,10 +112,9 @@ impl RuntimeMode {
             .filter(|name| !literal_true(env::var(name).ok().as_deref()))
             .collect::<Vec<_>>();
         if missing.is_empty() {
-            // The flag is part of the contract so a future implementation cannot be omitted
-            // accidentally. Until that adapter exists, however, refusing startup is safer than
-            // letting the final mode acknowledge `/game` and drop its live play/stop paths.
-            Err(RuntimeModeError::FullRuntimeNotReady)
+            // Every canary is part of the contract, so a future implementation cannot be omitted
+            // accidentally once the operator deliberately requests full mode.
+            Ok(())
         } else {
             Err(RuntimeModeError::MissingFlags(missing.join(", ")))
         }
@@ -148,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn full_contract_names_the_unported_game_surface() {
+    fn full_contract_includes_live_game_and_transcription_surfaces() {
         assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_GAME_PLAY_ENABLED"));
         assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_TRANSCRIBE_LIVE_ENABLED"));
     }
