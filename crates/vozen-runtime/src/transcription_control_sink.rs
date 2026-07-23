@@ -1,8 +1,8 @@
 //! Opt-in gateway adapter for `/transcribe revoke`.
 //!
-//! This leaf only withdraws the invoking user's consent row. It deliberately does not start or
-//! stop a voice receiver; those live-session operations remain Node-owned until receiver parity
-//! exists in Rust.
+//! This leaf only withdraws the invoking user's consent row. Live receiver start/stop is handled
+//! by the separate consent-gated live sink; keeping revoke independent lets operators withdraw
+//! consent even when the live receiver canary is being disabled.
 
 use std::{
     collections::{BTreeMap, BTreeSet},

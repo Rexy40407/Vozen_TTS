@@ -342,9 +342,14 @@ impl RuntimeConfig {
         let core_voice = core_voice_from_environment()?;
         let tts_file = tts_file_from_environment()?;
         let transcription = transcription_from_environment()?;
-        #[cfg(feature = "voice-driver")]
-        let transcription_live =
+        let transcription_live_requested =
             live_transcription_enabled(env::var("RUST_TRANSCRIBE_LIVE_ENABLED").ok().as_deref());
+        #[cfg(not(feature = "voice-driver"))]
+        if transcription_live_requested {
+            return Err(RuntimeError::LiveTranscriptionVoiceDriverRequired);
+        }
+        #[cfg(feature = "voice-driver")]
+        let transcription_live = transcription_live_requested;
         let transcription_control = transcription_control_enabled(
             env::var("RUST_TRANSCRIBE_CONTROL_ENABLED").ok().as_deref(),
         ) || {
@@ -733,7 +738,6 @@ fn transcription_control_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
-#[cfg(feature = "voice-driver")]
 fn live_transcription_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
@@ -1613,6 +1617,11 @@ enum RuntimeError {
     #[cfg_attr(feature = "voice-driver", allow(dead_code))]
     VoiceDriverRequired,
     #[error(
+        "RUST_TRANSCRIBE_LIVE_ENABLED=true requires a runtime built with --features voice-driver"
+    )]
+    #[cfg_attr(feature = "voice-driver", allow(dead_code))]
+    LiveTranscriptionVoiceDriverRequired,
+    #[error(
         "Rust voice features currently require TTS_ENGINE to be unset or set to piper; leave them disabled until that provider is ported"
     )]
     RustVoiceRequiresPiperDefault,
@@ -2323,6 +2332,15 @@ mod tests {
         assert!(!transcription_control_enabled(Some("1")));
         assert!(!transcription_control_enabled(Some("yes")));
         assert!(!transcription_control_enabled(None));
+    }
+
+    #[test]
+    fn live_transcription_promotion_is_exactly_opt_in() {
+        assert!(live_transcription_enabled(Some("true")));
+        assert!(live_transcription_enabled(Some(" TRUE ")));
+        assert!(!live_transcription_enabled(Some("1")));
+        assert!(!live_transcription_enabled(Some("yes")));
+        assert!(!live_transcription_enabled(None));
     }
 
     #[test]
