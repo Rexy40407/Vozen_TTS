@@ -92,11 +92,11 @@ describe('Rust core voice migration ownership', () => {
     expect(rustQueueOwnsCommand('join', 'true', 'true')).toBe(false);
   });
 
-  it('keeps pronunciation modal fallback in Node while direct leaves canary in Rust', () => {
+  it('promotes pronunciation modal and direct leaves behind one canary', () => {
     expect(rustPronunciationOwnsCommand('pronunciation', 'list')).toBe(false);
     expect(rustPronunciationOwnsCommand('pronunciation', 'list', false, 'true')).toBe(true);
     expect(rustPronunciationOwnsCommand('pronunciation', 'remove', false, 'true')).toBe(true);
-    expect(rustPronunciationOwnsCommand('pronunciation', 'add', false, 'true')).toBe(false);
+    expect(rustPronunciationOwnsCommand('pronunciation', 'add', false, 'true')).toBe(true);
     expect(rustPronunciationOwnsCommand('pronunciation', 'add', true, 'true')).toBe(true);
     expect(rustPronunciationOwnsCommand('server-pronunciation', 'add', true, 'true')).toBe(true);
     expect(rustPronunciationOwnsCommand('server-pronunciation', 'list', false, 'yes')).toBe(false);

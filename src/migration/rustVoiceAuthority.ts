@@ -84,17 +84,17 @@ export function rustQueueOwnsCommand(
   );
 }
 
-/** Pronunciation mutations share SQLite with the message pipeline, but add without both values
- * opens a Node modal. Rust may only claim the direct list/remove/add leaves behind its own flag. */
+/** Pronunciation mutations share SQLite with the message pipeline. The Rust adapter also owns
+ * the beginner-friendly add modal when this canary is enabled. */
 export function rustPronunciationOwnsCommand(
   commandName: string,
   subcommand: string | null,
-  hasCompleteAdd = false,
+  _hasCompleteAdd = false,
   enabled = process.env.RUST_PRONUNCIATION_ENABLED,
 ): boolean {
   if (enabled?.trim().toLowerCase() !== 'true') return false;
   if (commandName !== 'pronunciation' && commandName !== 'server-pronunciation') return false;
-  if (subcommand === 'add') return hasCompleteAdd;
+  if (subcommand === 'add') return true;
   return subcommand === 'list' || subcommand === 'remove';
 }
 
