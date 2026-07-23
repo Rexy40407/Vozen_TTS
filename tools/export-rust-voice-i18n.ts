@@ -12,6 +12,7 @@ const check = process.argv.includes('--check');
 // a new semantic Rust outcome a deliberate review of the existing Node public copy.
 const KEYS = [
   'error.generic',
+  'error.needManageGuild',
   'join.needVoiceChannel',
   'join.missingPerms',
   'join.joined',
@@ -63,6 +64,20 @@ const KEYS = [
   'translation.speakOn',
   'translation.optedOut',
   'translation.optedIn',
+  'pron.listHeader',
+  'pron.listEmpty',
+  'pron.set',
+  'pron.removed',
+  'pron.notFound',
+  'pron.empty',
+  'pron.limitHit',
+  'pron.limitUpsell',
+  'spron.listHeader',
+  'spron.listEmpty',
+  'spron.set',
+  'spron.removed',
+  'spron.notFound',
+  'spron.limitHit',
 ] as const;
 
 type CatalogEntry = { en: string; pt?: string };

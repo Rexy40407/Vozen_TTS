@@ -53,6 +53,7 @@ import {
   rustTranslationOwnsCommand,
   rustTranslationPreferencesOwnCommand,
   rustQueueOwnsCommand,
+  rustPronunciationOwnsCommand,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
 } from '../migration/rustVoiceAuthority';
@@ -262,12 +263,24 @@ export async function handleInteraction(
   i: ChatInputCommandInteraction,
   deps: BotDeps,
 ): Promise<void> {
+  const pronunciationSubcommand =
+    i.commandName === 'pronunciation' || i.commandName === 'server-pronunciation'
+      ? i.options.getSubcommand(false)
+      : null;
+  const pronunciationHasCompleteAdd =
+    pronunciationSubcommand === 'add' &&
+    Boolean(i.options.getString('term')?.trim() && i.options.getString('say')?.trim());
   // The Rust process responds to this exact interaction when the explicitly opt-in migration
   // flag is active. Returning before any defer/write prevents a double response from the two
   // Discord gateway sessions; every other command remains Node-owned.
   if (
     rustVoiceOwnsCommand(i.commandName) ||
     rustQueueOwnsCommand(i.commandName) ||
+    rustPronunciationOwnsCommand(
+      i.commandName,
+      pronunciationSubcommand,
+      pronunciationHasCompleteAdd,
+    ) ||
     rustTranslationOwnsCommand(
       i.commandName,
       i.commandName === 'translate' ? i.options.getSubcommand(false) : null,

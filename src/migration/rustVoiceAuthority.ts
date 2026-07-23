@@ -26,6 +26,20 @@ export function rustQueueOwnsCommand(
   );
 }
 
+/** Pronunciation mutations share SQLite with the message pipeline, but add without both values
+ * opens a Node modal. Rust may only claim the direct list/remove/add leaves behind its own flag. */
+export function rustPronunciationOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  hasCompleteAdd = false,
+  enabled = process.env.RUST_PRONUNCIATION_ENABLED,
+): boolean {
+  if (enabled?.trim().toLowerCase() !== 'true') return false;
+  if (commandName !== 'pronunciation' && commandName !== 'server-pronunciation') return false;
+  if (subcommand === 'add') return hasCompleteAdd;
+  return subcommand === 'list' || subcommand === 'remove';
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

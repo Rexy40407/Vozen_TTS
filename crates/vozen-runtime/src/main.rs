@@ -12,6 +12,7 @@ mod core_voice_sink;
 mod engine_router;
 mod file_export_sink;
 mod piper_adapter;
+mod pronunciation_sink;
 mod topgg_metrics;
 mod translation_preference_sink;
 mod translation_provider;
@@ -77,6 +78,7 @@ struct RuntimeConfig {
     translation_text: Option<TranslationTextRuntimeOptions>,
     translation_preferences: bool,
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
+    pronunciation: bool,
     automatic_translation: Option<AutomaticTranslationRuntimeOptions>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -256,6 +258,8 @@ impl RuntimeConfig {
                 .as_deref(),
         );
         let voice_preferences = voice_preferences_from_environment()?;
+        let pronunciation =
+            pronunciation_enabled(env::var("RUST_PRONUNCIATION_ENABLED").ok().as_deref());
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
         let admin = admin_from_environment();
@@ -273,6 +277,7 @@ impl RuntimeConfig {
             translation_text,
             translation_preferences,
             voice_preferences,
+            pronunciation,
             automatic_translation,
             dashboard,
             admin,
@@ -417,6 +422,10 @@ fn translation_preferences_enabled(raw: Option<&str>) -> bool {
 }
 
 fn voice_preferences_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn pronunciation_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -582,6 +591,22 @@ fn voice_preference_event_sink(
     )))
 }
 
+fn pronunciation_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        pronunciation_sink::PronunciationGatewaySink::new(
+            store,
+            nonempty_env("KOFI_URL").unwrap_or_else(|| "https://ko-fi.com/".to_owned()),
+        )
+        .map_err(|_| RuntimeError::PronunciationGateway)?,
+    )))
+}
+
 fn automatic_translation_event_sink(
     options: Option<AutomaticTranslationRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
@@ -736,6 +761,8 @@ enum RuntimeError {
     TranslationPreferenceGateway,
     #[error("voice preference gateway initialisation failed")]
     VoicePreferenceGateway,
+    #[error("pronunciation gateway initialisation failed")]
+    PronunciationGateway,
     #[error("Discord OAuth client initialisation failed")]
     OAuthClient,
     #[error("RUST_DASHBOARD_ENABLED=true requires PREMIUM_API_ENABLED=true")]
@@ -804,6 +831,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = voice_preference_event_sink(config.voice_preferences, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = pronunciation_event_sink(config.pronunciation, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = automatic_translation_event_sink(
@@ -1229,6 +1259,15 @@ mod tests {
         assert!(!voice_preferences_enabled(Some("1")));
         assert!(!voice_preferences_enabled(Some("yes")));
         assert!(!voice_preferences_enabled(None));
+    }
+
+    #[test]
+    fn pronunciation_promotion_is_exactly_opt_in() {
+        assert!(pronunciation_enabled(Some("true")));
+        assert!(pronunciation_enabled(Some(" TRUE ")));
+        assert!(!pronunciation_enabled(Some("1")));
+        assert!(!pronunciation_enabled(Some("yes")));
+        assert!(!pronunciation_enabled(None));
     }
 
     #[test]
