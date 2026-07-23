@@ -70,6 +70,7 @@ mod game_score_command;
 mod game_session;
 mod gateway_composite;
 mod guild_synthesis_coordinator;
+mod heads_or_tails_session;
 mod help_command;
 mod interaction_dispatch;
 mod invite_command;
@@ -246,6 +247,7 @@ pub use game_score_command::{GameScoreCommand, GameScoreCommandError, parse_game
 pub use game_session::{GameScore, GameSession, GameSessionStore, StartGameResult};
 pub use gateway_composite::CompositeGatewayEventSink;
 pub use guild_synthesis_coordinator::GuildSynthesisCoordinator;
+pub use heads_or_tails_session::{HeadsOrTailsMessage, HeadsOrTailsSession, HeadsOrTailsStart};
 pub use help_command::{HelpCommand, HelpCommandError, parse_help_command};
 pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,

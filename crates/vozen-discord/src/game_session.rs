@@ -44,6 +44,21 @@ impl GameSessionStore {
             .map(|session| session.channel_id.as_str())
     }
 
+    /// Returns whether an incoming message belongs to the active match. The Node manager uses
+    /// this exact guild + channel boundary so guesses in another channel still follow normal
+    /// message handling.
+    pub fn channel_matches(&self, guild_id: &str, channel_id: &str) -> bool {
+        self.sessions
+            .get(guild_id)
+            .is_some_and(|session| session.channel_id == channel_id)
+    }
+
+    /// Borrows the active session without exposing the internal guild map. Runtime adapters use
+    /// this for authorization and for rebuilding their response after a state transition.
+    pub fn session(&self, guild_id: &str) -> Option<&GameSession> {
+        self.sessions.get(guild_id)
+    }
+
     pub fn is_starter(&self, guild_id: &str, user_id: &str) -> bool {
         self.sessions
             .get(guild_id)
@@ -97,6 +112,12 @@ impl GameSessionStore {
 
     pub fn finish(&mut self, guild_id: &str) -> Option<GameSession> {
         self.sessions.remove(guild_id)
+    }
+
+    /// Finishes a normal match and returns its accumulated points for one transactional SQLite
+    /// write. Forced teardown must use `stop`/`end_guild` and deliberately discard this value.
+    pub fn finish_scores(&mut self, guild_id: &str) -> Option<Vec<GameScore>> {
+        self.finish(guild_id).map(|session| session.scores)
     }
 }
 
@@ -159,5 +180,23 @@ mod tests {
         store.start(session(true));
         assert!(store.on_voice_left("guild").is_some());
         assert!(!store.active("guild"));
+    }
+
+    #[test]
+    fn message_routing_and_normal_finish_return_only_the_active_match_scores() {
+        let mut store = GameSessionStore::default();
+        store.start(session(false));
+        assert!(store.channel_matches("guild", "thread"));
+        assert!(!store.channel_matches("guild", "other"));
+        store.award("guild", "winner", 3);
+        assert_eq!(
+            store.finish_scores("guild"),
+            Some(vec![GameScore {
+                user_id: "winner".into(),
+                points: 3,
+            }])
+        );
+        assert!(!store.active("guild"));
+        assert_eq!(store.finish_scores("guild"), None);
     }
 }
