@@ -60,6 +60,7 @@ import {
   rustConfigRoleOwnsCommand,
   rustConfigDefaultVoiceOwnsCommand,
   rustConfigChannelOwnsCommand,
+  rustSetupOwnsCommand,
   rustConfigQueueRolesOwnCommand,
   rustConfigGreetLanguageOwnsCommand,
   rustConfigBlockwordOwnsCommand,
@@ -335,6 +336,7 @@ export async function handleInteraction(
       i.commandName,
       i.commandName === 'config' ? i.options.getSubcommand(false) : null,
     ) ||
+    rustSetupOwnsCommand(i.commandName) ||
     rustConfigQueueRolesOwnCommand(
       i.commandName,
       i.commandName === 'config' ? i.options.getSubcommand(false) : null,

@@ -26,24 +26,25 @@ use serenity::{
     model::{
         Permissions,
         application::{ButtonStyle, ComponentInteractionDataKind, InputTextStyle, Interaction},
-        id::{GuildId, UserId},
+        channel::ChannelType,
+        id::{ChannelId, GuildId, UserId},
     },
 };
 use vozen_core::{PublicQueueItem, QueueLane, QueueSource, SynthesisEngine, detect_language};
 use vozen_discord::{
     CAST_LANGUAGE_CHOICES, CAST_MAX_MEMBERS, CAST_THEMES, CastAction, CastMember, CastSession,
-    CoreTtsOutcome, CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor,
+    CoreTtsOutcome, CoreVoiceCommand, CoreVoiceInteractionExecution, CoreVoiceInteractionExecutor,
     CoreVoiceInteractionFacts, CoreVoiceOutcome, DiscordDashboardOptionsProvider,
     DiscordMessageFactsOwned, GatewayEventDispatchError, GatewayEventSink, GatewayState,
-    GuildSynthesisCoordinator, MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService,
-    PlannedRejoinService, QueueControlInvocation, QueueControlOutcome, QueueControlService,
-    RandomizerCommand, RandomizerSession, RejoinChannelState, SongbirdCommandPlayback,
-    SongbirdVoiceSessionTransport, VoiceResponseLocalizer, collect_message_media,
-    consume_planned_rejoin_marker, parse_amount_component_id, parse_cast_component_id,
-    parse_fill_component_id, parse_modal_options, parse_queue_command, parse_randomizer_command,
-    pick_option,
+    GuildSynthesisCoordinator, JoinVoiceOutcome, MessageVoiceInvocation, MessageVoiceOutcome,
+    MessageVoiceService, PlannedRejoinService, QueueControlInvocation, QueueControlOutcome,
+    QueueControlService, RandomizerCommand, RandomizerSession, RejoinChannelState,
+    SongbirdCommandPlayback, SongbirdVoiceSessionTransport, VoiceResponseLocalizer,
+    collect_message_media, consume_planned_rejoin_marker, parse_amount_component_id,
+    parse_cast_component_id, parse_fill_component_id, parse_modal_options, parse_queue_command,
+    parse_randomizer_command, parse_setup_command, pick_option,
 };
-use vozen_store::SqliteStore;
+use vozen_store::{GuildConfigPatch, SqliteStore};
 
 use crate::{
     CoreVoiceRuntimeOptions, engine_router::PerUserCommandSynthesizer,
@@ -726,6 +727,233 @@ impl CoreVoiceGatewaySink {
         )
     }
 
+    async fn setup_reply(
+        command: &serenity::model::application::CommandInteraction,
+        context: &Context,
+        content: String,
+    ) -> Result<(), GatewayEventDispatchError> {
+        command
+            .create_response(
+                context,
+                CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content(content)
+                        .ephemeral(true)
+                        .allowed_mentions(
+                            CreateAllowedMentions::new()
+                                .all_users(false)
+                                .all_roles(false)
+                                .everyone(false),
+                        ),
+                ),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)
+    }
+
+    async fn handle_setup_command(
+        &self,
+        context: &Context,
+        command: &serenity::model::application::CommandInteraction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        let Some(parsed) =
+            parse_setup_command(&command.data).map_err(|_| GatewayEventDispatchError)?
+        else {
+            return Ok(());
+        };
+        let Some(guild_id) = command.guild_id else {
+            return Ok(());
+        };
+        let can_manage = command
+            .member
+            .as_ref()
+            .and_then(|member| member.permissions)
+            .is_some_and(|permissions| permissions.contains(Permissions::MANAGE_GUILD));
+        let localizer = VoiceResponseLocalizer::from_generated_contract()
+            .map_err(|_| GatewayEventDispatchError)?;
+        let render = |key: &str, parameters: &BTreeMap<&str, String>| {
+            localizer
+                .render_key(
+                    key,
+                    Some(&command.locale),
+                    command.guild_locale.as_deref(),
+                    parameters,
+                )
+                .ok_or(GatewayEventDispatchError)
+        };
+        if !can_manage {
+            return Self::setup_reply(
+                command,
+                context,
+                render("error.needManageGuild", &BTreeMap::new())?,
+            )
+            .await;
+        }
+
+        let target_id = parsed
+            .channel_id
+            .unwrap_or_else(|| command.channel_id.get());
+        let channels = guild_id
+            .channels(&context.http)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let Some(target) = channels.get(&ChannelId::new(target_id)) else {
+            return Self::setup_reply(
+                command,
+                context,
+                render("setup.noChannel", &BTreeMap::new())?,
+            )
+            .await;
+        };
+        if target.kind != ChannelType::Text {
+            return Self::setup_reply(
+                command,
+                context,
+                render("setup.channelWrongType", &BTreeMap::new())?,
+            )
+            .await;
+        }
+
+        let guild = guild_id
+            .to_partial_guild(&context.http)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let bot = context
+            .http
+            .get_current_user()
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let bot_member = guild_id
+            .member(&context.http, bot.id)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
+        let text_permissions = guild.user_permissions_in(target, &bot_member);
+        let can_view = text_permissions.contains(Permissions::VIEW_CHANNEL);
+        let can_send = text_permissions.contains(Permissions::SEND_MESSAGES);
+
+        let voice_id = self.gateway_state.voice_channel_id(
+            &guild_id.get().to_string(),
+            &command.user.id.get().to_string(),
+        );
+        let (can_connect, can_speak) = if let Some(voice_id) = voice_id.as_deref() {
+            match channels.get(&ChannelId::new(voice_id.parse().unwrap_or_default())) {
+                Some(voice) => {
+                    let permissions = guild.user_permissions_in(voice, &bot_member);
+                    (
+                        permissions.contains(Permissions::CONNECT),
+                        permissions.contains(Permissions::SPEAK),
+                    )
+                }
+                None => (false, false),
+            }
+        } else {
+            (false, false)
+        };
+
+        self.store
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .update_guild_config(
+                &guild_id.get().to_string(),
+                GuildConfigPatch {
+                    tts_channel_id: Some(Some(target_id.to_string())),
+                    autoread: Some(true),
+                    ..Default::default()
+                },
+            )
+            .map_err(|_| GatewayEventDispatchError)?;
+
+        let facts =
+            CoreVoiceInteractionFacts::from_command(command).ok_or(GatewayEventDispatchError)?;
+        let joined = if can_connect && can_speak {
+            matches!(
+                self.executor(context)?.join_for_setup(&facts).await,
+                CoreVoiceOutcome::Joined(JoinVoiceOutcome::Joined)
+            )
+        } else {
+            false
+        };
+        let voice_test = if parsed.test_voice && joined {
+            matches!(
+                self.executor(context)?
+                    .speak_text_with_voice(
+                        &facts,
+                        "Vozen is ready.",
+                        &self.options.settings.default_voice,
+                        self.options.settings.default_speed,
+                        SynthesisEngine::Piper,
+                        false,
+                    )
+                    .await,
+                CoreVoiceOutcome::Tts(CoreTtsOutcome::Queued)
+            )
+        } else {
+            false
+        };
+
+        let mut lines = Vec::new();
+        lines.push(render("setup.done", &BTreeMap::new())?);
+        let mut parameters = BTreeMap::new();
+        parameters.insert("channel", format!("<#{}>", target_id));
+        lines.push(render("setup.channelLine", &parameters)?);
+        lines.push(render("setup.autoreadOn", &BTreeMap::new())?);
+        lines.push(String::new());
+        lines.push(render("setup.permsHeader", &BTreeMap::new())?);
+        for (label_key, state) in [
+            ("setup.permView", Some(can_view)),
+            ("setup.permSend", Some(can_send)),
+            ("setup.permConnect", voice_id.as_ref().map(|_| can_connect)),
+            ("setup.permSpeak", voice_id.as_ref().map(|_| can_speak)),
+        ] {
+            let label = render(label_key, &BTreeMap::new())?;
+            let mut params = BTreeMap::new();
+            params.insert("label", label);
+            let key = if state == Some(true) {
+                "setup.permOk"
+            } else if state == Some(false) {
+                "setup.permMissing"
+            } else {
+                "setup.permUnchecked"
+            };
+            lines.push(render(key, &params)?);
+        }
+        if joined {
+            let mut params = BTreeMap::new();
+            params.insert(
+                "channel",
+                format!("<#{}>", voice_id.as_deref().unwrap_or_default()),
+            );
+            lines.push(String::new());
+            lines.push(render("setup.joinedVoice", &params)?);
+        }
+        if voice_test {
+            lines.push("🔊 Voice test queued with the local Piper engine.".to_owned());
+        }
+        if !can_view || !can_send || (voice_id.is_some() && (!can_connect || !can_speak)) {
+            lines.push(String::new());
+            lines.push(render("setup.fixHint", &BTreeMap::new())?);
+        }
+        if voice_id.is_none() {
+            lines.push(String::new());
+            lines.push(render("setup.voiceUncheckedNote", &BTreeMap::new())?);
+        }
+        if can_view && can_send && voice_id.is_some() && can_connect && can_speak {
+            lines.push(String::new());
+            lines.push(render(
+                if joined {
+                    "setup.readyTalk"
+                } else {
+                    "setup.allGood"
+                },
+                &BTreeMap::new(),
+            )?);
+        }
+        lines.push(String::new());
+        lines.push(render("setup.membersHeader", &BTreeMap::new())?);
+        lines.push(render("setup.membersBody", &BTreeMap::new())?);
+        Self::setup_reply(command, context, lines.join("\n")).await
+    }
+
     async fn fetch_cast_members(
         &self,
         context: &Context,
@@ -1351,6 +1579,13 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         context: Context,
         interaction: Interaction,
     ) -> Result<(), GatewayEventDispatchError> {
+        if self.options.setup_enabled
+            && matches!(&interaction, Interaction::Command(command) if command.data.name == "setup")
+        {
+            if let Interaction::Command(command) = interaction {
+                return self.handle_setup_command(&context, &command).await;
+            }
+        }
         if self.options.randomizer_enabled || self.options.cast_enabled {
             match &interaction {
                 Interaction::Component(component) => {

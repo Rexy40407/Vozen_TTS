@@ -193,6 +193,21 @@ export function rustConfigChannelOwnsCommand(
   );
 }
 
+/** Guided onboarding is separate from individual config leaves and remains opt-in. */
+export function rustSetupOwnsCommand(
+  commandName: string,
+  coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
+  enabled = process.env.RUST_SETUP_ENABLED,
+  ttsEngine = process.env.TTS_ENGINE,
+): boolean {
+  return (
+    coreEnabled?.trim().toLowerCase() === 'true' &&
+    enabled?.trim().toLowerCase() === 'true' &&
+    rustPiperCompatible(ttsEngine) &&
+    commandName === 'setup'
+  );
+}
+
 /** Priority and blocked role leaves share a cross-field conflict check and one canary. */
 export function rustConfigQueueRolesOwnCommand(
   commandName: string,

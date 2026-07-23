@@ -244,6 +244,7 @@ struct CoreVoiceRuntimeOptions {
     message_autoread: bool,
     randomizer_enabled: bool,
     cast_enabled: bool,
+    setup_enabled: bool,
     settings: CoreVoiceSettings,
 }
 
@@ -454,6 +455,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
         ),
         randomizer_enabled: randomizer_enabled(env::var("RUST_RANDOMIZER_ENABLED").ok().as_deref()),
         cast_enabled: cast_enabled(env::var("RUST_CAST_ENABLED").ok().as_deref()),
+        setup_enabled: setup_enabled(env::var("RUST_SETUP_ENABLED").ok().as_deref()),
         settings: CoreVoiceSettings {
             available_models: Vec::new(),
             default_voice,
@@ -468,6 +470,10 @@ fn randomizer_enabled(raw: Option<&str>) -> bool {
 }
 
 fn cast_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn setup_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 

@@ -10,6 +10,7 @@ import {
   rustConfigRoleOwnsCommand,
   rustConfigDefaultVoiceOwnsCommand,
   rustConfigChannelOwnsCommand,
+  rustSetupOwnsCommand,
   rustConfigQueueRolesOwnCommand,
   rustConfigGreetLanguageOwnsCommand,
   rustConfigBlockwordOwnsCommand,
@@ -151,6 +152,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigChannelOwnsCommand('config', 'tts-channel', 'true')).toBe(true);
     expect(rustConfigChannelOwnsCommand('config', 'auto-read', 'true')).toBe(false);
     expect(rustConfigChannelOwnsCommand('voice', 'tts-channel', 'true')).toBe(false);
+  });
+
+  it('keeps setup behind core, setup and Piper canaries', () => {
+    expect(rustSetupOwnsCommand('setup', 'false', 'true', 'piper')).toBe(false);
+    expect(rustSetupOwnsCommand('setup', 'true', 'false', 'piper')).toBe(false);
+    expect(rustSetupOwnsCommand('setup', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustSetupOwnsCommand('setup', 'true', 'true', 'piper')).toBe(true);
+    expect(rustSetupOwnsCommand('stats', 'true', 'true', 'piper')).toBe(false);
   });
 
   it('promotes both queue-role leaves behind one conflict-aware canary', () => {

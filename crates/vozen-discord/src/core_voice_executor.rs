@@ -218,6 +218,17 @@ where
             .await
     }
 
+    /// Joins the caller's current voice channel without requiring a synthetic Discord command
+    /// payload. Used by the atomic `/setup` onboarding flow after its permission checklist.
+    pub async fn join_for_setup(&self, facts: &CoreVoiceInteractionFacts) -> CoreVoiceOutcome {
+        self.service
+            .execute(
+                facts.invocation(&|_| "someone".to_owned(), &|_| "a channel".to_owned()),
+                &crate::CoreVoiceCommand::Join,
+            )
+            .await
+    }
+
     /// Speaks a generated line with an explicitly validated model/engine, while retaining the
     /// service's ordinary admission and queue safeguards.
     pub async fn speak_text_with_voice(

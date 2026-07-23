@@ -91,6 +91,7 @@ mod randomizer;
 mod redeem_command;
 mod rejoin_service;
 mod server_stats_command;
+mod setup_command;
 mod songbird_transport;
 mod sound_text;
 mod speech_preparation;
@@ -280,6 +281,7 @@ pub use rejoin_service::{PlannedRejoinError, PlannedRejoinOutcome, PlannedRejoin
 pub use server_stats_command::{
     ServerStatsCommand, ServerStatsCommandError, parse_server_stats_command,
 };
+pub use setup_command::{SetupCommand, SetupCommandError, parse_setup_command};
 pub use songbird_transport::SongbirdVoiceSessionTransport;
 pub use sound_text::{SOUNDS, SoundClip, sound_by_key, sound_list};
 pub use speech_preparation::{
