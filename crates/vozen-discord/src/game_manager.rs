@@ -25,6 +25,7 @@ pub enum GameDriverAction {
     Award { user_id: String, points: i64 },
     Finished,
     TextQuiz(crate::text_quiz_driver::TextQuizDriverAction),
+    Hangman(crate::hangman_driver::HangmanDriverAction),
 }
 
 /// A single game implementation behind the lifecycle boundary.

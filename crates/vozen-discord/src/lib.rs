@@ -73,6 +73,7 @@ mod game_score_command;
 mod game_session;
 mod gateway_composite;
 mod guild_synthesis_coordinator;
+mod hangman_driver;
 mod heads_or_tails_coordinator;
 mod heads_or_tails_session;
 mod help_command;
@@ -257,6 +258,7 @@ pub use game_score_command::{GameScoreCommand, GameScoreCommandError, parse_game
 pub use game_session::{GameScore, GameSession, GameSessionStore, GameStopDenied, StartGameResult};
 pub use gateway_composite::CompositeGatewayEventSink;
 pub use guild_synthesis_coordinator::GuildSynthesisCoordinator;
+pub use hangman_driver::{HangmanDriver, HangmanDriverAction, HangmanGameDriver};
 pub use heads_or_tails_coordinator::{
     GUESS_WINDOW_MS, HeadsOrTailsAction, HeadsOrTailsCoordinator, NEXT_ROUND_DELAY_MS,
 };
