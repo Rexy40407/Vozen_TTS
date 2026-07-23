@@ -78,8 +78,18 @@ impl HeadsOrTailsSession {
         self.game.begin_round()
     }
 
+    #[must_use]
+    pub fn round(&self) -> u8 {
+        self.game.round()
+    }
+
     pub fn finished(&self) -> bool {
         self.game.is_finished()
+    }
+
+    #[must_use]
+    pub fn is_final_round(&self) -> bool {
+        self.game.round() >= HeadsOrTailsGame::rounds()
     }
 
     pub fn scores(&self) -> Vec<GameScore> {
