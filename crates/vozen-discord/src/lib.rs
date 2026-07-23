@@ -68,6 +68,7 @@ mod file_export_service;
 mod game_catalog;
 mod game_command;
 mod game_content;
+mod game_driver_factory;
 mod game_list_command;
 mod game_manager;
 mod game_play_admission;
@@ -262,6 +263,7 @@ pub use game_command::{
     parse_game_stop_command,
 };
 pub use game_content::{GameContent, game_content};
+pub use game_driver_factory::{GameDriverFactory, GameFactoryError};
 pub use game_list_command::{GameListCommand, GameListCommandError, parse_game_list_command};
 pub use game_manager::{GameDriver, GameDriverAction, GameManager, GameManagerEvent, GameMessage};
 pub use game_play_admission::{
