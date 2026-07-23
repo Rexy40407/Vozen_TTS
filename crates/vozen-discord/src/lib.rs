@@ -221,7 +221,9 @@ pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,
 };
-pub use premium_command::{PremiumCommandError, PremiumInfoCommand, parse_premium_info_command};
+pub use premium_command::{
+    PremiumCommand, PremiumCommandError, parse_premium_command, parse_premium_info_command,
+};
 pub use privacy_command::{PrivacyCommandError, PrivacyEraseCommand, parse_privacy_erase_command};
 pub use pronunciation_command::{
     PronunciationCommand, PronunciationCommandError, PronunciationScope,

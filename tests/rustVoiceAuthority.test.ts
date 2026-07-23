@@ -24,6 +24,7 @@ import {
   rustBirthdayOwnsCommand,
   rustServerStatsOwnsCommand,
   rustPremiumInfoOwnsCommand,
+  rustPremiumMutationOwnsCommand,
   rustRedeemOwnsCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
@@ -208,6 +209,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustPremiumInfoOwnsCommand('premium', 'info')).toBe(false);
     expect(rustPremiumInfoOwnsCommand('premium', 'info', 'true')).toBe(true);
     expect(rustPremiumInfoOwnsCommand('premium', 'activate', 'true')).toBe(false);
+  });
+
+  it('promotes only premium mutations behind the same explicit canary', () => {
+    expect(rustPremiumMutationOwnsCommand('premium', 'activate')).toBe(false);
+    expect(rustPremiumMutationOwnsCommand('premium', 'activate', 'true')).toBe(true);
+    expect(rustPremiumMutationOwnsCommand('premium', 'deactivate', 'true')).toBe(true);
+    expect(rustPremiumMutationOwnsCommand('premium', 'info', 'true')).toBe(false);
   });
 
   it('promotes only redeem behind its own canary', () => {

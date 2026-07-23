@@ -281,6 +281,19 @@ export function rustPremiumInfoOwnsCommand(
   );
 }
 
+/** Premium mutations use the same canary, but remain separate from read-only status checks. */
+export function rustPremiumMutationOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_PREMIUM_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'premium' &&
+    (subcommand === 'activate' || subcommand === 'deactivate')
+  );
+}
+
 /** Gift-code redemption is transactional in SQLite and stays behind its own canary. */
 export function rustRedeemOwnsCommand(
   commandName: string,
