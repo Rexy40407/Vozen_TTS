@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::{io::AsyncWriteExt, process::Command, sync::Semaphore, time::timeout};
 use uuid::Uuid;
-use vozen_core::SynthRequest;
+use vozen_core::{RuntimeMetrics, SynthRequest};
 
 mod wav_concat;
 
@@ -130,6 +130,7 @@ pub struct PiperEngine<R = CommandPiperRunner> {
     models_dir: PathBuf,
     cache_dir: PathBuf,
     permits: Arc<Semaphore>,
+    metrics: Arc<RuntimeMetrics>,
 }
 
 impl PiperEngine<CommandPiperRunner> {
@@ -139,11 +140,28 @@ impl PiperEngine<CommandPiperRunner> {
         cache_dir: impl Into<PathBuf>,
         concurrency: usize,
     ) -> Self {
-        Self::new(
+        Self::new_with_metrics(
             Arc::new(CommandPiperRunner::new(executable)),
             models_dir,
             cache_dir,
             concurrency,
+            Arc::new(RuntimeMetrics::default()),
+        )
+    }
+
+    pub fn production_with_metrics(
+        executable: impl Into<PathBuf>,
+        models_dir: impl Into<PathBuf>,
+        cache_dir: impl Into<PathBuf>,
+        concurrency: usize,
+        metrics: Arc<RuntimeMetrics>,
+    ) -> Self {
+        Self::new_with_metrics(
+            Arc::new(CommandPiperRunner::new(executable)),
+            models_dir,
+            cache_dir,
+            concurrency,
+            metrics,
         )
     }
 }
@@ -155,11 +173,28 @@ impl<R: PiperRunner> PiperEngine<R> {
         cache_dir: impl Into<PathBuf>,
         concurrency: usize,
     ) -> Self {
+        Self::new_with_metrics(
+            runner,
+            models_dir,
+            cache_dir,
+            concurrency,
+            Arc::new(RuntimeMetrics::default()),
+        )
+    }
+
+    pub fn new_with_metrics(
+        runner: Arc<R>,
+        models_dir: impl Into<PathBuf>,
+        cache_dir: impl Into<PathBuf>,
+        concurrency: usize,
+        metrics: Arc<RuntimeMetrics>,
+    ) -> Self {
         Self {
             runner,
             models_dir: models_dir.into(),
             cache_dir: cache_dir.into(),
             permits: Arc::new(Semaphore::new(concurrency.max(1))),
+            metrics,
         }
     }
 
@@ -195,6 +230,7 @@ impl<R: PiperRunner> PiperEngine<R> {
     ) -> Result<PathBuf, TtsError> {
         let destination = self.cache_dir.join(format!("{}.wav", cache_key(request)));
         if non_empty_file(&destination).await? {
+            self.metrics.record_cache_hit();
             return Ok(destination);
         }
         let mut wavs = Vec::with_capacity(segments.len());
@@ -220,6 +256,7 @@ impl<R: PiperRunner> PiperEngine<R> {
         tokio::fs::create_dir_all(&self.cache_dir).await?;
         let destination = self.cache_dir.join(format!("{}.wav", cache_key(request)));
         if non_empty_file(&destination).await? {
+            self.metrics.record_cache_hit();
             return Ok(destination);
         }
 
@@ -230,8 +267,10 @@ impl<R: PiperRunner> PiperEngine<R> {
             .map_err(|_| TtsError::ProcessFailed)?;
         // Check again after waiting: another request may have completed this exact cache key.
         if non_empty_file(&destination).await? {
+            self.metrics.record_cache_hit();
             return Ok(destination);
         }
+        self.metrics.record_cache_miss();
         let temporary = self.cache_dir.join(format!(".{}.wav", Uuid::new_v4()));
         let result = self
             .runner
@@ -263,6 +302,7 @@ impl<R: PiperRunner> PiperEngine<R> {
     ) -> Result<PathBuf, TtsError> {
         tokio::fs::create_dir_all(&self.cache_dir).await?;
         if non_empty_file(&destination).await? {
+            self.metrics.record_cache_hit();
             return Ok(destination);
         }
         let temporary = self.cache_dir.join(format!(".{}.wav", Uuid::new_v4()));

@@ -34,6 +34,7 @@ mod privacy_sink;
 mod pronunciation_sink;
 mod redeem_sink;
 mod server_stats_sink;
+mod stats_sink;
 mod top_speakers_sink;
 mod topgg_metrics;
 mod translation_preference_sink;
@@ -125,6 +126,7 @@ struct RuntimeConfig {
     birthday: bool,
     bot_stats: bool,
     server_stats: bool,
+    stats: bool,
     premium: bool,
     redeem: bool,
     privacy: bool,
@@ -353,6 +355,7 @@ impl RuntimeConfig {
         let bot_stats = bot_stats_enabled(env::var("RUST_BOT_STATS_ENABLED").ok().as_deref());
         let server_stats =
             server_stats_enabled(env::var("RUST_SERVER_STATS_ENABLED").ok().as_deref());
+        let stats = stats_enabled(env::var("RUST_STATS_ENABLED").ok().as_deref());
         let premium = premium_enabled(env::var("RUST_PREMIUM_ENABLED").ok().as_deref());
         let redeem = redeem_enabled(env::var("RUST_REDEEM_ENABLED").ok().as_deref());
         let privacy = privacy_enabled(env::var("RUST_PRIVACY_ENABLED").ok().as_deref());
@@ -398,6 +401,7 @@ impl RuntimeConfig {
             birthday,
             bot_stats,
             server_stats,
+            stats,
             premium,
             redeem,
             privacy,
@@ -643,6 +647,10 @@ fn bot_stats_enabled(raw: Option<&str>) -> bool {
 }
 
 fn server_stats_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn stats_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1091,6 +1099,18 @@ fn bot_stats_event_sink(
     )))
 }
 
+fn stats_event_sink(
+    enabled: bool,
+    gateway_state: GatewayState,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        stats_sink::StatsGatewaySink::new(gateway_state).map_err(|_| RuntimeError::StatsGateway)?,
+    )))
+}
+
 fn server_stats_event_sink(
     enabled: bool,
     client_id: Option<String>,
@@ -1348,6 +1368,8 @@ enum RuntimeError {
     BotStatsGateway,
     #[error("server-stats gateway initialisation failed")]
     ServerStatsGateway,
+    #[error("stats gateway initialisation failed")]
+    StatsGateway,
     #[error("premium gateway initialisation failed")]
     PremiumGateway,
     #[error("redeem gateway initialisation failed")]
@@ -1509,6 +1531,9 @@ async fn run() -> Result<(), RuntimeError> {
         config.vote_redemption_secret.clone(),
         store.clone(),
     )? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = stats_event_sink(config.stats, gateway_state.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = premium_event_sink(
@@ -2139,6 +2164,15 @@ mod tests {
         assert!(!server_stats_enabled(Some("1")));
         assert!(!server_stats_enabled(Some("yes")));
         assert!(!server_stats_enabled(None));
+    }
+
+    #[test]
+    fn stats_promotion_is_exactly_opt_in() {
+        assert!(stats_enabled(Some("true")));
+        assert!(stats_enabled(Some(" TRUE ")));
+        assert!(!stats_enabled(Some("1")));
+        assert!(!stats_enabled(Some("yes")));
+        assert!(!stats_enabled(None));
     }
 
     #[test]

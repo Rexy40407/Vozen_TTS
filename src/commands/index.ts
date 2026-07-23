@@ -74,6 +74,7 @@ import {
   rustBirthdayOwnsCommand,
   rustBotStatsOwnsCommand,
   rustServerStatsOwnsCommand,
+  rustStatsOwnsCommand,
   rustPremiumInfoOwnsCommand,
   rustPremiumMutationOwnsCommand,
   rustRedeemOwnsCommand,
@@ -366,6 +367,7 @@ export async function handleInteraction(
     ) ||
     rustBotStatsOwnsCommand(i.commandName) ||
     rustServerStatsOwnsCommand(i.commandName) ||
+    rustStatsOwnsCommand(i.commandName) ||
     rustPremiumInfoOwnsCommand(
       i.commandName,
       i.commandName === 'premium' ? i.options.getSubcommand(false) : null,

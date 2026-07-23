@@ -270,6 +270,14 @@ export function rustServerStatsOwnsCommand(
   return enabled?.trim().toLowerCase() === 'true' && commandName === 'server-stats';
 }
 
+/** Manage Guild process statistics use the Rust gateway's process-local metrics snapshot. */
+export function rustStatsOwnsCommand(
+  commandName: string,
+  enabled = process.env.RUST_STATS_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true' && commandName === 'stats';
+}
+
 /** Public process statistics use the Rust gateway state behind their own canary. */
 export function rustBotStatsOwnsCommand(
   commandName: string,

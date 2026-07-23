@@ -11,6 +11,7 @@ mod message_guard;
 mod message_speech_policy;
 mod play_queue;
 mod rate_limiter;
+mod runtime_metrics;
 mod speech_preparation;
 mod speech_safety;
 mod text_cleaning;
@@ -43,6 +44,7 @@ pub use play_queue::{
 pub use rate_limiter::{
     DEFAULT_RATE_LIMIT_IDLE_MS, GuildRateLimiters, MAX_RATE_LIMIT_BUCKETS, RateLimiter,
 };
+pub use runtime_metrics::{RuntimeMetrics, RuntimeMetricsSnapshot};
 pub use speech_preparation::{
     MediaAnnouncement, MediaAnnouncementKind, PreparedSpeech, SpeechPreparationInput,
     VoicePreference, prepare_speech,

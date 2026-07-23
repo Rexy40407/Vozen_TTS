@@ -23,6 +23,7 @@ use serenity::{
 use songbird::serenity::SerenityInit;
 use thiserror::Error;
 use vozen_contracts::{ContractError, DiscordCommandCatalog};
+use vozen_core::RuntimeMetrics;
 
 mod automatic_translation_service;
 mod birthday_command;
@@ -85,6 +86,7 @@ mod rejoin_service;
 mod server_stats_command;
 mod songbird_transport;
 mod speech_preparation;
+mod stats_command;
 mod top_speakers_command;
 mod translation_command;
 mod translation_preference_command;
@@ -252,6 +254,7 @@ pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
     begin_message_speech, finish_message_speech, prepare_message_speech,
 };
+pub use stats_command::{StatsCommand, StatsCommandError, parse_stats_command};
 pub use top_speakers_command::{
     TopSpeakersCommand, TopSpeakersCommandError, parse_top_speakers_command,
 };
@@ -332,7 +335,7 @@ pub struct GatewayGuildSnapshot {
 #[derive(Clone, Default)]
 pub struct GatewayState {
     ready: Arc<AtomicBool>,
-    messages_spoken: Arc<AtomicU64>,
+    metrics: Arc<RuntimeMetrics>,
     bot_user_id: Arc<RwLock<Option<String>>>,
     guild_ids: Arc<RwLock<BTreeSet<String>>>,
     guild_names: Arc<RwLock<BTreeMap<String, String>>>,
@@ -348,20 +351,25 @@ impl GatewayState {
     /// This deliberately mirrors the public Node metric's lifecycle (process-local and reset on
     /// restart) without persisting message content or user identifiers.
     pub fn messages_spoken(&self) -> u64 {
-        self.messages_spoken.load(Ordering::Relaxed)
+        self.metrics.snapshot().messages_spoken
     }
 
     /// Records a speech item explicitly. The Songbird adapter normally updates this counter from
     /// its `Playable` event; this hook remains useful for deterministic integration tests. The
     /// metric is process-local observability, not a durable usage record.
     pub fn record_message_spoken(&self) {
-        self.messages_spoken.fetch_add(1, Ordering::Relaxed);
+        self.metrics.record_message_spoken();
     }
 
     /// Shares the process-local speech counter with the Songbird adapter so it can record a
     /// track only once it becomes playable. The atomic contains no content or identity data.
     pub fn message_counter(&self) -> Arc<AtomicU64> {
-        self.messages_spoken.clone()
+        self.metrics.message_counter()
+    }
+
+    /// Shares process-local synthesis and gateway observability with runtime adapters.
+    pub fn metrics(&self) -> Arc<RuntimeMetrics> {
+        self.metrics.clone()
     }
 
     /// Whether this process received Discord's READY event. The value contains no guild or user

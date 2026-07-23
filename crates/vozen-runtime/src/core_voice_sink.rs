@@ -94,11 +94,12 @@ impl CoreVoiceGatewaySink {
         let options = &self.options;
         let dependencies = Arc::new(VoiceDependencies {
             synthesizer: PerUserCommandSynthesizer::piper_only(
-                PiperCommandSynthesizer::production(
+                PiperCommandSynthesizer::production_with_metrics(
                     options.piper_path.clone(),
                     options.models_dir.clone(),
                     options.cache_dir.clone(),
                     options.piper_concurrency,
+                    self.gateway_state.metrics(),
                 ),
             ),
             playback: SongbirdCommandPlayback::new(

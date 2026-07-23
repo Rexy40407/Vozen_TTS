@@ -4,10 +4,10 @@
 //! synthesis failure into the command service's content-free error, so neither a filesystem path
 //! nor a Piper process diagnostic can reach Discord or the process log through a user request.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
-use vozen_core::{SynthRequest, SynthesisEngine};
+use vozen_core::{RuntimeMetrics, SynthRequest, SynthesisEngine};
 use vozen_discord::{CommandSpeechSynthesizer, CommandSynthesisError};
 use vozen_tts::CommandPiperRunner;
 use vozen_tts::{PiperEngine, PiperRunner};
@@ -15,12 +15,22 @@ use vozen_tts::{PiperEngine, PiperRunner};
 #[derive(Clone)]
 pub struct PiperCommandSynthesizer<R = vozen_tts::CommandPiperRunner> {
     engine: Arc<PiperEngine<R>>,
+    metrics: Arc<RuntimeMetrics>,
 }
 
 impl<R> PiperCommandSynthesizer<R> {
     #[must_use]
+    #[allow(dead_code)]
     pub fn new(engine: Arc<PiperEngine<R>>) -> Self {
-        Self { engine }
+        Self {
+            engine,
+            metrics: Arc::new(RuntimeMetrics::default()),
+        }
+    }
+
+    #[must_use]
+    pub fn new_with_metrics(engine: Arc<PiperEngine<R>>, metrics: Arc<RuntimeMetrics>) -> Self {
+        Self { engine, metrics }
     }
 }
 
@@ -32,12 +42,33 @@ impl PiperCommandSynthesizer<CommandPiperRunner> {
         cache_dir: impl Into<PathBuf>,
         concurrency: usize,
     ) -> Self {
-        Self::new(Arc::new(PiperEngine::production(
+        Self::production_with_metrics(
             executable,
             models_dir,
             cache_dir,
             concurrency,
-        )))
+            Arc::new(RuntimeMetrics::default()),
+        )
+    }
+
+    #[must_use]
+    pub fn production_with_metrics(
+        executable: impl Into<PathBuf>,
+        models_dir: impl Into<PathBuf>,
+        cache_dir: impl Into<PathBuf>,
+        concurrency: usize,
+        metrics: Arc<RuntimeMetrics>,
+    ) -> Self {
+        Self::new_with_metrics(
+            Arc::new(PiperEngine::production_with_metrics(
+                executable,
+                models_dir,
+                cache_dir,
+                concurrency,
+                metrics.clone(),
+            )),
+            metrics,
+        )
     }
 }
 
@@ -55,10 +86,14 @@ where
         ) {
             return Err(CommandSynthesisError);
         }
-        self.engine
-            .synth(request)
-            .await
-            .map_err(|_| CommandSynthesisError)
+        let started = Instant::now();
+        let result = self.engine.synth(request).await;
+        self.metrics
+            .record_synth_latency_ms(started.elapsed().as_millis().min(u64::MAX as u128) as u64);
+        if result.is_err() {
+            self.metrics.record_synth_error();
+        }
+        result.map_err(|_| CommandSynthesisError)
     }
 }
 
