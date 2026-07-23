@@ -88,8 +88,12 @@ describe('Rust core voice migration ownership', () => {
 
   it('promotes default voice only with the Piper-compatible catalogue canary', () => {
     expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice')).toBe(false);
-    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'piper')).toBe(true);
-    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'gtts')).toBe(false);
+    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'piper')).toBe(
+      true,
+    );
+    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'gtts')).toBe(
+      false,
+    );
     expect(rustConfigDefaultVoiceOwnsCommand('config', 'role', 'true', 'piper')).toBe(false);
   });
 

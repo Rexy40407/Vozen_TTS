@@ -12,7 +12,11 @@ function localeParts(locale: string): { language: string; region?: string } {
   return { language, region };
 }
 
-function displayName(locale: string, type: 'language' | 'region', code: string): string | undefined {
+function displayName(
+  locale: string,
+  type: 'language' | 'region',
+  code: string,
+): string | undefined {
   try {
     const value = new Intl.DisplayNames([locale, 'en'], { type }).of(code);
     return value && value.toLowerCase() !== code.toLowerCase() ? value : undefined;
@@ -24,7 +28,9 @@ function displayName(locale: string, type: 'language' | 'region', code: string):
 async function main(): Promise<void> {
   const localePartsList = Object.keys(LOCALE_NAMES).map(localeParts);
   const languages = [...new Set(localePartsList.map((value) => value.language))].sort();
-  const regions = [...new Set(localePartsList.flatMap((value) => (value.region ? [value.region] : [])))].sort();
+  const regions = [
+    ...new Set(localePartsList.flatMap((value) => (value.region ? [value.region] : []))),
+  ].sort();
   const contract = {
     schema_version: 1,
     generated_from: 'src/language/voiceMap.ts + src/i18n/index.ts',

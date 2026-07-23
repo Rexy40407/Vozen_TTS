@@ -103,9 +103,7 @@ export function rustConfigRoleOwnsCommand(
   enabled = process.env.RUST_CONFIG_ROLE_ENABLED,
 ): boolean {
   return (
-    enabled?.trim().toLowerCase() === 'true' &&
-    commandName === 'config' &&
-    subcommand === 'role'
+    enabled?.trim().toLowerCase() === 'true' && commandName === 'config' && subcommand === 'role'
   );
 }
 

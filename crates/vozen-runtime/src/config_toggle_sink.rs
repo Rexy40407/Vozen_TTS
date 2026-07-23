@@ -178,6 +178,6 @@ mod tests {
                 }),
             )
             .expect("response");
-        assert!(content.contains("Automatic reading is now on"));
+        assert!(content.contains("Auto-read is now **on**"));
     }
 }
