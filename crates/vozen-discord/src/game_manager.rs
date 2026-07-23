@@ -34,6 +34,7 @@ pub enum GameDriverAction {
     GuessLanguage(crate::guess_language_driver::GuessLanguageDriverAction),
     Reflexes(crate::reflexes_driver::ReflexesDriverAction),
     VozenSays(crate::vozen_says_driver::VozenSaysDriverAction),
+    WordChain(crate::word_chain_driver::WordChainDriverAction),
 }
 
 /// A single game implementation behind the lifecycle boundary.
