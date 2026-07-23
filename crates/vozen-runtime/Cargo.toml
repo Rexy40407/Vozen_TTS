@@ -15,11 +15,13 @@ voice-driver = ["vozen-discord/voice-driver"]
 axum.workspace = true
 async-trait.workspace = true
 reqwest.workspace = true
+serde.workspace = true
 serenity.workspace = true
 serde_json.workspace = true
 time.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+uuid.workspace = true
 vozen-api = { path = "../vozen-api" }
 vozen-contracts = { path = "../vozen-contracts" }
 vozen-core = { path = "../vozen-core" }

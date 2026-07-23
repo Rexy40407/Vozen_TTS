@@ -25,6 +25,7 @@ use thiserror::Error;
 use vozen_contracts::{ContractError, DiscordCommandCatalog};
 use vozen_core::RuntimeMetrics;
 
+mod attachment_transcription;
 mod automatic_translation_service;
 mod birthday_command;
 mod bot_stats_command;
@@ -93,6 +94,7 @@ mod sound_text;
 mod speech_preparation;
 mod stats_command;
 mod top_speakers_command;
+mod transcribe_message_command;
 mod translation_command;
 mod translation_preference_command;
 mod uptime_command;
@@ -104,6 +106,11 @@ mod voice_preference_service;
 mod voice_session;
 mod vote_command;
 
+pub use attachment_transcription::{
+    AttachmentAdmission, AttachmentRejectReason, AttachmentTranscriptionLimits,
+    DiscordAudioAttachment, admit_discord_audio_attachment, bound_transcript_text,
+    within_attachment_duration,
+};
 pub use automatic_translation_service::{
     AutomaticTranslationDelivery, AutomaticTranslationInvocation, AutomaticTranslationOutcome,
     AutomaticTranslationService, MAX_AUTOMATIC_TRANSLATION_IN_FLIGHT,
@@ -269,6 +276,10 @@ pub use speech_preparation::{
 pub use stats_command::{StatsCommand, StatsCommandError, parse_stats_command};
 pub use top_speakers_command::{
     TopSpeakersCommand, TopSpeakersCommandError, parse_top_speakers_command,
+};
+pub use transcribe_message_command::{
+    TRANSCRIBE_MESSAGE_COMMAND, TranscribeMessageCommand, TranscribeMessageCommandError,
+    parse_transcribe_message_command,
 };
 pub use translation_command::{
     TranslateTextCommand, TranslateTextCommandError, parse_translate_text_command,

@@ -23,6 +23,20 @@ const RUST_CORE_VOICE_COMMANDS = new Set([
 ]);
 const RUST_PRIVATE_TTS_FILE_COMMANDS = new Set(['tts-file']);
 
+/** Message context-menu transcription has an independent canary because it starts a Whisper
+ * process and must not race Node's ephemeral response. */
+export function rustTranscriptionOwnsCommand(
+  commandName: string,
+  commandType = 3,
+  enabled = process.env.RUST_TRANSCRIBE_MESSAGE_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandType === 3 &&
+    commandName === 'Transcribe voice message'
+  );
+}
+
 /** Queue controls share the Rust Songbird ledger with core voice, so they have their own
  * canary. Without this second flag Node must retain `/queue`; otherwise a Rust process that has
  * not built the voice driver could leave users without a response. */

@@ -37,6 +37,8 @@ mod server_stats_sink;
 mod stats_sink;
 mod top_speakers_sink;
 mod topgg_metrics;
+mod transcription_adapter;
+mod transcription_sink;
 mod translation_preference_sink;
 mod translation_provider;
 mod translation_text_sink;
@@ -86,6 +88,7 @@ use vozen_store::{ProviderHealth as StoreProviderHealth, SqliteStore};
 use crate::topgg_metrics::{
     ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats, sync_topgg_commands,
 };
+use crate::transcription_adapter::TranscriptionRuntimeOptions;
 
 const DISCORD_COMMAND_CONTRACT: &str = include_str!("../../../contracts/discord-commands.json");
 
@@ -100,6 +103,7 @@ struct RuntimeConfig {
     vote_redemption_secret: Option<String>,
     core_voice: Option<CoreVoiceRuntimeOptions>,
     tts_file: Option<TtsFileRuntimeOptions>,
+    transcription: Option<TranscriptionRuntimeOptions>,
     translation_text: Option<TranslationTextRuntimeOptions>,
     translation_preferences: bool,
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
@@ -310,6 +314,7 @@ impl RuntimeConfig {
         let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
         let core_voice = core_voice_from_environment()?;
         let tts_file = tts_file_from_environment()?;
+        let transcription = transcription_from_environment()?;
         let translation_text = translation_text_from_environment();
         let translation_preferences = translation_preferences_enabled(
             env::var("RUST_TRANSLATION_PREFERENCES_ENABLED")
@@ -375,6 +380,7 @@ impl RuntimeConfig {
             vote_redemption_secret,
             core_voice,
             tts_file,
+            transcription,
             translation_text,
             translation_preferences,
             voice_preferences,
@@ -486,6 +492,27 @@ fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeE
     }))
 }
 
+fn transcription_from_environment() -> Result<Option<TranscriptionRuntimeOptions>, RuntimeError> {
+    if !transcription_enabled(env::var("RUST_TRANSCRIBE_MESSAGE_ENABLED").ok().as_deref()) {
+        return Ok(None);
+    }
+    let max_concurrency =
+        positive_number_from_environment("STT_MAX_CONCURRENCY", 1.0, true)? as usize;
+    Ok(Some(TranscriptionRuntimeOptions {
+        python: nonempty_env("WHISPER_PYTHON")
+            .unwrap_or_else(|| "python3".to_owned())
+            .into(),
+        script: nonempty_env("WHISPER_SCRIPT")
+            .unwrap_or_else(|| "tools/whisper_sidecar.py".to_owned())
+            .into(),
+        model: nonempty_env("WHISPER_MODEL"),
+        ffmpeg: nonempty_env("FFMPEG_PATH")
+            .unwrap_or_else(|| "ffmpeg".to_owned())
+            .into(),
+        max_concurrency,
+    }))
+}
+
 fn voice_preferences_from_environment()
 -> Result<Option<VoicePreferenceRuntimeOptions>, RuntimeError> {
     if !voice_preferences_enabled(env::var("RUST_VOICE_PREFERENCES_ENABLED").ok().as_deref()) {
@@ -542,6 +569,10 @@ fn core_voice_enabled(raw: Option<&str>) -> bool {
 }
 
 fn tts_file_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn transcription_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -788,6 +819,20 @@ fn tts_file_event_sink(
     Ok(Some(Arc::new(
         file_export_sink::TtsFileGatewaySink::new(store, options)
             .map_err(|_| RuntimeError::TtsFileGateway)?,
+    )))
+}
+
+fn transcription_event_sink(
+    options: Option<TranscriptionRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    let Some(options) = options else {
+        return Ok(None);
+    };
+    let transcriber = transcription_adapter::AttachmentTranscriber::new(options)
+        .map_err(|_| RuntimeError::TranscriptionGateway)?;
+    Ok(Some(Arc::new(
+        transcription_sink::TranscriptionGatewaySink::new(store, transcriber),
     )))
 }
 
@@ -1334,6 +1379,8 @@ enum RuntimeError {
     TtsFileGateway,
     #[error("private translation gateway initialisation failed")]
     TranslationGateway,
+    #[error("message transcription gateway initialisation failed")]
+    TranscriptionGateway,
     #[error("translation preference gateway initialisation failed")]
     TranslationPreferenceGateway,
     #[error("voice preference gateway initialisation failed")]
@@ -1447,6 +1494,9 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = tts_file_event_sink(config.tts_file, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = transcription_event_sink(config.transcription, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = translation_text_event_sink(config.translation_text, store.clone())? {
@@ -1940,6 +1990,15 @@ mod tests {
         assert!(!tts_file_enabled(Some("1")));
         assert!(!tts_file_enabled(Some("yes")));
         assert!(!tts_file_enabled(None));
+    }
+
+    #[test]
+    fn message_transcription_promotion_is_exactly_opt_in() {
+        assert!(transcription_enabled(Some("true")));
+        assert!(transcription_enabled(Some(" TRUE ")));
+        assert!(!transcription_enabled(Some("1")));
+        assert!(!transcription_enabled(Some("yes")));
+        assert!(!transcription_enabled(None));
     }
 
     #[test]

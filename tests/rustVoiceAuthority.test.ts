@@ -34,9 +34,17 @@ import {
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
   rustVoicePreferencesOwnCommand,
+  rustTranscriptionOwnsCommand,
 } from '../src/migration/rustVoiceAuthority';
 
 describe('Rust core voice migration ownership', () => {
+  it('keeps message transcription behind an exact independent canary', () => {
+    expect(rustTranscriptionOwnsCommand('Transcribe voice message')).toBe(false);
+    expect(rustTranscriptionOwnsCommand('Transcribe voice message', 3, 'true')).toBe(true);
+    expect(rustTranscriptionOwnsCommand('Transcribe voice message', 2, 'true')).toBe(false);
+    expect(rustTranscriptionOwnsCommand('Translate', 3, 'true')).toBe(false);
+  });
+
   it('is off unless explicitly enabled and only yields the promoted command set', () => {
     expect(rustVoiceOwnsCommand('tts')).toBe(false);
     expect(rustVoiceOwnsCommand('tts', 'yes')).toBe(false);
