@@ -59,6 +59,18 @@ impl GatewayEventSink for CompositeGatewayEventSink {
         Ok(())
     }
 
+    async fn on_reaction_add(
+        &self,
+        context: Context,
+        reaction: serenity::model::channel::Reaction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        for sink in &self.sinks {
+            sink.on_reaction_add(context.clone(), reaction.clone())
+                .await?;
+        }
+        Ok(())
+    }
+
     async fn on_interaction(
         &self,
         context: Context,

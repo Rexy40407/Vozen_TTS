@@ -12,13 +12,13 @@ use std::{
 use serenity::{
     builder::{
         CreateAllowedMentions, CreateInteractionResponse, CreateInteractionResponseMessage,
-        EditInteractionResponse,
+        CreateMessage, EditInteractionResponse,
     },
     client::Context,
     model::{
         Permissions,
         application::{CommandInteraction, CommandType, Interaction},
-        channel::ChannelType,
+        channel::{ChannelType, Reaction, ReactionType},
         id::ChannelId,
     },
 };
@@ -502,6 +502,84 @@ impl GatewayEventSink for TranslationTextGatewaySink {
         _context: Context,
         _message: serenity::model::channel::Message,
     ) -> Result<(), GatewayEventDispatchError> {
+        Ok(())
+    }
+
+    async fn on_reaction_add(
+        &self,
+        context: Context,
+        reaction: Reaction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        if !self.text_enabled || !self.provider_enabled || reaction.guild_id.is_none() {
+            return Ok(());
+        }
+        let Some(user_id) = reaction.user_id else {
+            return Ok(());
+        };
+        let ReactionType::Unicode(emoji) = &reaction.emoji else {
+            return Ok(());
+        };
+        let Some(target_locale) = vozen_discord::reaction_target_locale(emoji) else {
+            return Ok(());
+        };
+
+        // Gateway reactions normally include a partial member. If it is absent, fetch the user
+        // and fail closed on an HTTP error so an unknown actor can never trigger translation.
+        let reactor_is_bot = match reaction.member.as_ref() {
+            Some(member) => member.user.bot,
+            None => match user_id.to_user(&context.http).await {
+                Ok(user) => user.bot,
+                Err(_) => return Ok(()),
+            },
+        };
+        if reactor_is_bot {
+            return Ok(());
+        }
+
+        let message = match reaction
+            .channel_id
+            .message(&context.http, reaction.message_id)
+            .await
+        {
+            Ok(message) => message,
+            Err(_) => return Ok(()),
+        };
+        let Some(message_guild_id) = message.guild_id else {
+            return Ok(());
+        };
+        if message.content.trim().is_empty() || message.author.bot || message.webhook_id.is_some() {
+            return Ok(());
+        }
+
+        let guild_id = message_guild_id.get().to_string();
+        let user_id = user_id.get().to_string();
+        let outcome = self
+            .service
+            .execute(ExplicitTranslationInvocation {
+                guild_id: Some(&guild_id),
+                user_id: &user_id,
+                text: &message.content,
+                target_locale,
+            })
+            .await;
+        let ExplicitTranslationOutcome::Ready { text, .. } = outcome else {
+            return Ok(());
+        };
+        let content = format!(
+            "**Translation · {target_locale}**\n{}",
+            truncate_utf16(&text, MAX_TRANSLATION_RESPONSE_UTF16)
+        );
+        message
+            .channel_id
+            .send_message(
+                &context.http,
+                CreateMessage::new()
+                    .content(content)
+                    .reference_message(&message)
+                    .allowed_mentions(no_mentions()),
+            )
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
         Ok(())
     }
 

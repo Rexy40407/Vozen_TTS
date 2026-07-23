@@ -129,6 +129,7 @@ mod transcription_command;
 mod translate_message_command;
 mod translation_command;
 mod translation_preference_command;
+mod translation_reaction;
 mod uptime_command;
 mod utterance_collector;
 mod voice_display;
@@ -392,6 +393,7 @@ pub use translation_preference_command::{
     TranslationPreferenceCommand, TranslationPreferenceCommandError,
     parse_translation_preference_command,
 };
+pub use translation_reaction::reaction_target_locale;
 pub use uptime_command::{UptimeCommand, UptimeCommandError, parse_uptime_command};
 pub use utterance_collector::{Utterance, UtteranceCollector};
 pub use voice_display::{VoiceDisplayCatalog, VoiceDisplayError};
@@ -451,6 +453,16 @@ pub trait GatewayEventSink: Send + Sync {
         context: Context,
         message: serenity::model::channel::Message,
     ) -> Result<(), GatewayEventDispatchError>;
+
+    /// Runs when a user adds a reaction. Reaction-based slices must re-fetch the target message
+    /// and fail closed when its author/content cannot be verified.
+    async fn on_reaction_add(
+        &self,
+        _context: Context,
+        _reaction: serenity::model::channel::Reaction,
+    ) -> Result<(), GatewayEventDispatchError> {
+        Ok(())
+    }
 
     async fn on_interaction(
         &self,
@@ -1098,6 +1110,12 @@ impl EventHandler for VozenGatewayHandler {
     async fn message(&self, context: Context, message: serenity::model::channel::Message) {
         if let Some(event_sink) = &self.event_sink {
             let _ = event_sink.on_message(context, message).await;
+        }
+    }
+
+    async fn reaction_add(&self, context: Context, reaction: serenity::model::channel::Reaction) {
+        if let Some(event_sink) = &self.event_sink {
+            let _ = event_sink.on_reaction_add(context, reaction).await;
         }
     }
 
