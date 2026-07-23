@@ -78,6 +78,20 @@ export function rustTranscriptionOwnsCommand(
   );
 }
 
+/** Consent withdrawal does not need the live voice receiver, so it can be canaried independently
+ * from `/transcribe start|stop`, which remain Node-owned until Rust has receiver parity. */
+export function rustTranscriptionControlOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_TRANSCRIBE_CONTROL_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'transcribe' &&
+    subcommand === 'revoke'
+  );
+}
+
 /** The Speak message context menu uses the core TTS admission path and has its own canary. */
 export function rustSpeakContextOwnsCommand(
   commandName: string,

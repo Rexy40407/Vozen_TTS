@@ -40,6 +40,7 @@ import {
   rustPublicCommandsOwnCommand,
   rustOwnerCommandsOwnCommand,
   rustTranscriptionOwnsCommand,
+  rustTranscriptionControlOwnsCommand,
   rustSpeakContextOwnsCommand,
   rustTranslateContextOwnsCommand,
   rustRandomizerOwnsCommand,
@@ -68,6 +69,13 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranscriptionOwnsCommand('Transcribe voice message', 3, 'true')).toBe(true);
     expect(rustTranscriptionOwnsCommand('Transcribe voice message', 2, 'true')).toBe(false);
     expect(rustTranscriptionOwnsCommand('Translate', 3, 'true')).toBe(false);
+  });
+
+  it('canaries only consent withdrawal while live transcription stays on Node', () => {
+    expect(rustTranscriptionControlOwnsCommand('transcribe', 'revoke', 'true')).toBe(true);
+    expect(rustTranscriptionControlOwnsCommand('transcribe', 'start', 'true')).toBe(false);
+    expect(rustTranscriptionControlOwnsCommand('transcribe', 'stop', 'true')).toBe(false);
+    expect(rustTranscriptionControlOwnsCommand('transcribe', 'revoke', 'false')).toBe(false);
   });
 
   it('keeps the Speak context menu behind core, Piper, and its own canary', () => {

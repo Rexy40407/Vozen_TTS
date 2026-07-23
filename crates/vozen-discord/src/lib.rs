@@ -120,6 +120,7 @@ mod text_quiz_driver;
 mod tictactoe_driver;
 mod top_speakers_command;
 mod transcribe_message_command;
+mod transcription_command;
 mod translate_message_command;
 mod translation_command;
 mod translation_preference_command;
@@ -365,6 +366,10 @@ pub use top_speakers_command::{
 pub use transcribe_message_command::{
     TRANSCRIBE_MESSAGE_COMMAND, TranscribeMessageCommand, TranscribeMessageCommandError,
     parse_transcribe_message_command,
+};
+pub use transcription_command::{
+    TranscriptionControlCommand, TranscriptionControlCommandError,
+    parse_transcription_control_command,
 };
 pub use translate_message_command::{
     TRANSLATE_MESSAGE_COMMAND, TranslateMessageCommand, TranslateMessageCommandError,

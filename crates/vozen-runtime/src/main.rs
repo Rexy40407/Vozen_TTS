@@ -40,6 +40,7 @@ mod stats_sink;
 mod top_speakers_sink;
 mod topgg_metrics;
 mod transcription_adapter;
+mod transcription_control_sink;
 mod transcription_sink;
 mod translation_preference_sink;
 mod translation_provider;
@@ -110,6 +111,7 @@ struct RuntimeConfig {
     core_voice: Option<CoreVoiceRuntimeOptions>,
     tts_file: Option<TtsFileRuntimeOptions>,
     transcription: Option<TranscriptionRuntimeOptions>,
+    transcription_control: bool,
     translation_text: Option<TranslationTextRuntimeOptions>,
     translation_preferences: bool,
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
@@ -330,6 +332,9 @@ impl RuntimeConfig {
         let core_voice = core_voice_from_environment()?;
         let tts_file = tts_file_from_environment()?;
         let transcription = transcription_from_environment()?;
+        let transcription_control = transcription_control_enabled(
+            env::var("RUST_TRANSCRIBE_CONTROL_ENABLED").ok().as_deref(),
+        );
         let translation_text = translation_text_from_environment();
         let translation_preferences = translation_preferences_enabled(
             env::var("RUST_TRANSLATION_PREFERENCES_ENABLED")
@@ -407,6 +412,7 @@ impl RuntimeConfig {
             core_voice,
             tts_file,
             transcription,
+            transcription_control,
             translation_text,
             translation_preferences,
             voice_preferences,
@@ -687,6 +693,10 @@ fn transcription_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
+fn transcription_control_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
 /// The first Rust voice adapters only have a production Piper backend. The Node bot can use
 /// other default engines, but allowing the Rust canary to start in that configuration would
 /// silently change what users hear. Missing `TTS_ENGINE` keeps Node's Piper default.
@@ -952,6 +962,19 @@ fn transcription_event_sink(
         .map_err(|_| RuntimeError::TranscriptionGateway)?;
     Ok(Some(Arc::new(
         transcription_sink::TranscriptionGatewaySink::new(store, transcriber),
+    )))
+}
+
+fn transcription_control_event_sink(
+    enabled: bool,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    if !enabled {
+        return Ok(None);
+    }
+    Ok(Some(Arc::new(
+        transcription_control_sink::TranscriptionControlGatewaySink::new(store)
+            .map_err(|_| RuntimeError::TranscriptionControlGateway)?,
     )))
 }
 
@@ -1524,6 +1547,8 @@ enum RuntimeError {
     TranslationGateway,
     #[error("message transcription gateway initialisation failed")]
     TranscriptionGateway,
+    #[error("transcription control gateway initialisation failed")]
+    TranscriptionControlGateway,
     #[error("owner command gateway initialisation failed")]
     OwnerCommandGateway,
     #[error("translation preference gateway initialisation failed")]
@@ -1655,6 +1680,11 @@ async fn run() -> Result<(), RuntimeError> {
         event_sinks.push(sink);
     }
     if let Some(sink) = transcription_event_sink(config.transcription, store.clone())? {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) =
+        transcription_control_event_sink(config.transcription_control, store.clone())?
+    {
         event_sinks.push(sink);
     }
     if let Some(sink) = translation_text_event_sink(config.translation_text, store.clone())? {
@@ -2192,6 +2222,15 @@ mod tests {
         assert!(!transcription_enabled(Some("1")));
         assert!(!transcription_enabled(Some("yes")));
         assert!(!transcription_enabled(None));
+    }
+
+    #[test]
+    fn transcription_control_promotion_is_exactly_opt_in() {
+        assert!(transcription_control_enabled(Some("true")));
+        assert!(transcription_control_enabled(Some(" TRUE ")));
+        assert!(!transcription_control_enabled(Some("1")));
+        assert!(!transcription_control_enabled(Some("yes")));
+        assert!(!transcription_control_enabled(None));
     }
 
     #[test]

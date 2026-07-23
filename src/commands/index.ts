@@ -89,6 +89,7 @@ import {
   rustVoicePreferencesOwnCommand,
   rustPublicCommandsOwnCommand,
   rustOwnerCommandsOwnCommand,
+  rustTranscriptionControlOwnsCommand,
 } from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
 import { handleTranslate } from './handlers/translation';
@@ -310,6 +311,10 @@ export async function handleInteraction(
   // Discord gateway sessions; every other command remains Node-owned.
   if (
     rustOwnerCommandsOwnCommand(i.commandName) ||
+    rustTranscriptionControlOwnsCommand(
+      i.commandName,
+      i.commandName === 'transcribe' ? i.options.getSubcommand(false) : null,
+    ) ||
     rustPublicCommandsOwnCommand(
       i.commandName,
       i.commandName === 'game' ? i.options.getSubcommand(false) : null,
