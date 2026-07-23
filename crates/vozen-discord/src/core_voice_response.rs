@@ -30,6 +30,10 @@ pub enum CoreVoiceResponse {
     JokeBusy,
     JokePlaying,
     JokeFailed,
+    MicroFunEightBall,
+    MicroFunFortune,
+    MicroFunFact,
+    MicroFunWouldYouRather,
     SkipNotInVoice,
     SkipNothingPlaying,
     Skipped,
@@ -96,6 +100,10 @@ impl CoreVoiceResponse {
             Self::JokeRateLimited => "tts.tooFast",
             Self::JokeBusy => "tts.busy",
             Self::JokePlaying => "joke.playing",
+            Self::MicroFunEightBall => "fun.eightball",
+            Self::MicroFunFortune => "fun.fortune",
+            Self::MicroFunFact => "fun.fact",
+            Self::MicroFunWouldYouRather => "fun.wyr",
             Self::Queued => "tts.queued",
             Self::PreviewNotInPlayer => "voice.notInVoice",
             Self::PreviewNotInSameVoice => "tts.notInVoice",
@@ -162,6 +170,12 @@ pub fn core_voice_response(outcome: CoreVoiceOutcome) -> CoreVoiceResponse {
                 CoreVoiceResponse::JokeFailed
             }
             CoreJokeOutcome::StoreUnavailable => CoreVoiceResponse::StoreUnavailable,
+        },
+        CoreVoiceOutcome::MicroFun(result) => match result.kind {
+            crate::MicroFunKind::EightBall => CoreVoiceResponse::MicroFunEightBall,
+            crate::MicroFunKind::Fortune => CoreVoiceResponse::MicroFunFortune,
+            crate::MicroFunKind::Fact => CoreVoiceResponse::MicroFunFact,
+            crate::MicroFunKind::WouldYouRather => CoreVoiceResponse::MicroFunWouldYouRather,
         },
         CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NotInVoice) => {
             CoreVoiceResponse::SkipNotInVoice
@@ -260,6 +274,19 @@ mod tests {
                 joke: Some("joke".into()),
             })),
             CoreVoiceResponse::JokePlaying
+        );
+        assert_eq!(
+            core_voice_response(CoreVoiceOutcome::MicroFun(crate::CoreMicroFunResult {
+                kind: crate::MicroFunKind::Fact,
+                question: None,
+                text: "Octopuses have three hearts.".into(),
+                queued: false,
+            })),
+            CoreVoiceResponse::MicroFunFact
+        );
+        assert_eq!(
+            CoreVoiceResponse::MicroFunFact.catalog_key(),
+            Some("fun.fact")
         );
     }
 

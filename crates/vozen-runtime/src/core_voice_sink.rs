@@ -316,11 +316,18 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
             }
         }
         let executor = self.executor(&context)?;
-        let defer = Executor::requires_ephemeral_defer(&command.data)
+        let defer_ephemeral = Executor::requires_ephemeral_defer(&command.data)
             .map_err(|_| GatewayEventDispatchError)?;
-        if defer {
+        let defer_public = Executor::requires_public_defer(&command.data)
+            .map_err(|_| GatewayEventDispatchError)?;
+        if defer_ephemeral {
             command
                 .defer_ephemeral(&context)
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+        } else if defer_public {
+            command
+                .defer(&context)
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
         }
@@ -337,7 +344,7 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         let CoreVoiceInteractionExecution::Reply { content, .. } = response else {
             return Ok(());
         };
-        if defer {
+        if defer_ephemeral || defer_public {
             command
                 .edit_response(&context, EditInteractionResponse::new().content(content))
                 .await

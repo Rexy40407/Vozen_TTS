@@ -76,6 +76,7 @@ mod message_interaction;
 mod message_media;
 mod message_pipeline;
 mod message_voice_service;
+mod microfun_text;
 mod planned_rejoin;
 mod premium_command;
 mod privacy_command;
@@ -197,9 +198,9 @@ pub use core_voice_interaction::CoreVoiceInteractionFacts;
 pub use core_voice_response::{CoreVoiceResponse, core_voice_response};
 pub use core_voice_service::{
     CommandPlaybackError, CommandPlaybackState, CommandSpeechSynthesizer, CommandSynthesisError,
-    CommandVoicePlayback, CoreJokeOutcome, CoreJokeResult, CorePlaybackControlOutcome,
-    CorePreviewOutcome, CoreTtsOutcome, CoreVoiceInvocation, CoreVoiceOutcome, CoreVoiceService,
-    CoreVoiceSettings,
+    CommandVoicePlayback, CoreJokeOutcome, CoreJokeResult, CoreMicroFunResult,
+    CorePlaybackControlOutcome, CorePreviewOutcome, CoreTtsOutcome, CoreVoiceInvocation,
+    CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
 };
 pub use dashboard_options::{
     DiscordDashboardOption, DiscordDashboardOptions, DiscordDashboardOptionsProvider,
@@ -230,6 +231,7 @@ pub use message_interaction::DiscordMessageFactsOwned;
 pub use message_media::collect_message_media;
 pub use message_pipeline::{MessagePipelineOutcome, MessageSpeechPipeline};
 pub use message_voice_service::{MessageVoiceInvocation, MessageVoiceOutcome, MessageVoiceService};
+pub use microfun_text::{MicroFunKind, pick_microfun};
 pub use planned_rejoin::{
     MAX_PLANNED_REJOIN_AGE, PLANNED_REJOIN_MARKER, PlannedRejoinScope, RejoinChannelState,
     RejoinPlan, consume_planned_rejoin_marker, plan_rejoin, write_planned_rejoin_marker,

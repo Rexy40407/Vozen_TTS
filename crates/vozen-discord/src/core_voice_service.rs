@@ -19,7 +19,7 @@ use vozen_store::{SqliteStore, UserEngine};
 
 use crate::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline, CoreVoiceCommand,
-    GatewayState, GuildSynthesisCoordinator, JoinVoiceOutcome, LeaveVoiceOutcome,
+    GatewayState, GuildSynthesisCoordinator, JoinVoiceOutcome, LeaveVoiceOutcome, MicroFunKind,
     VoiceSessionService, VoiceSessionTransport, joke_lang_by_key, laughter_for_model,
     laughter_for_prefix, pick_joke,
 };
@@ -132,11 +132,20 @@ pub struct CoreJokeResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreMicroFunResult {
+    pub kind: MicroFunKind,
+    pub question: Option<String>,
+    pub text: String,
+    pub queued: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreVoiceOutcome {
     Joined(JoinVoiceOutcome),
     Left(LeaveVoiceOutcome),
     Laugh(CorePreviewOutcome),
     Joke(CoreJokeResult),
+    MicroFun(CoreMicroFunResult),
     Tts(CoreTtsOutcome),
     Preview(CorePreviewOutcome),
     Skipped(CorePlaybackControlOutcome),
@@ -256,6 +265,10 @@ where
             CoreVoiceCommand::Joke { language, laughter } => {
                 CoreVoiceOutcome::Joke(self.execute_joke(invocation, language, *laughter).await)
             }
+            CoreVoiceCommand::MicroFun { kind, question } => CoreVoiceOutcome::MicroFun(
+                self.execute_microfun(invocation, *kind, question.clone())
+                    .await,
+            ),
             CoreVoiceCommand::Skip => {
                 CoreVoiceOutcome::Skipped(self.skip(invocation.guild_id).await)
             }
@@ -483,6 +496,126 @@ where
         let sample = laughter_for_model(&model);
         self.execute_preview(invocation, Some(&model), &sample)
             .await
+    }
+
+    /// Micro-fun commands always produce their public text answer. When a player exists, they
+    /// additionally use the same same-call, role and rate-limit gates as explicit speech and
+    /// queue the answer in the language of the UI. A missing/unauthorized call therefore never
+    /// turns a useful text command into an error.
+    async fn execute_microfun(
+        &self,
+        invocation: CoreVoiceInvocation<'_>,
+        kind: MicroFunKind,
+        question: Option<String>,
+    ) -> CoreMicroFunResult {
+        let locale = self
+            .store
+            .lock()
+            .ok()
+            .and_then(|store| store.guild_config(invocation.guild_id).ok())
+            .map(|config| config.locale)
+            .unwrap_or_else(|| "en".to_owned());
+        let text = crate::pick_microfun(kind, &locale, (self.now_ms)());
+        let mut result = CoreMicroFunResult {
+            kind,
+            question,
+            text,
+            queued: false,
+        };
+
+        let Ok(CommandPlaybackState::Active | CommandPlaybackState::Idle) =
+            self.playback.state(invocation.guild_id).await
+        else {
+            return result;
+        };
+        let roles = invocation
+            .member_role_ids
+            .map(|roles| roles.iter().map(String::as_str).collect::<Vec<_>>());
+        let (model, speed, engine, lane) = {
+            let Ok(store) = self.store.lock() else {
+                return result;
+            };
+            let Ok(config) = store.guild_config(invocation.guild_id) else {
+                return result;
+            };
+            let policy = RolePolicy {
+                priority_role_id: config.priority_role_id.as_deref(),
+                blocked_role_id: config.blocked_role_id.as_deref(),
+            };
+            let lane = match admit_user_speech(
+                self.gateway_state
+                    .voice_channel_id(invocation.guild_id, invocation.user_id)
+                    .as_deref(),
+                self.gateway_state
+                    .bot_voice_channel_id(invocation.guild_id)
+                    .as_deref(),
+                roles.as_deref(),
+                policy,
+            ) {
+                UserSpeechAdmission::Allowed { lane } => lane,
+                UserSpeechAdmission::Denied { .. } => return result,
+            };
+            let Ok(mut limiters) = self.preview_limiters.lock() else {
+                return result;
+            };
+            if !limiters.allow(
+                invocation.guild_id,
+                invocation.user_id,
+                config.rate_per_min,
+                (self.now_ms)(),
+            ) {
+                return result;
+            }
+            let stored = store
+                .get_user_voice(invocation.guild_id, invocation.user_id)
+                .ok()
+                .flatten();
+            let prefix = if locale.starts_with("pt") {
+                "pt_"
+            } else {
+                "en_"
+            };
+            let model = self
+                .settings
+                .available_models
+                .iter()
+                .find(|model| model.starts_with(prefix))
+                .cloned()
+                .or_else(|| {
+                    (!config.default_voice.trim().is_empty()).then(|| config.default_voice.clone())
+                })
+                .unwrap_or_else(|| {
+                    if self.settings.default_voice.trim().is_empty() {
+                        "en_US-amy-medium".to_owned()
+                    } else {
+                        self.settings.default_voice.clone()
+                    }
+                });
+            let engine = resolve_preview_engine(
+                &store,
+                invocation.guild_id,
+                invocation.user_id,
+                stored.as_ref().map(|voice| voice.engine),
+                (self.now_ms)(),
+            );
+            (model, self.settings.default_speed, engine, lane)
+        };
+        let request = SynthRequest {
+            text: result.text.clone(),
+            model,
+            speed,
+            engine,
+            segments: None,
+            single_voice: Some(true),
+            emphasis_source: None,
+            lead_silence_ms: 0,
+        };
+        result.queued = matches!(
+            self.enqueue_synth_request(invocation.guild_id, invocation.user_id, lane, request)
+                .await,
+            CorePreviewOutcome::Queued
+        );
+        result
     }
 
     /// `/joke` keeps Node's language-first model selection and queues the optional laugh as a

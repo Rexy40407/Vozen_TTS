@@ -9,7 +9,7 @@ use serenity::model::application::{CommandData, CommandDataOptionValue};
 use thiserror::Error;
 use vozen_contracts::ContractError;
 
-use crate::{CommandArea, command_path_from_options, route_command};
+use crate::{CommandArea, MicroFunKind, command_path_from_options, route_command};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreVoiceCommand {
@@ -21,6 +21,12 @@ pub enum CoreVoiceCommand {
     Joke {
         language: String,
         laughter: bool,
+    },
+    /// Public micro-fun commands may speak a short answer when the caller is in Vozen's call,
+    /// while still replying in text when no call is active.
+    MicroFun {
+        kind: MicroFunKind,
+        question: Option<String>,
     },
     Skip,
     ShutUp,
@@ -54,6 +60,12 @@ pub enum CoreVoiceCommandError {
     MissingLaughter,
     #[error("the joke command has a non-boolean laughter option")]
     InvalidLaughter,
+    #[error("the micro-fun command contains an undeclared option")]
+    InvalidMicroFunOptions,
+    #[error("the 8-ball command is missing its required question option")]
+    MissingQuestion,
+    #[error("the 8-ball command has a non-string question option")]
+    InvalidQuestion,
 }
 
 /// Parses only the promoted root commands. A contract-valid command from another area, or a
@@ -71,7 +83,10 @@ pub fn parse_promoted_core_voice(
         return parse_voice_preview(&command.options).map(Some);
     }
     if area != CommandArea::CoreVoice
-        && !(matches!(command.name.as_str(), "laugh" | "joke") && area == CommandArea::Fun)
+        && !(matches!(
+            command.name.as_str(),
+            "laugh" | "joke" | "8-ball" | "fortune" | "fact" | "wyr"
+        ) && area == CommandArea::Fun)
     {
         return Ok(None);
     }
@@ -80,6 +95,10 @@ pub fn parse_promoted_core_voice(
         "leave" => Ok(Some(CoreVoiceCommand::Leave)),
         "laugh" => Ok(Some(CoreVoiceCommand::Laugh)),
         "joke" => parse_joke(&command.options).map(Some),
+        "8-ball" => parse_microfun(&command.options, MicroFunKind::EightBall).map(Some),
+        "fortune" => parse_microfun(&command.options, MicroFunKind::Fortune).map(Some),
+        "fact" => parse_microfun(&command.options, MicroFunKind::Fact).map(Some),
+        "wyr" => parse_microfun(&command.options, MicroFunKind::WouldYouRather).map(Some),
         "skip" => Ok(Some(CoreVoiceCommand::Skip)),
         "shut-up" => Ok(Some(CoreVoiceCommand::ShutUp)),
         "tts" => {
@@ -99,6 +118,39 @@ pub fn parse_promoted_core_voice(
                 .unwrap_or(Err(CoreVoiceCommandError::MissingText))
         }
         _ => Ok(None),
+    }
+}
+
+fn parse_microfun(
+    options: &[serenity::model::application::CommandDataOption],
+    kind: MicroFunKind,
+) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
+    match kind {
+        MicroFunKind::EightBall => {
+            if options.len() != 1 || options[0].name != "question" {
+                return Err(CoreVoiceCommandError::InvalidMicroFunOptions);
+            }
+            let question = match &options[0].value {
+                CommandDataOptionValue::String(question) => question.clone(),
+                _ => return Err(CoreVoiceCommandError::InvalidQuestion),
+            };
+            if question.trim().is_empty() {
+                return Err(CoreVoiceCommandError::MissingQuestion);
+            }
+            Ok(CoreVoiceCommand::MicroFun {
+                kind,
+                question: Some(question),
+            })
+        }
+        MicroFunKind::Fortune | MicroFunKind::Fact | MicroFunKind::WouldYouRather => {
+            if !options.is_empty() {
+                return Err(CoreVoiceCommandError::InvalidMicroFunOptions);
+            }
+            Ok(CoreVoiceCommand::MicroFun {
+                kind,
+                question: None,
+            })
+        }
     }
 }
 
@@ -198,6 +250,26 @@ mod tests {
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"8-ball","type":1,"options":[{"name":"question","type":3,"value":"Will it work?"}]}"#
+            ))
+            .expect("8-ball"),
+            Some(CoreVoiceCommand::MicroFun {
+                kind: MicroFunKind::EightBall,
+                question: Some("Will it work?".into()),
+            })
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"fortune","type":1,"options":[]}"#
+            ))
+            .expect("fortune"),
+            Some(CoreVoiceCommand::MicroFun {
+                kind: MicroFunKind::Fortune,
+                question: None,
+            })
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
                 r#"{"id":"1","name":"skip","type":1,"options":[]}"#
             ))
             .expect("skip"),
@@ -287,6 +359,18 @@ mod tests {
                 r#"{"id":"1","name":"joke","type":1,"options":[{"name":"language","type":4,"value":1},{"name":"laughter","type":5,"value":false}]}"#
             )),
             Err(CoreVoiceCommandError::InvalidLanguage)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"8-ball","type":1,"options":[]}"#
+            )),
+            Err(CoreVoiceCommandError::InvalidMicroFunOptions)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"fortune","type":1,"options":[{"name":"unexpected","type":3,"value":"x"}]}"#
+            )),
+            Err(CoreVoiceCommandError::InvalidMicroFunOptions)
         );
     }
 }

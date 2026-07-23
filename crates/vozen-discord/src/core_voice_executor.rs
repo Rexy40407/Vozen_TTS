@@ -39,6 +39,8 @@ pub enum CoreVoiceInteractionExecution {
         content: String,
         /// `/tts` can wait for Piper; all other promoted commands complete immediately.
         defer_ephemeral: bool,
+        /// Micro-fun replies are public in Node, but may still wait for optional speech.
+        defer_public: bool,
     },
 }
 
@@ -116,6 +118,13 @@ impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P> {
             )
         ))
     }
+
+    pub fn requires_public_defer(command: &CommandData) -> Result<bool, CoreVoiceExecutionError> {
+        Ok(matches!(
+            parse_promoted_core_voice(command).map_err(|_| CoreVoiceExecutionError::Command)?,
+            Some(crate::CoreVoiceCommand::MicroFun { .. })
+        ))
+    }
 }
 
 impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P>
@@ -144,6 +153,7 @@ where
                 | crate::CoreVoiceCommand::Joke { .. }
                 | crate::CoreVoiceCommand::VoicePreview { .. }
         );
+        let defer_public = matches!(command, crate::CoreVoiceCommand::MicroFun { .. });
         let outcome = if let crate::CoreVoiceCommand::VoicePreview { model } = &command {
             let guild_locale = self.guild_locale(facts);
             let sample = self
@@ -182,6 +192,7 @@ where
         Ok(CoreVoiceInteractionExecution::Reply {
             content,
             defer_ephemeral,
+            defer_public,
         })
     }
 
@@ -196,6 +207,12 @@ where
     ) {
         let joke_text = match &outcome {
             CoreVoiceOutcome::Joke(result) => result.joke.clone(),
+            _ => None,
+        };
+        let microfun = match &outcome {
+            CoreVoiceOutcome::MicroFun(result) => {
+                Some((result.kind, result.question.clone(), result.text.clone()))
+            }
             _ => None,
         };
         let mut response = core_voice_response(outcome);
@@ -242,6 +259,18 @@ where
         }
         if let Some(joke) = joke_text {
             parameters.insert("joke", joke);
+        }
+        if let Some((kind, question, text)) = microfun {
+            if let Some(question) = question {
+                parameters.insert("question", question);
+            }
+            parameters.insert(
+                match kind {
+                    crate::MicroFunKind::EightBall => "answer",
+                    _ => "text",
+                },
+                text,
+            );
         }
         (response, parameters, guild_locale)
     }
@@ -304,6 +333,25 @@ mod tests {
             r#"{"id":"1","name":"queue","type":1,"options":[{"name":"show","type":1,"options":[]}]}"#
         ))
         .expect("unpromoted"));
+    }
+
+    #[test]
+    fn public_micro_fun_commands_defer_publicly_but_other_commands_do_not() {
+        let eight_ball = command(
+            r#"{"id":"1","name":"8-ball","type":1,"options":[{"name":"question","type":3,"value":"Will it work?"}]}"#,
+        );
+        assert!(
+            CoreVoiceInteractionExecutor::<(), (), ()>::requires_public_defer(&eight_ball)
+                .expect("8-ball")
+        );
+        assert!(
+            !CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&eight_ball)
+                .expect("8-ball")
+        );
+        assert!(!CoreVoiceInteractionExecutor::<(), (), ()>::requires_public_defer(&command(
+            r#"{"id":"1","name":"joke","type":1,"options":[{"name":"language","type":3,"value":"en"},{"name":"laughter","type":5,"value":false}]}"#,
+        ))
+        .expect("joke"));
     }
 
     #[test]
