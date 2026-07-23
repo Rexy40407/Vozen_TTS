@@ -6,7 +6,15 @@
  * answer it. Each promoted slice stays OFF unless the operator deliberately starts its matching
  * Rust runtime configuration.
  */
-const RUST_CORE_VOICE_COMMANDS = new Set(['join', 'leave', 'tts', 'laugh', 'skip', 'shut-up']);
+const RUST_CORE_VOICE_COMMANDS = new Set([
+  'join',
+  'leave',
+  'tts',
+  'laugh',
+  'joke',
+  'skip',
+  'shut-up',
+]);
 const RUST_PRIVATE_TTS_FILE_COMMANDS = new Set(['tts-file']);
 
 /** Queue controls share the Rust Songbird ledger with core voice, so they have their own

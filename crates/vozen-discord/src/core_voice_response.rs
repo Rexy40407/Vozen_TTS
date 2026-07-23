@@ -5,8 +5,8 @@
 //! downgrading command responses to English.
 
 use crate::{
-    CorePlaybackControlOutcome, CorePreviewOutcome, CoreTtsOutcome, CoreVoiceOutcome,
-    JoinVoiceOutcome, LeaveVoiceOutcome,
+    CoreJokeOutcome, CorePlaybackControlOutcome, CorePreviewOutcome, CoreTtsOutcome,
+    CoreVoiceOutcome, JoinVoiceOutcome, LeaveVoiceOutcome,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +24,12 @@ pub enum CoreVoiceResponse {
     LaughBusy,
     LaughQueued,
     LaughFailed,
+    JokeNotInVoice,
+    JokeUnknownLanguage,
+    JokeRateLimited,
+    JokeBusy,
+    JokePlaying,
+    JokeFailed,
     SkipNotInVoice,
     SkipNothingPlaying,
     Skipped,
@@ -65,6 +71,7 @@ impl CoreVoiceResponse {
             | Self::JoinFailed
             | Self::LeaveFailed
             | Self::LaughFailed
+            | Self::JokeFailed
             | Self::SynthesisFailed
             | Self::PlaybackFailed
             | Self::StoreUnavailable => "error.generic",
@@ -84,6 +91,11 @@ impl CoreVoiceResponse {
             Self::LaughRateLimited => "tts.tooFast",
             Self::LaughBusy => "tts.busy",
             Self::LaughQueued => "laugh.playing",
+            Self::JokeNotInVoice => "tts.notInVoice",
+            Self::JokeUnknownLanguage => "joke.unknownLang",
+            Self::JokeRateLimited => "tts.tooFast",
+            Self::JokeBusy => "tts.busy",
+            Self::JokePlaying => "joke.playing",
             Self::Queued => "tts.queued",
             Self::PreviewNotInPlayer => "voice.notInVoice",
             Self::PreviewNotInSameVoice => "tts.notInVoice",
@@ -138,6 +150,19 @@ pub fn core_voice_response(outcome: CoreVoiceOutcome) -> CoreVoiceResponse {
         CoreVoiceOutcome::Laugh(CorePreviewOutcome::StoreUnavailable) => {
             CoreVoiceResponse::StoreUnavailable
         }
+        CoreVoiceOutcome::Joke(result) => match result.outcome {
+            CoreJokeOutcome::NotInPlayer | CoreJokeOutcome::NotInSameVoice => {
+                CoreVoiceResponse::JokeNotInVoice
+            }
+            CoreJokeOutcome::UnknownLanguage => CoreVoiceResponse::JokeUnknownLanguage,
+            CoreJokeOutcome::RateLimited => CoreVoiceResponse::JokeRateLimited,
+            CoreJokeOutcome::Busy => CoreVoiceResponse::JokeBusy,
+            CoreJokeOutcome::Queued => CoreVoiceResponse::JokePlaying,
+            CoreJokeOutcome::SynthesisFailed | CoreJokeOutcome::PlaybackFailed => {
+                CoreVoiceResponse::JokeFailed
+            }
+            CoreJokeOutcome::StoreUnavailable => CoreVoiceResponse::StoreUnavailable,
+        },
         CoreVoiceOutcome::Skipped(CorePlaybackControlOutcome::NotInVoice) => {
             CoreVoiceResponse::SkipNotInVoice
         }
@@ -228,6 +253,13 @@ mod tests {
         assert_eq!(
             core_voice_response(CoreVoiceOutcome::Laugh(CorePreviewOutcome::Queued)),
             CoreVoiceResponse::LaughQueued
+        );
+        assert_eq!(
+            core_voice_response(CoreVoiceOutcome::Joke(crate::CoreJokeResult {
+                outcome: CoreJokeOutcome::Queued,
+                joke: Some("joke".into()),
+            })),
+            CoreVoiceResponse::JokePlaying
         );
     }
 

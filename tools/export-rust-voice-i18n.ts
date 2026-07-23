@@ -121,6 +121,8 @@ const KEYS = [
   'tts.queued',
   'tts.busy',
   'laugh.playing',
+  'joke.playing',
+  'joke.unknownLang',
   'ttsFile.tooLong',
   'ttsFile.unavailable',
   'ttsFile.ready',

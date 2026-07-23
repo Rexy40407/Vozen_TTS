@@ -17,6 +17,11 @@ pub enum CoreVoiceCommand {
     Leave,
     /// `/laugh` uses the caller's resolved voice but otherwise shares the core call path.
     Laugh,
+    /// `/joke` chooses a language-specific voice and optionally appends a delayed laugh.
+    Joke {
+        language: String,
+        laughter: bool,
+    },
     Skip,
     ShutUp,
     /// The raw argument is kept only for this interaction. Cleaning, rate limiting and all
@@ -41,6 +46,14 @@ pub enum CoreVoiceCommandError {
     InvalidText,
     #[error("the promoted voice command contains an undeclared option")]
     UnexpectedOption,
+    #[error("the joke command is missing its required language option")]
+    MissingLanguage,
+    #[error("the joke command has a non-string language option")]
+    InvalidLanguage,
+    #[error("the joke command is missing its required laughter option")]
+    MissingLaughter,
+    #[error("the joke command has a non-boolean laughter option")]
+    InvalidLaughter,
 }
 
 /// Parses only the promoted root commands. A contract-valid command from another area, or a
@@ -57,13 +70,16 @@ pub fn parse_promoted_core_voice(
         }
         return parse_voice_preview(&command.options).map(Some);
     }
-    if area != CommandArea::CoreVoice && !(command.name == "laugh" && area == CommandArea::Fun) {
+    if area != CommandArea::CoreVoice
+        && !(matches!(command.name.as_str(), "laugh" | "joke") && area == CommandArea::Fun)
+    {
         return Ok(None);
     }
     match command.name.as_str() {
         "join" => Ok(Some(CoreVoiceCommand::Join)),
         "leave" => Ok(Some(CoreVoiceCommand::Leave)),
         "laugh" => Ok(Some(CoreVoiceCommand::Laugh)),
+        "joke" => parse_joke(&command.options).map(Some),
         "skip" => Ok(Some(CoreVoiceCommand::Skip)),
         "shut-up" => Ok(Some(CoreVoiceCommand::ShutUp)),
         "tts" => {
@@ -84,6 +100,35 @@ pub fn parse_promoted_core_voice(
         }
         _ => Ok(None),
     }
+}
+
+fn parse_joke(
+    options: &[serenity::model::application::CommandDataOption],
+) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
+    if options.len() != 2
+        || options
+            .iter()
+            .any(|option| option.name != "language" && option.name != "laughter")
+    {
+        return Err(CoreVoiceCommandError::UnexpectedOption);
+    }
+    let language = options
+        .iter()
+        .find(|option| option.name == "language")
+        .ok_or(CoreVoiceCommandError::MissingLanguage)
+        .and_then(|option| match &option.value {
+            CommandDataOptionValue::String(language) => Ok(language.clone()),
+            _ => Err(CoreVoiceCommandError::InvalidLanguage),
+        })?;
+    let laughter = options
+        .iter()
+        .find(|option| option.name == "laughter")
+        .ok_or(CoreVoiceCommandError::MissingLaughter)
+        .and_then(|option| match option.value {
+            CommandDataOptionValue::Boolean(laughter) => Ok(laughter),
+            _ => Err(CoreVoiceCommandError::InvalidLaughter),
+        })?;
+    Ok(CoreVoiceCommand::Joke { language, laughter })
 }
 
 fn parse_voice_preview(
@@ -143,6 +188,13 @@ mod tests {
             ))
             .expect("laugh"),
             Some(CoreVoiceCommand::Laugh)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"joke","type":1,"options":[{"name":"language","type":3,"value":"pt"},{"name":"laughter","type":5,"value":true}]}"#
+            ))
+            .expect("joke"),
+            Some(CoreVoiceCommand::Joke { language: "pt".into(), laughter: true })
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
@@ -213,6 +265,28 @@ mod tests {
                 r#"{"id":"1","name":"voice","type":1,"options":[{"name":"preview","type":1,"options":[{"name":"model","type":4,"value":42}]}]}"#,
             )),
             Err(CoreVoiceCommandError::InvalidText)
+        );
+    }
+
+    #[test]
+    fn rejects_missing_or_forged_joke_arguments() {
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"joke","type":1,"options":[]}"#
+            )),
+            Err(CoreVoiceCommandError::UnexpectedOption)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"joke","type":1,"options":[{"name":"language","type":3,"value":"pt"},{"name":"laughter","type":3,"value":"yes"}]}"#
+            )),
+            Err(CoreVoiceCommandError::InvalidLaughter)
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"joke","type":1,"options":[{"name":"language","type":4,"value":1},{"name":"laughter","type":5,"value":false}]}"#
+            )),
+            Err(CoreVoiceCommandError::InvalidLanguage)
         );
     }
 }

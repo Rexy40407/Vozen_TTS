@@ -159,6 +159,15 @@ fn laugh_for_prefix(prefix: &str) -> Laugh {
     }
 }
 
+/// Returns the same spaced, language-prefix-aware laughter as the Node implementation.
+#[must_use]
+pub fn laughter_for_prefix(prefix: &str) -> String {
+    let laugh = laugh_for_prefix(prefix);
+    std::iter::repeat_n(laugh.unit, laugh.count)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Returns the same spaced, model-locale-aware laughter as the Node implementation.
 #[must_use]
 pub fn laughter_for_model(model: &str) -> String {
@@ -166,10 +175,7 @@ pub fn laughter_for_model(model: &str) -> String {
         .split_once('_')
         .map(|(language, _)| format!("{language}_"))
         .unwrap_or_default();
-    let laugh = laugh_for_prefix(&prefix);
-    std::iter::repeat_n(laugh.unit, laugh.count)
-        .collect::<Vec<_>>()
-        .join(" ")
+    laughter_for_prefix(&prefix)
 }
 
 #[cfg(test)]

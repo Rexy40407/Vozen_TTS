@@ -111,6 +111,7 @@ impl<T, S, P> CoreVoiceInteractionExecutor<T, S, P> {
             Some(
                 crate::CoreVoiceCommand::Tts { .. }
                     | crate::CoreVoiceCommand::Laugh
+                    | crate::CoreVoiceCommand::Joke { .. }
                     | crate::CoreVoiceCommand::VoicePreview { .. },
             )
         ))
@@ -140,6 +141,7 @@ where
             command,
             crate::CoreVoiceCommand::Tts { .. }
                 | crate::CoreVoiceCommand::Laugh
+                | crate::CoreVoiceCommand::Joke { .. }
                 | crate::CoreVoiceCommand::VoicePreview { .. }
         );
         let outcome = if let crate::CoreVoiceCommand::VoicePreview { model } = &command {
@@ -192,6 +194,10 @@ where
         BTreeMap<&'static str, String>,
         Option<String>,
     ) {
+        let joke_text = match &outcome {
+            CoreVoiceOutcome::Joke(result) => result.joke.clone(),
+            _ => None,
+        };
         let mut response = core_voice_response(outcome);
         let guild = self
             .store
@@ -233,6 +239,9 @@ where
                 );
             };
             parameters.insert("channel", channel_mention(&voice_channel_id));
+        }
+        if let Some(joke) = joke_text {
+            parameters.insert("joke", joke);
         }
         (response, parameters, guild_locale)
     }

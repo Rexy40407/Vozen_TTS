@@ -20,7 +20,8 @@ use vozen_store::{SqliteStore, UserEngine};
 use crate::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline, CoreVoiceCommand,
     GatewayState, GuildSynthesisCoordinator, JoinVoiceOutcome, LeaveVoiceOutcome,
-    VoiceSessionService, VoiceSessionTransport, laughter_for_model,
+    VoiceSessionService, VoiceSessionTransport, joke_lang_by_key, laughter_for_model,
+    laughter_for_prefix, pick_joke,
 };
 
 #[derive(Debug, Error)]
@@ -111,11 +112,31 @@ pub enum CorePreviewOutcome {
     StoreUnavailable,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CoreJokeOutcome {
+    NotInPlayer,
+    NotInSameVoice,
+    UnknownLanguage,
+    RateLimited,
+    Busy,
+    Queued,
+    SynthesisFailed,
+    PlaybackFailed,
+    StoreUnavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoreJokeResult {
+    pub outcome: CoreJokeOutcome,
+    pub joke: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CoreVoiceOutcome {
     Joined(JoinVoiceOutcome),
     Left(LeaveVoiceOutcome),
     Laugh(CorePreviewOutcome),
+    Joke(CoreJokeResult),
     Tts(CoreTtsOutcome),
     Preview(CorePreviewOutcome),
     Skipped(CorePlaybackControlOutcome),
@@ -231,6 +252,9 @@ where
             }
             CoreVoiceCommand::Laugh => {
                 CoreVoiceOutcome::Laugh(self.execute_laugh(invocation).await)
+            }
+            CoreVoiceCommand::Joke { language, laughter } => {
+                CoreVoiceOutcome::Joke(self.execute_joke(invocation, language, *laughter).await)
             }
             CoreVoiceCommand::Skip => {
                 CoreVoiceOutcome::Skipped(self.skip(invocation.guild_id).await)
@@ -459,6 +483,269 @@ where
         let sample = laughter_for_model(&model);
         self.execute_preview(invocation, Some(&model), &sample)
             .await
+    }
+
+    /// `/joke` keeps Node's language-first model selection and queues the optional laugh as a
+    /// separate utterance with one second of lead silence. The second item is best-effort, while
+    /// the joke itself determines the public success response.
+    async fn execute_joke(
+        &self,
+        invocation: CoreVoiceInvocation<'_>,
+        language: &str,
+        laughter: bool,
+    ) -> CoreJokeResult {
+        let playback_state = match self.playback.state(invocation.guild_id).await {
+            Ok(state) => state,
+            Err(_) => {
+                return CoreJokeResult {
+                    outcome: CoreJokeOutcome::NotInPlayer,
+                    joke: None,
+                };
+            }
+        };
+        if matches!(playback_state, CommandPlaybackState::NoSession) {
+            return CoreJokeResult {
+                outcome: CoreJokeOutcome::NotInPlayer,
+                joke: None,
+            };
+        }
+
+        let roles = invocation
+            .member_role_ids
+            .map(|roles| roles.iter().map(String::as_str).collect::<Vec<_>>());
+        let (model, speed, engine, lane, joke) = {
+            let store = match self.store.lock() {
+                Ok(store) => store,
+                Err(_) => {
+                    return CoreJokeResult {
+                        outcome: CoreJokeOutcome::StoreUnavailable,
+                        joke: None,
+                    };
+                }
+            };
+            let config = match store.guild_config(invocation.guild_id) {
+                Ok(config) => config,
+                Err(_) => {
+                    return CoreJokeResult {
+                        outcome: CoreJokeOutcome::StoreUnavailable,
+                        joke: None,
+                    };
+                }
+            };
+            let policy = RolePolicy {
+                priority_role_id: config.priority_role_id.as_deref(),
+                blocked_role_id: config.blocked_role_id.as_deref(),
+            };
+            let lane = match admit_user_speech(
+                self.gateway_state
+                    .voice_channel_id(invocation.guild_id, invocation.user_id)
+                    .as_deref(),
+                self.gateway_state
+                    .bot_voice_channel_id(invocation.guild_id)
+                    .as_deref(),
+                roles.as_deref(),
+                policy,
+            ) {
+                UserSpeechAdmission::Allowed { lane } => lane,
+                UserSpeechAdmission::Denied { .. } => {
+                    return CoreJokeResult {
+                        outcome: CoreJokeOutcome::NotInSameVoice,
+                        joke: None,
+                    };
+                }
+            };
+            if joke_lang_by_key(language).is_none() {
+                return CoreJokeResult {
+                    outcome: CoreJokeOutcome::UnknownLanguage,
+                    joke: None,
+                };
+            }
+            let allowed = match self.preview_limiters.lock() {
+                Ok(mut limiters) => limiters.allow(
+                    invocation.guild_id,
+                    invocation.user_id,
+                    config.rate_per_min,
+                    (self.now_ms)(),
+                ),
+                Err(_) => {
+                    return CoreJokeResult {
+                        outcome: CoreJokeOutcome::StoreUnavailable,
+                        joke: None,
+                    };
+                }
+            };
+            if !allowed {
+                return CoreJokeResult {
+                    outcome: CoreJokeOutcome::RateLimited,
+                    joke: None,
+                };
+            }
+            let stored = match store.get_user_voice(invocation.guild_id, invocation.user_id) {
+                Ok(stored) => stored,
+                Err(_) => {
+                    return CoreJokeResult {
+                        outcome: CoreJokeOutcome::StoreUnavailable,
+                        joke: None,
+                    };
+                }
+            };
+            let prefix = joke_lang_by_key(language)
+                .expect("validated joke language")
+                .prefix;
+            let model = self
+                .settings
+                .available_models
+                .iter()
+                .find(|model| model.starts_with(prefix))
+                .cloned()
+                .or_else(|| {
+                    (!config.default_voice.trim().is_empty()).then(|| config.default_voice.clone())
+                })
+                .unwrap_or_else(|| {
+                    if self.settings.default_voice.trim().is_empty() {
+                        "en_US-amy-medium".to_owned()
+                    } else {
+                        self.settings.default_voice.clone()
+                    }
+                });
+            let engine = resolve_preview_engine(
+                &store,
+                invocation.guild_id,
+                invocation.user_id,
+                stored.as_ref().map(|voice| voice.engine),
+                (self.now_ms)(),
+            );
+            let joke = pick_joke(language, (self.now_ms)()).to_owned();
+            (model, self.settings.default_speed, engine, lane, joke)
+        };
+
+        let joke_request = SynthRequest {
+            text: joke.clone(),
+            model: model.clone(),
+            speed,
+            engine,
+            segments: None,
+            single_voice: Some(true),
+            emphasis_source: None,
+            lead_silence_ms: 0,
+        };
+        let queued = match self
+            .enqueue_synth_request(invocation.guild_id, invocation.user_id, lane, joke_request)
+            .await
+        {
+            CorePreviewOutcome::Queued => true,
+            CorePreviewOutcome::Busy => {
+                return CoreJokeResult {
+                    outcome: CoreJokeOutcome::Busy,
+                    joke: Some(joke),
+                };
+            }
+            CorePreviewOutcome::SynthesisFailed => {
+                return CoreJokeResult {
+                    outcome: CoreJokeOutcome::SynthesisFailed,
+                    joke: Some(joke),
+                };
+            }
+            CorePreviewOutcome::PlaybackFailed => {
+                return CoreJokeResult {
+                    outcome: CoreJokeOutcome::PlaybackFailed,
+                    joke: Some(joke),
+                };
+            }
+            CorePreviewOutcome::NotInPlayer => {
+                return CoreJokeResult {
+                    outcome: CoreJokeOutcome::NotInPlayer,
+                    joke: Some(joke),
+                };
+            }
+            CorePreviewOutcome::NotInSameVoice
+            | CorePreviewOutcome::RateLimited
+            | CorePreviewOutcome::UnknownModel
+            | CorePreviewOutcome::StoreUnavailable => {
+                return CoreJokeResult {
+                    outcome: CoreJokeOutcome::PlaybackFailed,
+                    joke: Some(joke),
+                };
+            }
+        };
+        if queued && laughter {
+            let laugh_request = SynthRequest {
+                text: laughter_for_prefix(
+                    joke_lang_by_key(language)
+                        .expect("validated joke language")
+                        .prefix,
+                ),
+                model,
+                speed,
+                engine,
+                segments: None,
+                single_voice: Some(true),
+                emphasis_source: None,
+                lead_silence_ms: 1_000,
+            };
+            let _ = self
+                .enqueue_synth_request(invocation.guild_id, invocation.user_id, lane, laugh_request)
+                .await;
+        }
+        CoreJokeResult {
+            outcome: CoreJokeOutcome::Queued,
+            joke: Some(joke),
+        }
+    }
+
+    async fn enqueue_synth_request(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        lane: QueueLane,
+        request: SynthRequest,
+    ) -> CorePreviewOutcome {
+        let admitted_generation = self.synthesis.admission_generation(guild_id);
+        let mut synthesis = self.synthesis.acquire(guild_id, admitted_generation).await;
+        if synthesis.was_cleared() {
+            return CorePreviewOutcome::PlaybackFailed;
+        }
+        synthesis.activate();
+        match self.playback.reserve(guild_id, lane).await {
+            Ok(true) => {}
+            Ok(false) => return CorePreviewOutcome::Busy,
+            Err(_) => return CorePreviewOutcome::PlaybackFailed,
+        }
+        if synthesis.cancelled() {
+            let _ = self.playback.cancel_reservation(guild_id, lane).await;
+            return CorePreviewOutcome::PlaybackFailed;
+        }
+        let wav = match self.synthesizer.synthesize(&request).await {
+            Ok(wav) => wav,
+            Err(_) => {
+                let _ = self.playback.cancel_reservation(guild_id, lane).await;
+                return CorePreviewOutcome::SynthesisFailed;
+            }
+        };
+        if synthesis.cancelled() {
+            let _ = self.playback.cancel_reservation(guild_id, lane).await;
+            return CorePreviewOutcome::PlaybackFailed;
+        }
+        match self
+            .playback
+            .enqueue_reserved(
+                guild_id,
+                &wav,
+                QueueEnqueueOptions {
+                    author_id: Some(user_id),
+                    source: QueueSource::Command,
+                    lane,
+                    created_at_ms: (self.now_ms)().max(0) as u64,
+                },
+            )
+            .await
+        {
+            Ok(()) => CorePreviewOutcome::Queued,
+            Err(_) => {
+                let _ = self.playback.cancel_reservation(guild_id, lane).await;
+                CorePreviewOutcome::PlaybackFailed
+            }
+        }
     }
 
     async fn skip(&self, guild_id: &str) -> CorePlaybackControlOutcome {
@@ -711,15 +998,20 @@ mod tests {
     struct FakeSynthesizer {
         calls: AtomicUsize,
         fails: bool,
+        requests: Mutex<Vec<SynthRequest>>,
     }
 
     #[async_trait]
     impl CommandSpeechSynthesizer for FakeSynthesizer {
         async fn synthesize(
             &self,
-            _request: &SynthRequest,
+            request: &SynthRequest,
         ) -> Result<PathBuf, CommandSynthesisError> {
             self.calls.fetch_add(1, Ordering::Relaxed);
+            self.requests
+                .lock()
+                .expect("requests")
+                .push(request.clone());
             if self.fails {
                 return Err(CommandSynthesisError);
             }
@@ -942,6 +1234,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn joke_queues_the_selected_language_and_delayed_language_laughter() {
+        let (service, _, state) = service(true);
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        let outcome = service
+            .execute(
+                invocation(),
+                &CoreVoiceCommand::Joke {
+                    language: "pt".into(),
+                    laughter: true,
+                },
+            )
+            .await;
+        assert_eq!(
+            outcome,
+            CoreVoiceOutcome::Joke(CoreJokeResult {
+                outcome: CoreJokeOutcome::Queued,
+                joke: Some(pick_joke("pt", 0).into()),
+            })
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 2);
+        let requests = service.synthesizer.requests.lock().expect("requests");
+        assert_eq!(requests[0].text, pick_joke("pt", 0));
+        assert_eq!(requests[0].lead_silence_ms, 0);
+        assert_eq!(requests[1].text, laughter_for_prefix("pt_"));
+        assert_eq!(requests[1].lead_silence_ms, 1_000);
+    }
+
+    #[tokio::test]
+    async fn joke_rejects_unknown_language_without_spending_synthesis_or_queue_capacity() {
+        let (service, _, state) = service(true);
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::Joke {
+                        language: "made-up".into(),
+                        laughter: false,
+                    },
+                )
+                .await,
+            CoreVoiceOutcome::Joke(CoreJokeResult {
+                outcome: CoreJokeOutcome::UnknownLanguage,
+                joke: None,
+            })
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
+        assert_eq!(service.playback.reservations.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
     async fn tts_prepares_then_queues_in_the_effective_priority_lane() {
         let (service, store, state) = service(true);
         store
@@ -1010,6 +1355,7 @@ mod tests {
             FakeSynthesizer {
                 calls: AtomicUsize::new(0),
                 fails: true,
+                requests: Mutex::new(Vec::new()),
             },
             FakePlayback {
                 accepted: true,

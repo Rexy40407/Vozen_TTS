@@ -69,6 +69,7 @@ mod guild_synthesis_coordinator;
 mod help_command;
 mod interaction_dispatch;
 mod invite_command;
+mod joke_text;
 mod laugh_text;
 mod message_admission;
 mod message_interaction;
@@ -196,8 +197,9 @@ pub use core_voice_interaction::CoreVoiceInteractionFacts;
 pub use core_voice_response::{CoreVoiceResponse, core_voice_response};
 pub use core_voice_service::{
     CommandPlaybackError, CommandPlaybackState, CommandSpeechSynthesizer, CommandSynthesisError,
-    CommandVoicePlayback, CorePlaybackControlOutcome, CorePreviewOutcome, CoreTtsOutcome,
-    CoreVoiceInvocation, CoreVoiceOutcome, CoreVoiceService, CoreVoiceSettings,
+    CommandVoicePlayback, CoreJokeOutcome, CoreJokeResult, CorePlaybackControlOutcome,
+    CorePreviewOutcome, CoreTtsOutcome, CoreVoiceInvocation, CoreVoiceOutcome, CoreVoiceService,
+    CoreVoiceSettings,
 };
 pub use dashboard_options::{
     DiscordDashboardOption, DiscordDashboardOptions, DiscordDashboardOptionsProvider,
@@ -221,7 +223,8 @@ pub use interaction_dispatch::{
     DispatchOutcome, InteractionDispatchError, InteractionHandler, dispatch_interaction,
 };
 pub use invite_command::{InviteCommand, InviteCommandError, parse_invite_command};
-pub use laugh_text::laughter_for_model;
+pub use joke_text::{JOKE_LANGUAGES, JokeLanguage, joke_lang_by_key, pick_joke};
+pub use laugh_text::{laughter_for_model, laughter_for_prefix};
 pub use message_admission::{DiscordMessageFacts, admit_discord_message};
 pub use message_interaction::DiscordMessageFactsOwned;
 pub use message_media::collect_message_media;
