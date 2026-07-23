@@ -1254,6 +1254,29 @@ mod tests {
     }
 
     #[test]
+    fn admin_promotion_fails_closed_without_the_premium_http_listener() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let result = build_http_router(
+            None,
+            None,
+            Some(AdminRuntimeOptions {
+                panel_origin: "https://admin.example".into(),
+                session_secret: Some("01234567890123456789012345678901".into()),
+                owner_id: Some("123456789012345678".into()),
+                client_id: Some("123456789012345678".into()),
+            }),
+            None,
+            None,
+            store,
+            GatewayState::default(),
+        );
+        assert!(matches!(
+            result,
+            Err(RuntimeError::AdminRequiresPremiumHttp)
+        ));
+    }
+
+    #[test]
     fn rust_message_autoread_is_exactly_opt_in() {
         assert!(message_autoread_enabled(Some("true")));
         assert!(message_autoread_enabled(Some(" TRUE ")));
