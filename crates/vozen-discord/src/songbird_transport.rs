@@ -44,6 +44,18 @@ impl VoiceSessionTransport for SongbirdVoiceSessionTransport {
             .join(GuildId::new(guild_id), ChannelId::new(channel_id))
             .await
             .map_err(|_| VoiceSessionTransportError::Failed)?;
+        // Songbird only decodes incoming Opus when explicitly configured. Keep this opt-in so a
+        // normal Rust voice canary does not pay the receive CPU cost or collect audio; the live
+        // STT promotion enables it with `RUST_TRANSCRIBE_LIVE_ENABLED=true` and installs its
+        // consent-gated receiver on the same call.
+        if live_receive_enabled() {
+            if let Some(call) = manager.get(GuildId::new(guild_id)) {
+                let mut handler = call.lock().await;
+                handler.set_config(songbird::Config::default().decode_mode(
+                    songbird::driver::DecodeMode::Decode(songbird::driver::DecodeConfig::default()),
+                ));
+            }
+        }
         // Discord places bots in Stage channels as audience by default. Match Node's best-effort
         // behaviour: first self-promote, then request to speak if a moderator must approve it.
         // A Stage moderation failure never invalidates an otherwise successful voice join.
@@ -61,6 +73,13 @@ impl VoiceSessionTransport for SongbirdVoiceSessionTransport {
             .await
             .map_err(|_| VoiceSessionTransportError::Failed)
     }
+}
+
+#[cfg(feature = "voice-driver")]
+fn live_receive_enabled() -> bool {
+    std::env::var("RUST_TRANSCRIBE_LIVE_ENABLED")
+        .ok()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
 #[cfg(feature = "voice-driver")]

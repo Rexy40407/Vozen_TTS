@@ -125,11 +125,13 @@ mod translate_message_command;
 mod translation_command;
 mod translation_preference_command;
 mod uptime_command;
+mod utterance_collector;
 mod voice_display;
 mod voice_i18n;
 mod voice_playback;
 mod voice_preference_command;
 mod voice_preference_service;
+mod voice_receiver;
 mod voice_session;
 mod vote_command;
 mod vozen_says_driver;
@@ -385,6 +387,7 @@ pub use translation_preference_command::{
     parse_translation_preference_command,
 };
 pub use uptime_command::{UptimeCommand, UptimeCommandError, parse_uptime_command};
+pub use utterance_collector::{Utterance, UtteranceCollector};
 pub use voice_display::{VoiceDisplayCatalog, VoiceDisplayError};
 pub use voice_i18n::{VoiceResponseLocalizer, VoiceResponseLocalizerError};
 pub use voice_playback::{
@@ -397,6 +400,9 @@ pub use voice_preference_service::{
     VoicePreferenceInvocation, VoicePreferenceOutcome, VoicePreferenceService,
     VoicePreferenceSettings,
 };
+#[cfg(feature = "voice-driver")]
+pub use voice_receiver::SongbirdVoiceReceiver;
+pub use voice_receiver::{ReceivedUtterance, VoiceReceiver};
 pub use voice_session::{
     JoinVoiceOutcome, LeaveVoiceOutcome, VoiceSessionService, VoiceSessionTransport,
     VoiceSessionTransportError,
