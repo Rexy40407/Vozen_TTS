@@ -98,6 +98,23 @@ impl GameSessionStore {
         self.sessions.remove(guild_id)
     }
 
+    /// Applies the Node `/game stop` authorization rule and removes the match only when the
+    /// caller is the starter or has Manage Guild. A denied stop leaves the session untouched.
+    pub fn stop_authorized(
+        &mut self,
+        guild_id: &str,
+        user_id: &str,
+        can_manage_guild: bool,
+    ) -> Result<Option<GameSession>, GameStopDenied> {
+        let Some(session) = self.sessions.get(guild_id) else {
+            return Ok(None);
+        };
+        if !can_manage_guild && session.starter_id != user_id {
+            return Err(GameStopDenied);
+        }
+        Ok(self.sessions.remove(guild_id))
+    }
+
     pub fn on_voice_left(&mut self, guild_id: &str) -> Option<GameSession> {
         let should_stop = self
             .sessions
@@ -120,6 +137,9 @@ impl GameSessionStore {
         self.finish(guild_id).map(|session| session.scores)
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GameStopDenied;
 
 #[cfg(test)]
 mod tests {
@@ -198,5 +218,31 @@ mod tests {
         );
         assert!(!store.active("guild"));
         assert_eq!(store.finish_scores("guild"), None);
+    }
+
+    #[test]
+    fn stop_authorization_is_scoped_and_denial_preserves_the_match() {
+        let mut store = GameSessionStore::default();
+        store.start(session(false));
+        assert_eq!(
+            store.stop_authorized("guild", "other", false),
+            Err(GameStopDenied)
+        );
+        assert!(store.active("guild"));
+        assert!(
+            store
+                .stop_authorized("guild", "starter", false)
+                .expect("starter may stop")
+                .is_some()
+        );
+
+        store.start(session(false));
+        assert!(
+            store
+                .stop_authorized("guild", "manager", true)
+                .expect("manager may stop")
+                .is_some()
+        );
+        assert_eq!(store.stop_authorized("guild", "missing", true), Ok(None));
     }
 }

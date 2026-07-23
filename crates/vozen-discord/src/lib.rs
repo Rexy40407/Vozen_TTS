@@ -250,7 +250,7 @@ pub use game_play_admission::{
     GamePlayAdmission, GamePlayAdmissionFacts, admit_game_play, game_definition,
 };
 pub use game_score_command::{GameScoreCommand, GameScoreCommandError, parse_game_score_command};
-pub use game_session::{GameScore, GameSession, GameSessionStore, StartGameResult};
+pub use game_session::{GameScore, GameSession, GameSessionStore, GameStopDenied, StartGameResult};
 pub use gateway_composite::CompositeGatewayEventSink;
 pub use guild_synthesis_coordinator::GuildSynthesisCoordinator;
 pub use heads_or_tails_session::{HeadsOrTailsMessage, HeadsOrTailsSession, HeadsOrTailsStart};
