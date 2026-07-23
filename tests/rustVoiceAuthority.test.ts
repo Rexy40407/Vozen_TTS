@@ -10,6 +10,7 @@ import {
   rustConfigRoleOwnsCommand,
   rustConfigDefaultVoiceOwnsCommand,
   rustConfigChannelOwnsCommand,
+  rustConfigQueueRolesOwnCommand,
   rustConfigTogglesOwnCommand,
   rustVoiceOwnsAutoRead,
   rustVoiceOwnsCommand,
@@ -95,6 +96,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigChannelOwnsCommand('config', 'tts-channel', 'true')).toBe(true);
     expect(rustConfigChannelOwnsCommand('config', 'auto-read', 'true')).toBe(false);
     expect(rustConfigChannelOwnsCommand('voice', 'tts-channel', 'true')).toBe(false);
+  });
+
+  it('promotes both queue-role leaves behind one conflict-aware canary', () => {
+    expect(rustConfigQueueRolesOwnCommand('config', 'priority-role')).toBe(false);
+    expect(rustConfigQueueRolesOwnCommand('config', 'priority-role', 'true')).toBe(true);
+    expect(rustConfigQueueRolesOwnCommand('config', 'blocked-role', 'true')).toBe(true);
+    expect(rustConfigQueueRolesOwnCommand('config', 'role', 'true')).toBe(false);
+    expect(rustConfigQueueRolesOwnCommand('voice', 'priority-role', 'true')).toBe(false);
   });
 
   it('keeps Node message ownership unless both explicit migration flags are set', () => {

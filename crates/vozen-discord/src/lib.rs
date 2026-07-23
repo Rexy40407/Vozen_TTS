@@ -36,6 +36,8 @@ mod config_language_command;
 mod config_language_service;
 mod config_numeric_command;
 mod config_numeric_service;
+mod config_queue_role_command;
+mod config_queue_role_service;
 mod config_role_command;
 mod config_role_service;
 mod config_toggle_command;
@@ -111,6 +113,14 @@ pub use config_numeric_command::{
 };
 pub use config_numeric_service::{
     ConfigNumericFailure, ConfigNumericInvocation, ConfigNumericOutcome, ConfigNumericService,
+};
+pub use config_queue_role_command::{
+    ConfigQueueRoleCommand, ConfigQueueRoleCommandError, ConfigQueueRoleSetting,
+    parse_config_queue_role_command,
+};
+pub use config_queue_role_service::{
+    ConfigQueueRoleFailure, ConfigQueueRoleInvocation, ConfigQueueRoleOutcome,
+    ConfigQueueRoleService,
 };
 pub use config_role_command::{
     ConfigRoleCommand, ConfigRoleCommandError, parse_config_role_command,

@@ -848,6 +848,21 @@ export const catalog: Record<string, Entry> = {
     en: 'Role restriction removed — everyone can be read now.',
     pt: 'Restricao de role removida: todos podem ser lidos.',
   },
+  'config.priorityRoleSet': {
+    en: 'Accessibility queue priority set to {role}.',
+  },
+  'config.priorityRoleCleared': {
+    en: 'Accessibility queue priority role cleared.',
+  },
+  'config.blockedRoleSet': {
+    en: 'Queue block set to {role}.',
+  },
+  'config.blockedRoleCleared': {
+    en: 'Queue block role cleared.',
+  },
+  'config.rolesConflict': {
+    en: 'Choose a different role: a role cannot be both priority and blocked.',
+  },
   'config.enabledOn': {
     en: 'TTS is now **on** for this server.',
     pt: 'TTS **ativado** neste servidor.',

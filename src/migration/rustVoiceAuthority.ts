@@ -137,6 +137,19 @@ export function rustConfigChannelOwnsCommand(
   );
 }
 
+/** Priority and blocked role leaves share a cross-field conflict check and one canary. */
+export function rustConfigQueueRolesOwnCommand(
+  commandName: string,
+  subcommand: string | null,
+  enabled = process.env.RUST_CONFIG_QUEUE_ROLES_ENABLED,
+): boolean {
+  return (
+    enabled?.trim().toLowerCase() === 'true' &&
+    commandName === 'config' &&
+    (subcommand === 'priority-role' || subcommand === 'blocked-role')
+  );
+}
+
 /** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
  * reject startup because the shared default engine is gTTS, neural or a router. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {

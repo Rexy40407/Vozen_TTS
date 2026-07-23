@@ -143,7 +143,12 @@
     "config.defaultVoiceSet",
     "config.channelWrongType",
     "config.channelNoAccess",
-    "config.channelSet"
+    "config.channelSet",
+    "config.priorityRoleSet",
+    "config.priorityRoleCleared",
+    "config.blockedRoleSet",
+    "config.blockedRoleCleared",
+    "config.rolesConflict"
   ],
   "messages": {
     "en": {
@@ -250,7 +255,12 @@
       "config.defaultVoiceSet": "✅ Server default voice set to **{name}**. Members without their own voice will hear this one. (id: `{model}`)",
       "config.channelWrongType": "Pick a text channel (not a voice channel or a category).",
       "config.channelNoAccess": "I can't see {channel} — please check my permissions there.",
-      "config.channelSet": "Auto-read channel set to {channel}. Next: make sure auto-read is on with `/config auto-read active:true`."
+      "config.channelSet": "Auto-read channel set to {channel}. Next: make sure auto-read is on with `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "pt": {
       "error.generic": "Ocorreu um erro. Tenta outra vez.",
@@ -356,7 +366,12 @@
       "config.defaultVoiceSet": "✅ Voz default do servidor: **{name}**. Os membros sem voz própria vão ouvir esta. (id: `{model}`)",
       "config.channelWrongType": "Escolhe um canal de texto (nao voz nem categoria).",
       "config.channelNoAccess": "Nao tenho acesso a {channel} — verifica as minhas permissoes.",
-      "config.channelSet": "Canal de auto-leitura: {channel}. A seguir: confirma que a auto-leitura está ligada com `/config auto-read ativo:true`."
+      "config.channelSet": "Canal de auto-leitura: {channel}. A seguir: confirma que a auto-leitura está ligada com `/config auto-read ativo:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "es": {
       "error.generic": "Algo salió mal. Inténtalo de nuevo.",
@@ -462,7 +477,12 @@
       "config.defaultVoiceSet": "✅ Voz predeterminada del servidor configurada como **{name}**. Los miembros sin su propia voz escucharán esta. (id: `{model}`)",
       "config.channelWrongType": "Elige un canal de texto (no un canal de voz ni una categoría).",
       "config.channelNoAccess": "No puedo ver {channel}: revisa mis permisos ahí.",
-      "config.channelSet": "Canal de lectura automática configurado como {channel}. Siguiente: asegúrate de que la lectura automática esté activada con `/config auto-read active:true`."
+      "config.channelSet": "Canal de lectura automática configurado como {channel}. Siguiente: asegúrate de que la lectura automática esté activada con `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "fr": {
       "error.generic": "Une erreur s'est produite. Veuillez réessayer.",
@@ -568,7 +588,12 @@
       "config.defaultVoiceSet": "✅ Voix par défaut du serveur définie sur **{name}**. Les membres sans voix propre entendront celle-ci. (id : `{model}`)",
       "config.channelWrongType": "Choisissez un salon textuel (pas un salon vocal ni une catégorie).",
       "config.channelNoAccess": "Je ne vois pas {channel} — veuillez vérifier mes permissions là-bas.",
-      "config.channelSet": "Salon de lecture automatique défini sur {channel}. Ensuite : assurez-vous que la lecture automatique est activée avec `/config auto-read active:true`."
+      "config.channelSet": "Salon de lecture automatique défini sur {channel}. Ensuite : assurez-vous que la lecture automatique est activée avec `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "de": {
       "error.generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
@@ -674,7 +699,12 @@
       "config.defaultVoiceSet": "✅ Standardstimme des Servers auf **{name}** gesetzt. Mitglieder ohne eigene Stimme hören diese. (id: `{model}`)",
       "config.channelWrongType": "Wähle einen Textkanal (keinen Sprachkanal und keine Kategorie).",
       "config.channelNoAccess": "Ich kann {channel} nicht sehen — bitte überprüfe dort meine Berechtigungen.",
-      "config.channelSet": "Kanal für automatisches Vorlesen auf {channel} gesetzt. Als Nächstes: stelle sicher, dass das automatische Vorlesen mit `/config auto-read active:true` aktiviert ist."
+      "config.channelSet": "Kanal für automatisches Vorlesen auf {channel} gesetzt. Als Nächstes: stelle sicher, dass das automatische Vorlesen mit `/config auto-read active:true` aktiviert ist.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "nl": {
       "error.generic": "Er ging iets mis. Probeer het opnieuw.",
@@ -780,7 +810,12 @@
       "config.defaultVoiceSet": "✅ Standaardstem van de server ingesteld op **{name}**. Leden zonder eigen stem horen deze. (id: `{model}`)",
       "config.channelWrongType": "Kies een tekstkanaal (geen spraakkanaal of categorie).",
       "config.channelNoAccess": "Ik kan {channel} niet zien — controleer daar mijn rechten.",
-      "config.channelSet": "Kanaal voor automatisch voorlezen ingesteld op {channel}. Volgende: zorg dat automatisch voorlezen aanstaat met `/config auto-read active:true`."
+      "config.channelSet": "Kanaal voor automatisch voorlezen ingesteld op {channel}. Volgende: zorg dat automatisch voorlezen aanstaat met `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "pl": {
       "error.generic": "Coś poszło nie tak. Spróbuj ponownie.",
@@ -886,7 +921,12 @@
       "config.defaultVoiceSet": "✅ Domyślny głos serwera ustawiony na **{name}**. Członkowie bez własnego głosu usłyszą ten. (id: `{model}`)",
       "config.channelWrongType": "Wybierz kanał tekstowy (nie kanał głosowy ani kategorię).",
       "config.channelNoAccess": "Nie widzę kanału {channel} — sprawdź moje uprawnienia tam.",
-      "config.channelSet": "Kanał automatycznego czytania ustawiony na {channel}. Następnie: upewnij się, że automatyczne czytanie jest włączone za pomocą `/config auto-read active:true`."
+      "config.channelSet": "Kanał automatycznego czytania ustawiony na {channel}. Następnie: upewnij się, że automatyczne czytanie jest włączone za pomocą `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "tr": {
       "error.generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
@@ -992,7 +1032,12 @@
       "config.defaultVoiceSet": "✅ Sunucu varsayılan sesi **{name}** olarak ayarlandı. Kendi sesi olmayan üyeler bunu duyacak. (id: `{model}`)",
       "config.channelWrongType": "Bir metin kanalı seç (ses kanalı veya kategori değil).",
       "config.channelNoAccess": "{channel} kanalını göremiyorum — lütfen oradaki izinlerimi kontrol et.",
-      "config.channelSet": "Otomatik okuma kanalı {channel} olarak ayarlandı. Sıradaki: `/config auto-read active:true` ile otomatik okumanın açık olduğundan emin ol."
+      "config.channelSet": "Otomatik okuma kanalı {channel} olarak ayarlandı. Sıradaki: `/config auto-read active:true` ile otomatik okumanın açık olduğundan emin ol.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "cs": {
       "error.generic": "Něco se pokazilo. Zkuste to prosím znovu.",
@@ -1098,7 +1143,12 @@
       "config.defaultVoiceSet": "✅ Výchozí hlas serveru nastaven na **{name}**. Členové bez vlastního hlasu uslyší tento. (id: `{model}`)",
       "config.channelWrongType": "Vyber textový kanál (ne hlasový kanál ani kategorii).",
       "config.channelNoAccess": "Nevidím {channel} — zkontroluj prosím moje oprávnění tam.",
-      "config.channelSet": "Kanál pro automatické předčítání nastaven na {channel}. Dále: ujisti se, že je automatické předčítání zapnuté pomocí `/config auto-read active:true`."
+      "config.channelSet": "Kanál pro automatické předčítání nastaven na {channel}. Dále: ujisti se, že je automatické předčítání zapnuté pomocí `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "sv": {
       "error.generic": "Något gick fel. Försök igen.",
@@ -1204,7 +1254,12 @@
       "config.defaultVoiceSet": "✅ Serverns standardröst satt till **{name}**. Medlemmar utan egen röst hör den här. (id: `{model}`)",
       "config.channelWrongType": "Välj en textkanal (inte en röstkanal eller en kategori).",
       "config.channelNoAccess": "Jag kan inte se {channel} — kontrollera mina behörigheter där.",
-      "config.channelSet": "Kanal för automatisk uppläsning satt till {channel}. Nästa: se till att automatisk uppläsning är på med `/config auto-read active:true`."
+      "config.channelSet": "Kanal för automatisk uppläsning satt till {channel}. Nästa: se till att automatisk uppläsning är på med `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "fi": {
       "error.generic": "Jokin meni pieleen. Yritä uudelleen.",
@@ -1310,7 +1365,12 @@
       "config.defaultVoiceSet": "✅ Palvelimen oletusääneksi asetettu **{name}**. Jäsenet, joilla ei ole omaa ääntä, kuulevat tämän. (id: `{model}`)",
       "config.channelWrongType": "Valitse tekstikanava (ei puhekanava tai kategoria).",
       "config.channelNoAccess": "En näe kanavaa {channel} — tarkista oikeuteni siellä.",
-      "config.channelSet": "Automaattisen lukemisen kanavaksi asetettu {channel}. Seuraavaksi: varmista että automaattinen lukeminen on päällä komennolla `/config auto-read active:true`."
+      "config.channelSet": "Automaattisen lukemisen kanavaksi asetettu {channel}. Seuraavaksi: varmista että automaattinen lukeminen on päällä komennolla `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "da": {
       "error.generic": "Noget gik galt. Prøv venligst igen.",
@@ -1416,7 +1476,12 @@
       "config.defaultVoiceSet": "✅ Serverens standardstemme sat til **{name}**. Medlemmer uden deres egen stemme hører denne. (id: `{model}`)",
       "config.channelWrongType": "Vælg en tekstkanal (ikke en talekanal eller en kategori).",
       "config.channelNoAccess": "Jeg kan ikke se {channel} — tjek venligst mine tilladelser der.",
-      "config.channelSet": "Automatisk oplæsningskanal sat til {channel}. Næste: sørg for at automatisk oplæsning er slået til med `/config auto-read active:true`."
+      "config.channelSet": "Automatisk oplæsningskanal sat til {channel}. Næste: sørg for at automatisk oplæsning er slået til med `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "ro": {
       "error.generic": "Ceva n-a mers bine. Te rog încearcă din nou.",
@@ -1522,7 +1587,12 @@
       "config.defaultVoiceSet": "✅ Vocea implicită a serverului setată la **{name}**. Membrii fără voce proprie o vor auzi pe aceasta. (id: `{model}`)",
       "config.channelWrongType": "Alege un canal text (nu un canal de voce sau o categorie).",
       "config.channelNoAccess": "Nu pot vedea {channel} — te rog verifică permisiunile mele acolo.",
-      "config.channelSet": "Canalul de citire automată setat la {channel}. Mai departe: asigură-te că citirea automată e activă cu `/config auto-read active:true`."
+      "config.channelSet": "Canalul de citire automată setat la {channel}. Mai departe: asigură-te că citirea automată e activă cu `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "hu": {
       "error.generic": "Valami hiba történt. Kérlek, próbáld újra.",
@@ -1628,7 +1698,12 @@
       "config.defaultVoiceSet": "✅ A szerver alapértelmezett hangja beállítva: **{name}**. A saját hang nélküli tagok ezt fogják hallani. (id: `{model}`)",
       "config.channelWrongType": "Válassz egy szöveges csatornát (ne hangcsatornát vagy kategóriát).",
       "config.channelNoAccess": "Nem látom a(z) {channel} csatornát — kérlek, ellenőrizd az ottani jogosultságaimat.",
-      "config.channelSet": "Az automatikus felolvasás csatornája beállítva: {channel}. Következő: kapcsold be az automatikus felolvasást a `/config auto-read active:true` paranccsal."
+      "config.channelSet": "Az automatikus felolvasás csatornája beállítva: {channel}. Következő: kapcsold be az automatikus felolvasást a `/config auto-read active:true` paranccsal.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "cy": {
       "error.generic": "Aeth rhywbeth o'i le. Rho gynnig arall arni os gweli'n dda.",
@@ -1734,7 +1809,12 @@
       "config.defaultVoiceSet": "✅ Llais rhagosodedig y gweinydd wedi'i osod i **{name}**. Bydd aelodau heb eu llais eu hunain yn clywed hwn. (id: `{model}`)",
       "config.channelWrongType": "Dewisa sianel destun (nid sianel lais na chategori).",
       "config.channelNoAccess": "Alla i ddim gweld {channel} — gwiria fy nghaniatadau yno os gweli'n dda.",
-      "config.channelSet": "Sianel darllen awtomatig wedi'i gosod i {channel}. Nesaf: gwna'n siŵr fod darllen awtomatig ymlaen gyda `/config auto-read active:true`."
+      "config.channelSet": "Sianel darllen awtomatig wedi'i gosod i {channel}. Nesaf: gwna'n siŵr fod darllen awtomatig ymlaen gyda `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "is": {
       "error.generic": "Eitthvað fór úrskeiðis. Reyndu aftur.",
@@ -1840,7 +1920,12 @@
       "config.defaultVoiceSet": "✅ Sjálfgefin rödd netþjóns stillt á **{name}**. Meðlimir án eigin raddar heyra þessa. (id: `{model}`)",
       "config.channelWrongType": "Veldu textarás (ekki talrás eða flokk).",
       "config.channelNoAccess": "Ég sé ekki {channel} — athugaðu heimildir mínar þar.",
-      "config.channelSet": "Sjálflesin rás stillt á {channel}. Næst: gakktu úr skugga um að sjálflestur sé kveikur með `/config auto-read active:true`."
+      "config.channelSet": "Sjálflesin rás stillt á {channel}. Næst: gakktu úr skugga um að sjálflestur sé kveikur með `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "lb": {
       "error.generic": "Eppes ass schiefgaangen. Probéier w.e.g. nach eng Kéier.",
@@ -1946,7 +2031,12 @@
       "config.defaultVoiceSet": "✅ Standardstëmm vum Server op **{name}** gesat. Memberen ouni eege Stëmm héieren dës. (id: `{model}`)",
       "config.channelWrongType": "Wiel en Textkanal (net e Sproochkanal oder eng Kategorie).",
       "config.channelNoAccess": "Ech kann {channel} net gesinn — kuck w.e.g. meng Berechtegungen do no.",
-      "config.channelSet": "Automatesche Virliesekanal op {channel} gesat. Nächst: vergewëssere dech, datt d'Automatescht Virliesen un ass mat `/config auto-read active:true`."
+      "config.channelSet": "Automatesche Virliesekanal op {channel} gesat. Nächst: vergewëssere dech, datt d'Automatescht Virliesen un ass mat `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "lv": {
       "error.generic": "Kaut kas nogāja greizi. Lūdzu, mēģini vēlreiz.",
@@ -2052,7 +2142,12 @@
       "config.defaultVoiceSet": "✅ Servera noklusējuma balss iestatīta uz **{name}**. Dalībnieki bez savas balss dzirdēs šo. (id: `{model}`)",
       "config.channelWrongType": "Izvēlies teksta kanālu (nevis balss kanālu vai kategoriju).",
       "config.channelNoAccess": "Es neredzu {channel} — lūdzu, pārbaudi manas atļaujas tur.",
-      "config.channelSet": "Automātiskās lasīšanas kanāls iestatīts uz {channel}. Tālāk: pārliecinies, ka automātiskā lasīšana ir ieslēgta ar `/config auto-read active:true`."
+      "config.channelSet": "Automātiskās lasīšanas kanāls iestatīts uz {channel}. Tālāk: pārliecinies, ka automātiskā lasīšana ir ieslēgta ar `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "sk": {
       "error.generic": "Niečo sa pokazilo. Skús to prosím znova.",
@@ -2158,7 +2253,12 @@
       "config.defaultVoiceSet": "✅ Predvolený hlas servera nastavený na **{name}**. Členovia bez vlastného hlasu budú počuť tento. (id: `{model}`)",
       "config.channelWrongType": "Vyber textový kanál (nie hlasový kanál ani kategóriu).",
       "config.channelNoAccess": "Nevidím {channel} — skontroluj prosím moje oprávnenia tam.",
-      "config.channelSet": "Kanál na automatické čítanie nastavený na {channel}. Ďalej: uisti sa, že automatické čítanie je zapnuté cez `/config auto-read active:true`."
+      "config.channelSet": "Kanál na automatické čítanie nastavený na {channel}. Ďalej: uisti sa, že automatické čítanie je zapnuté cez `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "sl": {
       "error.generic": "Nekaj je šlo narobe. Poskusi znova.",
@@ -2264,7 +2364,12 @@
       "config.defaultVoiceSet": "✅ Privzeti glas strežnika je nastavljen na **{name}**. Člani brez lastnega glasu bodo slišali tega. (id: `{model}`)",
       "config.channelWrongType": "Izberi besedilni kanal (ne glasovnega kanala ali kategorije).",
       "config.channelNoAccess": "Ne vidim {channel} — preveri moja dovoljenja tam.",
-      "config.channelSet": "Kanal za samodejno branje je nastavljen na {channel}. Naprej: poskrbi, da je samodejno branje vklopljeno z `/config auto-read active:true`."
+      "config.channelSet": "Kanal za samodejno branje je nastavljen na {channel}. Naprej: poskrbi, da je samodejno branje vklopljeno z `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "sw": {
       "error.generic": "Kuna hitilafu imetokea. Tafadhali jaribu tena.",
@@ -2370,7 +2475,12 @@
       "config.defaultVoiceSet": "✅ Sauti chaguo-msingi ya seva imewekwa kuwa **{name}**. Wanachama wasio na sauti yao wenyewe watasikia hii. (kitambulisho: `{model}`)",
       "config.channelWrongType": "Chagua kituo cha maandishi (si kituo cha sauti wala kategoria).",
       "config.channelNoAccess": "Siwezi kuona {channel} — tafadhali angalia ruhusa zangu hapo.",
-      "config.channelSet": "Kituo cha kusoma kiotomatiki kimewekwa kuwa {channel}. Ifuatayo: hakikisha kusoma kiotomatiki kumewashwa kwa `/config auto-read active:true`."
+      "config.channelSet": "Kituo cha kusoma kiotomatiki kimewekwa kuwa {channel}. Ifuatayo: hakikisha kusoma kiotomatiki kumewashwa kwa `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "vi": {
       "error.generic": "Đã có lỗi xảy ra. Vui lòng thử lại.",
@@ -2476,7 +2586,12 @@
       "config.defaultVoiceSet": "✅ Đã đặt giọng mặc định của máy chủ thành **{name}**. Thành viên chưa có giọng riêng sẽ nghe giọng này. (id: `{model}`)",
       "config.channelWrongType": "Hãy chọn một kênh văn bản (không phải kênh thoại hay danh mục).",
       "config.channelNoAccess": "Tôi không thấy {channel} — vui lòng kiểm tra quyền của tôi ở đó.",
-      "config.channelSet": "Đã đặt kênh tự động đọc thành {channel}. Tiếp theo: đảm bảo tự động đọc đã bật với `/config auto-read active:true`."
+      "config.channelSet": "Đã đặt kênh tự động đọc thành {channel}. Tiếp theo: đảm bảo tự động đọc đã bật với `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "ca": {
       "error.generic": "Alguna cosa ha anat malament. Torna-ho a provar.",
@@ -2582,7 +2697,12 @@
       "config.defaultVoiceSet": "✅ Veu predeterminada del servidor establerta a **{name}**. Els membres sense veu pròpia sentiran aquesta. (id: `{model}`)",
       "config.channelWrongType": "Tria un canal de text (no un canal de veu ni una categoria).",
       "config.channelNoAccess": "No puc veure {channel}. Comprova els meus permisos allà.",
-      "config.channelSet": "Canal de lectura automàtica establert a {channel}. Ara: assegura't que la lectura automàtica estigui activada amb `/config auto-read active:true`."
+      "config.channelSet": "Canal de lectura automàtica establert a {channel}. Ara: assegura't que la lectura automàtica estigui activada amb `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "it": {
       "error.generic": "Qualcosa è andato storto. Riprova.",
@@ -2688,7 +2808,12 @@
       "config.defaultVoiceSet": "✅ Voce predefinita del server impostata su **{name}**. I membri senza una voce propria sentiranno questa. (id: `{model}`)",
       "config.channelWrongType": "Scegli un canale testuale (non un canale vocale né una categoria).",
       "config.channelNoAccess": "Non riesco a vedere {channel} — controlla i miei permessi lì.",
-      "config.channelSet": "Canale di lettura automatica impostato su {channel}. Ora: assicurati che la lettura automatica sia attiva con `/config auto-read active:true`."
+      "config.channelSet": "Canale di lettura automatica impostato su {channel}. Ora: assicurati che la lettura automatica sia attiva con `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "el": {
       "error.generic": "Κάτι πήγε στραβά. Δοκίμασε ξανά.",
@@ -2794,7 +2919,12 @@
       "config.defaultVoiceSet": "✅ Η προεπιλεγμένη φωνή του διακομιστή ορίστηκε σε **{name}**. Τα μέλη χωρίς δική τους φωνή θα ακούν αυτήν. (id: `{model}`)",
       "config.channelWrongType": "Διάλεξε ένα κανάλι κειμένου (όχι φωνητικό κανάλι ή κατηγορία).",
       "config.channelNoAccess": "Δεν βλέπω το {channel} — έλεγξε τα δικαιώματά μου εκεί.",
-      "config.channelSet": "Το κανάλι αυτόματης ανάγνωσης ορίστηκε στο {channel}. Επόμενο: βεβαιώσου ότι η αυτόματη ανάγνωση είναι ενεργή με `/config auto-read active:true`."
+      "config.channelSet": "Το κανάλι αυτόματης ανάγνωσης ορίστηκε στο {channel}. Επόμενο: βεβαιώσου ότι η αυτόματη ανάγνωση είναι ενεργή με `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "ru": {
       "error.generic": "Что-то пошло не так. Пожалуйста, попробуйте ещё раз.",
@@ -2900,7 +3030,12 @@
       "config.defaultVoiceSet": "✅ Голос сервера по умолчанию установлен на **{name}**. Участники без своего голоса будут слышать этот. (id: `{model}`)",
       "config.channelWrongType": "Выберите текстовый канал (не голосовой канал и не категорию).",
       "config.channelNoAccess": "Я не вижу {channel} — пожалуйста, проверьте мои права там.",
-      "config.channelSet": "Канал авточтения установлен на {channel}. Дальше: убедитесь, что авточтение включено, командой `/config auto-read active:true`."
+      "config.channelSet": "Канал авточтения установлен на {channel}. Дальше: убедитесь, что авточтение включено, командой `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "uk": {
       "error.generic": "Щось пішло не так. Спробуйте ще раз.",
@@ -3006,7 +3141,12 @@
       "config.defaultVoiceSet": "✅ Типовий голос сервера встановлено на **{name}**. Учасники без власного голосу чутимуть цей. (id: `{model}`)",
       "config.channelWrongType": "Оберіть текстовий канал (не голосовий канал і не категорію).",
       "config.channelNoAccess": "Я не бачу {channel} — перевірте мої дозволи там.",
-      "config.channelSet": "Канал автозачитування встановлено на {channel}. Далі: переконайтеся, що автозачитування ввімкнено за допомогою `/config auto-read active:true`."
+      "config.channelSet": "Канал автозачитування встановлено на {channel}. Далі: переконайтеся, що автозачитування ввімкнено за допомогою `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "kk": {
       "error.generic": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
@@ -3112,7 +3252,12 @@
       "config.defaultVoiceSet": "✅ Сервердің әдепкі дауысы **{name}** болып орнатылды. Өз дауысы жоқ мүшелер осыны естиді. (id: `{model}`)",
       "config.channelWrongType": "Мәтіндік арнаны таңдаңыз (дауыстық арна немесе санат емес).",
       "config.channelNoAccess": "Мен {channel} арнасын көре алмаймын — сол жердегі рұқсаттарымды тексеріңіз.",
-      "config.channelSet": "Автоматты оқу арнасы {channel} болып орнатылды. Келесі: `/config auto-read active:true` арқылы автоматты оқу қосулы екеніне көз жеткізіңіз."
+      "config.channelSet": "Автоматты оқу арнасы {channel} болып орнатылды. Келесі: `/config auto-read active:true` арқылы автоматты оқу қосулы екеніне көз жеткізіңіз.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "sr": {
       "error.generic": "Нешто је пошло наопако. Покушај поново.",
@@ -3218,7 +3363,12 @@
       "config.defaultVoiceSet": "✅ Подразумевани глас сервера постављен на **{name}**. Чланови без сопственог гласа чуће овај. (ид: `{model}`)",
       "config.channelWrongType": "Изабери текстуални канал (не гласовни канал ни категорију).",
       "config.channelNoAccess": "Не видим {channel} — провери моје дозволе тамо.",
-      "config.channelSet": "Канал за аутоматско читање постављен на {channel}. Следеће: провери да ли је аутоматско читање укључено помоћу `/config auto-read active:true`."
+      "config.channelSet": "Канал за аутоматско читање постављен на {channel}. Следеће: провери да ли је аутоматско читање укључено помоћу `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "ar": {
       "error.generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
@@ -3324,7 +3474,12 @@
       "config.defaultVoiceSet": "✅ تم تعيين الصوت الافتراضي للخادم إلى **{name}**. الأعضاء الذين ليس لديهم صوت خاص سيسمعون هذا الصوت. (المعرّف: `{model}`)",
       "config.channelWrongType": "اختر قناة نصية (وليست قناة صوتية أو فئة).",
       "config.channelNoAccess": "لا أستطيع رؤية {channel} — يرجى التحقق من صلاحياتي هناك.",
-      "config.channelSet": "تم تعيين قناة القراءة التلقائية إلى {channel}. التالي: تأكد من تفعيل القراءة التلقائية عبر `/config auto-read active:true`."
+      "config.channelSet": "تم تعيين قناة القراءة التلقائية إلى {channel}. التالي: تأكد من تفعيل القراءة التلقائية عبر `/config auto-read active:true`.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "fa": {
       "error.generic": "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.",
@@ -3430,7 +3585,12 @@
       "config.defaultVoiceSet": "✅ صدای پیش‌فرض سرور روی **{name}** تنظیم شد. اعضایی که صدای خودشان را ندارند این را می‌شنوند. (شناسه: `{model}`)",
       "config.channelWrongType": "یک کانال متنی انتخاب کن (نه کانال صوتی یا دسته‌بندی).",
       "config.channelNoAccess": "نمی‌توانم {channel} را ببینم — لطفاً مجوزهای من را آنجا بررسی کن.",
-      "config.channelSet": "کانال خواندن خودکار روی {channel} تنظیم شد. بعدی: با `/config auto-read active:true` مطمئن شو که خواندن خودکار روشن است."
+      "config.channelSet": "کانال خواندن خودکار روی {channel} تنظیم شد. بعدی: با `/config auto-read active:true` مطمئن شو که خواندن خودکار روشن است.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "ka": {
       "error.generic": "რაღაც არასწორად წავიდა. გთხოვთ, სცადოთ ხელახლა.",
@@ -3536,7 +3696,12 @@
       "config.defaultVoiceSet": "✅ სერვერის ნაგულისხმევი ხმა დაყენდა **{name}**-ზე. საკუთარი ხმის არმქონე წევრები ამას მოისმენენ. (id: `{model}`)",
       "config.channelWrongType": "აირჩიეთ ტექსტური არხი (არა ხმოვანი არხი ან კატეგორია).",
       "config.channelNoAccess": "ვერ ვხედავ {channel}-ს — გთხოვთ, შეამოწმოთ ჩემი ნებართვები იქ.",
-      "config.channelSet": "ავტოკითხვის არხად დაყენდა {channel}. შემდეგ: დარწმუნდით, რომ ავტოკითხვა ჩართულია `/config auto-read active:true`-ით."
+      "config.channelSet": "ავტოკითხვის არხად დაყენდა {channel}. შემდეგ: დარწმუნდით, რომ ავტოკითხვა ჩართულია `/config auto-read active:true`-ით.",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "ne": {
       "error.generic": "केही गडबड भयो। कृपया फेरि प्रयास गर्नुहोस्।",
@@ -3642,7 +3807,12 @@
       "config.defaultVoiceSet": "✅ सर्भरको पूर्वनिर्धारित स्वर **{name}** मा सेट भयो। आफ्नै स्वर नभएका सदस्यहरूले यही सुन्नेछन्। (id: `{model}`)",
       "config.channelWrongType": "कुनै टेक्स्ट च्यानल छान्नुहोस् (भ्वाइस च्यानल वा वर्ग होइन)।",
       "config.channelNoAccess": "मैले {channel} देख्न सक्दिनँ — कृपया त्यहाँ मेरा अनुमतिहरू जाँच्नुहोस्।",
-      "config.channelSet": "स्वतः-पढ्ने च्यानल {channel} मा सेट भयो। अर्को: `/config auto-read active:true` ले स्वतः-पढ्ने सक्रिय छ भन्ने पक्का गर्नुहोस्।"
+      "config.channelSet": "स्वतः-पढ्ने च्यानल {channel} मा सेट भयो। अर्को: `/config auto-read active:true` ले स्वतः-पढ्ने सक्रिय छ भन्ने पक्का गर्नुहोस्।",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "zh": {
       "error.generic": "出错了，请重试。",
@@ -3748,7 +3918,12 @@
       "config.defaultVoiceSet": "✅ 服务器默认声音已设为 **{name}**。没有自己声音的成员将听到这个声音。（id：`{model}`）",
       "config.channelWrongType": "请选择一个文字频道（不能是语音频道或分类）。",
       "config.channelNoAccess": "我看不到 {channel}——请检查我在那里的权限。",
-      "config.channelSet": "自动朗读频道已设为 {channel}。下一步：用 `/config auto-read active:true` 确保自动朗读已开启。"
+      "config.channelSet": "自动朗读频道已设为 {channel}。下一步：用 `/config auto-read active:true` 确保自动朗读已开启。",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     },
     "ja": {
       "error.generic": "問題が発生しました。もう一度お試しください。",
@@ -3854,7 +4029,12 @@
       "config.defaultVoiceSet": "✅ サーバーの既定の声を **{name}** に設定しました。自分の声を設定していないメンバーはこの声を聞きます。(id: `{model}`)",
       "config.channelWrongType": "テキストチャンネルを選んでください（ボイスチャンネルやカテゴリーではなく）。",
       "config.channelNoAccess": "{channel} が見えません。そこでの権限を確認してください。",
-      "config.channelSet": "自動読み上げチャンネルを {channel} に設定しました。次に：`/config auto-read active:true` で自動読み上げが有効になっていることを確認してください。"
+      "config.channelSet": "自動読み上げチャンネルを {channel} に設定しました。次に：`/config auto-read active:true` で自動読み上げが有効になっていることを確認してください。",
+      "config.priorityRoleSet": "Accessibility queue priority set to {role}.",
+      "config.priorityRoleCleared": "Accessibility queue priority role cleared.",
+      "config.blockedRoleSet": "Queue block set to {role}.",
+      "config.blockedRoleCleared": "Queue block role cleared.",
+      "config.rolesConflict": "Choose a different role: a role cannot be both priority and blocked."
     }
   }
 }
