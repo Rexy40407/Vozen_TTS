@@ -64,13 +64,15 @@ impl std::fmt::Display for KofiWebhookConfigError {
 
 impl std::error::Error for KofiWebhookConfigError {}
 
-/// Builds only the sensitive payment route. It is not merged into the public router until the
-/// cutover checklist confirms the Rust listener, reverse proxy and secret configuration.
+/// Builds the sensitive payment route. Ko-fi deployments historically pointed at the server
+/// root, while newer setups use `/webhook/kofi`; keep both paths during the cutover so changing
+/// the runtime does not silently stop purchase delivery.
 pub fn kofi_webhook_router(config: KofiWebhookConfig) -> Result<Router, KofiWebhookConfigError> {
     if config.verification_token.trim().is_empty() {
         return Err(KofiWebhookConfigError::VerificationToken);
     }
     Ok(Router::new()
+        .route("/", any(kofi_webhook))
         .route("/webhook/kofi", any(kofi_webhook))
         .with_state(KofiWebhookState {
             verification_token: Arc::from(config.verification_token),
@@ -210,6 +212,30 @@ mod tests {
                 .unclaimed_kofi_pending_by_transaction("tx-1")
                 .expect("read")
                 .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn accepts_the_legacy_root_webhook_path() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let response = router(store.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/")
+                    .body(Body::from(payload("token", "Vozen Plus")))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            store
+                .lock()
+                .unwrap()
+                .unclaimed_kofi_pending_by_transaction("tx-1")
+                .expect("pending")
+                .is_some()
         );
     }
 
