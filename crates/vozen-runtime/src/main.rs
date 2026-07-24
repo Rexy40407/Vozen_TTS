@@ -290,6 +290,8 @@ struct CoreVoiceRuntimeOptions {
     setup_enabled: bool,
     speak_context_enabled: bool,
     game_play_enabled: bool,
+    client_id: Option<String>,
+    support_url: String,
     settings: CoreVoiceSettings,
 }
 
@@ -630,6 +632,9 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             env::var("RUST_SPEAK_CONTEXT_ENABLED").ok().as_deref(),
         ),
         game_play_enabled: game_play_enabled(env::var("RUST_GAME_PLAY_ENABLED").ok().as_deref()),
+        client_id: nonempty_env("CLIENT_ID"),
+        support_url: nonempty_env("SUPPORT_URL")
+            .unwrap_or_else(|| "https://discord.gg/4kYw2WUbNN".to_owned()),
         settings: CoreVoiceSettings {
             available_models: Vec::new(),
             default_voice,

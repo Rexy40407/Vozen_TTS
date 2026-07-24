@@ -40,6 +40,7 @@ mod user_profile;
 mod user_voice;
 mod voice_effect;
 mod voice_presence;
+mod vote_promo;
 mod vote_reward;
 
 pub use admin_passes::{AdminPassRow, AdminPassesView, AdminPlusRow};
@@ -88,6 +89,7 @@ pub use user_profile::{Birthday, is_valid_birthday};
 pub use user_voice::{MAX_RECENT_VOICES, MAX_VOICE_FAVORITES, UserEngine, UserVoice};
 pub use voice_effect::VoiceEffect;
 pub use voice_presence::VoicePresence;
+pub use vote_promo::{CommunityPromoKind, PROMO_SLOT_COOLDOWN_MS};
 pub use vote_reward::{
     TOPGG_EVENT_RETENTION_MS, TopggVoteRewardResult, VOTE_REDEMPTION_SECRET_MIN_LENGTH,
     VOTE_REWARD_MS, VoteRewardResult, VoteRewardStatus,

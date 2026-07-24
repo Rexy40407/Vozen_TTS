@@ -51,11 +51,12 @@ use vozen_discord::{
     parse_setup_command, parse_speak_message_command, pick_option, render_game_action,
     render_game_finish,
 };
+use vozen_store::CommunityPromoKind;
 use vozen_store::{GuildConfigPatch, SqliteStore, utc_day_key};
 
 use crate::{
     CoreVoiceRuntimeOptions,
-    activity_poster::{LeaderboardPoster, random_unit},
+    activity_poster::{LeaderboardPoster, VotePromoPoster, random_unit},
     engine_router::PerUserCommandSynthesizer,
     piper_adapter::PiperCommandSynthesizer,
     system_now_ms,
@@ -119,6 +120,7 @@ pub struct CoreVoiceGatewaySink {
     options: CoreVoiceRuntimeOptions,
     localizer: Option<VoiceResponseLocalizer>,
     leaderboard_poster: Mutex<LeaderboardPoster>,
+    vote_promo_poster: Mutex<VotePromoPoster>,
     dependencies: Mutex<Option<Arc<VoiceDependencies>>>,
     executor: Mutex<Option<Arc<Executor>>>,
     message_service: Mutex<Option<Arc<MessageService>>>,
@@ -1075,6 +1077,7 @@ impl CoreVoiceGatewaySink {
             options,
             localizer: VoiceResponseLocalizer::from_generated_contract().ok(),
             leaderboard_poster: Mutex::new(LeaderboardPoster::default()),
+            vote_promo_poster: Mutex::new(VotePromoPoster::default()),
             dependencies: Mutex::new(None),
             executor: Mutex::new(None),
             message_service: Mutex::new(None),
@@ -2842,13 +2845,20 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
             if let Ok(mut speakers) = self.last_speakers.lock() {
                 speakers.insert(facts.guild_id.clone(), facts.author_id.clone());
             }
-            let (streak_announce, locale, tts_channel_id) = self
+            let (streak_announce, locale, tts_channel_id, vote_promos) = self
                 .store
                 .lock()
                 .ok()
                 .and_then(|store| store.guild_config(&facts.guild_id).ok())
-                .map(|config| (config.streak_announce, config.locale, config.tts_channel_id))
-                .unwrap_or((false, "en".to_owned(), None));
+                .map(|config| {
+                    (
+                        config.streak_announce,
+                        config.locale,
+                        config.tts_channel_id,
+                        config.vote_promos,
+                    )
+                })
+                .unwrap_or((false, "en".to_owned(), None, false));
             if let Some(talk) = talk
                 && talk.first_of_day
                 && talk.streak >= 2
@@ -2875,6 +2885,7 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
 
             // Activity is counted only after the queue accepted the message. The poster itself
             // is process-local and bounded; durable rows are read only when a draw succeeds.
+            let mut automatic_post_sent = false;
             if tts_channel_id.is_some()
                 && self
                     .leaderboard_poster
@@ -2892,7 +2903,7 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                     .unwrap_or_default();
                 if !rows.is_empty()
                     && let Some(localizer) = self.localizer.as_ref()
-                    && let Some(channel_id) = tts_channel_id
+                    && let Some(channel_id) = tts_channel_id.as_deref()
                     && let Ok(channel_id) = channel_id.parse::<u64>()
                 {
                     let mut lines = Vec::with_capacity(rows.len() + 1);
@@ -2918,14 +2929,97 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                         }
                     }
                     if !lines.is_empty() {
-                        let _ = ChannelId::new(channel_id)
+                        if ChannelId::new(channel_id)
                             .send_message(
                                 &context.http,
                                 CreateMessage::new()
                                     .content(lines.join("\n"))
                                     .allowed_mentions(no_mentions()),
                             )
-                            .await;
+                            .await
+                            .is_ok()
+                        {
+                            automatic_post_sent = true;
+                        }
+                    }
+                }
+            }
+
+            // The promotional slot shares activity with the leaderboard but is suppressed when
+            // that leaderboard already posted. Reservation happens only after the target channel
+            // is parseable, and the SQLite update remains atomic across restarts/workers.
+            if !automatic_post_sent
+                && vote_promos
+                && self.options.client_id.is_some()
+                && let Some(channel_id) = tts_channel_id.as_deref().and_then(|id| id.parse().ok())
+            {
+                let promo = self.store.lock().ok().and_then(|store| {
+                    self.vote_promo_poster.lock().ok().and_then(|mut poster| {
+                        poster
+                            .record(&store, &facts.guild_id, system_now_ms(), random_unit())
+                            .ok()
+                            .flatten()
+                    })
+                });
+                if let Some(kind) = promo {
+                    let mut parameters = BTreeMap::new();
+                    let content_key = match kind {
+                        CommunityPromoKind::Vote => "vote.upsell",
+                        CommunityPromoKind::Support => "help.support",
+                    };
+                    if let Some(client_id) = self.options.client_id.as_deref()
+                        && let Some(url) = match kind {
+                            CommunityPromoKind::Vote => {
+                                Some(format!("https://top.gg/bot/{client_id}/vote"))
+                            }
+                            CommunityPromoKind::Support => Some(self.options.support_url.clone()),
+                        }
+                    {
+                        parameters.insert("url", url.clone());
+                        let opt_out_label = self
+                            .localizer
+                            .as_ref()
+                            .and_then(|localizer| {
+                                localizer.render_key(
+                                    "config.votePromosLabel",
+                                    Some(&locale),
+                                    None,
+                                    &BTreeMap::new(),
+                                )
+                            })
+                            .unwrap_or_else(|| "Vozen notices".to_owned());
+                        if let Some(localizer) = self.localizer.as_ref()
+                            && let Some(content) =
+                                localizer.render_key(content_key, Some(&locale), None, &parameters)
+                        {
+                            let button = match kind {
+                                CommunityPromoKind::Vote => {
+                                    let label = localizer
+                                        .render_key(
+                                            "vote.button",
+                                            Some(&locale),
+                                            None,
+                                            &BTreeMap::new(),
+                                        )
+                                        .unwrap_or_else(|| "Vote on top.gg".to_owned());
+                                    CreateButton::new_link(url).label(label)
+                                }
+                                CommunityPromoKind::Support => {
+                                    CreateButton::new_link(url).label("Vozen Support")
+                                }
+                            };
+                            let _ = ChannelId::new(channel_id)
+                                .send_message(
+                                    &context.http,
+                                    CreateMessage::new()
+                                        .content(format!(
+                                            "{content}\n\n{opt_out_label}: `/config vote-reminders active:false`"
+                                        ))
+                                        .components(vec![CreateActionRow::Buttons(vec![button])])
+                                        .allowed_mentions(no_mentions()),
+                                )
+                                .await;
+                        }
                     }
                 }
             }
@@ -3087,6 +3181,9 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
             speakers.remove(guild_id);
         }
         if let Ok(mut poster) = self.leaderboard_poster.lock() {
+            poster.forget_guild(guild_id);
+        }
+        if let Ok(mut poster) = self.vote_promo_poster.lock() {
             poster.forget_guild(guild_id);
         }
         if let Ok(mut sessions) = self.cast_sessions.lock() {
@@ -3391,6 +3488,8 @@ mod tests {
             setup_enabled: false,
             speak_context_enabled: false,
             game_play_enabled: false,
+            client_id: None,
+            support_url: "https://discord.gg/4kYw2WUbNN".into(),
             settings: CoreVoiceSettings {
                 available_models: vec!["en_US-amy-medium".into()],
                 default_voice: "en_US-amy-medium".into(),
@@ -3450,6 +3549,8 @@ mod tests {
                 setup_enabled: false,
                 speak_context_enabled: false,
                 game_play_enabled: false,
+                client_id: None,
+                support_url: "https://discord.gg/4kYw2WUbNN".into(),
                 settings: CoreVoiceSettings {
                     available_models: vec!["en_US-amy-medium".into()],
                     default_voice: "en_US-amy-medium".into(),
