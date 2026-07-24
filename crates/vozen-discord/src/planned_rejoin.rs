@@ -26,11 +26,18 @@ pub enum PlannedRejoinScope {
 
 #[derive(Debug, Serialize)]
 struct RejoinMarker<'a> {
+    // Keep the on-disk shape compatible with the Node runtime. This marker can
+    // survive a mixed-runtime clean shutdown during the migration.
+    #[serde(rename = "guildIds")]
     guild_ids: &'a [String],
 }
 
 #[derive(Debug, Deserialize)]
 struct ParsedRejoinMarker {
+    // `guild_ids` was emitted by an early Rust-only implementation. Accept it
+    // as an alias, but emit the canonical Node-compatible `guildIds` above.
+    #[serde(alias = "guild_ids")]
+    #[serde(rename = "guildIds")]
     guild_ids: Vec<String>,
 }
 
@@ -72,12 +79,17 @@ pub fn consume_planned_rejoin_marker(
     let path = marker_path(directory);
     let metadata = fs::metadata(&path).ok()?;
     let modified = metadata.modified().ok()?;
-    let age = now.duration_since(modified).ok()?;
     let raw = fs::read_to_string(&path).ok()?;
     // Consume before parsing, so a malformed marker cannot authorize a later process.
     let _ = fs::remove_file(path);
 
-    if age > MAX_PLANNED_REJOIN_AGE {
+    // Match Node's `age >= 0 && age <= MAX_MARKER_AGE_MS` rule. A future-dated
+    // marker is invalid too, but must still be consumed so it cannot authorize
+    // a later restart.
+    if !matches!(
+        now.duration_since(modified),
+        Ok(age) if age <= MAX_PLANNED_REJOIN_AGE
+    ) {
         return None;
     }
     if raw.trim().is_empty() {
@@ -174,6 +186,10 @@ mod tests {
             &directory
         ));
         assert_eq!(
+            fs::read_to_string(marker_path(&directory)).expect("marker payload"),
+            r#"{"guildIds":["guild-a","guild-b"]}"#
+        );
+        assert_eq!(
             consume_planned_rejoin_marker(&directory, SystemTime::now()),
             Some(PlannedRejoinScope::Guilds(
                 ["guild-a".into(), "guild-b".into()].into_iter().collect()
@@ -187,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_deploy_marker_authorizes_all_but_stale_marker_does_not() {
+    fn marker_accepts_legacy_shape_and_rejects_stale_or_future_markers() {
         let directory = test_directory("all");
         let path = marker_path(&directory);
         fs::write(&path, "").expect("write deployment marker");
@@ -196,9 +212,23 @@ mod tests {
             Some(PlannedRejoinScope::All)
         );
 
-        fs::write(&path, r#"{\"guild_ids\":[\"guild-a\"]}"#).expect("write stale marker");
+        fs::write(&path, r#"{"guild_ids":["guild-a"]}"#).expect("write legacy marker");
+        assert_eq!(
+            consume_planned_rejoin_marker(&directory, SystemTime::now()),
+            Some(PlannedRejoinScope::Guilds(
+                ["guild-a".into()].into_iter().collect()
+            ))
+        );
+
+        fs::write(&path, r#"{"guildIds":["guild-a"]}"#).expect("write stale marker");
         let stale_now = SystemTime::now() + MAX_PLANNED_REJOIN_AGE + Duration::from_secs(1);
         assert_eq!(consume_planned_rejoin_marker(&directory, stale_now), None);
+        assert!(!path.exists());
+        fs::write(&path, r#"{"guildIds":["guild-a"]}"#).expect("write future marker");
+        let future_now = SystemTime::now()
+            .checked_sub(Duration::from_secs(1))
+            .expect("future timestamp");
+        assert_eq!(consume_planned_rejoin_marker(&directory, future_now), None);
         assert!(!path.exists());
         fs::remove_dir_all(directory).expect("remove test directory");
     }
