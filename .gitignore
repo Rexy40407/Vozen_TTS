@@ -36,3 +36,4 @@ site-dist/
 
 # Rust build output is recreated locally and in CI.
 /target/
+vozen-central-*.tar.gz
