@@ -90,7 +90,7 @@ impl DiscordHttpCommandRegistrationClient {
         let response = self
             .client
             .put(url)
-            .bearer_auth(&self.token)
+            .header("Authorization", bot_authorization(&self.token))
             .json(&commands)
             .send()
             .await
@@ -101,6 +101,10 @@ impl DiscordHttpCommandRegistrationClient {
             Err(CommandRegistrationError::Rejected)
         }
     }
+}
+
+fn bot_authorization(token: &str) -> String {
+    format!("Bot {token}")
 }
 
 #[async_trait]
@@ -337,6 +341,11 @@ mod tests {
                 .expect("time")
                 .as_nanos()
         ))
+    }
+
+    #[test]
+    fn discord_bot_registration_uses_bot_authorization_scheme() {
+        assert_eq!(bot_authorization("test-token"), "Bot test-token");
     }
 
     #[tokio::test]
