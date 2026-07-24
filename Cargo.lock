@@ -4346,6 +4346,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vozen-entitlementd"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "tokio",
+ "vozen-api",
+ "vozen-store",
+]
+
+[[package]]
 name = "vozen-runtime"
 version = "0.1.0"
 dependencies = [
