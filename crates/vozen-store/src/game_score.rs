@@ -4,11 +4,70 @@
 //! player and exactly one win is awarded to the first player with the highest positive score.
 //! Keeping that rule here prevents a future Rust game from partially writing a finished match.
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
-use crate::{SqliteStore, StoreError};
+use crate::{SqliteStore, StoreError, admin_stats::GameScoreRow};
 
 impl SqliteStore {
+    /// Adds points to one player's durable score. A zero-point update is a no-op, matching
+    /// Node's `addPoints` helper and avoiding creation of an empty leaderboard row.
+    pub fn add_game_points(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        points: i64,
+    ) -> Result<(), StoreError> {
+        if points == 0 {
+            return Ok(());
+        }
+        self.connection().execute(
+            "INSERT INTO game_score (guild_id, user_id, points, wins)
+             VALUES (?1, ?2, ?3, 0)
+             ON CONFLICT(guild_id, user_id)
+             DO UPDATE SET points = points + excluded.points",
+            params![guild_id, user_id, points],
+        )?;
+        Ok(())
+    }
+
+    /// Increments the durable match-win count for one player. Points remain unchanged when the
+    /// row already exists, exactly like Node's `addWin` helper.
+    pub fn add_game_win(&self, guild_id: &str, user_id: &str) -> Result<(), StoreError> {
+        self.connection().execute(
+            "INSERT INTO game_score (guild_id, user_id, points, wins)
+             VALUES (?1, ?2, 0, 1)
+             ON CONFLICT(guild_id, user_id)
+             DO UPDATE SET wins = wins + 1",
+            params![guild_id, user_id],
+        )?;
+        Ok(())
+    }
+
+    /// Reads one player's score, returning the same 0/0 sentinel for a player without history as
+    /// Node's `getUserScore` helper.
+    pub fn game_score(&self, guild_id: &str, user_id: &str) -> Result<GameScoreRow, StoreError> {
+        let row = self
+            .connection()
+            .query_row(
+                "SELECT user_id, points, wins FROM game_score
+                 WHERE guild_id = ?1 AND user_id = ?2",
+                params![guild_id, user_id],
+                |row| {
+                    Ok(GameScoreRow {
+                        user_id: row.get(0)?,
+                        points: row.get(1)?,
+                        wins: row.get(2)?,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(row.unwrap_or_else(|| GameScoreRow {
+            user_id: user_id.to_owned(),
+            points: 0,
+            wins: 0,
+        }))
+    }
+
     /// Persists one completed match atomically.
     ///
     /// `points` is ordered by insertion order. That order is used only to resolve an exact tie,
@@ -86,6 +145,41 @@ mod tests {
                 .game_leaderboard("guild", 10)
                 .expect("leaderboard")
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn direct_score_helpers_match_node_upsert_and_missing_row_sentinel() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        assert_eq!(
+            store.game_score("guild", "missing").expect("missing"),
+            GameScoreRow {
+                user_id: "missing".into(),
+                points: 0,
+                wins: 0,
+            }
+        );
+        store.add_game_points("guild", "player", 3).expect("points");
+        store.add_game_points("guild", "player", 2).expect("points");
+        store
+            .add_game_points("guild", "player", 0)
+            .expect("zero points");
+        store.add_game_win("guild", "player").expect("win");
+        assert_eq!(
+            store.game_score("guild", "player").expect("score"),
+            GameScoreRow {
+                user_id: "player".into(),
+                points: 5,
+                wins: 1,
+            }
+        );
+        assert_eq!(
+            store.game_score("other-guild", "player").expect("isolated"),
+            GameScoreRow {
+                user_id: "player".into(),
+                points: 0,
+                wins: 0,
+            }
         );
     }
 }
