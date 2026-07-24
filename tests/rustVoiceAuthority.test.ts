@@ -85,9 +85,19 @@ describe('Rust core voice migration ownership', () => {
         ...env,
         RUST_RUNTIME_MODE: 'FULL',
         PREMIUM_API_ENABLED: 'true',
+        OWNER_ID: '123456789012345678',
+        OWNER_GUILD_ID: '234567890123456789',
       }),
     ).toBe(true);
     expect(rustRuntimeFullEnabled({ ...env, RUST_RUNTIME_MODE: 'FULL' })).toBe(false);
+    expect(
+      rustRuntimeFullEnabled({
+        ...env,
+        RUST_RUNTIME_MODE: 'FULL',
+        PREMIUM_API_ENABLED: 'true',
+        OWNER_ID: '123456789012345678',
+      }),
+    ).toBe(false);
   });
 
   it('keeps owner commands on Node until both identity guards are present', () => {

@@ -71,8 +71,14 @@ export function rustRuntimeFullEnabled(env: NodeJS.ProcessEnv = process.env): bo
   return (
     env.RUST_RUNTIME_MODE?.trim().toLowerCase() === 'full' &&
     FULL_RUST_RUNTIME_FLAGS.every((name) => env[name]?.trim().toLowerCase() === 'true') &&
-    env.PREMIUM_API_ENABLED?.trim().toLowerCase() === 'true'
+    env.PREMIUM_API_ENABLED?.trim().toLowerCase() === 'true' &&
+    nonEmpty(env.OWNER_ID) &&
+    nonEmpty(env.OWNER_GUILD_ID)
   );
+}
+
+function nonEmpty(value: string | undefined): boolean {
+  return (value?.trim().length ?? 0) > 0;
 }
 
 const RUST_CORE_VOICE_COMMANDS = new Set([
