@@ -131,11 +131,10 @@ mod tests {
         }
 
         let fallback = GttsWithPiperFallback::new(Arc::new(Failing), Arc::new(Successful));
-        assert_eq!(
-            fallback
-                .synthesize(&request(SynthesisEngine::Default))
-                .await,
-            Ok("piper.wav".into())
-        );
+        let output = fallback
+            .synthesize(&request(SynthesisEngine::Default))
+            .await
+            .expect("fallback synthesis");
+        assert_eq!(output, PathBuf::from("piper.wav"));
     }
 }

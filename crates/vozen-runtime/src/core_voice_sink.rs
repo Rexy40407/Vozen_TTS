@@ -2928,8 +2928,8 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                             lines.push(line);
                         }
                     }
-                    if !lines.is_empty() {
-                        if ChannelId::new(channel_id)
+                    if !lines.is_empty()
+                        && ChannelId::new(channel_id)
                             .send_message(
                                 &context.http,
                                 CreateMessage::new()
@@ -2938,9 +2938,8 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                             )
                             .await
                             .is_ok()
-                        {
-                            automatic_post_sent = true;
-                        }
+                    {
+                        automatic_post_sent = true;
                     }
                 }
             }

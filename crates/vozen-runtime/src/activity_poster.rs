@@ -203,9 +203,9 @@ mod tests {
         }
         assert_eq!(
             poster
-                .record(&store, PROMO_SLOT_COOLDOWN_MS * 2 + 1, 0.0)
+                .record(&store, "guild", PROMO_SLOT_COOLDOWN_MS * 2 + 1, 0.0)
                 .expect("record"),
-            None
+            Some(CommunityPromoKind::Support)
         );
         for _ in 0..VOTE_PROMO_MIN_MESSAGES {
             poster
@@ -214,9 +214,9 @@ mod tests {
         }
         assert_eq!(
             poster
-                .record(&store, PROMO_SLOT_COOLDOWN_MS * 3 + 1, 0.0)
+                .record(&store, "guild", PROMO_SLOT_COOLDOWN_MS * 3 + 1, 0.0)
                 .expect("record"),
-            Some(CommunityPromoKind::Support)
+            Some(CommunityPromoKind::Vote)
         );
     }
 
