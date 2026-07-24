@@ -1,0 +1,47 @@
+# Vozen Rust runtime image.
+#
+# This file is deliberately separate from Dockerfile: the default hosted image remains the
+# Node/TypeScript runtime until the Rust staging gate, voice smoke test and rollback rehearsal
+# are complete. Build this image only with the Rust compose override documented in the staging
+# runbook.
+
+# ---------- builder ----------
+FROM rust:1.97.1-bookworm AS builder
+WORKDIR /app
+
+# Songbird's production voice feature links Opus on Linux. Keep the native toolchain in the
+# builder only; the runtime image contains the shared library but no compiler.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends build-essential cmake pkg-config libopus-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY contracts ./contracts
+COPY crates ./crates
+
+RUN cargo build --locked --release -p vozen-runtime --features voice-driver
+
+# ---------- runtime ----------
+FROM debian:bookworm-slim AS runtime
+ENV RUST_BACKTRACE=0
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg libopus0 \
+  && rm -rf /var/lib/apt/lists/* \
+  && useradd --system --uid 1000 --create-home --shell /usr/sbin/nologin vozen \
+  && mkdir -p /data \
+  && chown -R vozen:vozen /data
+
+COPY --from=builder /app/target/release/vozen-runtime /usr/local/bin/vozen-runtime
+COPY docker/healthcheck-rust.sh /usr/local/bin/healthcheck-rust.sh
+RUN chmod 0755 /usr/local/bin/healthcheck-rust.sh
+
+USER vozen
+
+# With no HEALTH_PORT the Rust runtime intentionally has no HTTP listener and this probe is a
+# no-op. When an API/status surface is enabled, HEALTH_PORT must be set and /health must answer.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD ["/usr/local/bin/healthcheck-rust.sh"]
+
+ENTRYPOINT ["/usr/local/bin/vozen-runtime"]

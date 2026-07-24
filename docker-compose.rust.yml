@@ -1,0 +1,16 @@
+# Explicit Rust cutover override. The normal `docker compose up` still uses Dockerfile and
+# starts Node. Use this file only after the staging runbook's isolation and smoke gates pass.
+#
+# The service name and `data` volume deliberately stay identical to docker-compose.yml so the
+# Rust process can read the existing SQLite/WAL data after Node is stopped. Never run both files
+# concurrently with the same Discord token.
+services:
+  vozen:
+    # Set RUST_ENV_FILE=.env.rust.staging for an isolated environment. Leaving it unset keeps
+    # the base compose `.env` for an intentional, already-reviewed cutover.
+    env_file:
+      - ${RUST_ENV_FILE:-.env}
+    build:
+      context: .
+      dockerfile: Dockerfile.rust
+    image: vozen-rust:staging

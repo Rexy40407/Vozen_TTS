@@ -59,6 +59,25 @@ With the staging bot online, verify in the test guild:
 3. A restart leaves the guild command list intact and does not create a second gateway session.
 4. Invalid or missing staging identifiers fail before any REST registration request.
 
+## Optional Linux container smoke
+
+The default `docker compose up` remains the Node runtime. The Rust image is an explicit override
+so a normal update cannot silently switch production ownership:
+
+```bash
+RUST_ENV_FILE=.env.rust.staging docker compose -p vozen-staging \
+  -f docker-compose.yml -f docker-compose.rust.yml build vozen
+RUST_ENV_FILE=.env.rust.staging docker compose -p vozen-staging \
+  -f docker-compose.yml -f docker-compose.rust.yml run --rm vozen
+```
+
+For a real staging run, use `.env.rust.staging` containing a second Discord application/token;
+the `vozen-staging` project name creates a separate named SQLite volume. The override keeps the existing
+`/data`, `/models` and `/opt/piper` mounts, and the Rust image is built with Songbird's
+`voice-driver` feature plus Linux Opus support. Do not point this command at the production
+token while Node is running; the shared single-instance lock protects only processes on the same
+host and cannot protect two different machines.
+
 Only after these checks, the voice-driver build, API contract checks and the remaining R5 module
 canaries pass may the private cutover gate be considered. This document does not authorize a
 production deployment or a push.
