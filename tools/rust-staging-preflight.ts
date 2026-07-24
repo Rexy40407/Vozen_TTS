@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { config as loadDotenv } from 'dotenv';
 
 type JsonRecord = Record<string, unknown>;
 type FetchLike = typeof fetch;
@@ -341,6 +342,13 @@ export async function runRustStagingPreflight(
 
 async function main(): Promise<void> {
   try {
+    const envFile = process.env.RUST_ENV_FILE?.trim();
+    if (envFile) {
+      const loaded = loadDotenv({ path: resolve(process.cwd(), envFile), override: false });
+      if (loaded.error) {
+        throw new RustStagingPreflightError('invalid_config', 'RUST_ENV_FILE could not be loaded');
+      }
+    }
     const report = await runRustStagingPreflight({ env: process.env });
     console.log(JSON.stringify(report));
   } catch (error: unknown) {

@@ -21,6 +21,9 @@ deliberately shadow-only and does not contain a credential:
 ```powershell
 Copy-Item .env.rust.staging.example .env.rust.staging
 # edit DISCORD_TOKEN, CLIENT_ID, RUST_COMMANDS_GUILD_ID and OWNER_GUILD_ID locally
+$env:RUST_ENV_FILE = (Resolve-Path .env.rust.staging).Path
+npm run rust:staging:preflight
+Remove-Item Env:RUST_ENV_FILE
 ```
 
 `RUST_COMMANDS_GUILD_ID` makes the public command PUT guild-scoped instead of global. When the
@@ -46,7 +49,8 @@ cargo build --release -p vozen-runtime --features voice-driver
 cargo run --release -p vozen-runtime --features voice-driver
 ```
 
-`rust:staging:preflight` is read-only. It checks the bot identity, staging guild and guild
+`rust:staging:preflight` is read-only. When `RUST_ENV_FILE` is set, it loads that dotenv file
+without overriding variables already exported by the shell. It checks the bot identity, staging guild and guild
 command set against `contracts/discord-commands.json`, and reports the global command count for
 awareness. It never calls a Discord PUT route and never prints the token or Discord response
 bodies. Run it with `DISCORD_TOKEN`, `CLIENT_ID`, `RUST_COMMANDS_GUILD_ID` and `OWNER_GUILD_ID`
