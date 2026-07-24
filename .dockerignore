@@ -30,5 +30,9 @@ coverage
 npm-debug.log*
 docs
 
-# Brand assets (imagens de docs/README): nao precisam na imagem runtime.
-assets/
+# Brand/game assets (imagens de docs/README e wordlists): nao precisam na imagem runtime.
+# O soundboard e uma dependencia de runtime dos dois containers, por isso reabrimos apenas
+# assets/sfx/ abaixo.
+assets/*
+!assets/sfx/
+!assets/sfx/**

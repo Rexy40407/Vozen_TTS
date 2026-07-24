@@ -40,6 +40,9 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
+# /sound and /cast resolve curated WAVs from the repository-relative assets/sfx directory.
+# Keep only these small runtime assets in the image; models and Piper remain volumes.
+COPY --from=builder /app/assets/sfx ./assets/sfx
 
 # Script do HEALTHCHECK (ver HEALTHCHECK abaixo). Copiado do contexto de build
 # (nao vem do builder). Invocado via `sh` no HEALTHCHECK, por isso nao depende
