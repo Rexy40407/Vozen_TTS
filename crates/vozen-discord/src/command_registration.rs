@@ -18,6 +18,9 @@ const DISCORD_API: &str = "https://discord.com/api/v10";
 #[derive(Debug, Clone)]
 pub struct CommandRegistrationConfig {
     pub application_id: String,
+    /// Optional guild-only scope for R4 staging. When set, public commands are replaced only in
+    /// this guild instead of being published globally. Production leaves this unset.
+    pub public_guild_id: Option<String>,
     pub state_path: Option<PathBuf>,
     pub owner_guild_id: Option<String>,
 }
@@ -33,6 +36,8 @@ pub struct CommandRegistrationOutcome {
 pub enum CommandRegistrationError {
     #[error("Discord application ID must be a 17-20 digit snowflake")]
     InvalidApplicationId,
+    #[error("Discord public command guild ID must be a 17-20 digit snowflake")]
+    InvalidPublicGuildId,
     #[error("Discord owner guild ID must be a 17-20 digit snowflake")]
     InvalidOwnerGuildId,
     #[error("Discord bot token is required for command registration")]
@@ -141,12 +146,46 @@ pub async fn register_commands<C: CommandRegistrationClient>(
         None => None,
     };
     let public_registered = previous.as_ref().is_none_or(|state| {
-        state.application_id != config.application_id || state.public_fingerprint != fingerprint
+        state.application_id != config.application_id
+            || state.public_fingerprint != fingerprint
+            || state.public_guild_id != config.public_guild_id
     });
-    let state_saved = if public_registered {
+    let owner_same_as_public_guild = config
+        .public_guild_id
+        .as_deref()
+        .zip(config.owner_guild_id.as_deref())
+        .is_some_and(|(public, owner)| public == owner);
+    let owner_registered = if owner_same_as_public_guild {
+        // Discord's PUT /guilds/{guild}/commands replaces the complete list. Merge both scopes
+        // into one request or a later owner-only PUT would silently erase the public commands.
+        let mut commands = public.clone();
+        commands.extend(catalog.owner_registration_payload()?);
         client
-            .replace_global(&config.application_id, public)
+            .replace_guild(
+                &config.application_id,
+                config
+                    .public_guild_id
+                    .as_deref()
+                    .expect("same public guild"),
+                commands,
+            )
             .await?;
+        true
+    } else if public_registered {
+        if let Some(guild_id) = &config.public_guild_id {
+            client
+                .replace_guild(&config.application_id, guild_id, public.clone())
+                .await?;
+        } else {
+            client
+                .replace_global(&config.application_id, public.clone())
+                .await?;
+        }
+        false
+    } else {
+        false
+    };
+    let state_saved = if public_registered {
         match &config.state_path {
             Some(path) => {
                 write_state(
@@ -154,6 +193,7 @@ pub async fn register_commands<C: CommandRegistrationClient>(
                     &CommandRegistrationState {
                         application_id: config.application_id.clone(),
                         public_fingerprint: fingerprint,
+                        public_guild_id: config.public_guild_id.clone(),
                     },
                 )
                 .await
@@ -163,7 +203,9 @@ pub async fn register_commands<C: CommandRegistrationClient>(
     } else {
         false
     };
-    let owner_registered = if let Some(guild_id) = &config.owner_guild_id {
+    let owner_registered = if owner_same_as_public_guild {
+        owner_registered
+    } else if let Some(guild_id) = &config.owner_guild_id {
         client
             .replace_guild(
                 &config.application_id,
@@ -186,11 +228,20 @@ pub async fn register_commands<C: CommandRegistrationClient>(
 struct CommandRegistrationState {
     application_id: String,
     public_fingerprint: String,
+    #[serde(default)]
+    public_guild_id: Option<String>,
 }
 
 fn validate_config(config: &CommandRegistrationConfig) -> Result<(), CommandRegistrationError> {
     if !valid_snowflake(&config.application_id) {
         return Err(CommandRegistrationError::InvalidApplicationId);
+    }
+    if config
+        .public_guild_id
+        .as_deref()
+        .is_some_and(|value| !valid_snowflake(value))
+    {
+        return Err(CommandRegistrationError::InvalidPublicGuildId);
     }
     if config
         .owner_guild_id
@@ -215,7 +266,7 @@ async fn read_state(path: &Path) -> Option<CommandRegistrationState> {
     serde_json::from_slice(&tokio::fs::read(path).await.ok()?).ok()
 }
 
-// State is a cache only: failure safely means the next Rust boot repeats the global PUT.
+// State is a cache only: failure safely means the next Rust boot repeats the scoped PUT.
 async fn write_state(path: &Path, state: &CommandRegistrationState) -> bool {
     let Some(parent) = path.parent() else {
         return false;
@@ -272,6 +323,7 @@ mod tests {
     fn config(state_path: Option<PathBuf>) -> CommandRegistrationConfig {
         CommandRegistrationConfig {
             application_id: "1523826014935842997".into(),
+            public_guild_id: None,
             state_path,
             owner_guild_id: Some("123456789012345678".into()),
         }
@@ -316,6 +368,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn staging_scope_uses_one_guild_put_without_erasing_owner_or_public_commands() {
+        let client = MockClient::default();
+        let mut staging = config(None);
+        staging.public_guild_id = Some("123456789012345678".into());
+
+        let outcome = register_commands(&client, &staging)
+            .await
+            .expect("register staging commands");
+
+        assert!(outcome.public_registered && outcome.owner_registered);
+        assert!(client.global.lock().expect("global").is_empty());
+        let guild = client.guild.lock().expect("guild");
+        assert_eq!(
+            guild.len(),
+            1,
+            "same-guild scopes must use one replacing PUT"
+        );
+        assert_eq!(guild[0].0, "123456789012345678");
+        assert_eq!(guild[0].1.len(), 42, "40 public + 2 owner commands");
+    }
+
+    #[tokio::test]
+    async fn staging_scope_change_invalidates_a_global_registration_cache() {
+        let path = temporary_state_path();
+        let client = MockClient::default();
+        register_commands(&client, &config(Some(path.clone())))
+            .await
+            .expect("global register");
+
+        let mut staging = config(Some(path.clone()));
+        staging.public_guild_id = Some("123456789012345678".into());
+        let outcome = register_commands(&client, &staging)
+            .await
+            .expect("staging register");
+
+        assert!(outcome.public_registered);
+        assert_eq!(client.global.lock().expect("global").len(), 1);
+        assert_eq!(client.guild.lock().expect("guild").len(), 2);
+        let _ = tokio::fs::remove_file(path).await;
+    }
+
+    #[tokio::test]
     async fn malformed_snowflakes_fail_before_any_rest_call() {
         let client = MockClient::default();
         let mut invalid = config(None);
@@ -325,5 +419,12 @@ mod tests {
             Err(CommandRegistrationError::InvalidApplicationId)
         ));
         assert!(client.global.lock().expect("global").is_empty());
+
+        let mut invalid_staging = config(None);
+        invalid_staging.public_guild_id = Some("not-a-guild".into());
+        assert!(matches!(
+            register_commands(&client, &invalid_staging).await,
+            Err(CommandRegistrationError::InvalidPublicGuildId)
+        ));
     }
 }

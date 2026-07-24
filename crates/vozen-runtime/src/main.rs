@@ -370,6 +370,13 @@ impl RuntimeConfig {
         let topgg_metrics = topgg_metrics_from_environment()?;
         let vote_redemption_secret = nonempty_env("VOTE_REDEMPTION_SECRET");
         let owner_commands = owner_commands_from_environment();
+        if !full_owner_commands_ready(
+            runtime_mode.is_full(),
+            owner_commands_enabled(env::var("RUST_OWNER_COMMANDS_ENABLED").ok().as_deref()),
+            owner_commands.as_ref(),
+        ) {
+            return Err(RuntimeError::FullRuntimeOwnerCommandsRequired);
+        }
         let core_voice = core_voice_from_environment()?;
         let tts_file = tts_file_from_environment()?;
         let transcription = transcription_from_environment()?;
@@ -821,11 +828,22 @@ fn owner_commands_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
+fn full_owner_commands_ready(
+    full_mode: bool,
+    enabled: bool,
+    options: Option<&OwnerCommandRuntimeOptions>,
+) -> bool {
+    !full_mode || !enabled || options.is_some()
+}
+
 async fn register_rust_commands_if_enabled(config: &RuntimeConfig) -> Result<(), RuntimeError> {
     if !register_commands_enabled(env::var("RUST_REGISTER_COMMANDS_ENABLED").ok().as_deref()) {
         return Ok(());
     }
     let application_id = nonempty_env("CLIENT_ID").ok_or(RuntimeError::MissingClientId)?;
+    // R4 staging can scope public commands to one test guild. Leaving this empty preserves the
+    // production global registration path; a staging process must opt in explicitly.
+    let public_guild_id = nonempty_env("RUST_COMMANDS_GUILD_ID");
     let owner_guild_id = nonempty_env("OWNER_GUILD_ID");
     let state_path = nonempty_env("RUST_COMMANDS_STATE_PATH")
         .map(PathBuf::from)
@@ -842,6 +860,7 @@ async fn register_rust_commands_if_enabled(config: &RuntimeConfig) -> Result<(),
         &client,
         &CommandRegistrationConfig {
             application_id,
+            public_guild_id,
             state_path: Some(state_path),
             owner_guild_id,
         },
@@ -1790,6 +1809,10 @@ enum RuntimeError {
         "RUST_RUNTIME_MODE=full requires RUST_BROWSER_API_ENABLED=true and PREMIUM_API_ENABLED=true"
     )]
     FullRuntimeBrowserApiRequired,
+    #[error(
+        "RUST_RUNTIME_MODE=full with RUST_OWNER_COMMANDS_ENABLED=true requires OWNER_ID and OWNER_GUILD_ID"
+    )]
+    FullRuntimeOwnerCommandsRequired,
     #[error(
         "CLIENT_ID is required when PREMIUM_API_ENABLED=true or TOPGG_WEBHOOK_SECRET is configured"
     )]
@@ -3000,6 +3023,18 @@ mod tests {
         assert!(!owner_commands_enabled(Some("1")));
         assert!(!owner_commands_enabled(Some("yes")));
         assert!(!owner_commands_enabled(None));
+    }
+
+    #[test]
+    fn full_mode_never_claims_owner_commands_without_both_identity_guards() {
+        let options = OwnerCommandRuntimeOptions {
+            owner_id: "123456789012345678".into(),
+            owner_guild_id: "234567890123456789".into(),
+        };
+        assert!(!full_owner_commands_ready(true, true, None));
+        assert!(full_owner_commands_ready(true, true, Some(&options)));
+        assert!(full_owner_commands_ready(false, true, None));
+        assert!(full_owner_commands_ready(true, false, None));
     }
 
     #[test]
