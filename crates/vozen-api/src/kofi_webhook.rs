@@ -12,7 +12,7 @@ use std::{
 use axum::{
     Router,
     body::Bytes,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{Method, StatusCode},
     response::{IntoResponse, Response},
     routing::any,
@@ -74,6 +74,9 @@ pub fn kofi_webhook_router(config: KofiWebhookConfig) -> Result<Router, KofiWebh
     Ok(Router::new()
         .route("/", any(kofi_webhook))
         .route("/webhook/kofi", any(kofi_webhook))
+        // Reject oversized webhook bodies before `Bytes` materialises more than the Node
+        // reader's 64 KB cap. The handler check remains for direct unit-level invocations.
+        .layer(DefaultBodyLimit::max(BODY_MAX_BYTES))
         .with_state(KofiWebhookState {
             verification_token: Arc::from(config.verification_token),
             store: config.store,

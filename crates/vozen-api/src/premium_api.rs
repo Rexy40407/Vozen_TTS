@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use axum::{
     Router,
     body::Bytes,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
     routing::any,
@@ -158,6 +158,9 @@ pub fn premium_router(config: PremiumApiConfig) -> Result<Router, PremiumApiConf
         .route("/api/link", any(link_request))
         .route("/api/activate", any(activate_request))
         .route("/api/claim-help", any(claim_help_request))
+        // Keep the network-side cap aligned with Node's incremental 4 KB reader. The
+        // handler still checks the length so direct in-process calls retain the same contract.
+        .layer(DefaultBodyLimit::max(BODY_MAX_BYTES))
         .with_state(PremiumApiState {
             origin,
             kofi_webhook_token: config

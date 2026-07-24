@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{HeaderMap, Method, StatusCode, header},
     response::{IntoResponse, Response},
     routing::any,
@@ -81,6 +81,9 @@ pub fn topgg_webhook_router(config: TopggWebhookConfig) -> Result<Router, TopggW
     }
     Ok(Router::new()
         .route("/webhook/topgg", any(topgg_webhook))
+        // Match the Node webhook's incremental 64 KB cap before an attacker can force a
+        // larger `Bytes` allocation. The handler retains the explicit contract check.
+        .layer(DefaultBodyLimit::max(BODY_MAX_BYTES))
         .with_state(TopggWebhookState {
             webhook_secret: Arc::from(config.webhook_secret),
             redemption_secret: Arc::from(config.redemption_secret),
