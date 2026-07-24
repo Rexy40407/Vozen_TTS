@@ -3,7 +3,10 @@
 //! This is deliberately read-only. Billing remains owned by the existing Vozen
 //! store; Helper receives a signed snapshot and never duplicates checkout logic.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use axum::{
     Router,
@@ -33,6 +36,7 @@ pub struct EntitlementsConfig {
 struct StateInner {
     store: Arc<Mutex<SqliteStore>>,
     service_secret: String,
+    seen_nonces: Arc<Mutex<HashMap<String, i64>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +64,7 @@ pub fn entitlements_router(config: EntitlementsConfig) -> Router {
         .with_state(StateInner {
             store: config.store,
             service_secret: config.service_secret,
+            seen_nonces: Arc::new(Mutex::new(HashMap::new())),
         })
 }
 
@@ -68,7 +73,7 @@ async fn resolve(
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
-    if !verify_request(&headers, &body, &state.service_secret) {
+    if !verify_request(&headers, &body, &state.service_secret, &state.seen_nonces) {
         return (StatusCode::UNAUTHORIZED, "invalid service signature").into_response();
     }
     let request: ResolveRequest = match serde_json::from_slice(&body) {
@@ -145,7 +150,12 @@ fn resolve_from_store(
     })
 }
 
-fn verify_request(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
+fn verify_request(
+    headers: &HeaderMap,
+    body: &[u8],
+    secret: &str,
+    seen_nonces: &Arc<Mutex<HashMap<String, i64>>>,
+) -> bool {
     let timestamp = match headers
         .get("x-vozen-timestamp")
         .and_then(|v| v.to_str().ok())
@@ -177,13 +187,37 @@ fn verify_request(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
     let body_hash = URL_SAFE_NO_PAD.encode(Sha256::digest(body));
     mac.update(format!("{timestamp}\n{nonce}\n{body_hash}").as_bytes());
     let expected = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
-    subtle::ConstantTimeEq::ct_eq(expected.as_bytes(), signature.as_bytes()).into()
+    let valid: bool =
+        subtle::ConstantTimeEq::ct_eq(expected.as_bytes(), signature.as_bytes()).into();
+    if !valid {
+        return false;
+    }
+    let mut seen = match seen_nonces.lock() {
+        Ok(seen) => seen,
+        Err(_) => return false,
+    };
+    seen.retain(|_, seen_at| now.saturating_sub(*seen_at) <= 60);
+    if seen.contains_key(nonce) {
+        return false;
+    }
+    seen.insert(nonce.to_owned(), now);
+    // Keep the replay cache bounded even if an attacker rotates nonces rapidly.
+    if seen.len() > 4_096
+        && let Some(oldest) = seen
+            .iter()
+            .min_by_key(|(_, seen_at)| **seen_at)
+            .map(|(nonce, _)| nonce.clone())
+    {
+        seen.remove(&oldest);
+    }
+    true
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::http::HeaderValue;
+    use std::collections::HashMap;
 
     #[test]
     fn signed_request_rejects_stale_timestamp() {
@@ -191,6 +225,35 @@ mod tests {
         headers.insert("x-vozen-timestamp", HeaderValue::from_static("1"));
         headers.insert("x-vozen-nonce", HeaderValue::from_static("n"));
         headers.insert("x-vozen-signature", HeaderValue::from_static("v1=bad"));
-        assert!(!verify_request(&headers, b"{}", "secret"));
+        assert!(!verify_request(
+            &headers,
+            b"{}",
+            "secret",
+            &Arc::new(Mutex::new(HashMap::new()))
+        ));
+    }
+
+    #[test]
+    fn signed_nonce_is_single_use_within_the_timestamp_window() {
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let body = br#"{"subject_id":"u"}"#;
+        let nonce = "nonce-1";
+        let body_hash = URL_SAFE_NO_PAD.encode(Sha256::digest(body));
+        let mut mac = HmacSha256::new_from_slice(b"secret").unwrap();
+        mac.update(format!("{now}\n{nonce}\n{body_hash}").as_bytes());
+        let signature = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-vozen-timestamp",
+            HeaderValue::from_str(&now.to_string()).unwrap(),
+        );
+        headers.insert("x-vozen-nonce", HeaderValue::from_static(nonce));
+        headers.insert(
+            "x-vozen-signature",
+            HeaderValue::from_str(&format!("v1={signature}")).unwrap(),
+        );
+        let cache = Arc::new(Mutex::new(HashMap::new()));
+        assert!(verify_request(&headers, body, "secret", &cache));
+        assert!(!verify_request(&headers, body, "secret", &cache));
     }
 }
