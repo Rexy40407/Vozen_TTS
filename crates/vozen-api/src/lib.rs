@@ -16,6 +16,7 @@ pub mod dashboard_api;
 pub mod dashboard_oauth;
 pub mod dashboard_validation;
 pub mod discord_oauth;
+pub mod entitlements_api;
 pub mod kofi_webhook;
 pub mod premium_api;
 pub mod topgg_webhook;
@@ -123,6 +124,7 @@ pub struct RuntimeRouterConfig {
     pub admin: Option<admin_router::AdminRouterConfig>,
     pub kofi_webhook: Option<kofi_webhook::KofiWebhookConfig>,
     pub topgg_webhook: Option<topgg_webhook::TopggWebhookConfig>,
+    pub entitlements: Option<entitlements_api::EntitlementsConfig>,
 }
 
 #[derive(Debug, Error)]
@@ -164,6 +166,9 @@ pub fn runtime_router(config: RuntimeRouterConfig) -> Result<Router, RuntimeRout
     }
     if let Some(topgg_webhook) = config.topgg_webhook {
         router = router.merge(topgg_webhook::topgg_webhook_router(topgg_webhook)?);
+    }
+    if let Some(entitlements) = config.entitlements {
+        router = router.merge(entitlements_api::entitlements_router(entitlements));
     }
     Ok(router.fallback(fallback))
 }
@@ -266,6 +271,7 @@ mod tests {
             admin: None,
             kofi_webhook: None,
             topgg_webhook: None,
+            entitlements: None,
         })
         .expect("compose public-only runtime");
         let health = app

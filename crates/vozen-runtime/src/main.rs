@@ -1657,7 +1657,7 @@ fn automatic_translation_event_sink(
     options.map(|options| {
         Arc::new(
             automatic_translation_sink::AutomaticTranslationGatewaySink::new(
-                store,
+                store.clone(),
                 gateway_state,
                 options.provider,
             ),
@@ -2264,9 +2264,15 @@ fn build_http_router(
                 webhook_secret: config.webhook_secret,
                 redemption_secret: config.redemption_secret,
                 expected_bot_id: config.client_id,
-                store,
+                store: store.clone(),
                 metrics: Some(runtime_metrics.clone()),
                 now: Arc::new(system_now_ms),
+            }),
+            entitlements: nonempty_env("VOZEN_ENTITLEMENTS_SERVICE_SECRET").map(|service_secret| {
+                vozen_api::entitlements_api::EntitlementsConfig {
+                    store: store.clone(),
+                    service_secret,
+                }
             }),
         })
         .map_err(RuntimeError::from);
@@ -2404,6 +2410,12 @@ fn build_http_router(
             store: store.clone(),
             metrics: Some(runtime_metrics),
             now: Arc::new(system_now_ms),
+        }),
+        entitlements: nonempty_env("VOZEN_ENTITLEMENTS_SERVICE_SECRET").map(|service_secret| {
+            vozen_api::entitlements_api::EntitlementsConfig {
+                store: store.clone(),
+                service_secret,
+            }
         }),
     })
     .map_err(RuntimeError::from)
