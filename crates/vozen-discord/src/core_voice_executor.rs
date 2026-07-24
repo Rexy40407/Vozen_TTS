@@ -267,6 +267,12 @@ where
             .await
     }
 
+    /// Joins the author's current voice channel for the one message that triggered an enabled
+    /// auto-join policy. It shares the exact `/join` transport and durable-presence ordering.
+    pub async fn join_for_message(&self, facts: &CoreVoiceInteractionFacts) -> CoreVoiceOutcome {
+        self.join_for_setup(facts).await
+    }
+
     /// Leaves a call from a gateway lifecycle rule using the same durable cleanup as `/leave`.
     pub async fn leave_for_lifecycle(&self, guild_id: &str) -> LeaveVoiceOutcome {
         self.service.leave_for_lifecycle(guild_id).await

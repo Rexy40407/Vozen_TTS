@@ -56,6 +56,16 @@ impl DiscordMessageFactsOwned {
 
     #[must_use]
     pub fn as_borrowed(&self) -> DiscordMessageFacts<'_> {
+        self.as_borrowed_with_autojoined(false)
+    }
+
+    /// Projects the same gateway facts after the runtime successfully auto-joined for this
+    /// exact message. The marker is intentionally supplied by the caller and never persisted.
+    #[must_use]
+    pub fn as_borrowed_with_autojoined(
+        &self,
+        autojoined_for_author: bool,
+    ) -> DiscordMessageFacts<'_> {
         DiscordMessageFacts {
             guild_id: &self.guild_id,
             channel_id: &self.channel_id,
@@ -66,7 +76,7 @@ impl DiscordMessageFactsOwned {
             author_voice_channel_id: self.author_voice_channel_id.as_deref(),
             bot_voice_channel_id: self.bot_voice_channel_id.as_deref(),
             member_role_ids: self.member_role_ids.as_deref(),
-            autojoined_for_author: false,
+            autojoined_for_author,
         }
     }
 }

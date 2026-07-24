@@ -73,6 +73,72 @@ pub fn admit_discord_message(
     }))
 }
 
+/// Decides whether the gateway may attempt the Node-compatible auto-join before the normal
+/// admission pass. This deliberately checks every gate that precedes `maybeAutojoin` in Node:
+/// guild switch, bot-reading, trigger, channel binding, required role and passive opt-out.
+///
+/// The transport and permission check remain in the runtime adapter. Returning `true` only says
+/// that joining the author's current voice channel is worth attempting; it never grants speech
+/// or bypasses the final same-call admission.
+pub fn should_attempt_autojoin(
+    store: &SqliteStore,
+    facts: DiscordMessageFacts<'_>,
+) -> Result<bool, StoreError> {
+    let config = store.guild_config(facts.guild_id)?;
+    if !config.enabled || !config.autojoin || facts.bot_voice_channel_id.is_some() {
+        return Ok(false);
+    }
+    if facts.author_voice_channel_id.is_none() || (facts.author_is_bot && !config.read_bots) {
+        return Ok(false);
+    }
+    let profile = store.channel_profile(facts.guild_id, facts.channel_id)?;
+    let auto_read = profile
+        .as_ref()
+        .and_then(|profile| profile.auto_read)
+        .unwrap_or_else(|| {
+            profile.is_none()
+                && config.autoread
+                && config.tts_channel_id.as_deref() == Some(facts.channel_id)
+        });
+    let read_bots = profile
+        .as_ref()
+        .and_then(|profile| profile.read_bots)
+        .unwrap_or(config.read_bots);
+    if facts.author_is_bot && !read_bots {
+        return Ok(false);
+    }
+
+    let explicitly_requested = facts.mentioned_bot || facts.replied_to_bot;
+    let passive_trigger =
+        auto_read || (config.text_in_voice && facts.bot_voice_channel_id == Some(facts.channel_id));
+    if !explicitly_requested && !passive_trigger {
+        return Ok(false);
+    }
+    if let Some(bound_voice) = profile
+        .as_ref()
+        .and_then(|profile| profile.voice_channel_id.as_deref())
+        && !facts.author_is_bot
+        && facts.author_voice_channel_id != Some(bound_voice)
+    {
+        return Ok(false);
+    }
+    if let Some(required_role) = config.tts_role_id.as_deref() {
+        let has_role = facts
+            .member_role_ids
+            .is_some_and(|roles| roles.iter().any(|role| role == required_role));
+        if !has_role {
+            return Ok(false);
+        }
+    }
+    if store.is_opted_out(facts.guild_id, facts.author_id)?
+        && passive_trigger
+        && !explicitly_requested
+    {
+        return Ok(false);
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,6 +158,57 @@ mod tests {
             member_role_ids: Some(&[]),
             autojoined_for_author: false,
         }
+    }
+
+    #[test]
+    fn autojoin_requires_a_real_trigger_and_enabled_setting() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        assert!(!should_attempt_autojoin(&store, facts()).expect("decision"));
+        store
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    autojoin: Some(true),
+                    autoread: Some(true),
+                    tts_channel_id: Some(Some("text".into())),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("config");
+        let mut candidate = facts();
+        candidate.bot_voice_channel_id = None;
+        assert!(should_attempt_autojoin(&store, candidate).expect("decision"));
+        let mut other = candidate;
+        other.channel_id = "other";
+        assert!(!should_attempt_autojoin(&store, other).expect("decision"));
+    }
+
+    #[test]
+    fn autojoin_respects_role_and_passive_opt_out_before_transport() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    autojoin: Some(true),
+                    autoread: Some(true),
+                    tts_channel_id: Some(Some("text".into())),
+                    tts_role_id: Some(Some("reader".into())),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("config");
+        let mut candidate = facts();
+        candidate.bot_voice_channel_id = None;
+        assert!(!should_attempt_autojoin(&store, candidate).expect("missing role"));
+        let reader_roles = ["reader".to_owned()];
+        let mut authorized = candidate;
+        authorized.member_role_ids = Some(&reader_roles);
+        assert!(should_attempt_autojoin(&store, authorized).expect("role"));
+        store.set_opt_out("guild", "user").expect("opt out");
+        assert!(!should_attempt_autojoin(&store, authorized).expect("opt out"));
+        authorized.mentioned_bot = true;
+        assert!(should_attempt_autojoin(&store, authorized).expect("explicit mention"));
     }
 
     #[test]

@@ -1225,6 +1225,74 @@ impl CoreVoiceGatewaySink {
         Ok(service)
     }
 
+    /// Mirrors Node's `maybeAutojoin`: only a message that already passed the trigger and policy
+    /// gates may cause a join, and the current channel is checked against live Discord permissions
+    /// immediately before the transport call. The result is an ephemeral exception for this
+    /// message; the normal message admission still receives an explicit autojoin marker.
+    async fn maybe_autojoin_for_message(
+        &self,
+        context: &Context,
+        facts: &DiscordMessageFactsOwned,
+    ) -> bool {
+        let eligible = self
+            .store
+            .lock()
+            .ok()
+            .and_then(|store| {
+                vozen_discord::should_attempt_autojoin(&store, facts.as_borrowed()).ok()
+            })
+            .unwrap_or(false);
+        if !eligible {
+            return false;
+        }
+        let Some(author_voice_channel_id) = facts.author_voice_channel_id.as_deref() else {
+            return false;
+        };
+        let Ok(guild_number) = facts.guild_id.parse::<u64>() else {
+            return false;
+        };
+        let Ok(channel_number) = author_voice_channel_id.parse::<u64>() else {
+            return false;
+        };
+        let guild_id = GuildId::new(guild_number);
+        let channel_id = ChannelId::new(channel_number);
+        let Ok(channels) = guild_id.channels(&context.http).await else {
+            return false;
+        };
+        let Some(voice) = channels.get(&channel_id) else {
+            return false;
+        };
+        if !matches!(voice.kind, ChannelType::Voice | ChannelType::Stage) {
+            return false;
+        }
+        let Ok(guild) = guild_id.to_partial_guild(&context.http).await else {
+            return false;
+        };
+        let Ok(bot) = context.http.get_current_user().await else {
+            return false;
+        };
+        let Ok(bot_member) = guild_id.member(&context.http, bot.id).await else {
+            return false;
+        };
+        let permissions = guild.user_permissions_in(voice, &bot_member);
+        if !permissions.contains(Permissions::CONNECT | Permissions::SPEAK) {
+            return false;
+        }
+        let core_facts = CoreVoiceInteractionFacts {
+            guild_id: facts.guild_id.clone(),
+            channel_id: facts.channel_id.clone(),
+            user_id: facts.author_id.clone(),
+            member_role_ids: None,
+        };
+        let Ok(executor) = self.executor(context) else {
+            return false;
+        };
+        matches!(
+            executor.join_for_message(&core_facts).await,
+            CoreVoiceOutcome::Joined(JoinVoiceOutcome::Joined)
+        )
+    }
+
     fn greet_cooldown_allows(&self, guild_id: &str, user_id: &str, now_ms: i64) -> bool {
         let key = format!("{guild_id}:{user_id}");
         let Ok(mut cooldown) = self.greet_cooldown.lock() else {
@@ -2721,6 +2789,10 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
             return Ok(());
         };
         let media = collect_message_media(&message);
+        if message.content.is_empty() && media.is_empty() {
+            return Ok(());
+        }
+        let autojoined_for_author = self.maybe_autojoin_for_message(&context, &facts).await;
         let service = self.message_service(&context)?;
         let announce_speaker = self.announce_speaker(&facts, &message);
         let detected_language = self.detected_language(&facts, &message.content);
@@ -2750,7 +2822,7 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         };
         let outcome = service
             .execute(MessageVoiceInvocation {
-                facts: facts.as_borrowed(),
+                facts: facts.as_borrowed_with_autojoined(autojoined_for_author),
                 raw: &message.content,
                 media: &media,
                 detected_language,

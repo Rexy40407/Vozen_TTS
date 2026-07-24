@@ -312,7 +312,7 @@ pub use interaction_dispatch::{
 pub use invite_command::{InviteCommand, InviteCommandError, parse_invite_command};
 pub use joke_text::{JOKE_LANGUAGES, JokeLanguage, joke_lang_by_key, pick_joke};
 pub use laugh_text::{laughter_for_model, laughter_for_prefix};
-pub use message_admission::{DiscordMessageFacts, admit_discord_message};
+pub use message_admission::{DiscordMessageFacts, admit_discord_message, should_attempt_autojoin};
 pub use message_interaction::DiscordMessageFactsOwned;
 pub use message_media::collect_message_media;
 pub use message_pipeline::{MessagePipelineOutcome, MessageSpeechPipeline};
