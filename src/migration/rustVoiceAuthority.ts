@@ -70,7 +70,8 @@ export const FULL_RUST_RUNTIME_FLAGS = [
 export function rustRuntimeFullEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return (
     env.RUST_RUNTIME_MODE?.trim().toLowerCase() === 'full' &&
-    FULL_RUST_RUNTIME_FLAGS.every((name) => env[name]?.trim().toLowerCase() === 'true')
+    FULL_RUST_RUNTIME_FLAGS.every((name) => env[name]?.trim().toLowerCase() === 'true') &&
+    env.PREMIUM_API_ENABLED?.trim().toLowerCase() === 'true'
   );
 }
 

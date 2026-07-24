@@ -80,7 +80,14 @@ describe('Rust core voice migration ownership', () => {
 
   it('recognises a complete explicit cutover contract without reading process.env', () => {
     const env = Object.fromEntries(FULL_RUST_RUNTIME_FLAGS.map((name) => [name, 'true']));
-    expect(rustRuntimeFullEnabled({ ...env, RUST_RUNTIME_MODE: 'FULL' })).toBe(true);
+    expect(
+      rustRuntimeFullEnabled({
+        ...env,
+        RUST_RUNTIME_MODE: 'FULL',
+        PREMIUM_API_ENABLED: 'true',
+      }),
+    ).toBe(true);
+    expect(rustRuntimeFullEnabled({ ...env, RUST_RUNTIME_MODE: 'FULL' })).toBe(false);
   });
 
   it('keeps owner commands on Node until both identity guards are present', () => {
