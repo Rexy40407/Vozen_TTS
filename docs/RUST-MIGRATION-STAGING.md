@@ -84,3 +84,42 @@ Only after these checks, the voice-driver build, API contract checks and the rem
 canaries pass may the private cutover gate be considered. A control-plane-only build without
 `voice-driver` is useful for portable CI, but it is not evidence that live TTS or Songbird works.
 This document does not authorize a production deployment or a push.
+
+## Abort and rollback
+
+Abort the staging run immediately if the Rust process creates a second gateway session, a
+command is registered outside the disposable guild, SQLite integrity is not `ok`, a voice
+message is spoken by the wrong user/call, or a critical error repeats. Do not try to repair the
+database while either runtime is still running.
+
+### Staging rollback
+
+The staging project has its own named volume and can be stopped without touching production:
+
+```bash
+RUST_ENV_FILE=.env.rust.staging docker compose -p vozen-staging \
+  -f docker-compose.yml -f docker-compose.rust.yml down --remove-orphans
+```
+
+Do not add `-v`: the SQLite copy and its WAL/SHM files must remain available for inspection. If
+the staging database is needed again, restart the known-good Node image with the same staging
+environment and the base compose file, never with the production token.
+
+### Production cutover rollback
+
+The production rollback is a process switch, not a live database migration:
+
+1. Stop Rust and verify that its process/container is gone before starting anything else.
+2. Preserve the Rust logs and make a fresh copy of `tts.db`, `tts.db-wal` and `tts.db-shm` while
+   the database is stopped. Keep the pre-cutover verified backup unchanged.
+3. Restore the Node compose/service definition and start Node with the production `.env`; leave
+   `RUST_RUNTIME_MODE=shadow` or unset and do not enable any Rust canary flags.
+4. Verify one gateway `READY`, `/health`, `/uptime`, `/join` and a non-mutating `/config show`
+   before allowing normal traffic. Confirm that no second process owns the production token.
+5. If `PRAGMA integrity_check` or `PRAGMA foreign_key_check` fails, stop and restore the verified
+   backup with every SQLite sidecar file together. Do not let Node open a suspect copy.
+
+Never run Node and Rust concurrently with the same Discord token, and never delete the data
+volume as part of rollback. A failed rollback remains an incident requiring the preserved logs,
+database copies and an explicit operator decision; it is not a reason to keep retrying the
+cutover automatically.
