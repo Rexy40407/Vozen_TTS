@@ -198,11 +198,15 @@ impl SqliteStore {
         connection.execute_batch(
             "PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;\nPRAGMA synchronous = NORMAL;",
         )?;
+        // Reject an already-corrupt copy before any schema installation or historical migration
+        // can touch it. The post-migration check below protects the newly-added objects too.
+        verify_connection_integrity(&connection)?;
         // Schema installation and historical upgrades must commit together. A failed ALTER or
         // privacy cleanup must leave the database exactly as it was before Rust opened it.
         let transaction = connection.transaction()?;
         install_current_schema(&transaction)?;
         migration::migrate_legacy_schema(&transaction)?;
+        verify_connection_integrity(&transaction)?;
         transaction.commit()?;
         Ok(Self { connection })
     }
@@ -223,26 +227,31 @@ impl SqliteStore {
     /// this is an explicit gate rather than a silent repair: a failed check must stop a Rust
     /// cutover and preserve the original file for rollback investigation.
     pub fn verify_integrity(&self) -> Result<(), StoreError> {
-        let result = self
-            .connection
-            .query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))?;
-        if result != "ok" {
-            return Err(StoreError::IntegrityCheck(result));
-        }
+        verify_connection_integrity(&self.connection)
+    }
+}
 
-        let mut statement = self.connection.prepare("PRAGMA foreign_key_check")?;
-        let mut rows = statement.query([])?;
-        if let Some(row) = rows.next()? {
-            let table = row.get::<_, String>(0).unwrap_or_else(|_| "?".into());
-            let rowid = row.get::<_, i64>(1).unwrap_or(-1);
-            let parent = row.get::<_, String>(2).unwrap_or_else(|_| "?".into());
-            return Err(StoreError::ForeignKeyCheck(format!(
-                "table={table} rowid={rowid} parent={parent}"
-            )));
-        }
-        Ok(())
+fn verify_connection_integrity(connection: &Connection) -> Result<(), StoreError> {
+    let result =
+        connection.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))?;
+    if result != "ok" {
+        return Err(StoreError::IntegrityCheck(result));
     }
 
+    let mut statement = connection.prepare("PRAGMA foreign_key_check")?;
+    let mut rows = statement.query([])?;
+    if let Some(row) = rows.next()? {
+        let table = row.get::<_, String>(0).unwrap_or_else(|_| "?".into());
+        let rowid = row.get::<_, i64>(1).unwrap_or(-1);
+        let parent = row.get::<_, String>(2).unwrap_or_else(|_| "?".into());
+        return Err(StoreError::ForeignKeyCheck(format!(
+            "table={table} rowid={rowid} parent={parent}"
+        )));
+    }
+    Ok(())
+}
+
+impl SqliteStore {
     pub(crate) fn connection(&self) -> &Connection {
         &self.connection
     }
@@ -470,6 +479,56 @@ mod tests {
                 )
                 .expect("schema object query"),
             0
+        );
+        drop(reopened);
+        let _ = remove_file(&path);
+        let _ = remove_file(format!("{}-wal", path.display()));
+        let _ = remove_file(format!("{}-shm", path.display()));
+    }
+
+    #[test]
+    fn integrity_failure_is_rejected_before_schema_mutation() {
+        let path = temporary_database_path();
+        let legacy = Connection::open(&path).expect("legacy database");
+        legacy
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE integrity_parent (id INTEGER PRIMARY KEY);
+                 CREATE TABLE integrity_child (
+                   id INTEGER PRIMARY KEY,
+                   parent_id INTEGER NOT NULL REFERENCES integrity_parent(id)
+                 );
+                 PRAGMA foreign_keys = OFF;
+                 INSERT INTO integrity_child (id, parent_id) VALUES (1, 999);",
+            )
+            .expect("incompatible legacy data");
+        drop(legacy);
+
+        assert!(matches!(
+            SqliteStore::open(&path),
+            Err(StoreError::ForeignKeyCheck(_))
+        ));
+
+        let reopened = Connection::open(&path).expect("reopen original database");
+        assert_eq!(
+            reopened
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE name = 'guild_config'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("schema object query"),
+            0
+        );
+        assert_eq!(
+            reopened
+                .query_row(
+                    "SELECT parent_id FROM integrity_child WHERE id = 1",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("orphan remains untouched"),
+            999
         );
         drop(reopened);
         let _ = remove_file(&path);
