@@ -1903,6 +1903,10 @@ async fn run() -> Result<(), RuntimeError> {
     // Opening the store verifies/migrates the exact Node SQLite schema before the Rust gateway
     // does any work. Keep the handle alive for the whole process; future adapters share it.
     let store = Arc::new(Mutex::new(SqliteStore::open(&config.database_path)?));
+    store
+        .lock()
+        .map_err(|_| RuntimeError::StoreLock)?
+        .verify_integrity()?;
     run_startup_data_hygiene(&config.database_path);
     let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
     match transcription_adapter::check_ffmpeg(std::path::Path::new(&ffmpeg_path)).await {

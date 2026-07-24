@@ -169,6 +169,10 @@ pub enum StoreError {
     InvalidTopggEventId,
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("SQLite integrity check failed: {0}")]
+    IntegrityCheck(String),
+    #[error("SQLite foreign-key check failed: {0}")]
+    ForeignKeyCheck(String),
 }
 
 /// A Rust-owned SQLite connection configured with the same durable schema as the live bot.
@@ -204,6 +208,33 @@ impl SqliteStore {
             |row| row.get::<_, i64>(0),
         )?;
         Ok(found != 0)
+    }
+
+    /// Verifies that an existing production copy is safe to serve before Discord or HTTP starts.
+    ///
+    /// SQLite can open a file whose pages are readable while still reporting corruption or
+    /// orphaned foreign-key rows. The Node process remains authoritative during migration, so
+    /// this is an explicit gate rather than a silent repair: a failed check must stop a Rust
+    /// cutover and preserve the original file for rollback investigation.
+    pub fn verify_integrity(&self) -> Result<(), StoreError> {
+        let result = self
+            .connection
+            .query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))?;
+        if result != "ok" {
+            return Err(StoreError::IntegrityCheck(result));
+        }
+
+        let mut statement = self.connection.prepare("PRAGMA foreign_key_check")?;
+        let mut rows = statement.query([])?;
+        if let Some(row) = rows.next()? {
+            let table = row.get::<_, String>(0).unwrap_or_else(|_| "?".into());
+            let rowid = row.get::<_, i64>(1).unwrap_or(-1);
+            let parent = row.get::<_, String>(2).unwrap_or_else(|_| "?".into());
+            return Err(StoreError::ForeignKeyCheck(format!(
+                "table={table} rowid={rowid} parent={parent}"
+            )));
+        }
+        Ok(())
     }
 
     pub(crate) fn connection(&self) -> &Connection {
@@ -256,6 +287,7 @@ mod tests {
     #[test]
     fn new_rust_database_contains_the_node_schema_contract() {
         let store = SqliteStore::open_in_memory().expect("create in-memory store");
+        store.verify_integrity().expect("new store is valid");
         assert!(
             store
                 .has_schema_object("guild_config")
@@ -294,5 +326,39 @@ mod tests {
             "CREATE INDEX IF NOT EXISTS idx ON table_name (column_name)"
         );
         assert!(idempotent_create_sql("DROP TABLE nope").is_err());
+    }
+
+    #[test]
+    fn integrity_gate_rejects_orphaned_foreign_keys_without_repairing_them() {
+        let store = SqliteStore::open_in_memory().expect("create in-memory store");
+        store
+            .connection
+            .execute_batch(
+                "CREATE TABLE integrity_parent (id INTEGER PRIMARY KEY);
+                 CREATE TABLE integrity_child (
+                   id INTEGER PRIMARY KEY,
+                   parent_id INTEGER REFERENCES integrity_parent(id)
+                 );
+                 PRAGMA foreign_keys = OFF;
+                 INSERT INTO integrity_child (id, parent_id) VALUES (1, 999);
+                 PRAGMA foreign_keys = ON;",
+            )
+            .expect("seed invalid fixture");
+
+        let error = store
+            .verify_integrity()
+            .expect_err("orphan must fail closed");
+        assert!(matches!(error, StoreError::ForeignKeyCheck(_)));
+        assert_eq!(
+            store
+                .connection
+                .query_row(
+                    "SELECT parent_id FROM integrity_child WHERE id = 1",
+                    [],
+                    |row| { row.get::<_, i64>(0) }
+                )
+                .expect("fixture remains intact"),
+            999
+        );
     }
 }
