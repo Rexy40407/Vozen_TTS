@@ -282,7 +282,20 @@ fn idempotent_create_sql(sql: &str) -> Result<String, StoreError> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::remove_file;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use rusqlite::Connection;
+
     use super::*;
+
+    fn temporary_database_path() -> std::path::PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!("vozen-rust-current-schema-{nonce}.sqlite"))
+    }
 
     #[test]
     fn new_rust_database_contains_the_node_schema_contract() {
@@ -360,5 +373,65 @@ mod tests {
                 .expect("fixture remains intact"),
             999
         );
+    }
+
+    #[test]
+    fn opens_a_copy_created_by_the_current_node_schema_and_preserves_rows() {
+        let path = temporary_database_path();
+        let legacy = Connection::open(&path).expect("node schema copy");
+        let contract: SqliteSchemaContract =
+            serde_json::from_str(SQLITE_SCHEMA).expect("schema contract");
+        for object in &contract.objects {
+            legacy
+                .execute_batch(&object.sql)
+                .unwrap_or_else(|error| panic!("create {}: {error}", object.name));
+        }
+        legacy
+            .execute(
+                "INSERT INTO guild_config (guild_id, default_voice, locale) VALUES (?1, ?2, ?3)",
+                ("guild-copy", "pt_PT-google-medium", "pt"),
+            )
+            .expect("seed node row");
+        legacy
+            .execute(
+                "INSERT INTO user_voice (guild_id, user_id, voice_model, speed, engine)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                (
+                    "guild-copy",
+                    "user-copy",
+                    "en_US-amy-medium",
+                    1.0_f64,
+                    "google",
+                ),
+            )
+            .expect("seed user voice");
+        drop(legacy);
+
+        let store = SqliteStore::open(&path).expect("open current node copy");
+        store.verify_integrity().expect("current copy is valid");
+        for object in &contract.objects {
+            assert!(
+                store
+                    .has_schema_object(&object.name)
+                    .expect("query schema object"),
+                "missing schema object {}",
+                object.name
+            );
+        }
+        assert_eq!(
+            store
+                .connection
+                .query_row(
+                    "SELECT default_voice FROM guild_config WHERE guild_id = 'guild-copy'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .expect("preserved guild row"),
+            "pt_PT-google-medium"
+        );
+        drop(store);
+        let _ = remove_file(&path);
+        let _ = remove_file(format!("{}-wal", path.display()));
+        let _ = remove_file(format!("{}-shm", path.display()));
     }
 }
