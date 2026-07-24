@@ -183,11 +183,33 @@ function projectContractShape(actual: unknown, expected: unknown): unknown {
           key,
           Object.prototype.hasOwnProperty.call(actualRecord, key)
             ? projectContractShape(actualRecord[key], value)
-            : { __missing: true },
+            : discordDefaultOmission(key, value)
+              ? discordDefaultValue(key, value)
+              : { __missing: true },
         ]),
     );
   }
   return actual;
+}
+
+/**
+ * Discord does not echo every command payload field for guild commands. In particular,
+ * empty option arrays, `required: false`, and installation-context fields may be omitted
+ * from the GET response even though they were accepted by the PUT request. Treat only these
+ * documented defaults as equivalent; all non-default drift remains a preflight failure.
+ */
+function discordDefaultOmission(key: string, expected: unknown): boolean {
+  return (
+    (key === 'options' && Array.isArray(expected) && expected.length === 0) ||
+    (key === 'required' && expected === false) ||
+    ((key === 'contexts' || key === 'integration_types') && Array.isArray(expected))
+  );
+}
+
+function discordDefaultValue(key: string, expected: unknown): unknown {
+  if (key === 'options') return [];
+  if (key === 'required') return false;
+  return expected;
 }
 
 function compareCommandContracts(actual: JsonRecord[], expected: JsonRecord[]): boolean {

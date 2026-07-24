@@ -100,6 +100,37 @@ describe('Rust staging preflight', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
+  it('accepts Discord omissions for command defaults in guild responses', async () => {
+    const omitDiscordDefaults = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(omitDiscordDefaults);
+      if (value === null || typeof value !== 'object') return value;
+      const record = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .filter(([key, item]) => {
+            if (key === 'options' && Array.isArray(item) && item.length === 0) return false;
+            if (key === 'required' && item === false) return false;
+            return key !== 'contexts' && key !== 'integration_types';
+          })
+          .map(([key, item]) => [key, omitDiscordDefaults(item)]),
+      );
+      return record;
+    };
+    const fetchImpl = happyFetch();
+    fetchImpl.mockImplementationOnce(async () => response({ id: env.CLIENT_ID }));
+    fetchImpl.mockImplementationOnce(async () => response({ id: env.RUST_COMMANDS_GUILD_ID }));
+    fetchImpl.mockImplementationOnce(async () =>
+      response(omitDiscordDefaults([...contract.public_commands, ...contract.owner_commands])),
+    );
+
+    await expect(
+      runRustStagingPreflight({ env, fetchImpl, apiBaseUrl: 'https://discord.test/api/v10' }),
+    ).resolves.toMatchObject({
+      guildCommandCount: 42,
+      expectedGuildCommandCount: 42,
+      globalCommandCount: 0,
+    });
+  });
+
   it('fails before network access when required configuration is missing or invalid', async () => {
     const fetchImpl = vi.fn();
     await expect(
