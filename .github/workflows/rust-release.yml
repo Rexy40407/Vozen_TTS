@@ -28,11 +28,15 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build runtime
         run: cargo build --release -p vozen-runtime
+      - name: Build entitlement daemon
+        run: cargo build --release -p vozen-entitlementd
       - name: Package
         run: |
           mkdir -p release/bin release/deploy
           cp target/release/vozen-runtime release/bin/vozen-runtime
+          cp target/release/vozen-entitlementd release/bin/vozen-entitlementd
           cp deploy/vozen-rust.service release/deploy/
+          cp deploy/vozen-entitlementd.service release/deploy/
           cp deploy/RUST-CUTOVER.md release/deploy/
           tar -czf vozen-rust-${GITHUB_SHA}.tar.gz -C release .
       - uses: actions/upload-artifact@v4

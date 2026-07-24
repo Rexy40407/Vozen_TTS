@@ -1,0 +1,24 @@
+[Unit]
+Description=Vozen cross-product entitlement read service
+After=network-online.target vozen.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vozen
+Group=vozen
+WorkingDirectory=/home/vozen/vozen-entitlementd/current
+EnvironmentFile=/home/vozen/vozen-entitlementd/shared/.env
+ExecStart=/home/vozen/vozen-entitlementd/current/bin/vozen-entitlementd
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/vozen/discord-bot-Vozen
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

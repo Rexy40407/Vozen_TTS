@@ -4,6 +4,7 @@ members = [
   "crates/vozen-core",
   "crates/vozen-store",
   "crates/vozen-api",
+  "crates/vozen-entitlementd",
   "crates/vozen-discord",
   "crates/vozen-tts",
   "crates/vozen-runtime",

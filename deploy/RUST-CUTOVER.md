@@ -21,6 +21,15 @@ shared environment as `VOZEN_ENTITLEMENT_SECRET`; the Helper URL is the loopback
 (`http://127.0.0.1:3001/internal/v1/entitlements/resolve`) unless a private network endpoint is
 provisioned.
 
+The entitlement read path can be staged independently of the Discord gateway with
+`vozen-entitlementd.service`. It reads the same SQLite database in WAL mode and listens on
+`VOZEN_ENTITLEMENT_BIND_ADDR` (default `127.0.0.1:3011`), exposing only the signed resolve route.
+Set `VOZEN_ENTITLEMENTS_DATABASE_PATH=/home/vozen/discord-bot-Vozen/tts.db`, configure the same
+random secret in both services, and point the Helper at
+`http://127.0.0.1:3011/internal/v1/entitlements/resolve`. This daemon is read-only at the HTTP
+boundary and does not open a Discord gateway, so it can run while the Node gateway remains the
+rollback target.
+
 ## Rollback
 
 ```bash
