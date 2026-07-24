@@ -47,8 +47,9 @@ cargo run --release -p vozen-runtime
 `rust:staging:preflight` is read-only. It checks the bot identity, staging guild and guild
 command set against `contracts/discord-commands.json`, and reports the global command count for
 awareness. It never calls a Discord PUT route and never prints the token or Discord response
-bodies. Run it with `DISCORD_TOKEN`, `CLIENT_ID`, `RUST_COMMANDS_GUILD_ID` and (when owner
-commands share the staging guild) `OWNER_GUILD_ID` set in an uncommitted environment file.
+bodies. Run it with `DISCORD_TOKEN`, `CLIENT_ID`, `RUST_COMMANDS_GUILD_ID` and `OWNER_GUILD_ID`
+set in an uncommitted environment file. If the owner guild differs from the staging guild, the
+preflight also checks that guild and its owner-only command set.
 
 With the staging bot online, verify in the test guild:
 

@@ -35,6 +35,7 @@ export interface RustStagingPreflightReport {
   guildReachable: boolean;
   guildCommandCount: number;
   expectedGuildCommandCount: number;
+  ownerGuildCommandCount: number | null;
   globalCommandCount: number;
 }
 
@@ -222,6 +223,45 @@ export async function runRustStagingPreflight(
     );
   }
 
+  let ownerGuildCommandCount: number | null = null;
+  if (ownerGuildId && ownerGuildId !== guildId) {
+    const ownerGuild = jsonRecord(
+      await getJson(
+        fetchImpl,
+        `${apiBase}/guilds/${ownerGuildId}`,
+        token,
+        'owner guild',
+        timeoutMs,
+      ),
+      'owner guild',
+    );
+    if (ownerGuild.id !== ownerGuildId) {
+      throw new RustStagingPreflightError(
+        'invalid_response',
+        'Discord returned a different owner guild',
+      );
+    }
+    const ownerCommands = responseArray(
+      await getJson(
+        fetchImpl,
+        `${apiBase}/applications/${clientId}/guilds/${ownerGuildId}/commands`,
+        token,
+        'owner commands',
+        timeoutMs,
+      ),
+      'owner commands',
+    );
+    const ownerNames = commandNames(ownerCommands, 'owner commands');
+    const expectedOwnerNames = contractNames('owner_commands');
+    if (!compareCommandNames(ownerNames, expectedOwnerNames)) {
+      throw new RustStagingPreflightError(
+        'guild_command_mismatch',
+        `Owner command set differs from the Rust contract (got ${ownerNames.length}, expected ${expectedOwnerNames.length})`,
+      );
+    }
+    ownerGuildCommandCount = ownerNames.length;
+  }
+
   const globalCommands = responseArray(
     await getJson(
       fetchImpl,
@@ -239,6 +279,7 @@ export async function runRustStagingPreflight(
     guildReachable: true,
     guildCommandCount: actualNames.length,
     expectedGuildCommandCount: expectedNames.length,
+    ownerGuildCommandCount,
     globalCommandCount: globalCommands.length,
   };
 }

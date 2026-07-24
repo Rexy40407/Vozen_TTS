@@ -58,6 +58,7 @@ describe('Rust staging preflight', () => {
       guildReachable: true,
       guildCommandCount: 42,
       expectedGuildCommandCount: 42,
+      ownerGuildCommandCount: null,
       globalCommandCount: 0,
     });
     expect(fetchImpl).toHaveBeenCalledTimes(4);
@@ -113,6 +114,56 @@ describe('Rust staging preflight', () => {
       runRustStagingPreflight({ env, fetchImpl, apiBaseUrl: 'https://discord.test/api/v10' }),
     ).rejects.toMatchObject({ code: 'guild_command_mismatch' });
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(
+      fetchImpl.mock.calls.every((call) => (call[1] as RequestInit | undefined)?.method === 'GET'),
+    ).toBe(true);
+  });
+
+  it('also verifies owner commands when the owner guild is separate', async () => {
+    const separateOwnerEnv = {
+      ...env,
+      OWNER_GUILD_ID: '345678901234567890',
+    };
+    const fetchImpl = vi.fn(async (input: unknown, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/users/@me')) return response({ id: separateOwnerEnv.CLIENT_ID });
+      if (url.endsWith(`/guilds/${separateOwnerEnv.RUST_COMMANDS_GUILD_ID}`)) {
+        return response({ id: separateOwnerEnv.RUST_COMMANDS_GUILD_ID });
+      }
+      if (url.endsWith(`/guilds/${separateOwnerEnv.OWNER_GUILD_ID}`)) {
+        return response({ id: separateOwnerEnv.OWNER_GUILD_ID });
+      }
+      if (
+        url.endsWith(
+          `/applications/${separateOwnerEnv.CLIENT_ID}/guilds/${separateOwnerEnv.RUST_COMMANDS_GUILD_ID}/commands`,
+        )
+      ) {
+        return response(contract.public_commands);
+      }
+      if (
+        url.endsWith(
+          `/applications/${separateOwnerEnv.CLIENT_ID}/guilds/${separateOwnerEnv.OWNER_GUILD_ID}/commands`,
+        )
+      ) {
+        return response(contract.owner_commands);
+      }
+      if (url.endsWith('/commands')) return response([]);
+      throw new Error(`unexpected URL: ${url}`);
+    });
+
+    await expect(
+      runRustStagingPreflight({
+        env: separateOwnerEnv,
+        fetchImpl,
+        apiBaseUrl: 'https://discord.test/api/v10',
+      }),
+    ).resolves.toMatchObject({
+      guildCommandCount: 40,
+      expectedGuildCommandCount: 40,
+      ownerGuildCommandCount: 2,
+      globalCommandCount: 0,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
     expect(
       fetchImpl.mock.calls.every((call) => (call[1] as RequestInit | undefined)?.method === 'GET'),
     ).toBe(true);
