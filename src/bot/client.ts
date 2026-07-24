@@ -12,6 +12,7 @@ import type { BotDeps } from './deps';
 import { handleGuildDelete, getPlayer } from './deps';
 import { markGuildDeparted, unmarkGuildDeparted } from '../store/guildDeparted';
 import { handleInteraction, handleAutocomplete, handleMessageContextMenu } from '../commands/index';
+import { rustAutocompleteOwnsCommand, rustRuntimeReady } from '../migration/rustVoiceAuthority';
 import { handleMessage } from '../commands/messageHandler';
 import { getGuildConfig } from '../store/guildConfig';
 import { getNickname } from '../store/nickname';
@@ -110,6 +111,14 @@ export function bindEvents(deps: BotDeps): void {
 
   client.on(Events.InteractionCreate, (interaction: Interaction) => {
     if (interaction.isAutocomplete()) {
+      const focused = interaction.options.getFocused(true);
+      const subcommand = interaction.options.getSubcommand(false);
+      if (
+        rustRuntimeReady() &&
+        rustAutocompleteOwnsCommand(interaction.commandName, subcommand, focused.name)
+      ) {
+        return;
+      }
       void handleAutocomplete(interaction, deps);
       return;
     }

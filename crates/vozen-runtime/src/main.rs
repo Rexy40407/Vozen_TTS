@@ -6,6 +6,7 @@
 //! optional loopback HTTP route). Account, receipt-claim, Ko-fi webhook, dashboard and admin
 //! adapters are individually opt-in. Voice/message ownership still requires its own canary flag.
 
+mod autocomplete_sink;
 mod automatic_translation_sink;
 mod birthday_sink;
 mod bot_stats_sink;
@@ -134,6 +135,7 @@ struct RuntimeConfig {
     translation_preferences: bool,
     voice_preferences: Option<VoicePreferenceRuntimeOptions>,
     config_default_voice: Option<ConfigDefaultVoiceRuntimeOptions>,
+    autocomplete: Option<autocomplete_sink::AutocompleteRuntimeOptions>,
     config_channel: bool,
     config_queue_roles: bool,
     config_greet_language: bool,
@@ -408,6 +410,18 @@ impl RuntimeConfig {
         );
         let voice_preferences = voice_preferences_from_environment()?;
         let config_default_voice = config_default_voice_from_environment()?;
+        let autocomplete = autocomplete_from_environment(
+            core_voice.as_ref(),
+            voice_preferences.as_ref(),
+            config_default_voice.as_ref(),
+            config_language_enabled(env::var("RUST_CONFIG_LANGUAGE_ENABLED").ok().as_deref()),
+            translation_preferences,
+            pronunciation_enabled(env::var("RUST_PRONUNCIATION_ENABLED").ok().as_deref()),
+            #[cfg(feature = "voice-driver")]
+            transcription_live,
+            #[cfg(not(feature = "voice-driver"))]
+            false,
+        )?;
         let config_channel =
             config_channel_enabled(env::var("RUST_CONFIG_CHANNEL_ENABLED").ok().as_deref());
         let config_queue_roles =
@@ -495,6 +509,7 @@ impl RuntimeConfig {
             translation_preferences,
             voice_preferences,
             config_default_voice,
+            autocomplete,
             config_channel,
             config_queue_roles,
             config_greet_language,
@@ -774,6 +789,39 @@ fn config_default_voice_from_environment()
     }))
 }
 
+fn autocomplete_from_environment(
+    core_voice: Option<&CoreVoiceRuntimeOptions>,
+    voice_preferences: Option<&VoicePreferenceRuntimeOptions>,
+    config_default_voice: Option<&ConfigDefaultVoiceRuntimeOptions>,
+    config_language: bool,
+    translation_preferences: bool,
+    pronunciation: bool,
+    transcription_live: bool,
+) -> Result<Option<autocomplete_sink::AutocompleteRuntimeOptions>, RuntimeError> {
+    if !autocomplete_enabled(env::var("RUST_AUTOCOMPLETE_ENABLED").ok().as_deref()) {
+        return Ok(None);
+    }
+    let needs_models =
+        core_voice.is_some() || voice_preferences.is_some() || config_default_voice.is_some();
+    let available_models = if needs_models {
+        let models_dir = nonempty_env("MODELS_DIR").unwrap_or_else(|| "./models".to_owned());
+        discover_piper_models(std::path::Path::new(&models_dir))?
+    } else {
+        Vec::new()
+    };
+    Ok(Some(autocomplete_sink::AutocompleteRuntimeOptions {
+        available_models,
+        core_voice: core_voice.is_some(),
+        game_play: core_voice.is_some_and(|options| options.game_play_enabled),
+        transcription_live,
+        voice_preferences: voice_preferences.is_some(),
+        config_default_voice: config_default_voice.is_some(),
+        config_language,
+        translation_preferences,
+        pronunciation,
+    }))
+}
+
 fn translation_text_from_environment() -> Option<TranslationTextRuntimeOptions> {
     let text_enabled =
         translation_text_enabled(env::var("RUST_TRANSLATE_TEXT_ENABLED").ok().as_deref());
@@ -935,6 +983,10 @@ fn voice_preferences_enabled(raw: Option<&str>) -> bool {
 }
 
 fn config_default_voice_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn autocomplete_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -1384,6 +1436,19 @@ fn config_default_voice_event_sink(
             },
         )
         .map_err(|_| RuntimeError::ConfigDefaultVoiceGateway)?,
+    )))
+}
+
+fn autocomplete_event_sink(
+    options: Option<autocomplete_sink::AutocompleteRuntimeOptions>,
+    store: Arc<Mutex<SqliteStore>>,
+) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
+    let Some(options) = options else {
+        return Ok(None);
+    };
+    Ok(Some(Arc::new(
+        autocomplete_sink::AutocompleteGatewaySink::new(store, options)
+            .map_err(|_| RuntimeError::AutocompleteGateway)?,
     )))
 }
 
@@ -1905,6 +1970,8 @@ enum RuntimeError {
     GameScoresGateway,
     #[error("config default voice gateway initialisation failed")]
     ConfigDefaultVoiceGateway,
+    #[error("autocomplete gateway initialisation failed")]
+    AutocompleteGateway,
     #[error("config channel gateway initialisation failed")]
     ConfigChannelGateway,
     #[error("config queue role gateway initialisation failed")]
@@ -2012,6 +2079,9 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) =
         core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?
     {
+        event_sinks.push(sink);
+    }
+    if let Some(sink) = autocomplete_event_sink(config.autocomplete, store.clone())? {
         event_sinks.push(sink);
     }
     if let Some(sink) = tts_file_event_sink(config.tts_file, store.clone())? {
@@ -2726,6 +2796,15 @@ mod tests {
         assert!(!core_voice_enabled(Some("1")));
         assert!(!core_voice_enabled(Some("yes")));
         assert!(!core_voice_enabled(None));
+    }
+
+    #[test]
+    fn autocomplete_promotion_is_exactly_opt_in() {
+        assert!(autocomplete_enabled(Some("true")));
+        assert!(autocomplete_enabled(Some(" TRUE ")));
+        assert!(!autocomplete_enabled(Some("1")));
+        assert!(!autocomplete_enabled(Some("yes")));
+        assert!(!autocomplete_enabled(None));
     }
 
     #[test]

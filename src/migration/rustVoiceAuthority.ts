@@ -14,6 +14,7 @@
 export const FULL_RUST_RUNTIME_FLAGS = [
   'RUST_RUNTIME_READY',
   'RUST_REGISTER_COMMANDS_ENABLED',
+  'RUST_AUTOCOMPLETE_ENABLED',
   'RUST_CORE_VOICE_ENABLED',
   'RUST_QUEUE_ENABLED',
   'RUST_PRONUNCIATION_ENABLED',
@@ -84,6 +85,48 @@ export function rustRuntimeFullEnabled(env: NodeJS.ProcessEnv = process.env): bo
  */
 export function rustRuntimeReady(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.RUST_RUNTIME_READY?.trim().toLowerCase() === 'true';
+}
+
+/**
+ * Autocomplete is a separate Discord interaction and must yield together with the command that
+ * consumes its value. A global flag alone would make Node stop answering an unpromoted option,
+ * so every route below reuses the exact command canary used by handleInteraction.
+ */
+export function rustAutocompleteOwnsCommand(
+  commandName: string,
+  subcommand: string | null,
+  focusedName: string,
+  enabled = process.env.RUST_AUTOCOMPLETE_ENABLED,
+): boolean {
+  if (enabled?.trim().toLowerCase() !== 'true') return false;
+  if (focusedName === 'model') {
+    return commandName === 'config'
+      ? rustConfigDefaultVoiceOwnsCommand(commandName, subcommand)
+      : commandName === 'voice' && rustVoicePreferencesOwnCommand(commandName, subcommand);
+  }
+  if (focusedName === 'game') {
+    return rustGamePlayOwnsCommand(commandName, subcommand);
+  }
+  if (focusedName === 'language') {
+    return commandName === 'game'
+      ? rustGamePlayOwnsCommand(commandName, subcommand)
+      : commandName === 'transcribe'
+        ? rustTranscriptionLiveOwnsCommand(commandName, subcommand)
+        : rustVoiceOwnsCommand(commandName);
+  }
+  if (focusedName === 'locale') {
+    return commandName === 'config'
+      ? rustConfigLanguageOwnsCommand(commandName, subcommand)
+      : commandName === 'translate' &&
+          rustTranslationPreferencesOwnCommand(commandName, subcommand);
+  }
+  if (focusedName === 'term') {
+    return (
+      (commandName === 'pronunciation' || commandName === 'server-pronunciation') &&
+      rustPronunciationOwnsCommand(commandName, subcommand)
+    );
+  }
+  return false;
 }
 
 function nonEmpty(value: string | undefined): boolean {

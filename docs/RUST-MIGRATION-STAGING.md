@@ -19,6 +19,7 @@ Set these values in a local, uncommitted environment file:
 ```dotenv
 RUST_RUNTIME_MODE=shadow
 RUST_REGISTER_COMMANDS_ENABLED=true
+RUST_AUTOCOMPLETE_ENABLED=true
 RUST_COMMANDS_GUILD_ID=<staging-guild-id>
 OWNER_GUILD_ID=<staging-guild-id>
 RUST_COMMANDS_STATE_PATH=./.staging/commands-state-rust.json
@@ -33,6 +34,10 @@ first list. Leaving the variable empty is the production global-registration pat
 `SINGLE_INSTANCE_PORT` is shared with the Node supervisor. The Rust process binds it on loopback
 before opening SQLite or the Discord gateway, so starting Rust while the old Node process is still
 alive fails closed instead of creating two sessions with the same token.
+
+`RUST_AUTOCOMPLETE_ENABLED` is a separate interaction canary. Rust only answers autocomplete for
+the command leaf whose matching Rust canary is active; Node keeps answering all other suggestions.
+Enable it in staging only after checking model, language, locale, game and pronunciation choices.
 
 ## Preflight and smoke sequence
 

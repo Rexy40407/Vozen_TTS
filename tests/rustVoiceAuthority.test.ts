@@ -51,6 +51,7 @@ import {
   rustCastOwnsCommand,
   rustRuntimeFullEnabled,
   rustRuntimeReady,
+  rustAutocompleteOwnsCommand,
   FULL_RUST_RUNTIME_FLAGS,
 } from '../src/migration/rustVoiceAuthority';
 
@@ -84,6 +85,14 @@ describe('Rust core voice migration ownership', () => {
     expect(rustRuntimeReady({ RUST_RUNTIME_READY: 'false' })).toBe(false);
     expect(rustRuntimeReady({ RUST_RUNTIME_READY: 'yes' })).toBe(false);
     expect(rustRuntimeReady({ RUST_RUNTIME_READY: ' TRUE ' })).toBe(true);
+  });
+
+  it('promotes autocomplete only with the matching command canary', () => {
+    expect(rustAutocompleteOwnsCommand('voice', 'set', 'model')).toBe(false);
+    expect(rustAutocompleteOwnsCommand('voice', 'set', 'model', 'true')).toBe(false);
+    expect(rustAutocompleteOwnsCommand('voice', 'set', 'model', 'true')).toBe(false);
+    expect(rustAutocompleteOwnsCommand('config', 'language', 'locale', 'true')).toBe(false);
+    expect(rustAutocompleteOwnsCommand('joke', null, 'language', 'true')).toBe(false);
   });
 
   it('recognises a complete explicit cutover contract without reading process.env', () => {
