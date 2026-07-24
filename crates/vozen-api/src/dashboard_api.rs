@@ -25,6 +25,8 @@ use crate::dashboard_validation::{
     sanitize_dashboard_patch,
 };
 
+const MAX_DASHBOARD_BODY_BYTES: usize = 8_000;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManageableGuild {
     pub id: String,
@@ -180,8 +182,12 @@ async fn save_guild(
     if let Err(response) = authorize(&state, &bearer, &guild_id).await {
         return response;
     }
-    let Some(input) = read_json(request).await else {
-        return error(StatusCode::BAD_REQUEST, "invalid_json", &state);
+    let input = match read_json(request).await {
+        Ok(input) => input,
+        Err(JsonBodyError::TooLarge) => {
+            return error(StatusCode::PAYLOAD_TOO_LARGE, "too_large", &state);
+        }
+        Err(JsonBodyError::Invalid) => return error(StatusCode::BAD_REQUEST, "bad_json", &state),
     };
     let options = match state.options.options_for_guild(&guild_id).await {
         Ok(options) => options,
@@ -235,8 +241,12 @@ async fn save_profile(
     if let Err(response) = authorize(&state, &bearer, &guild_id).await {
         return response;
     }
-    let Some(input) = read_json(request).await else {
-        return error(StatusCode::BAD_REQUEST, "invalid_json", &state);
+    let input = match read_json(request).await {
+        Ok(input) => input,
+        Err(JsonBodyError::TooLarge) => {
+            return error(StatusCode::PAYLOAD_TOO_LARGE, "too_large", &state);
+        }
+        Err(JsonBodyError::Invalid) => return error(StatusCode::BAD_REQUEST, "bad_json", &state),
     };
     let options = match state.options.options_for_guild(&guild_id).await {
         Ok(options) => options,
@@ -310,7 +320,9 @@ async fn delete_profile(
     {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "internal", &state);
     }
-    json_response(StatusCode::OK, json!({"ok":true}), &state)
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    common_headers(response.headers_mut(), &state);
+    response
 }
 
 async fn authorize(state: &DashboardState, bearer: &str, guild_id: &str) -> Result<(), Response> {
@@ -466,8 +478,16 @@ fn profile_field(field: InvalidChannelProfile) -> &'static str {
     }
 }
 
-async fn read_json(request: Request) -> Option<Value> {
-    serde_json::from_slice(&to_bytes(request.into_body(), 64 * 1024).await.ok()?).ok()
+enum JsonBodyError {
+    TooLarge,
+    Invalid,
+}
+
+async fn read_json(request: Request) -> Result<Value, JsonBodyError> {
+    let body = to_bytes(request.into_body(), MAX_DASHBOARD_BODY_BYTES)
+        .await
+        .map_err(|_| JsonBodyError::TooLarge)?;
+    serde_json::from_slice(&body).map_err(|_| JsonBodyError::Invalid)
 }
 async fn preflight(State(state): State<DashboardState>) -> Response {
     let mut response = StatusCode::NO_CONTENT.into_response();
@@ -644,6 +664,15 @@ mod tests {
                 .status(),
             StatusCode::BAD_REQUEST
         );
+        let too_large = "x".repeat(MAX_DASHBOARD_BODY_BYTES + 1);
+        assert_eq!(
+            app.clone()
+                .oneshot(request(Method::POST, &route, Some("good"), &too_large))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
         let invalid = app
             .oneshot(request(
                 Method::POST,
@@ -686,6 +715,6 @@ mod tests {
             .oneshot(request(Method::DELETE, &route, Some("good"), ""))
             .await
             .expect("response");
-        assert_eq!(deleted.status(), StatusCode::OK);
+        assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
     }
 }
