@@ -22,6 +22,14 @@ jobs:
           components: rustfmt, clippy
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Check entitlement daemon dependency surface
+        shell: bash
+        run: |
+          cargo tree -p vozen-entitlementd --no-default-features --edges normal > entitlementd-deps.txt
+          if grep -E '(^|[[:space:]])(failure|failure_derive|chess|serenity|songbird|libcrux-[^[:space:]]*|rustls-webpki v0\.102\.)' entitlementd-deps.txt; then
+            echo "forbidden dependency reached the entitlement daemon graph"
+            exit 1
+          fi
       - name: Test workspace
         run: cargo test --workspace
       - name: Clippy
