@@ -57,6 +57,11 @@ bodies. Run it with `DISCORD_TOKEN`, `CLIENT_ID`, `RUST_COMMANDS_GUILD_ID` and `
 set in an uncommitted environment file. If the owner guild differs from the staging guild, the
 preflight also checks that guild and its owner-only command set.
 
+`RUST_ENV_FILE` is read by the preflight process only; it does not mutate the parent PowerShell
+environment. For the direct `cargo run` smoke command above, either export the same variables in
+the current shell or use the Docker Compose path, whose `env_file` loads them for the container.
+Do not pass the production `.env` to a staging run.
+
 With the staging bot online, verify in the test guild:
 
 1. The slash-command list appears in the staging guild and no production guild receives a command
