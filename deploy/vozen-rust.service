@@ -1,0 +1,28 @@
+[Unit]
+Description=Vozen Discord runtime (Rust)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vozen
+Group=vozen
+WorkingDirectory=/home/vozen/discord-bot-Vozen
+EnvironmentFile=/home/vozen/discord-bot-Vozen/.env
+Environment=NODE_ENV=production
+Environment=RUST_RUNTIME_MODE=full
+Environment=HEALTH_PORT=3001
+Environment=SINGLE_INSTANCE_PORT=59595
+ExecStart=/home/vozen/vozen-rust/current/bin/vozen-runtime
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/vozen/discord-bot-Vozen /home/vozen/vozen-rust/shared
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
