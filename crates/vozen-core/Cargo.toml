@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["chess"]
+chess = ["dep:chess"]
+
 [dependencies]
 hmac.workspace = true
 regex.workspace = true
@@ -16,7 +20,7 @@ form_urlencoded.workspace = true
 uuid.workspace = true
 whatlang.workspace = true
 unicode-normalization.workspace = true
-chess.workspace = true
+chess = { workspace = true, optional = true }
 
 [lints]
 workspace = true

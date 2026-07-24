@@ -16,7 +16,7 @@ subtle.workspace = true
 time.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-vozen-core = { path = "../vozen-core" }
+vozen-core = { path = "../vozen-core", default-features = false }
 
 [lints]
 workspace = true

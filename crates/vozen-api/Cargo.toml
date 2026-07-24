@@ -20,7 +20,7 @@ sha2.workspace = true
 subtle.workspace = true
 thiserror.workspace = true
 time.workspace = true
-vozen-core = { path = "../vozen-core" }
+vozen-core = { path = "../vozen-core", default-features = false }
 vozen-store = { path = "../vozen-store" }
 
 [dev-dependencies]
