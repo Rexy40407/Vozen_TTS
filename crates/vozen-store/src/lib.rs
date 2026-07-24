@@ -195,12 +195,14 @@ impl SqliteStore {
 
     fn from_connection(mut connection: Connection) -> Result<Self, StoreError> {
         connection.busy_timeout(Duration::from_secs(5))?;
-        connection.execute_batch(
-            "PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;\nPRAGMA synchronous = NORMAL;",
-        )?;
+        // Foreign-key enforcement is connection-local and is safe to enable before the
+        // read-only preflight. Delay WAL/synchronous changes until after that preflight so a
+        // rejected database is not modified merely by being opened.
+        connection.execute_batch("PRAGMA foreign_keys = ON;")?;
         // Reject an already-corrupt copy before any schema installation or historical migration
         // can touch it. The post-migration check below protects the newly-added objects too.
         verify_connection_integrity(&connection)?;
+        connection.execute_batch("PRAGMA journal_mode = WAL;\nPRAGMA synchronous = NORMAL;")?;
         // Schema installation and historical upgrades must commit together. A failed ALTER or
         // privacy cleanup must leave the database exactly as it was before Rust opened it.
         let transaction = connection.transaction()?;
