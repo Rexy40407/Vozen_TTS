@@ -51,11 +51,14 @@ use vozen_discord::{
     parse_setup_command, parse_speak_message_command, pick_option, render_game_action,
     render_game_finish,
 };
-use vozen_store::{GuildConfigPatch, SqliteStore};
+use vozen_store::{GuildConfigPatch, SqliteStore, utc_day_key};
 
 use crate::{
-    CoreVoiceRuntimeOptions, engine_router::PerUserCommandSynthesizer,
-    piper_adapter::PiperCommandSynthesizer, system_now_ms,
+    CoreVoiceRuntimeOptions,
+    activity_poster::{LeaderboardPoster, random_unit},
+    engine_router::PerUserCommandSynthesizer,
+    piper_adapter::PiperCommandSynthesizer,
+    system_now_ms,
 };
 
 type Executor = CoreVoiceInteractionExecutor<
@@ -115,6 +118,7 @@ pub struct CoreVoiceGatewaySink {
     gateway_state: GatewayState,
     options: CoreVoiceRuntimeOptions,
     localizer: Option<VoiceResponseLocalizer>,
+    leaderboard_poster: Mutex<LeaderboardPoster>,
     dependencies: Mutex<Option<Arc<VoiceDependencies>>>,
     executor: Mutex<Option<Arc<Executor>>>,
     message_service: Mutex<Option<Arc<MessageService>>>,
@@ -1070,6 +1074,7 @@ impl CoreVoiceGatewaySink {
             gateway_state,
             options,
             localizer: VoiceResponseLocalizer::from_generated_contract().ok(),
+            leaderboard_poster: Mutex::new(LeaderboardPoster::default()),
             dependencies: Mutex::new(None),
             executor: Mutex::new(None),
             message_service: Mutex::new(None),
@@ -2837,17 +2842,18 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
             if let Ok(mut speakers) = self.last_speakers.lock() {
                 speakers.insert(facts.guild_id.clone(), facts.author_id.clone());
             }
-            let streak_config = self
+            let (streak_announce, locale, tts_channel_id) = self
                 .store
                 .lock()
                 .ok()
                 .and_then(|store| store.guild_config(&facts.guild_id).ok())
-                .map(|config| (config.streak_announce, config.locale));
+                .map(|config| (config.streak_announce, config.locale, config.tts_channel_id))
+                .unwrap_or((false, "en".to_owned(), None));
             if let Some(talk) = talk
                 && talk.first_of_day
                 && talk.streak >= 2
                 && let Some(localizer) = self.localizer.as_ref()
-                && let Some((true, locale)) = streak_config
+                && streak_announce
             {
                 let mut parameters = BTreeMap::new();
                 parameters.insert("user", facts.author_id.clone());
@@ -2864,6 +2870,63 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                                 .allowed_mentions(no_mentions()),
                         )
                         .await;
+                }
+            }
+
+            // Activity is counted only after the queue accepted the message. The poster itself
+            // is process-local and bounded; durable rows are read only when a draw succeeds.
+            if tts_channel_id.is_some()
+                && self
+                    .leaderboard_poster
+                    .lock()
+                    .ok()
+                    .is_some_and(|mut poster| {
+                        poster.record(&facts.guild_id, system_now_ms(), random_unit())
+                    })
+            {
+                let rows = self
+                    .store
+                    .lock()
+                    .ok()
+                    .and_then(|store| store.top_speakers(&facts.guild_id, &utc_day_key(), 10).ok())
+                    .unwrap_or_default();
+                if !rows.is_empty()
+                    && let Some(localizer) = self.localizer.as_ref()
+                    && let Some(channel_id) = tts_channel_id
+                    && let Ok(channel_id) = channel_id.parse::<u64>()
+                {
+                    let mut lines = Vec::with_capacity(rows.len() + 1);
+                    let empty = BTreeMap::new();
+                    if let Some(title) =
+                        localizer.render_key("leaderboard.autoTitle", Some(&locale), None, &empty)
+                    {
+                        lines.push(title);
+                    }
+                    for (index, row) in rows.into_iter().enumerate() {
+                        let mut parameters = BTreeMap::new();
+                        parameters.insert("rank", (index + 1).to_string());
+                        parameters.insert("user", row.user_id);
+                        parameters.insert("count", row.count.to_string());
+                        parameters.insert("streak", row.streak.to_string());
+                        if let Some(line) = localizer.render_key(
+                            "topspeakers.line",
+                            Some(&locale),
+                            None,
+                            &parameters,
+                        ) {
+                            lines.push(line);
+                        }
+                    }
+                    if !lines.is_empty() {
+                        let _ = ChannelId::new(channel_id)
+                            .send_message(
+                                &context.http,
+                                CreateMessage::new()
+                                    .content(lines.join("\n"))
+                                    .allowed_mentions(no_mentions()),
+                            )
+                            .await;
+                    }
                 }
             }
         }
@@ -3022,6 +3085,9 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         }
         if let Ok(mut speakers) = self.last_speakers.lock() {
             speakers.remove(guild_id);
+        }
+        if let Ok(mut poster) = self.leaderboard_poster.lock() {
+            poster.forget_guild(guild_id);
         }
         if let Ok(mut sessions) = self.cast_sessions.lock() {
             sessions.retain(|_, session| session.guild_id != guild_id);

@@ -6,6 +6,8 @@
 //! optional loopback HTTP route). Account, receipt-claim, Ko-fi webhook, dashboard and admin
 //! adapters are individually opt-in. Voice/message ownership still requires its own canary flag.
 
+#[cfg(feature = "voice-driver")]
+mod activity_poster;
 mod autocomplete_sink;
 mod automatic_translation_sink;
 mod birthday_sink;
