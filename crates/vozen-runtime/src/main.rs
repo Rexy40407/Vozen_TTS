@@ -784,8 +784,9 @@ fn require_piper_runtime_default(raw: Option<&str>) -> Result<(), RuntimeError> 
 
 fn core_voice_default_engine(raw: Option<&str>) -> Result<SynthesisEngine, RuntimeError> {
     match raw.map(str::trim).filter(|value| !value.is_empty()) {
-        None | Some("piper") => Ok(SynthesisEngine::Piper),
-        Some("gtts") => Ok(SynthesisEngine::Default),
+        None => Ok(SynthesisEngine::Piper),
+        Some(value) if value.eq_ignore_ascii_case("piper") => Ok(SynthesisEngine::Piper),
+        Some(value) if value.eq_ignore_ascii_case("gtts") => Ok(SynthesisEngine::Default),
         Some(_) => Err(RuntimeError::RustVoiceRequiresPiperDefault),
     }
 }
