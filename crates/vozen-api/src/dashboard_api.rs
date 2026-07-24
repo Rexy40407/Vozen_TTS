@@ -154,7 +154,7 @@ async fn get_guild(
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
     if !valid_discord_id(&guild_id) {
-        return error(StatusCode::BAD_REQUEST, "invalid_guild", &state);
+        return error(StatusCode::BAD_REQUEST, "bad_guild", &state);
     }
     match authorize(&state, bearer, &guild_id).await {
         Ok(()) => match build_payload(&state, &guild_id).await {
@@ -177,7 +177,7 @@ async fn save_guild(
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
     if !valid_discord_id(&guild_id) {
-        return error(StatusCode::BAD_REQUEST, "invalid_guild", &state);
+        return error(StatusCode::BAD_REQUEST, "bad_guild", &state);
     }
     if let Err(response) = authorize(&state, &bearer, &guild_id).await {
         return response;
@@ -236,7 +236,7 @@ async fn save_profile(
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
     if !valid_discord_id(&guild_id) || !valid_discord_id(&channel_id) {
-        return error(StatusCode::BAD_REQUEST, "invalid_guild", &state);
+        return error(StatusCode::BAD_REQUEST, "bad_guild", &state);
     }
     if let Err(response) = authorize(&state, &bearer, &guild_id).await {
         return response;
@@ -306,7 +306,7 @@ async fn delete_profile(
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
     if !valid_discord_id(&guild_id) || !valid_discord_id(&channel_id) {
-        return error(StatusCode::BAD_REQUEST, "invalid_guild", &state);
+        return error(StatusCode::BAD_REQUEST, "bad_guild", &state);
     }
     if let Err(response) = authorize(&state, bearer, &guild_id).await {
         return response;
@@ -656,6 +656,24 @@ mod tests {
     async fn malformed_or_tampered_settings_do_not_write() {
         let app = app();
         let route = format!("/api/dashboard/guild/{GUILD}");
+        let bad_guild = app
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                "/api/dashboard/guild/not-a-discord-id",
+                Some("good"),
+                "",
+            ))
+            .await
+            .expect("response");
+        assert_eq!(bad_guild.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            to_bytes(bad_guild.into_body(), 1024)
+                .await
+                .expect("body")
+                .as_ref(),
+            br#"{"error":"bad_guild"}"#
+        );
         assert_eq!(
             app.clone()
                 .oneshot(request(Method::POST, &route, Some("good"), "{no"))
