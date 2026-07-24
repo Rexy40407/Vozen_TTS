@@ -4,7 +4,11 @@
 //! implementation must prove OAuth audience + `identify guilds`, Manage Guild/Administrator and
 //! current bot presence before it returns `Allowed`; no configuration is read before that point.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use async_trait::async_trait;
 use axum::{
@@ -26,6 +30,9 @@ use crate::dashboard_validation::{
 };
 
 const MAX_DASHBOARD_BODY_BYTES: usize = 8_000;
+const DASHBOARD_RATE_MAX: usize = 30;
+const DASHBOARD_RATE_WINDOW_MS: i64 = 10_000;
+const DASHBOARD_RATE_MAX_ENTRIES: usize = 2_048;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManageableGuild {
@@ -93,6 +100,13 @@ struct DashboardState {
     store: Arc<Mutex<SqliteStore>>,
     authorizer: Arc<dyn DashboardAuthorizer>,
     options: Arc<dyn DashboardOptionsProvider>,
+    rate: Arc<Mutex<HashMap<String, RateState>>>,
+}
+
+#[derive(Clone, Copy)]
+struct RateState {
+    count: usize,
+    reset: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +130,7 @@ pub fn dashboard_router(config: DashboardApiConfig) -> Result<Router, DashboardA
         store: config.store,
         authorizer: config.authorizer,
         options: config.options,
+        rate: Arc::new(Mutex::new(HashMap::new())),
     };
     Ok(Router::new()
         .route("/api/dashboard/guilds", get(list_guilds).options(preflight))
@@ -131,6 +146,9 @@ pub fn dashboard_router(config: DashboardApiConfig) -> Result<Router, DashboardA
 }
 
 async fn list_guilds(State(state): State<DashboardState>, headers: HeaderMap) -> Response {
+    if rate_limited(&state, &headers) {
+        return error(StatusCode::TOO_MANY_REQUESTS, "rate_limited", &state);
+    }
     let Some(bearer) = bearer_token(&headers) else {
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
@@ -150,6 +168,9 @@ async fn get_guild(
     Path(guild_id): Path<String>,
     headers: HeaderMap,
 ) -> Response {
+    if rate_limited(&state, &headers) {
+        return error(StatusCode::TOO_MANY_REQUESTS, "rate_limited", &state);
+    }
     let Some(bearer) = bearer_token(&headers) else {
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
@@ -173,6 +194,9 @@ async fn save_guild(
     headers: HeaderMap,
     request: Request,
 ) -> Response {
+    if rate_limited(&state, &headers) {
+        return error(StatusCode::TOO_MANY_REQUESTS, "rate_limited", &state);
+    }
     let Some(bearer) = bearer_token(&headers).map(str::to_owned) else {
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
@@ -232,6 +256,9 @@ async fn save_profile(
     headers: HeaderMap,
     request: Request,
 ) -> Response {
+    if rate_limited(&state, &headers) {
+        return error(StatusCode::TOO_MANY_REQUESTS, "rate_limited", &state);
+    }
     let Some(bearer) = bearer_token(&headers).map(str::to_owned) else {
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
@@ -302,6 +329,9 @@ async fn delete_profile(
     Path((guild_id, channel_id)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
+    if rate_limited(&state, &headers) {
+        return error(StatusCode::TOO_MANY_REQUESTS, "rate_limited", &state);
+    }
     let Some(bearer) = bearer_token(&headers) else {
         return error(StatusCode::UNAUTHORIZED, "no_token", &state);
     };
@@ -511,6 +541,45 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
 }
+
+fn client_ip(headers: &HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.rsplit(',').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("unknown")
+        .to_owned()
+}
+
+fn rate_limited(state: &DashboardState, headers: &HeaderMap) -> bool {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or(0);
+    let Ok(mut rate) = state.rate.lock() else {
+        return true;
+    };
+    rate.retain(|_, value| value.reset > now);
+    let ip = client_ip(headers);
+    if !rate.contains_key(&ip)
+        && rate.len() >= DASHBOARD_RATE_MAX_ENTRIES
+        && let Some(oldest) = rate
+            .iter()
+            .min_by_key(|(_, value)| value.reset)
+            .map(|(ip, _)| ip.clone())
+    {
+        rate.remove(&oldest);
+    }
+    let entry = rate.entry(ip).or_insert(RateState {
+        count: 0,
+        reset: now + DASHBOARD_RATE_WINDOW_MS,
+    });
+    entry.count += 1;
+    entry.count > DASHBOARD_RATE_MAX
+}
+
 fn valid_discord_id(id: &str) -> bool {
     (17..=20).contains(&id.len()) && id.bytes().all(|byte| byte.is_ascii_digit())
 }
@@ -734,5 +803,33 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn dashboard_rate_limit_matches_node_window_and_limit() {
+        let app = app();
+        for _ in 0..DASHBOARD_RATE_MAX {
+            let response = app
+                .clone()
+                .oneshot(request(
+                    Method::GET,
+                    "/api/dashboard/guilds",
+                    Some("good"),
+                    "",
+                ))
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        let limited = app
+            .oneshot(request(
+                Method::GET,
+                "/api/dashboard/guilds",
+                Some("good"),
+                "",
+            ))
+            .await
+            .expect("response");
+        assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }
