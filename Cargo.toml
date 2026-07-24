@@ -35,6 +35,7 @@ serenity = { version = "0.12.5", default-features = false, features = ["client",
 songbird = { version = "0.6.0", default-features = false, features = ["gateway", "rustls", "serenity"] }
 async-trait = "0.1.91"
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
+futures = "0.3.33"
 regex = "1.12.3"
 time = { version = "0.3.47", features = ["formatting", "parsing", "macros"] }
 whatlang = "0.18.0"

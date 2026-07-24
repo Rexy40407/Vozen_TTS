@@ -1092,16 +1092,32 @@ impl CoreVoiceGatewaySink {
             return Ok(dependencies.clone());
         }
         let options = &self.options;
-        let dependencies = Arc::new(VoiceDependencies {
-            synthesizer: PerUserCommandSynthesizer::piper_only(
-                PiperCommandSynthesizer::production_with_metrics(
-                    options.piper_path.clone(),
-                    options.models_dir.clone(),
-                    options.cache_dir.clone(),
-                    options.piper_concurrency,
+        let piper = Arc::new(PiperCommandSynthesizer::production_with_metrics(
+            options.piper_path.clone(),
+            options.models_dir.clone(),
+            options.cache_dir.clone(),
+            options.piper_concurrency,
+            self.gateway_state.metrics(),
+        ));
+        let piper: Arc<dyn vozen_discord::CommandSpeechSynthesizer> = piper;
+        let default = if options.settings.default_engine == SynthesisEngine::Default {
+            let gtts = Arc::new(
+                crate::gtts_adapter::GttsCommandSynthesizer::production(
+                    options.ffmpeg.clone(),
+                    options.gtts_cache_dir.clone(),
                     self.gateway_state.metrics(),
-                ),
-            ),
+                )
+                .map_err(|_| GatewayEventDispatchError)?,
+            ) as Arc<dyn vozen_discord::CommandSpeechSynthesizer>;
+            Arc::new(crate::gtts_adapter::GttsWithPiperFallback::new(
+                gtts,
+                piper.clone(),
+            )) as Arc<dyn vozen_discord::CommandSpeechSynthesizer>
+        } else {
+            piper.clone()
+        };
+        let dependencies = Arc::new(VoiceDependencies {
+            synthesizer: PerUserCommandSynthesizer::new(default, piper, None, None),
             playback: SongbirdCommandPlayback::new(
                 context.clone(),
                 options.queue_cap,
@@ -3130,6 +3146,8 @@ mod tests {
             piper_path: "piper".into(),
             models_dir: "models".into(),
             cache_dir: "cache".into(),
+            gtts_cache_dir: "gtts-cache".into(),
+            ffmpeg: "ffmpeg".into(),
             piper_concurrency: 2,
             queue_cap: 20,
             queue_enabled: true,
@@ -3173,6 +3191,8 @@ mod tests {
                 piper_path: "piper".into(),
                 models_dir: "models".into(),
                 cache_dir: "cache".into(),
+                gtts_cache_dir: "gtts-cache".into(),
+                ffmpeg: "ffmpeg".into(),
                 piper_concurrency: 1,
                 queue_cap: 1,
                 queue_enabled: true,

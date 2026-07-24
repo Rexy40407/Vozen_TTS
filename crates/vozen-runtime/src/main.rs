@@ -27,6 +27,8 @@ mod error_reporter;
 mod file_export_sink;
 mod game_list_sink;
 mod game_score_sink;
+#[cfg(feature = "voice-driver")]
+mod gtts_adapter;
 mod guild_lifecycle_sink;
 mod guild_welcome_sink;
 mod help_sink;
@@ -259,6 +261,8 @@ struct CoreVoiceRuntimeOptions {
     piper_path: PathBuf,
     models_dir: PathBuf,
     cache_dir: PathBuf,
+    gtts_cache_dir: PathBuf,
+    ffmpeg: PathBuf,
     piper_concurrency: usize,
     queue_cap: usize,
     queue_enabled: bool,
@@ -502,7 +506,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
     if !core_voice_enabled(env::var("RUST_CORE_VOICE_ENABLED").ok().as_deref()) {
         return Ok(None);
     }
-    require_piper_runtime_default(env::var("TTS_ENGINE").ok().as_deref())?;
+    let default_engine = core_voice_default_engine(env::var("TTS_ENGINE").ok().as_deref())?;
     let default_voice =
         nonempty_env("DEFAULT_VOICE").unwrap_or_else(|| "en_US-amy-medium".to_owned());
     let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
@@ -522,6 +526,12 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
         cache_dir: nonempty_env("RUST_VOICE_CACHE_DIR")
             .unwrap_or_else(|| "./audio-cache/rust".to_owned())
             .into(),
+        gtts_cache_dir: nonempty_env("RUST_GTTS_CACHE_DIR")
+            .unwrap_or_else(|| "./audio-cache/rust-gtts".to_owned())
+            .into(),
+        ffmpeg: nonempty_env("FFMPEG_PATH")
+            .unwrap_or_else(|| "ffmpeg".to_owned())
+            .into(),
         piper_concurrency,
         queue_cap,
         queue_enabled: queue_enabled(env::var("RUST_QUEUE_ENABLED").ok().as_deref()),
@@ -539,7 +549,7 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             available_models: Vec::new(),
             default_voice,
             default_speed,
-            default_engine: SynthesisEngine::Piper,
+            default_engine,
         },
     }))
 }
@@ -770,6 +780,14 @@ fn require_piper_runtime_default(raw: Option<&str>) -> Result<(), RuntimeError> 
     piper_runtime_default_compatible(raw)
         .then_some(())
         .ok_or(RuntimeError::RustVoiceRequiresPiperDefault)
+}
+
+fn core_voice_default_engine(raw: Option<&str>) -> Result<SynthesisEngine, RuntimeError> {
+    match raw.map(str::trim).filter(|value| !value.is_empty()) {
+        None | Some("piper") => Ok(SynthesisEngine::Piper),
+        Some("gtts") => Ok(SynthesisEngine::Default),
+        Some(_) => Err(RuntimeError::RustVoiceRequiresPiperDefault),
+    }
 }
 
 fn translation_text_enabled(raw: Option<&str>) -> bool {
@@ -2521,6 +2539,19 @@ mod tests {
             require_piper_runtime_default(Some("gtts")),
             Err(RuntimeError::RustVoiceRequiresPiperDefault)
         ));
+    }
+
+    #[test]
+    fn core_voice_can_select_the_opt_in_gtts_default() {
+        assert_eq!(
+            core_voice_default_engine(Some("gtts")).expect("gtts default"),
+            SynthesisEngine::Default
+        );
+        assert_eq!(
+            core_voice_default_engine(Some("PIPER")).expect("piper default"),
+            SynthesisEngine::Piper
+        );
+        assert!(core_voice_default_engine(Some("router")).is_err());
     }
 
     #[test]

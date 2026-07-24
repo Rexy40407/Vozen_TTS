@@ -19,8 +19,10 @@ use tokio::{io::AsyncWriteExt, process::Command, sync::Semaphore, time::timeout}
 use uuid::Uuid;
 use vozen_core::{RuntimeMetrics, SynthRequest};
 
+mod gtts;
 mod wav_concat;
 
+pub use gtts::{GttsEngine, GttsOptions, chunk_text, gtts_lang_of_model, lower_all_caps_runs};
 pub use wav_concat::{
     WavError, WavFormat, concat_wavs, parse_wav, prepend_silence_wav, silence_wav,
 };
@@ -43,6 +45,14 @@ pub enum TtsError {
     EmptyOutput,
     #[error("Piper WAV composition failed: {0}")]
     Wav(#[from] WavError),
+    #[error("gTTS request failed")]
+    GttsRequest,
+    #[error("gTTS request timed out")]
+    GttsTimeout,
+    #[error("gTTS returned an invalid response")]
+    GttsResponse,
+    #[error("gTTS audio conversion failed")]
+    GttsConversion,
     #[error("TTS I/O failed: {0}")]
     Io(#[from] std::io::Error),
 }
