@@ -78,6 +78,16 @@ describe('Rust core voice migration ownership', () => {
     }
   });
 
+  it('keeps every full-mode canary explicit in the isolated staging template', () => {
+    const stagingExample = readFileSync(
+      resolve(process.cwd(), '.env.rust.staging.example'),
+      'utf8',
+    );
+    for (const flag of FULL_RUST_RUNTIME_FLAGS) {
+      expect(stagingExample).toMatch(new RegExp(`^${flag}=`, 'm'));
+    }
+  });
+
   it('keeps the final cutover off for shadow and partial configurations', () => {
     expect(rustRuntimeFullEnabled({ RUST_RUNTIME_MODE: 'shadow' })).toBe(false);
     expect(
