@@ -1,0 +1,42 @@
+name: Rust Vozen release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/ecosystem-entitlements-api]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vozen-rust-release
+  cancel-in-progress: true
+
+jobs:
+  linux-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Test workspace
+        run: cargo test --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Build runtime
+        run: cargo build --release -p vozen-runtime
+      - name: Package
+        run: |
+          mkdir -p release/bin release/deploy
+          cp target/release/vozen-runtime release/bin/vozen-runtime
+          cp deploy/vozen-rust.service release/deploy/
+          cp deploy/RUST-CUTOVER.md release/deploy/
+          tar -czf vozen-rust-${GITHUB_SHA}.tar.gz -C release .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vozen-rust-linux-${{ github.sha }}
+          path: vozen-rust-${{ github.sha }}.tar.gz
+          if-no-files-found: error
