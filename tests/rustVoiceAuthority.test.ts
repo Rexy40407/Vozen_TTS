@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   rustTranslationOwnsCommand,
@@ -52,6 +54,19 @@ import {
 } from '../src/migration/rustVoiceAuthority';
 
 describe('Rust core voice migration ownership', () => {
+  it('keeps the Node and Rust full-mode flag contracts identical', () => {
+    const rustSource = readFileSync(
+      resolve(process.cwd(), 'crates/vozen-runtime/src/runtime_mode.rs'),
+      'utf8',
+    );
+    const block = rustSource.match(
+      /pub const FULL_RUNTIME_FLAGS: &\[&str\] = &\[(?<flags>[\s\S]*?)\];/,
+    )?.groups?.flags;
+    expect(block).toBeTruthy();
+    const rustFlags = [...(block ?? '').matchAll(/"(RUST_[A-Z0-9_]+)"/g)].map((match) => match[1]);
+    expect(rustFlags).toEqual([...FULL_RUST_RUNTIME_FLAGS]);
+  });
+
   it('keeps the final cutover off for shadow and partial configurations', () => {
     expect(rustRuntimeFullEnabled({ RUST_RUNTIME_MODE: 'shadow' })).toBe(false);
     expect(
