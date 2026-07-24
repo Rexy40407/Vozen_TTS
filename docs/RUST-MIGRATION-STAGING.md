@@ -22,12 +22,17 @@ RUST_REGISTER_COMMANDS_ENABLED=true
 RUST_COMMANDS_GUILD_ID=<staging-guild-id>
 OWNER_GUILD_ID=<staging-guild-id>
 RUST_COMMANDS_STATE_PATH=./.staging/commands-state-rust.json
+SINGLE_INSTANCE_PORT=59595
 ```
 
 `RUST_COMMANDS_GUILD_ID` makes the public command PUT guild-scoped instead of global. When the
 owner guild is the same guild, Rust sends one merged PUT containing the public and owner commands;
 Discord replaces a guild's complete command list, so two separate PUTs would otherwise erase the
 first list. Leaving the variable empty is the production global-registration path.
+
+`SINGLE_INSTANCE_PORT` is shared with the Node supervisor. The Rust process binds it on loopback
+before opening SQLite or the Discord gateway, so starting Rust while the old Node process is still
+alive fails closed instead of creating two sessions with the same token.
 
 ## Preflight and smoke sequence
 

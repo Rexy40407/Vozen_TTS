@@ -65,7 +65,7 @@ mod vote_sink;
 
 use std::{
     env,
-    net::SocketAddr,
+    net::{SocketAddr, TcpListener},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -1803,6 +1803,12 @@ enum RuntimeError {
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
     InvalidHealthPort,
+    #[error("SINGLE_INSTANCE_PORT must be `off`, `0`, or an integer from 1 to 65535")]
+    InvalidSingleInstancePort,
+    #[error("another Vozen runtime already owns the single-instance lock")]
+    SingleInstanceAlreadyRunning,
+    #[error("could not acquire the Vozen single-instance lock")]
+    SingleInstanceLockFailed,
     #[error("HEALTH_PORT is required when a Rust HTTP/API surface is enabled")]
     HttpListenerRequired,
     #[error(
@@ -1940,6 +1946,9 @@ async fn main() {
 
 async fn run() -> Result<(), RuntimeError> {
     let config = RuntimeConfig::from_environment()?;
+    // Share the same loopback guard as the Node supervisor. A Rust cutover must never silently
+    // create a second gateway session with the same Discord token while Node is still alive.
+    let _instance_guard = acquire_single_instance_lock()?;
     // Opening the store verifies/migrates the exact Node SQLite schema before the Rust gateway
     // does any work. Keep the handle alive for the whole process; future adapters share it.
     let store = Arc::new(Mutex::new(SqliteStore::open(&config.database_path)?));
@@ -2439,6 +2448,37 @@ fn system_now_ms() -> i64 {
         .unwrap_or_default()
 }
 
+fn acquire_single_instance_lock() -> Result<Option<TcpListener>, RuntimeError> {
+    let Some(port) = parse_single_instance_port(env::var("SINGLE_INSTANCE_PORT").ok().as_deref())?
+    else {
+        return Ok(None);
+    };
+    TcpListener::bind(("127.0.0.1", port))
+        .map(Some)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AddrInUse {
+                RuntimeError::SingleInstanceAlreadyRunning
+            } else {
+                RuntimeError::SingleInstanceLockFailed
+            }
+        })
+}
+
+fn parse_single_instance_port(raw: Option<&str>) -> Result<Option<u16>, RuntimeError> {
+    let Some(raw) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(Some(59_595));
+    };
+    if raw.eq_ignore_ascii_case("off") || raw == "0" {
+        return Ok(None);
+    }
+    let port = raw
+        .parse::<u16>()
+        .ok()
+        .filter(|port| *port != 0)
+        .ok_or(RuntimeError::InvalidSingleInstancePort)?;
+    Ok(Some(port))
+}
+
 /// Reconciles files that cannot be cleaned up transactionally after a hard process stop. The
 /// operation is deliberately best-effort and narrow: only Rust/Vozen-owned STT prefixes and the
 /// exact legacy `voice-clones` directory beside the configured database are touched.
@@ -2593,6 +2633,24 @@ mod tests {
         let address = SocketAddr::from(([127, 0, 0, 1], 8080));
         assert!(address.ip().is_loopback());
         assert_eq!(address.port(), 8080);
+    }
+
+    #[test]
+    fn single_instance_guard_defaults_shared_with_node_and_has_explicit_disable() {
+        assert_eq!(
+            parse_single_instance_port(None).expect("default"),
+            Some(59_595)
+        );
+        assert_eq!(
+            parse_single_instance_port(Some(" 59596 ")).expect("custom"),
+            Some(59_596)
+        );
+        assert_eq!(parse_single_instance_port(Some("off")).expect("off"), None);
+        assert_eq!(parse_single_instance_port(Some("0")).expect("zero"), None);
+        assert!(matches!(
+            parse_single_instance_port(Some("not-a-port")),
+            Err(RuntimeError::InvalidSingleInstancePort)
+        ));
     }
 
     #[test]
