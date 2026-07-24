@@ -189,7 +189,7 @@ export function rustSpeakContextOwnsCommand(
   return (
     coreEnabled?.trim().toLowerCase() === 'true' &&
     enabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine) &&
+    rustCoreEngineCompatible(ttsEngine) &&
     commandType === 3 &&
     commandName === 'Speak'
   );
@@ -216,7 +216,7 @@ export function rustRandomizerOwnsCommand(
   return (
     coreEnabled?.trim().toLowerCase() === 'true' &&
     enabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine) &&
+    rustCoreEngineCompatible(ttsEngine) &&
     commandName === 'randomizer'
   );
 }
@@ -231,7 +231,7 @@ export function rustCastOwnsCommand(
   return (
     coreEnabled?.trim().toLowerCase() === 'true' &&
     enabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine) &&
+    rustCoreEngineCompatible(ttsEngine) &&
     commandName === 'cast'
   );
 }
@@ -248,7 +248,7 @@ export function rustQueueOwnsCommand(
   return (
     coreEnabled?.trim().toLowerCase() === 'true' &&
     enabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine) &&
+    rustCoreEngineCompatible(ttsEngine) &&
     commandName === 'queue'
   );
 }
@@ -343,7 +343,7 @@ export function rustConfigDefaultVoiceOwnsCommand(
 ): boolean {
   return (
     enabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine) &&
+    rustCoreEngineCompatible(ttsEngine) &&
     commandName === 'config' &&
     subcommand === 'default-voice'
   );
@@ -372,7 +372,7 @@ export function rustSetupOwnsCommand(
   return (
     coreEnabled?.trim().toLowerCase() === 'true' &&
     enabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine) &&
+    rustCoreEngineCompatible(ttsEngine) &&
     commandName === 'setup'
   );
 }
@@ -595,14 +595,25 @@ export function rustGamePlayOwnsCommand(
   return (
     coreEnabled?.trim().toLowerCase() === 'true' &&
     enabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine) &&
+    rustCoreEngineCompatible(ttsEngine) &&
     commandName === 'game' &&
     (subcommand === 'play' || subcommand === 'stop')
   );
 }
 
-/** Rust only has a production Piper adapter today. Node must retain an interaction if Rust would
- * reject startup because the shared default engine is gTTS, neural or a router. */
+/** Rust can run the shared core with every legacy operator default now ported to the runtime. */
+function rustCoreEngineCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
+  const normalized = ttsEngine?.trim().toLowerCase();
+  return (
+    !normalized ||
+    normalized === 'piper' ||
+    normalized === 'gtts' ||
+    normalized === 'router' ||
+    normalized === 'neural'
+  );
+}
+
+/** File export remains Piper-only until its provider-specific path is ported. */
 function rustPiperCompatible(ttsEngine = process.env.TTS_ENGINE): boolean {
   const normalized = ttsEngine?.trim().toLowerCase();
   return !normalized || normalized === 'piper';
@@ -684,7 +695,7 @@ export function rustVoiceOwnsCommand(
 ): boolean {
   return (
     (coreEnabled?.trim().toLowerCase() === 'true' &&
-      rustPiperCompatible(ttsEngine) &&
+      rustCoreEngineCompatible(ttsEngine) &&
       RUST_CORE_VOICE_COMMANDS.has(commandName)) ||
     (privateFileEnabled?.trim().toLowerCase() === 'true' &&
       rustPiperCompatible(ttsEngine) &&
@@ -693,7 +704,7 @@ export function rustVoiceOwnsCommand(
 }
 
 /**
- * `/voice` is a mixed surface. Rust's audio core owns `preview` only when the same Piper voice
+ * `/voice` is a mixed surface. Rust's audio core owns `preview` only when the same provider
  * runtime that owns `/tts` is explicitly enabled; the preference browser, config panel and
  * mutation leaves use their own canary. Other unpromoted voice behavior remains Node-owned.
  */
@@ -705,12 +716,12 @@ export function rustVoicePreferencesOwnCommand(
   coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,
 ): boolean {
   const previewEnabled =
-    coreEnabled?.trim().toLowerCase() === 'true' && rustPiperCompatible(ttsEngine);
+    coreEnabled?.trim().toLowerCase() === 'true' && rustCoreEngineCompatible(ttsEngine);
   return (
     commandName === 'voice' &&
     ((previewEnabled && subcommand === 'preview') ||
       (enabled?.trim().toLowerCase() === 'true' &&
-        rustPiperCompatible(ttsEngine) &&
+        rustCoreEngineCompatible(ttsEngine) &&
         (subcommand === 'list' ||
           subcommand === 'browse' ||
           subcommand === 'config' ||
@@ -741,6 +752,6 @@ export function rustVoiceOwnsAutoRead(
   return (
     coreEnabled?.trim().toLowerCase() === 'true' &&
     messageEnabled?.trim().toLowerCase() === 'true' &&
-    rustPiperCompatible(ttsEngine)
+    rustCoreEngineCompatible(ttsEngine)
   );
 }

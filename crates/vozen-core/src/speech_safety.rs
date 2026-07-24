@@ -28,6 +28,10 @@ pub enum SynthesisEngine {
     Piper,
     Kokoro,
     Gcloud,
+    /// OpenAI's hosted `tts-1` provider selected by the operator's legacy
+    /// `TTS_ENGINE=neural` setting. It is a default-provider route rather than
+    /// a user-persisted engine choice.
+    Neural,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

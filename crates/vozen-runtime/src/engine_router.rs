@@ -2,8 +2,8 @@
 //!
 //! The legacy `google` value is a configured default route. Provider-specific selections use
 //! their provider when installed and fall back to that default on absence or failure, matching
-//! Node's no-silence policy. This module deliberately does not invent provider implementations:
-//! Kokoro and Google HD become real routes only when their adapters are installed.
+//! Node's no-silence policy. Provider implementations stay behind their explicit adapters and
+//! never receive an unvalidated user-controlled command or model path.
 
 use std::sync::Arc;
 
@@ -19,13 +19,14 @@ pub struct PerUserCommandSynthesizer {
     piper: Arc<dyn CommandSpeechSynthesizer>,
     kokoro: Option<Arc<dyn CommandSpeechSynthesizer>>,
     gcloud: Option<Arc<dyn CommandSpeechSynthesizer>>,
+    neural: Option<Arc<dyn CommandSpeechSynthesizer>>,
 }
 
 impl PerUserCommandSynthesizer {
     #[must_use]
     pub fn piper_only(piper: PiperCommandSynthesizer) -> Self {
         let piper: Arc<dyn CommandSpeechSynthesizer> = Arc::new(piper);
-        Self::new(piper.clone(), piper, None, None)
+        Self::new(piper.clone(), piper, None, None, None)
     }
 
     #[must_use]
@@ -34,12 +35,14 @@ impl PerUserCommandSynthesizer {
         piper: Arc<dyn CommandSpeechSynthesizer>,
         kokoro: Option<Arc<dyn CommandSpeechSynthesizer>>,
         gcloud: Option<Arc<dyn CommandSpeechSynthesizer>>,
+        neural: Option<Arc<dyn CommandSpeechSynthesizer>>,
     ) -> Self {
         Self {
             default,
             piper,
             kokoro,
             gcloud,
+            neural,
         }
     }
 
@@ -91,6 +94,10 @@ impl CommandSpeechSynthesizer for PerUserCommandSynthesizer {
             }
             SynthesisEngine::Gcloud => {
                 self.preferred_or_default(self.gcloud.as_ref(), request, SynthesisEngine::Gcloud)
+                    .await
+            }
+            SynthesisEngine::Neural => {
+                self.preferred_or_default(self.neural.as_ref(), request, SynthesisEngine::Neural)
                     .await
             }
         }
@@ -156,6 +163,7 @@ mod tests {
             Arc::new(FakeSynthesizer::default()),
             None,
             None,
+            None,
         );
 
         router
@@ -178,6 +186,7 @@ mod tests {
             Arc::new(FakeSynthesizer::default()),
             Some(kokoro.clone()),
             None,
+            None,
         );
 
         router
@@ -192,5 +201,28 @@ mod tests {
             *default.received.lock().expect("received"),
             [SynthesisEngine::Default]
         );
+    }
+
+    #[tokio::test]
+    async fn neural_provider_receives_the_neural_route_and_is_available_to_user_preferences() {
+        let default = Arc::new(FakeSynthesizer::default());
+        let neural = Arc::new(FakeSynthesizer::default());
+        let router = PerUserCommandSynthesizer::new(
+            default.clone(),
+            Arc::new(FakeSynthesizer::default()),
+            None,
+            None,
+            Some(neural.clone()),
+        );
+
+        router
+            .synthesize(&request(SynthesisEngine::Neural))
+            .await
+            .expect("neural provider");
+        assert_eq!(
+            *neural.received.lock().expect("received"),
+            [SynthesisEngine::Neural]
+        );
+        assert!(default.received.lock().expect("received").is_empty());
     }
 }

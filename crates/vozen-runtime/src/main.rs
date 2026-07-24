@@ -40,6 +40,8 @@ mod kokoro_adapter;
 #[cfg(feature = "voice-driver")]
 mod live_transcription_sink;
 mod loop_lag;
+#[cfg(feature = "voice-driver")]
+mod neural_adapter;
 mod owner_command_sink;
 mod piper_adapter;
 mod premium_sink;
@@ -267,6 +269,8 @@ struct CoreVoiceRuntimeOptions {
     cache_dir: PathBuf,
     gtts_cache_dir: PathBuf,
     ffmpeg: PathBuf,
+    openai_api_key: Option<String>,
+    neural_cache_dir: PathBuf,
     gcloud_api_key: Option<String>,
     gcloud_cache_dir: PathBuf,
     gcloud_limits: vozen_tts::GcloudLimits,
@@ -517,6 +521,9 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
         return Ok(None);
     }
     let default_engine = core_voice_default_engine(env::var("TTS_ENGINE").ok().as_deref())?;
+    if default_engine == SynthesisEngine::Neural && nonempty_env("OPENAI_API_KEY").is_none() {
+        return Err(RuntimeError::NeuralApiKeyRequired);
+    }
     let default_voice =
         nonempty_env("DEFAULT_VOICE").unwrap_or_else(|| "en_US-amy-medium".to_owned());
     let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
@@ -541,6 +548,10 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             .into(),
         ffmpeg: nonempty_env("FFMPEG_PATH")
             .unwrap_or_else(|| "ffmpeg".to_owned())
+            .into(),
+        openai_api_key: nonempty_env("OPENAI_API_KEY"),
+        neural_cache_dir: nonempty_env("RUST_NEURAL_CACHE_DIR")
+            .unwrap_or_else(|| "./audio-cache/rust-neural".to_owned())
             .into(),
         gcloud_api_key: nonempty_env("GOOGLE_TTS_API_KEY"),
         gcloud_cache_dir: nonempty_env("RUST_GCLOUD_CACHE_DIR")
@@ -725,7 +736,6 @@ fn voice_preferences_from_environment()
     if !voice_preferences_enabled(env::var("RUST_VOICE_PREFERENCES_ENABLED").ok().as_deref()) {
         return Ok(None);
     }
-    require_piper_runtime_default(env::var("TTS_ENGINE").ok().as_deref())?;
     let models_dir = nonempty_env("MODELS_DIR").unwrap_or_else(|| "./models".to_owned());
     let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
     Ok(Some(VoicePreferenceRuntimeOptions {
@@ -743,7 +753,6 @@ fn config_default_voice_from_environment()
     ) {
         return Ok(None);
     }
-    require_piper_runtime_default(env::var("TTS_ENGINE").ok().as_deref())?;
     let models_dir = nonempty_env("MODELS_DIR").unwrap_or_else(|| "./models".to_owned());
     Ok(Some(ConfigDefaultVoiceRuntimeOptions {
         available_models: discover_piper_models(std::path::Path::new(&models_dir))?,
@@ -872,6 +881,8 @@ fn core_voice_default_engine(raw: Option<&str>) -> Result<SynthesisEngine, Runti
         None => Ok(SynthesisEngine::Piper),
         Some(value) if value.eq_ignore_ascii_case("piper") => Ok(SynthesisEngine::Piper),
         Some(value) if value.eq_ignore_ascii_case("gtts") => Ok(SynthesisEngine::Default),
+        Some(value) if value.eq_ignore_ascii_case("router") => Ok(SynthesisEngine::Default),
+        Some(value) if value.eq_ignore_ascii_case("neural") => Ok(SynthesisEngine::Neural),
         Some(_) => Err(RuntimeError::RustVoiceRequiresPiperDefault),
     }
 }
@@ -1780,10 +1791,10 @@ enum RuntimeError {
     )]
     #[cfg_attr(feature = "voice-driver", allow(dead_code))]
     LiveTranscriptionVoiceDriverRequired,
-    #[error(
-        "Rust voice features currently require TTS_ENGINE to be unset or set to piper; leave them disabled until that provider is ported"
-    )]
+    #[error("Rust voice features require TTS_ENGINE to be unset, piper, gtts, router, or neural")]
     RustVoiceRequiresPiperDefault,
+    #[error("TTS_ENGINE=neural requires OPENAI_API_KEY")]
+    NeuralApiKeyRequired,
     #[error("a Rust Piper feature requires at least one supported Piper .onnx model")]
     ModelsUnavailable,
     #[error("DEFAULT_VOICE must name a supported Piper model when a Rust Piper feature is enabled")]
@@ -2628,7 +2639,7 @@ mod tests {
     }
 
     #[test]
-    fn rust_voice_canaries_require_the_node_piper_default() {
+    fn piper_only_canaries_remain_explicitly_piper_gated() {
         assert!(piper_runtime_default_compatible(None));
         assert!(piper_runtime_default_compatible(Some("  ")));
         assert!(piper_runtime_default_compatible(Some("PIPER")));
@@ -2643,7 +2654,7 @@ mod tests {
     }
 
     #[test]
-    fn core_voice_can_select_the_opt_in_gtts_default() {
+    fn core_voice_can_select_each_supported_operator_default() {
         assert_eq!(
             core_voice_default_engine(Some("gtts")).expect("gtts default"),
             SynthesisEngine::Default
@@ -2652,7 +2663,14 @@ mod tests {
             core_voice_default_engine(Some("PIPER")).expect("piper default"),
             SynthesisEngine::Piper
         );
-        assert!(core_voice_default_engine(Some("router")).is_err());
+        assert_eq!(
+            core_voice_default_engine(Some("router")).expect("router default"),
+            SynthesisEngine::Default
+        );
+        assert_eq!(
+            core_voice_default_engine(Some("NEURAL")).expect("neural default"),
+            SynthesisEngine::Neural
+        );
     }
 
     #[test]

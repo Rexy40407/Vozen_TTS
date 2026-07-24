@@ -102,10 +102,11 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranscriptionLiveOwnsCommand('transcribe', 'start', 'false')).toBe(false);
   });
 
-  it('keeps the Speak context menu behind core, Piper, and its own canary', () => {
+  it('keeps the Speak context menu behind core, provider, and its own canary', () => {
     expect(rustSpeakContextOwnsCommand('Speak', 3, 'false', 'true', 'piper')).toBe(false);
     expect(rustSpeakContextOwnsCommand('Speak', 3, 'true', 'false', 'piper')).toBe(false);
     expect(rustSpeakContextOwnsCommand('Speak', 3, 'true', 'true', 'google')).toBe(false);
+    expect(rustSpeakContextOwnsCommand('Speak', 3, 'true', 'true', 'neural')).toBe(true);
     expect(rustSpeakContextOwnsCommand('Speak', 2, 'true', 'true', 'piper')).toBe(false);
     expect(rustSpeakContextOwnsCommand('Translate', 3, 'true', 'true', 'piper')).toBe(false);
     expect(rustSpeakContextOwnsCommand('Speak', 3, 'true', 'true', 'piper')).toBe(true);
@@ -118,17 +119,19 @@ describe('Rust core voice migration ownership', () => {
     expect(rustTranslateContextOwnsCommand('Translate', 3, 'true')).toBe(true);
   });
 
-  it('keeps randomizer behind the core Piper canary', () => {
+  it('keeps randomizer behind the core provider canary', () => {
     expect(rustRandomizerOwnsCommand('randomizer')).toBe(false);
     expect(rustRandomizerOwnsCommand('randomizer', 'true', 'true', 'piper')).toBe(true);
-    expect(rustRandomizerOwnsCommand('randomizer', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustRandomizerOwnsCommand('randomizer', 'true', 'true', 'gtts')).toBe(true);
+    expect(rustRandomizerOwnsCommand('randomizer', 'true', 'true', 'neural')).toBe(true);
     expect(rustRandomizerOwnsCommand('joke', 'true', 'true', 'piper')).toBe(false);
   });
 
-  it('keeps cast behind the core Piper canary', () => {
+  it('keeps cast behind the core provider canary', () => {
     expect(rustCastOwnsCommand('cast')).toBe(false);
     expect(rustCastOwnsCommand('cast', 'true', 'true', 'piper')).toBe(true);
-    expect(rustCastOwnsCommand('cast', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustCastOwnsCommand('cast', 'true', 'true', 'gtts')).toBe(true);
+    expect(rustCastOwnsCommand('cast', 'true', 'true', 'neural')).toBe(true);
     expect(rustCastOwnsCommand('randomizer', 'true', 'true', 'piper')).toBe(false);
   });
 
@@ -136,7 +139,8 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoiceOwnsCommand('tts')).toBe(false);
     expect(rustVoiceOwnsCommand('tts', 'yes')).toBe(false);
     expect(rustVoiceOwnsCommand('tts', 'true')).toBe(true);
-    expect(rustVoiceOwnsCommand('tts', 'true', 'false', 'gtts')).toBe(false);
+    expect(rustVoiceOwnsCommand('tts', 'true', 'false', 'gtts')).toBe(true);
+    expect(rustVoiceOwnsCommand('tts', 'true', 'false', 'neural')).toBe(true);
     expect(rustVoiceOwnsCommand('join', ' TRUE ')).toBe(true);
     expect(rustVoiceOwnsCommand('shut-up', 'true')).toBe(true);
     expect(rustVoiceOwnsCommand('laugh', 'true')).toBe(true);
@@ -154,11 +158,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoiceOwnsCommand('queue', 'true')).toBe(false);
   });
 
-  it('keeps queue ownership behind its own Piper-compatible canary', () => {
+  it('keeps queue ownership behind its own provider-compatible canary', () => {
     expect(rustQueueOwnsCommand('queue')).toBe(false);
     expect(rustQueueOwnsCommand('queue', 'true', 'yes')).toBe(false);
     expect(rustQueueOwnsCommand('queue', 'true', 'true')).toBe(true);
-    expect(rustQueueOwnsCommand('queue', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustQueueOwnsCommand('queue', 'true', 'true', 'gtts')).toBe(true);
+    expect(rustQueueOwnsCommand('queue', 'true', 'true', 'neural')).toBe(true);
     expect(rustQueueOwnsCommand('join', 'true', 'true')).toBe(false);
   });
 
@@ -206,14 +211,12 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigRoleOwnsCommand('config', 'show', 'true')).toBe(false);
   });
 
-  it('promotes default voice only with the Piper-compatible catalogue canary', () => {
+  it('promotes default voice with the shared provider catalogue canary', () => {
     expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice')).toBe(false);
     expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'piper')).toBe(
       true,
     );
-    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'gtts')).toBe(
-      false,
-    );
+    expect(rustConfigDefaultVoiceOwnsCommand('config', 'default-voice', 'true', 'gtts')).toBe(true);
     expect(rustConfigDefaultVoiceOwnsCommand('config', 'role', 'true', 'piper')).toBe(false);
   });
 
@@ -224,10 +227,11 @@ describe('Rust core voice migration ownership', () => {
     expect(rustConfigChannelOwnsCommand('voice', 'tts-channel', 'true')).toBe(false);
   });
 
-  it('keeps setup behind core, setup and Piper canaries', () => {
+  it('keeps setup behind core, setup and provider canaries', () => {
     expect(rustSetupOwnsCommand('setup', 'false', 'true', 'piper')).toBe(false);
     expect(rustSetupOwnsCommand('setup', 'true', 'false', 'piper')).toBe(false);
-    expect(rustSetupOwnsCommand('setup', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustSetupOwnsCommand('setup', 'true', 'true', 'gtts')).toBe(true);
+    expect(rustSetupOwnsCommand('setup', 'true', 'true', 'neural')).toBe(true);
     expect(rustSetupOwnsCommand('setup', 'true', 'true', 'piper')).toBe(true);
     expect(rustSetupOwnsCommand('stats', 'true', 'true', 'piper')).toBe(false);
   });
@@ -370,7 +374,8 @@ describe('Rust core voice migration ownership', () => {
   it('promotes live game play and stop only with the core voice canary', () => {
     expect(rustGamePlayOwnsCommand('game', 'play')).toBe(false);
     expect(rustGamePlayOwnsCommand('game', 'play', 'false', 'true', 'piper')).toBe(false);
-    expect(rustGamePlayOwnsCommand('game', 'play', 'true', 'true', 'gtts')).toBe(false);
+    expect(rustGamePlayOwnsCommand('game', 'play', 'true', 'true', 'gtts')).toBe(true);
+    expect(rustGamePlayOwnsCommand('game', 'play', 'true', 'true', 'neural')).toBe(true);
     expect(rustGamePlayOwnsCommand('game', 'play', 'true', 'true', 'piper')).toBe(true);
     expect(rustGamePlayOwnsCommand('game', 'stop', 'true', 'true', 'piper')).toBe(true);
     expect(rustGamePlayOwnsCommand('game', 'list', 'true', 'true', 'piper')).toBe(false);
@@ -381,7 +386,7 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoiceOwnsAutoRead('true', 'yes')).toBe(false);
     expect(rustVoiceOwnsAutoRead('false', 'true')).toBe(false);
     expect(rustVoiceOwnsAutoRead(' TRUE ', ' true ')).toBe(true);
-    expect(rustVoiceOwnsAutoRead('true', 'true', 'neural')).toBe(false);
+    expect(rustVoiceOwnsAutoRead('true', 'true', 'neural')).toBe(true);
   });
 
   it('only yields the private translate text leaf when its exact flag is enabled', () => {
@@ -423,7 +428,7 @@ describe('Rust core voice migration ownership', () => {
     expect(rustVoicePreferencesOwnCommand('voice', 'reset')).toBe(false);
     expect(rustVoicePreferencesOwnCommand('voice', 'reset', 'yes')).toBe(false);
     expect(rustVoicePreferencesOwnCommand('voice', 'reset', ' TRUE ')).toBe(true);
-    expect(rustVoicePreferencesOwnCommand('voice', 'set', 'true', 'router')).toBe(false);
+    expect(rustVoicePreferencesOwnCommand('voice', 'set', 'true', 'router')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('voice', 'detection', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('voice', 'effect', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('voice', 'set', 'true')).toBe(true);
@@ -436,7 +441,7 @@ describe('Rust core voice migration ownership', () => {
       true,
     );
     expect(rustVoicePreferencesOwnCommand('voice', 'preview', undefined, 'router', 'true')).toBe(
-      false,
+      true,
     );
     expect(rustVoicePreferencesOwnCommand('voice', 'config', 'true')).toBe(true);
     expect(rustVoicePreferencesOwnCommand('translate', 'reset', 'true')).toBe(false);

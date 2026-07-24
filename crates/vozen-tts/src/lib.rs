@@ -22,6 +22,7 @@ use vozen_core::{RuntimeMetrics, SynthRequest};
 mod gcloud;
 mod gtts;
 mod kokoro;
+mod neural;
 mod wav_concat;
 
 pub use gcloud::{
@@ -33,6 +34,7 @@ pub use kokoro::{
     KokoroCommand, KokoroEngine, KokoroOptions, KokoroVoice, kokoro_voice_for_model,
     language_key as kokoro_language_key, parse_command as parse_kokoro_command,
 };
+pub use neural::{NeuralEngine, NeuralOptions, openai_voice_for_model};
 pub use wav_concat::{
     WavError, WavFormat, concat_wavs, parse_wav, prepend_silence_wav, silence_wav,
 };
@@ -75,6 +77,14 @@ pub enum TtsError {
     GcloudBudgetMissing,
     #[error("Google Cloud TTS budget denied the request")]
     GcloudBudgetDenied,
+    #[error("OpenAI TTS is not configured")]
+    NeuralConfiguration,
+    #[error("OpenAI TTS request failed")]
+    NeuralRequest,
+    #[error("OpenAI TTS request timed out")]
+    NeuralTimeout,
+    #[error("OpenAI TTS returned an invalid response")]
+    NeuralResponse,
     #[error("Kokoro sidecar is not configured")]
     KokoroConfiguration,
     #[error("Kokoro sidecar process failed")]
