@@ -30,6 +30,10 @@ random secret in both services, and point the Helper at
 boundary and does not open a Discord gateway, so it can run while the Node gateway remains the
 rollback target.
 
+The standalone daemon is currently the live entitlement path on the Helper VPS. The main
+`vozen.service` gateway remains Node and is deliberately not cut over by this Helper goal. Keep
+the daemon and Helper secret files mode `0600`; never print or commit their values.
+
 ## Rollback
 
 ```bash
