@@ -14,16 +14,13 @@ production VPS and must use a second Discord application, token and test guild.
 
 ## Guild-scoped command registration
 
-Set these values in a local, uncommitted environment file:
+Copy `.env.rust.staging.example` to `.env.rust.staging`, fill in the staging application's
+`DISCORD_TOKEN`, `CLIENT_ID` and test-guild IDs, and keep the copy uncommitted. The example is
+deliberately shadow-only and does not contain a credential:
 
-```dotenv
-RUST_RUNTIME_MODE=shadow
-RUST_REGISTER_COMMANDS_ENABLED=true
-RUST_AUTOCOMPLETE_ENABLED=true
-RUST_COMMANDS_GUILD_ID=<staging-guild-id>
-OWNER_GUILD_ID=<staging-guild-id>
-RUST_COMMANDS_STATE_PATH=./.staging/commands-state-rust.json
-SINGLE_INSTANCE_PORT=59595
+```powershell
+Copy-Item .env.rust.staging.example .env.rust.staging
+# edit DISCORD_TOKEN, CLIENT_ID, RUST_COMMANDS_GUILD_ID and OWNER_GUILD_ID locally
 ```
 
 `RUST_COMMANDS_GUILD_ID` makes the public command PUT guild-scoped instead of global. When the
