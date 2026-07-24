@@ -142,11 +142,6 @@ async function getJson(
   }
 }
 
-function contractNames(key: 'public_commands' | 'owner_commands'): string[] {
-  const commands = commandContract[key] ?? [];
-  return commands.flatMap((command) => (typeof command.name === 'string' ? [command.name] : []));
-}
-
 function commandNames(commands: JsonRecord[], endpoint: string): string[] {
   return commands.map((command) => {
     if (typeof command.name !== 'string' || command.name.length === 0) {
@@ -162,6 +157,52 @@ function commandNames(commands: JsonRecord[], endpoint: string): string[] {
 function compareCommandNames(actual: string[], expected: string[]): boolean {
   const sort = (names: string[]) => [...names].sort();
   return JSON.stringify(sort(actual)) === JSON.stringify(sort(expected));
+}
+
+/**
+ * Projects an API command onto the fields present in the generated contract. Discord adds
+ * volatile identifiers and response metadata (id, version, application_id, guild_id, ...), so
+ * those are deliberately ignored; every stable field that Rust would register is compared,
+ * including nested options and choices.
+ */
+function projectContractShape(actual: unknown, expected: unknown): unknown {
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(actual) || actual.length !== expected.length) return { __missing: true };
+    return expected.map((item, index) => projectContractShape(actual[index], item));
+  }
+  if (expected !== null && typeof expected === 'object') {
+    if (actual === null || typeof actual !== 'object' || Array.isArray(actual)) {
+      return { __missing: true };
+    }
+    const actualRecord = actual as JsonRecord;
+    return Object.fromEntries(
+      Object.entries(expected as JsonRecord)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, value]) => [
+          key,
+          Object.prototype.hasOwnProperty.call(actualRecord, key)
+            ? projectContractShape(actualRecord[key], value)
+            : { __missing: true },
+        ]),
+    );
+  }
+  return actual;
+}
+
+function compareCommandContracts(actual: JsonRecord[], expected: JsonRecord[]): boolean {
+  const sortByName = (commands: JsonRecord[]) =>
+    [...commands].sort((left, right) => String(left.name).localeCompare(String(right.name)));
+  const sortedActual = sortByName(actual);
+  const sortedExpected = sortByName(expected);
+  if (sortedActual.length !== sortedExpected.length) return false;
+  return sortedExpected.every((contractCommand, index) => {
+    const liveCommand = sortedActual[index];
+    return (
+      liveCommand.name === contractCommand.name &&
+      JSON.stringify(projectContractShape(liveCommand, contractCommand)) ===
+        JSON.stringify(projectContractShape(contractCommand, contractCommand))
+    );
+  });
 }
 
 export async function runRustStagingPreflight(
@@ -213,10 +254,18 @@ export async function runRustStagingPreflight(
     ),
     'staging commands',
   );
-  const expectedNames = [...contractNames('public_commands')];
-  if (ownerGuildId === guildId) expectedNames.push(...contractNames('owner_commands'));
+  const expectedCommands = [...(commandContract.public_commands ?? [])];
+  if (ownerGuildId === guildId) {
+    expectedCommands.push(...(commandContract.owner_commands ?? []));
+  }
+  const expectedNames = expectedCommands.flatMap((command) =>
+    typeof command.name === 'string' ? [command.name] : [],
+  );
   const actualNames = commandNames(guildCommands, 'staging commands');
-  if (!compareCommandNames(actualNames, expectedNames)) {
+  if (
+    !compareCommandNames(actualNames, expectedNames) ||
+    !compareCommandContracts(guildCommands, expectedCommands as JsonRecord[])
+  ) {
     throw new RustStagingPreflightError(
       'guild_command_mismatch',
       `Staging command set differs from the Rust contract (got ${actualNames.length}, expected ${expectedNames.length})`,
@@ -252,8 +301,14 @@ export async function runRustStagingPreflight(
       'owner commands',
     );
     const ownerNames = commandNames(ownerCommands, 'owner commands');
-    const expectedOwnerNames = contractNames('owner_commands');
-    if (!compareCommandNames(ownerNames, expectedOwnerNames)) {
+    const expectedOwnerCommands = [...(commandContract.owner_commands ?? [])];
+    const expectedOwnerNames = expectedOwnerCommands.flatMap((command) =>
+      typeof command.name === 'string' ? [command.name] : [],
+    );
+    if (
+      !compareCommandNames(ownerNames, expectedOwnerNames) ||
+      !compareCommandContracts(ownerCommands, expectedOwnerCommands as JsonRecord[])
+    ) {
       throw new RustStagingPreflightError(
         'guild_command_mismatch',
         `Owner command set differs from the Rust contract (got ${ownerNames.length}, expected ${expectedOwnerNames.length})`,

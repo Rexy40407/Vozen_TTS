@@ -119,6 +119,25 @@ describe('Rust staging preflight', () => {
     ).toBe(true);
   });
 
+  it('detects stable command-shape drift, not only a changed command name', async () => {
+    const fetchImpl = happyFetch();
+    fetchImpl.mockImplementationOnce(async () => response({ id: env.CLIENT_ID }));
+    fetchImpl.mockImplementationOnce(async () => response({ id: env.RUST_COMMANDS_GUILD_ID }));
+    fetchImpl.mockImplementationOnce(async () =>
+      response([
+        ...contract.public_commands.map((command, index) =>
+          index === 0 ? { ...command, description: 'tampered description' } : command,
+        ),
+        ...contract.owner_commands,
+      ]),
+    );
+
+    await expect(
+      runRustStagingPreflight({ env, fetchImpl, apiBaseUrl: 'https://discord.test/api/v10' }),
+    ).rejects.toMatchObject({ code: 'guild_command_mismatch' });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it('also verifies owner commands when the owner guild is separate', async () => {
     const separateOwnerEnv = {
       ...env,
