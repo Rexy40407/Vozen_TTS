@@ -44,6 +44,16 @@ try {
 catch [System.ArgumentException] {
   throw "Process $ProcessId exited before the benchmark completed."
 }
+catch [System.InvalidOperationException] {
+  # TotalProcessorTime/Refresh can race with a process that exits between samples. Treat that
+  # exactly like the existing missing-process case instead of emitting a partial report.
+  throw "Process $ProcessId exited before the benchmark completed."
+}
+catch [System.ComponentModel.Win32Exception] {
+  # Windows can report a process disappearing as a Win32 lookup failure. A partial sample is not
+  # comparable, so fail closed with the same operator-facing message.
+  throw "Process $ProcessId exited before the benchmark completed."
+}
 
 if ($samples.Count -eq 0) {
   throw 'No process samples were collected.'
