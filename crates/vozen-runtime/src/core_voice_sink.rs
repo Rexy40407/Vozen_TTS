@@ -114,6 +114,7 @@ pub struct CoreVoiceGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
     options: CoreVoiceRuntimeOptions,
+    localizer: Option<VoiceResponseLocalizer>,
     dependencies: Mutex<Option<Arc<VoiceDependencies>>>,
     executor: Mutex<Option<Arc<Executor>>>,
     message_service: Mutex<Option<Arc<MessageService>>>,
@@ -1068,6 +1069,7 @@ impl CoreVoiceGatewaySink {
             store,
             gateway_state,
             options,
+            localizer: VoiceResponseLocalizer::from_generated_contract().ok(),
             dependencies: Mutex::new(None),
             executor: Mutex::new(None),
             message_service: Mutex::new(None),
@@ -2831,10 +2833,39 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 resolve_channel: &resolve_channel,
             })
             .await;
-        if outcome == MessageVoiceOutcome::Queued
-            && let Ok(mut speakers) = self.last_speakers.lock()
-        {
-            speakers.insert(facts.guild_id, facts.author_id);
+        if let MessageVoiceOutcome::Queued { talk } = outcome {
+            if let Ok(mut speakers) = self.last_speakers.lock() {
+                speakers.insert(facts.guild_id.clone(), facts.author_id.clone());
+            }
+            let streak_config = self
+                .store
+                .lock()
+                .ok()
+                .and_then(|store| store.guild_config(&facts.guild_id).ok())
+                .map(|config| (config.streak_announce, config.locale));
+            if let Some(talk) = talk
+                && talk.first_of_day
+                && talk.streak >= 2
+                && let Some(localizer) = self.localizer.as_ref()
+                && let Some((true, locale)) = streak_config
+            {
+                let mut parameters = BTreeMap::new();
+                parameters.insert("user", facts.author_id.clone());
+                parameters.insert("n", talk.streak.to_string());
+                if let Some(content) =
+                    localizer.render_key("streak.day", Some(locale.as_str()), None, &parameters)
+                {
+                    let _ = message
+                        .channel_id
+                        .send_message(
+                            &context.http,
+                            CreateMessage::new()
+                                .content(content)
+                                .allowed_mentions(no_mentions()),
+                        )
+                        .await;
+                }
+            }
         }
         Ok(())
     }

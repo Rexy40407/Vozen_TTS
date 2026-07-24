@@ -14,7 +14,7 @@ use vozen_core::{
     QueueEnqueueOptions, QueueSource, SynthesisEngine, is_repetition_spam,
 };
 use vozen_store::{
-    OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore, UserEngine,
+    OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore, TalkBump, UserEngine,
     utc_day_key_from_unix_millis,
 };
 
@@ -47,7 +47,7 @@ pub enum MessageVoiceOutcome {
     Busy,
     SynthesisFailed,
     PlaybackFailed,
-    Queued,
+    Queued { talk: Option<TalkBump> },
     StoreUnavailable,
 }
 
@@ -250,7 +250,7 @@ where
             .await
         {
             Ok(()) => {
-                if self.should_count(
+                let talk = if self.should_count(
                     invocation.facts.guild_id,
                     invocation.facts.author_id,
                     &cleaned_text,
@@ -262,9 +262,11 @@ where
                         &request.model,
                         request.engine,
                         now_ms,
-                    );
-                }
-                MessageVoiceOutcome::Queued
+                    )
+                } else {
+                    None
+                };
+                MessageVoiceOutcome::Queued { talk }
             }
             Err(_) => {
                 let _ = self
@@ -352,17 +354,19 @@ where
         model: &str,
         engine: SynthesisEngine,
         now_ms: i64,
-    ) {
+    ) -> Option<TalkBump> {
         if let Ok(store) = self.store.lock() {
             // `talk_stats` and `talk_usage` are both post-queue aggregates. Keep the writes
             // best-effort, as Node does: a telemetry/storage hiccup must never turn accepted
             // audio into a failed request. The day key uses the runtime's UTC contract, which is
             // also what the Rust operational metrics use on the production VPS.
             let day = utc_day_key_from_unix_millis(now_ms);
-            let _ = store.bump_talk(guild_id, user_id, &day);
+            let talk = store.bump_talk(guild_id, user_id, &day).ok();
             let _ = store.bump_guild_talk(guild_id, &day);
             let _ = store.bump_talk_usage(guild_id, user_id, model, user_engine(engine));
+            return talk;
         }
+        None
     }
 }
 
@@ -603,10 +607,10 @@ mod tests {
             Arc::new(|| 0),
         );
 
-        assert_eq!(
+        assert!(matches!(
             service.execute(invocation(Some("voice"))).await,
-            MessageVoiceOutcome::Queued
-        );
+            MessageVoiceOutcome::Queued { talk: Some(_) }
+        ));
         let store = store.lock().expect("store");
         assert!(
             store
@@ -716,14 +720,14 @@ mod tests {
             Arc::new(|| 0),
         );
 
-        assert_eq!(
+        assert!(matches!(
             service.execute(invocation(Some("voice"))).await,
-            MessageVoiceOutcome::Queued
-        );
-        assert_eq!(
+            MessageVoiceOutcome::Queued { talk: Some(_) }
+        ));
+        assert!(matches!(
             service.execute(invocation(Some("voice"))).await,
-            MessageVoiceOutcome::Queued
-        );
+            MessageVoiceOutcome::Queued { talk: None }
+        ));
         let usage = store
             .lock()
             .expect("store")
