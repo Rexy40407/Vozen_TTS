@@ -65,6 +65,7 @@ pub const FULL_RUNTIME_FLAGS: &[&str] = &[
     "RUST_CAST_ENABLED",
     "RUST_SETUP_ENABLED",
     "RUST_OWNER_COMMANDS_ENABLED",
+    "RUST_BROWSER_API_ENABLED",
     "RUST_DASHBOARD_ENABLED",
     "RUST_ADMIN_API_ENABLED",
 ];
@@ -149,5 +150,6 @@ mod tests {
         assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_GAME_PLAY_ENABLED"));
         assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_TRANSCRIBE_LIVE_ENABLED"));
         assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_WELCOME_ENABLED"));
+        assert!(FULL_RUNTIME_FLAGS.contains(&"RUST_BROWSER_API_ENABLED"));
     }
 }

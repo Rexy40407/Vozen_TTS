@@ -60,6 +60,7 @@ export const FULL_RUST_RUNTIME_FLAGS = [
   'RUST_CAST_ENABLED',
   'RUST_SETUP_ENABLED',
   'RUST_OWNER_COMMANDS_ENABLED',
+  'RUST_BROWSER_API_ENABLED',
   'RUST_DASHBOARD_ENABLED',
   'RUST_ADMIN_API_ENABLED',
 ] as const;
@@ -221,7 +222,7 @@ export function rustRandomizerOwnsCommand(
   );
 }
 
-/** `/cast` owns its menu/reveal session only after the Rust core and Piper canaries are active. */
+/** `/cast` owns its menu/reveal session only after the Rust core and provider canaries are active. */
 export function rustCastOwnsCommand(
   commandName: string,
   coreEnabled = process.env.RUST_CORE_VOICE_ENABLED,

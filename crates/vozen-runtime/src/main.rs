@@ -357,6 +357,14 @@ impl RuntimeConfig {
             Err(env::VarError::NotUnicode(_)) => return Err(RuntimeError::InvalidHealthPort),
         };
         let premium_http = premium_http_from_environment()?;
+        if runtime_mode.is_full()
+            && !browser_api_promoted(
+                env::var("RUST_BROWSER_API_ENABLED").ok().as_deref(),
+                premium_http.as_ref(),
+            )
+        {
+            return Err(RuntimeError::FullRuntimeBrowserApiRequired);
+        }
         let public_status = public_status_from_environment();
         let topgg_webhook = topgg_webhook_from_environment()?;
         let topgg_metrics = topgg_metrics_from_environment()?;
@@ -1745,6 +1753,11 @@ fn premium_http_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
+fn browser_api_promoted(raw: Option<&str>, premium_http: Option<&PremiumHttpConfig>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+        && premium_http.is_some_and(|config| config.browser_api_enabled)
+}
+
 fn nonempty_env(name: &str) -> Option<String> {
     env::var(name)
         .ok()
@@ -1773,6 +1786,10 @@ enum RuntimeError {
     InvalidHealthPort,
     #[error("HEALTH_PORT is required when a Rust HTTP/API surface is enabled")]
     HttpListenerRequired,
+    #[error(
+        "RUST_RUNTIME_MODE=full requires RUST_BROWSER_API_ENABLED=true and PREMIUM_API_ENABLED=true"
+    )]
+    FullRuntimeBrowserApiRequired,
     #[error(
         "CLIENT_ID is required when PREMIUM_API_ENABLED=true or TOPGG_WEBHOOK_SECRET is configured"
     )]
@@ -2586,6 +2603,30 @@ mod tests {
         assert!(!premium_http_enabled(Some("1")));
         assert!(!premium_http_enabled(Some("yes")));
         assert!(!premium_http_enabled(None));
+    }
+
+    #[test]
+    fn full_mode_requires_the_explicit_browser_api_promotion_and_real_api_config() {
+        let config = PremiumHttpConfig {
+            browser_api_enabled: true,
+            client_id: Some("client".into()),
+            origin: "https://vozen.org".into(),
+            kofi_webhook_token: None,
+            kofi_shop_map: None,
+            claim_help_webhook_url: None,
+        };
+        assert!(browser_api_promoted(Some("true"), Some(&config)));
+        assert!(browser_api_promoted(Some(" TRUE "), Some(&config)));
+        assert!(!browser_api_promoted(Some("false"), Some(&config)));
+        assert!(!browser_api_promoted(None, Some(&config)));
+        assert!(!browser_api_promoted(
+            Some("true"),
+            Some(&PremiumHttpConfig {
+                browser_api_enabled: false,
+                ..config
+            })
+        ));
+        assert!(!browser_api_promoted(Some("true"), None));
     }
 
     #[test]
