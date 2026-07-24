@@ -11,7 +11,7 @@ use std::{
 
 use vozen_core::{
     CountGate, DuplicateTracker, MediaAnnouncement, MessageSpeechDecision, MessageSpeechDenial,
-    QueueEnqueueOptions, QueueSource, is_repetition_spam,
+    QueueEnqueueOptions, QueueSource, SynthesisEngine, is_repetition_spam,
 };
 use vozen_store::{
     OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore, UserEngine,
@@ -260,6 +260,8 @@ where
                         invocation.facts.guild_id,
                         invocation.facts.author_id,
                         &request.model,
+                        request.engine,
+                        now_ms,
                     );
                 }
                 MessageVoiceOutcome::Queued
@@ -343,10 +345,35 @@ where
     /// Mirrors the Node rule: usage changes only after playback accepted the rendered request.
     /// The established `talk_usage` aggregate is best-effort and contains neither message text
     /// nor audio; failure to update the dashboard counter cannot undo valid playback.
-    fn record_accepted_speech(&self, guild_id: &str, user_id: &str, model: &str) {
+    fn record_accepted_speech(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        model: &str,
+        engine: SynthesisEngine,
+        now_ms: i64,
+    ) {
         if let Ok(store) = self.store.lock() {
-            let _ = store.bump_talk_usage(guild_id, user_id, model, UserEngine::Piper);
+            // `talk_stats` and `talk_usage` are both post-queue aggregates. Keep the writes
+            // best-effort, as Node does: a telemetry/storage hiccup must never turn accepted
+            // audio into a failed request. The day key uses the runtime's UTC contract, which is
+            // also what the Rust operational metrics use on the production VPS.
+            let day = utc_day_key_from_unix_millis(now_ms);
+            let _ = store.bump_talk(guild_id, user_id, &day);
+            let _ = store.bump_guild_talk(guild_id, &day);
+            let _ = store.bump_talk_usage(guild_id, user_id, model, user_engine(engine));
         }
+    }
+}
+
+fn user_engine(engine: SynthesisEngine) -> UserEngine {
+    match engine {
+        // `Default` and `Neural` are runtime routes, not persisted UserEngine values. Node
+        // records those legacy/default routes as `google` in talk_usage.
+        SynthesisEngine::Piper => UserEngine::Piper,
+        SynthesisEngine::Kokoro => UserEngine::Kokoro,
+        SynthesisEngine::Gcloud => UserEngine::Gcloud,
+        SynthesisEngine::Default | SynthesisEngine::Neural => UserEngine::Google,
     }
 }
 
@@ -612,6 +639,29 @@ mod tests {
                 source: TalkUsageSource::Measured,
             })
         );
+        let top = store
+            .top_speakers("guild", "1970-01-01", 10)
+            .expect("top speakers");
+        assert_eq!(
+            top.first().map(|row| (&row.user_id, row.count, row.streak)),
+            Some((&"user".to_string(), 1, 1))
+        );
+        assert_eq!(
+            store
+                .guild_talk_streak("guild", "1970-01-01")
+                .expect("guild streak")
+                .streak,
+            1
+        );
+    }
+
+    #[test]
+    fn accepted_usage_maps_runtime_engines_to_persisted_engines() {
+        assert_eq!(user_engine(SynthesisEngine::Default), UserEngine::Google);
+        assert_eq!(user_engine(SynthesisEngine::Neural), UserEngine::Google);
+        assert_eq!(user_engine(SynthesisEngine::Piper), UserEngine::Piper);
+        assert_eq!(user_engine(SynthesisEngine::Kokoro), UserEngine::Kokoro);
+        assert_eq!(user_engine(SynthesisEngine::Gcloud), UserEngine::Gcloud);
     }
 
     #[tokio::test]
