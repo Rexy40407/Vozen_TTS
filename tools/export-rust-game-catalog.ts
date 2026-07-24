@@ -26,7 +26,7 @@ function render(): string {
 function main(): void {
   const expected = render();
   if (check) {
-    const actual = existsSync(target) ? readFileSync(target, 'utf8') : '';
+    const actual = existsSync(target) ? readFileSync(target, 'utf8').replace(/\r\n/g, '\n') : '';
     if (actual !== expected) {
       console.error('Rust game catalog contract is stale. Run: npm run build:rust-game-catalog');
       process.exitCode = 1;

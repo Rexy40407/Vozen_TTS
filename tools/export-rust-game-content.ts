@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   });
 
   if (check) {
-    const actual = existsSync(target) ? readFileSync(target, 'utf8') : '';
+    const actual = existsSync(target) ? readFileSync(target, 'utf8').replace(/\r\n/g, '\n') : '';
     if (actual !== expected) {
       console.error('Rust game content contract is stale. Run: npm run build:rust-game-content');
       process.exitCode = 1;
