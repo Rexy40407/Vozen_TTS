@@ -52,6 +52,8 @@ import {
   rustRuntimeFullEnabled,
   rustRuntimeReady,
   rustAutocompleteOwnsCommand,
+  rustTranslationOwnsReactions,
+  rustWelcomeOwnsGuildCreate,
   FULL_RUST_RUNTIME_FLAGS,
 } from '../src/migration/rustVoiceAuthority';
 
@@ -93,6 +95,15 @@ describe('Rust core voice migration ownership', () => {
     expect(rustAutocompleteOwnsCommand('voice', 'set', 'model', 'true')).toBe(false);
     expect(rustAutocompleteOwnsCommand('config', 'language', 'locale', 'true')).toBe(false);
     expect(rustAutocompleteOwnsCommand('joke', null, 'language', 'true')).toBe(false);
+  });
+
+  it('keeps reaction and guild-welcome side effects behind their own canaries', () => {
+    expect(rustTranslationOwnsReactions()).toBe(false);
+    expect(rustTranslationOwnsReactions('true')).toBe(true);
+    expect(rustTranslationOwnsReactions('yes')).toBe(false);
+    expect(rustWelcomeOwnsGuildCreate()).toBe(false);
+    expect(rustWelcomeOwnsGuildCreate('true')).toBe(true);
+    expect(rustWelcomeOwnsGuildCreate('1')).toBe(false);
   });
 
   it('recognises a complete explicit cutover contract without reading process.env', () => {

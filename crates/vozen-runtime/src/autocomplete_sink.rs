@@ -231,7 +231,11 @@ fn filter_word_chain_languages(query: &str) -> Vec<Choice> {
     sanitize(
         WORD_CHAIN_LANGUAGES
             .into_iter()
-            .filter(|(_, name)| name.to_lowercase().contains(&query) || query.is_empty())
+            .filter(|(value, name)| {
+                query.is_empty()
+                    || value.to_lowercase().contains(&query)
+                    || name.to_lowercase().contains(&query)
+            })
             .take(25)
             .map(|(value, name)| Choice {
                 name: name.to_owned(),
@@ -334,6 +338,7 @@ mod tests {
         );
         assert_eq!(filter_joke_languages("russ")[0].value, "ru");
         assert_eq!(filter_word_chain_languages("fr")[0].value, "fr");
+        assert_eq!(filter_word_chain_languages("pt")[0].value, "pt");
         assert_eq!(filter_locales("deuts")[0].value, "de");
         assert_eq!(
             filter_pronunciations(vec![("sql".into(), "sequel".into())], "sequel")[0].value,

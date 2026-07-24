@@ -12,7 +12,12 @@ import type { BotDeps } from './deps';
 import { handleGuildDelete, getPlayer } from './deps';
 import { markGuildDeparted, unmarkGuildDeparted } from '../store/guildDeparted';
 import { handleInteraction, handleAutocomplete, handleMessageContextMenu } from '../commands/index';
-import { rustAutocompleteOwnsCommand, rustRuntimeReady } from '../migration/rustVoiceAuthority';
+import {
+  rustAutocompleteOwnsCommand,
+  rustRuntimeReady,
+  rustTranslationOwnsReactions,
+  rustWelcomeOwnsGuildCreate,
+} from '../migration/rustVoiceAuthority';
 import { handleMessage } from '../commands/messageHandler';
 import { getGuildConfig } from '../store/guildConfig';
 import { getNickname } from '../store/nickname';
@@ -141,6 +146,7 @@ export function bindEvents(deps: BotDeps): void {
   });
 
   client.on(Events.MessageReactionAdd, (reaction, user) => {
+    if (rustRuntimeReady() && rustTranslationOwnsReactions()) return;
     void handleTranslationReaction(reaction, user, deps);
   });
 
@@ -173,6 +179,7 @@ export function bindEvents(deps: BotDeps): void {
     } catch (err) {
       log.warn('[retention] failed to clear the departed-guild marker (ignored)', err);
     }
+    if (rustRuntimeReady() && rustWelcomeOwnsGuildCreate()) return;
     void (async () => {
       try {
         const channel = pickWelcomeChannel(

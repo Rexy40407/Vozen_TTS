@@ -129,6 +129,19 @@ export function rustAutocompleteOwnsCommand(
   return false;
 }
 
+/** Rust's explicit translation sink also handles flag reactions. Keep Node from posting a
+ * duplicate translation when that interaction path is promoted alongside `/translate text`. */
+export function rustTranslationOwnsReactions(
+  enabled = process.env.RUST_TRANSLATE_TEXT_ENABLED,
+): boolean {
+  return enabled?.trim().toLowerCase() === 'true';
+}
+
+/** Guild welcome is an outbound GUILD_CREATE side effect, not just a read-only lifecycle hook. */
+export function rustWelcomeOwnsGuildCreate(enabled = process.env.RUST_WELCOME_ENABLED): boolean {
+  return enabled?.trim().toLowerCase() === 'true';
+}
+
 function nonEmpty(value: string | undefined): boolean {
   return (value?.trim().length ?? 0) > 0;
 }
