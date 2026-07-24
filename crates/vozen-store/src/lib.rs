@@ -193,13 +193,17 @@ impl SqliteStore {
         Self::from_connection(connection)
     }
 
-    fn from_connection(connection: Connection) -> Result<Self, StoreError> {
+    fn from_connection(mut connection: Connection) -> Result<Self, StoreError> {
         connection.busy_timeout(Duration::from_secs(5))?;
         connection.execute_batch(
             "PRAGMA foreign_keys = ON;\nPRAGMA journal_mode = WAL;\nPRAGMA synchronous = NORMAL;",
         )?;
-        install_current_schema(&connection)?;
-        migration::migrate_legacy_schema(&connection)?;
+        // Schema installation and historical upgrades must commit together. A failed ALTER or
+        // privacy cleanup must leave the database exactly as it was before Rust opened it.
+        let transaction = connection.transaction()?;
+        install_current_schema(&transaction)?;
+        migration::migrate_legacy_schema(&transaction)?;
+        transaction.commit()?;
         Ok(Self { connection })
     }
 
@@ -432,6 +436,42 @@ mod tests {
             "pt_PT-google-medium"
         );
         drop(store);
+        let _ = remove_file(&path);
+        let _ = remove_file(format!("{}-wal", path.display()));
+        let _ = remove_file(format!("{}-shm", path.display()));
+    }
+
+    #[test]
+    fn schema_and_legacy_migration_roll_back_together_on_open_failure() {
+        let path = temporary_database_path();
+        let legacy = Connection::open(&path).expect("legacy database");
+        legacy
+            .execute_batch("CREATE VIEW guild_config AS SELECT 'guild' AS guild_id;")
+            .expect("incompatible legacy object");
+        drop(legacy);
+
+        assert!(SqliteStore::open(&path).is_err());
+
+        let reopened = Connection::open(&path).expect("reopen original database");
+        let object_type: String = reopened
+            .query_row(
+                "SELECT type FROM sqlite_master WHERE name = 'guild_config'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("original view remains");
+        assert_eq!(object_type, "view");
+        assert_eq!(
+            reopened
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE name = 'blocklist'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("schema object query"),
+            0
+        );
+        drop(reopened);
         let _ = remove_file(&path);
         let _ = remove_file(format!("{}-wal", path.display()));
         let _ = remove_file(format!("{}-shm", path.display()));
