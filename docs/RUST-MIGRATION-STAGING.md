@@ -45,8 +45,8 @@ Enable it in staging only after checking model, language, locale, game and pronu
 $env:Path = 'C:\Users\diogo\.cargo\bin;' + $env:Path
 npm run rust:staging:preflight
 cargo test -p vozen-discord command_registration --lib
-cargo build --release -p vozen-runtime
-cargo run --release -p vozen-runtime
+cargo build --release -p vozen-runtime --features voice-driver
+cargo run --release -p vozen-runtime --features voice-driver
 ```
 
 `rust:staging:preflight` is read-only. It checks the bot identity, staging guild and guild
@@ -84,5 +84,6 @@ token while Node is running; the shared single-instance lock protects only proce
 host and cannot protect two different machines.
 
 Only after these checks, the voice-driver build, API contract checks and the remaining R5 module
-canaries pass may the private cutover gate be considered. This document does not authorize a
-production deployment or a push.
+canaries pass may the private cutover gate be considered. A control-plane-only build without
+`voice-driver` is useful for portable CI, but it is not evidence that live TTS or Songbird works.
+This document does not authorize a production deployment or a push.
