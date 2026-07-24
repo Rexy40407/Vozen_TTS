@@ -40,6 +40,7 @@
     "check:rust-game-catalog": "tsx tools/export-rust-game-catalog.ts --check",
     "check:rust": "cargo fmt --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
     "check:rust-voice": "cargo test -p vozen-runtime --features voice-driver && cargo clippy -p vozen-runtime --features voice-driver --all-targets -- -D warnings",
+    "rust:staging:preflight": "tsx tools/rust-staging-preflight.ts",
     "build:i18n": "node tools/build-i18n.mjs",
     "check:i18n": "node tools/build-i18n.mjs --check",
     "check:site-copy": "node tools/check-site-copy.mjs",

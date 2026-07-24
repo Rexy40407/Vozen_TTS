@@ -1,0 +1,262 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+type JsonRecord = Record<string, unknown>;
+type FetchLike = typeof fetch;
+
+const DISCORD_API_BASE = 'https://discord.com/api/v10';
+const DEFAULT_TIMEOUT_MS = 5_000;
+const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
+
+const commandContract = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'contracts/discord-commands.json'), 'utf8'),
+) as {
+  public_commands?: Array<{ name?: unknown }>;
+  owner_commands?: Array<{ name?: unknown }>;
+};
+
+export interface RustStagingPreflightEnv {
+  DISCORD_TOKEN?: string;
+  CLIENT_ID?: string;
+  RUST_COMMANDS_GUILD_ID?: string;
+  OWNER_GUILD_ID?: string;
+}
+
+export interface RustStagingPreflightOptions {
+  env: RustStagingPreflightEnv;
+  fetchImpl?: FetchLike;
+  apiBaseUrl?: string;
+  timeoutMs?: number;
+}
+
+export interface RustStagingPreflightReport {
+  ok: true;
+  botUserMatchesApplication: boolean;
+  guildReachable: boolean;
+  guildCommandCount: number;
+  expectedGuildCommandCount: number;
+  globalCommandCount: number;
+}
+
+export type RustStagingPreflightFailureCode =
+  | 'invalid_config'
+  | 'discord_request_failed'
+  | 'invalid_response'
+  | 'application_mismatch'
+  | 'guild_command_mismatch';
+
+export class RustStagingPreflightError extends Error {
+  constructor(
+    readonly code: RustStagingPreflightFailureCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RustStagingPreflightError';
+  }
+}
+
+function validSnowflake(value: string | undefined): value is string {
+  return value !== undefined && SNOWFLAKE_PATTERN.test(value.trim());
+}
+
+function requiredEnv(env: RustStagingPreflightEnv, key: keyof RustStagingPreflightEnv): string {
+  const value = env[key]?.trim();
+  if (!value) {
+    throw new RustStagingPreflightError('invalid_config', `${key} is required`);
+  }
+  return value;
+}
+
+function requiredSnowflake(
+  env: RustStagingPreflightEnv,
+  key: 'CLIENT_ID' | 'RUST_COMMANDS_GUILD_ID',
+): string {
+  const value = requiredEnv(env, key);
+  if (!validSnowflake(value)) {
+    throw new RustStagingPreflightError('invalid_config', `${key} must be a Discord snowflake`);
+  }
+  return value;
+}
+
+function jsonRecord(value: unknown, endpoint: string): JsonRecord {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new RustStagingPreflightError(
+      'invalid_response',
+      `Discord returned an invalid ${endpoint} response`,
+    );
+  }
+  return value as JsonRecord;
+}
+
+function responseArray(value: unknown, endpoint: string): JsonRecord[] {
+  if (!Array.isArray(value) || value.some((item) => item === null || typeof item !== 'object')) {
+    throw new RustStagingPreflightError(
+      'invalid_response',
+      `Discord returned an invalid ${endpoint} response`,
+    );
+  }
+  return value as JsonRecord[];
+}
+
+async function getJson(
+  fetchImpl: FetchLike,
+  url: string,
+  token: string,
+  endpoint: string,
+  timeoutMs: number,
+): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bot ${token}`,
+      },
+      signal: controller.signal,
+    });
+  } catch {
+    throw new RustStagingPreflightError(
+      'discord_request_failed',
+      `Discord ${endpoint} request failed`,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) {
+    throw new RustStagingPreflightError(
+      'discord_request_failed',
+      `Discord ${endpoint} request returned HTTP ${response.status}`,
+    );
+  }
+  try {
+    return await response.json();
+  } catch {
+    throw new RustStagingPreflightError(
+      'invalid_response',
+      `Discord returned invalid JSON for ${endpoint}`,
+    );
+  }
+}
+
+function contractNames(key: 'public_commands' | 'owner_commands'): string[] {
+  const commands = commandContract[key] ?? [];
+  return commands.flatMap((command) => (typeof command.name === 'string' ? [command.name] : []));
+}
+
+function commandNames(commands: JsonRecord[], endpoint: string): string[] {
+  return commands.map((command) => {
+    if (typeof command.name !== 'string' || command.name.length === 0) {
+      throw new RustStagingPreflightError(
+        'invalid_response',
+        `Discord returned an invalid command in ${endpoint}`,
+      );
+    }
+    return command.name;
+  });
+}
+
+function compareCommandNames(actual: string[], expected: string[]): boolean {
+  const sort = (names: string[]) => [...names].sort();
+  return JSON.stringify(sort(actual)) === JSON.stringify(sort(expected));
+}
+
+export async function runRustStagingPreflight(
+  options: RustStagingPreflightOptions,
+): Promise<RustStagingPreflightReport> {
+  const token = requiredEnv(options.env, 'DISCORD_TOKEN');
+  const clientId = requiredSnowflake(options.env, 'CLIENT_ID');
+  const guildId = requiredSnowflake(options.env, 'RUST_COMMANDS_GUILD_ID');
+  const ownerGuildId = options.env.OWNER_GUILD_ID?.trim();
+  if (ownerGuildId !== undefined && ownerGuildId !== '' && !validSnowflake(ownerGuildId)) {
+    throw new RustStagingPreflightError(
+      'invalid_config',
+      'OWNER_GUILD_ID must be a Discord snowflake',
+    );
+  }
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const apiBase = (options.apiBaseUrl ?? DISCORD_API_BASE).replace(/\/$/, '');
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  const botUser = jsonRecord(
+    await getJson(fetchImpl, `${apiBase}/users/@me`, token, 'bot identity', timeoutMs),
+    'bot identity',
+  );
+  if (botUser.id !== clientId) {
+    throw new RustStagingPreflightError(
+      'application_mismatch',
+      'Discord bot identity does not match CLIENT_ID',
+    );
+  }
+
+  const guild = jsonRecord(
+    await getJson(fetchImpl, `${apiBase}/guilds/${guildId}`, token, 'staging guild', timeoutMs),
+    'staging guild',
+  );
+  if (guild.id !== guildId) {
+    throw new RustStagingPreflightError(
+      'invalid_response',
+      'Discord returned a different staging guild',
+    );
+  }
+
+  const guildCommands = responseArray(
+    await getJson(
+      fetchImpl,
+      `${apiBase}/applications/${clientId}/guilds/${guildId}/commands`,
+      token,
+      'staging commands',
+      timeoutMs,
+    ),
+    'staging commands',
+  );
+  const expectedNames = [...contractNames('public_commands')];
+  if (ownerGuildId === guildId) expectedNames.push(...contractNames('owner_commands'));
+  const actualNames = commandNames(guildCommands, 'staging commands');
+  if (!compareCommandNames(actualNames, expectedNames)) {
+    throw new RustStagingPreflightError(
+      'guild_command_mismatch',
+      `Staging command set differs from the Rust contract (got ${actualNames.length}, expected ${expectedNames.length})`,
+    );
+  }
+
+  const globalCommands = responseArray(
+    await getJson(
+      fetchImpl,
+      `${apiBase}/applications/${clientId}/commands`,
+      token,
+      'global commands',
+      timeoutMs,
+    ),
+    'global commands',
+  );
+
+  return {
+    ok: true,
+    botUserMatchesApplication: true,
+    guildReachable: true,
+    guildCommandCount: actualNames.length,
+    expectedGuildCommandCount: expectedNames.length,
+    globalCommandCount: globalCommands.length,
+  };
+}
+
+async function main(): Promise<void> {
+  try {
+    const report = await runRustStagingPreflight({ env: process.env });
+    console.log(JSON.stringify(report));
+  } catch (error: unknown) {
+    if (error instanceof RustStagingPreflightError) {
+      console.error(`[rust-staging-preflight] ${error.code}: ${error.message}`);
+    } else {
+      console.error('[rust-staging-preflight] unexpected failure');
+    }
+    process.exitCode = 1;
+  }
+}
+
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/tools/rust-staging-preflight.ts')) {
+  void main();
+}
