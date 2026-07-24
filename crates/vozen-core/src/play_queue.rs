@@ -176,6 +176,7 @@ mod tests {
             asset_path: None,
             speed: 1.0,
             engine: SynthesisEngine::Default,
+            gcloud_budget: None,
             segments: None,
             single_voice: None,
             emphasis_source: None,

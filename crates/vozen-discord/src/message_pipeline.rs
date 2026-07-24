@@ -17,6 +17,10 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
+// See CommandSpeechOutcome: the prepared speech is deliberately by-value for compatibility with
+// the existing message pipeline; provider entitlement metadata made the variant cross clippy's
+// layout heuristic, not a correctness threshold.
+#[allow(clippy::large_enum_variant)]
 pub enum MessagePipelineOutcome {
     Denied(MessageSpeechDenial),
     Empty,

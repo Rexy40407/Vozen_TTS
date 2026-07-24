@@ -364,7 +364,7 @@ pub use speak_message_command::{
 };
 pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
-    begin_message_speech, finish_message_speech, prepare_message_speech,
+    begin_message_speech, finish_message_speech, gcloud_budget_for, prepare_message_speech,
 };
 pub use stats_command::{StatsCommand, StatsCommandError, parse_stats_command};
 pub use text_quiz_driver::{

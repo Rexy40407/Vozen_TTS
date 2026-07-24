@@ -1116,8 +1116,37 @@ impl CoreVoiceGatewaySink {
         } else {
             piper.clone()
         };
+        let gcloud = options
+            .gcloud_api_key
+            .as_ref()
+            .map(|api_key| {
+                crate::gcloud_adapter::GcloudCommandSynthesizer::production(
+                    api_key.clone(),
+                    options.gcloud_cache_dir.clone(),
+                    self.store.clone(),
+                    options.gcloud_limits,
+                    self.gateway_state.metrics(),
+                )
+            })
+            .transpose()
+            .map_err(|_| GatewayEventDispatchError)?
+            .map(|provider| Arc::new(provider) as Arc<dyn vozen_discord::CommandSpeechSynthesizer>);
+        let kokoro = options
+            .kokoro_command
+            .clone()
+            .map(|command| {
+                crate::kokoro_adapter::KokoroCommandSynthesizer::production(
+                    command,
+                    options.kokoro_cache_dir.clone(),
+                    options.kokoro_languages.clone(),
+                    self.gateway_state.metrics(),
+                )
+            })
+            .transpose()
+            .map_err(|_| GatewayEventDispatchError)?
+            .map(|provider| Arc::new(provider) as Arc<dyn vozen_discord::CommandSpeechSynthesizer>);
         let dependencies = Arc::new(VoiceDependencies {
-            synthesizer: PerUserCommandSynthesizer::new(default, piper, None, None),
+            synthesizer: PerUserCommandSynthesizer::new(default, piper, kokoro, gcloud),
             playback: SongbirdCommandPlayback::new(
                 context.clone(),
                 options.queue_cap,
@@ -1777,6 +1806,7 @@ impl CoreVoiceGatewaySink {
         let engine = match session.engine.as_str() {
             "piper" => "Piper",
             "kokoro" => "Kokoro",
+            "gcloud" => "Google HD",
             _ => "Google",
         };
         let mut content = format!(
@@ -1812,6 +1842,7 @@ impl CoreVoiceGatewaySink {
             ("Google", "google"),
             ("Piper", "piper"),
             ("Kokoro", "kokoro"),
+            ("Google HD", "gcloud"),
         ]
         .into_iter()
         .map(|(label, value)| {
@@ -2172,6 +2203,7 @@ impl CoreVoiceGatewaySink {
         let engine = match session.engine.as_str() {
             "piper" => SynthesisEngine::Piper,
             "kokoro" => SynthesisEngine::Kokoro,
+            "gcloud" => SynthesisEngine::Gcloud,
             _ => SynthesisEngine::Default,
         };
         Some((model, speed, engine))
@@ -2234,6 +2266,7 @@ impl CoreVoiceGatewaySink {
             .map(|voice| match voice.engine {
                 vozen_store::UserEngine::Piper => "piper",
                 vozen_store::UserEngine::Kokoro => "kokoro",
+                vozen_store::UserEngine::Gcloud => "gcloud",
                 _ => "google",
             })
             .unwrap_or("piper")
@@ -2327,7 +2360,7 @@ impl CoreVoiceGatewaySink {
             CastAction::Engine => {
                 if selected
                     .as_deref()
-                    .is_none_or(|value| !matches!(value, "google" | "piper" | "kokoro"))
+                    .is_none_or(|value| !matches!(value, "google" | "piper" | "kokoro" | "gcloud"))
                 {
                     return Ok(true);
                 }
@@ -2406,6 +2439,7 @@ impl CoreVoiceGatewaySink {
             ("Google", "google"),
             ("Piper", "piper"),
             ("Kokoro", "kokoro"),
+            ("Google HD", "gcloud"),
         ]
         .into_iter()
         .map(|(label, value)| {
@@ -3148,6 +3182,18 @@ mod tests {
             cache_dir: "cache".into(),
             gtts_cache_dir: "gtts-cache".into(),
             ffmpeg: "ffmpeg".into(),
+            gcloud_api_key: None,
+            gcloud_cache_dir: "gcloud-cache".into(),
+            gcloud_limits: vozen_tts::GcloudLimits {
+                max_chars: 500,
+                plus_monthly: 100_000,
+                pass3_monthly: 400_000,
+                pass8_monthly: 1_000_000,
+                daily_budget: 300_000,
+            },
+            kokoro_command: None,
+            kokoro_cache_dir: "kokoro-cache".into(),
+            kokoro_languages: None,
             piper_concurrency: 2,
             queue_cap: 20,
             queue_enabled: true,
@@ -3193,6 +3239,18 @@ mod tests {
                 cache_dir: "cache".into(),
                 gtts_cache_dir: "gtts-cache".into(),
                 ffmpeg: "ffmpeg".into(),
+                gcloud_api_key: None,
+                gcloud_cache_dir: "gcloud-cache".into(),
+                gcloud_limits: vozen_tts::GcloudLimits {
+                    max_chars: 500,
+                    plus_monthly: 100_000,
+                    pass3_monthly: 400_000,
+                    pass8_monthly: 1_000_000,
+                    daily_budget: 300_000,
+                },
+                kokoro_command: None,
+                kokoro_cache_dir: "kokoro-cache".into(),
+                kokoro_languages: None,
                 piper_concurrency: 1,
                 queue_cap: 1,
                 queue_enabled: true,

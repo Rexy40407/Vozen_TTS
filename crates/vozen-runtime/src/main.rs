@@ -28,11 +28,15 @@ mod file_export_sink;
 mod game_list_sink;
 mod game_score_sink;
 #[cfg(feature = "voice-driver")]
+mod gcloud_adapter;
+#[cfg(feature = "voice-driver")]
 mod gtts_adapter;
 mod guild_lifecycle_sink;
 mod guild_welcome_sink;
 mod help_sink;
 mod invite_sink;
+#[cfg(feature = "voice-driver")]
+mod kokoro_adapter;
 #[cfg(feature = "voice-driver")]
 mod live_transcription_sink;
 mod loop_lag;
@@ -60,7 +64,7 @@ mod vote_sink;
 use std::{
     env,
     net::SocketAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -263,6 +267,12 @@ struct CoreVoiceRuntimeOptions {
     cache_dir: PathBuf,
     gtts_cache_dir: PathBuf,
     ffmpeg: PathBuf,
+    gcloud_api_key: Option<String>,
+    gcloud_cache_dir: PathBuf,
+    gcloud_limits: vozen_tts::GcloudLimits,
+    kokoro_command: Option<vozen_tts::KokoroCommand>,
+    kokoro_cache_dir: PathBuf,
+    kokoro_languages: Option<Vec<String>>,
     piper_concurrency: usize,
     queue_cap: usize,
     queue_enabled: bool,
@@ -532,6 +542,38 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
         ffmpeg: nonempty_env("FFMPEG_PATH")
             .unwrap_or_else(|| "ffmpeg".to_owned())
             .into(),
+        gcloud_api_key: nonempty_env("GOOGLE_TTS_API_KEY"),
+        gcloud_cache_dir: nonempty_env("RUST_GCLOUD_CACHE_DIR")
+            .unwrap_or_else(|| "./audio-cache/rust-gcloud".to_owned())
+            .into(),
+        gcloud_limits: vozen_tts::GcloudLimits {
+            max_chars: positive_number_from_environment("GCLOUD_MAX_CHARS", 500.0, true)? as usize,
+            plus_monthly: positive_number_from_environment(
+                "GCLOUD_PLUS_MONTHLY_CHARS",
+                100_000.0,
+                true,
+            )? as i64,
+            pass3_monthly: positive_number_from_environment(
+                "GCLOUD_PASS3_MONTHLY_CHARS",
+                400_000.0,
+                true,
+            )? as i64,
+            pass8_monthly: positive_number_from_environment(
+                "GCLOUD_PASS8_MONTHLY_CHARS",
+                1_000_000.0,
+                true,
+            )? as i64,
+            daily_budget: non_negative_number_from_environment(
+                "GCLOUD_DAILY_CHAR_BUDGET",
+                300_000.0,
+                true,
+            )? as i64,
+        },
+        kokoro_command: resolve_kokoro_command(nonempty_env("KOKORO_CMD").as_deref()),
+        kokoro_cache_dir: nonempty_env("RUST_KOKORO_CACHE_DIR")
+            .unwrap_or_else(|| "./audio-cache/rust-kokoro".to_owned())
+            .into(),
+        kokoro_languages: kokoro_languages_from_environment(),
         piper_concurrency,
         queue_cap,
         queue_enabled: queue_enabled(env::var("RUST_QUEUE_ENABLED").ok().as_deref()),
@@ -552,6 +594,49 @@ fn core_voice_from_environment() -> Result<Option<CoreVoiceRuntimeOptions>, Runt
             default_engine,
         },
     }))
+}
+
+fn kokoro_languages_from_environment() -> Option<Vec<String>> {
+    let raw = env::var("KOKORO_LANGS").ok()?;
+    let languages: Vec<String> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect();
+    (!languages.is_empty()).then_some(languages)
+}
+
+fn resolve_kokoro_command(explicit: Option<&str>) -> Option<vozen_tts::KokoroCommand> {
+    if let Some(value) = explicit {
+        return vozen_tts::parse_kokoro_command(value);
+    }
+    let root = env::current_dir().ok()?;
+    let python = [
+        root.join("tools")
+            .join("kokoro-venv")
+            .join("Scripts")
+            .join("python.exe"),
+        root.join("tools")
+            .join("kokoro-venv")
+            .join("bin")
+            .join("python"),
+    ]
+    .into_iter()
+    .find(|path| path.is_file())?;
+    let required = [
+        root.join("tools").join("kokoro_server.py"),
+        root.join("tools").join("kokoro-v1.0.onnx"),
+        root.join("tools").join("voices-v1.0.bin"),
+    ];
+    if required.iter().all(|path| Path::is_file(path)) {
+        Some(vozen_tts::KokoroCommand {
+            executable: python,
+            args: vec![required[0].to_string_lossy().into_owned()],
+        })
+    } else {
+        None
+    }
 }
 
 fn randomizer_enabled(raw: Option<&str>) -> bool {
@@ -978,6 +1063,21 @@ fn positive_number_from_environment(
 ) -> Result<f64, RuntimeError> {
     parse_positive_number(nonempty_env(name).as_deref(), fallback, integer)
         .ok_or(RuntimeError::InvalidCoreVoiceSetting(name))
+}
+
+fn non_negative_number_from_environment(
+    name: &'static str,
+    fallback: f64,
+    integer: bool,
+) -> Result<f64, RuntimeError> {
+    let value = nonempty_env(name)
+        .and_then(|raw| raw.parse::<f64>().ok())
+        .unwrap_or(fallback);
+    if value.is_finite() && value >= 0.0 && (!integer || value.fract() == 0.0) {
+        Ok(value)
+    } else {
+        Err(RuntimeError::InvalidCoreVoiceSetting(name))
+    }
 }
 
 fn parse_positive_number(raw: Option<&str>, fallback: f64, integer: bool) -> Option<f64> {

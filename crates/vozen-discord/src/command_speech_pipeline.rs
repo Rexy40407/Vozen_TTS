@@ -39,6 +39,10 @@ pub struct CommandSpeechInput<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+// The Ready payload intentionally stays by-value: it carries the prepared request and keeps the
+// pipeline's ownership/result contract unchanged while the Rust migration adds provider budget
+// metadata to that request. Boxing it would alter every caller without changing the boundary.
+#[allow(clippy::large_enum_variant)]
 pub enum CommandSpeechOutcome {
     NotInSameVoice,
     Blocked,

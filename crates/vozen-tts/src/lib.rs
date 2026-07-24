@@ -19,10 +19,20 @@ use tokio::{io::AsyncWriteExt, process::Command, sync::Semaphore, time::timeout}
 use uuid::Uuid;
 use vozen_core::{RuntimeMetrics, SynthRequest};
 
+mod gcloud;
 mod gtts;
+mod kokoro;
 mod wav_concat;
 
+pub use gcloud::{
+    GcloudEngine, GcloudLedgerError, GcloudLimits, GcloudOptions, GcloudUsageLedger,
+    bcp47_of_model, monthly_limit_for,
+};
 pub use gtts::{GttsEngine, GttsOptions, chunk_text, gtts_lang_of_model, lower_all_caps_runs};
+pub use kokoro::{
+    KokoroCommand, KokoroEngine, KokoroOptions, KokoroVoice, kokoro_voice_for_model,
+    language_key as kokoro_language_key, parse_command as parse_kokoro_command,
+};
 pub use wav_concat::{
     WavError, WavFormat, concat_wavs, parse_wav, prepend_silence_wav, silence_wav,
 };
@@ -53,6 +63,28 @@ pub enum TtsError {
     GttsResponse,
     #[error("gTTS audio conversion failed")]
     GttsConversion,
+    #[error("Google Cloud TTS is not configured")]
+    GcloudConfiguration,
+    #[error("Google Cloud TTS request failed")]
+    GcloudRequest,
+    #[error("Google Cloud TTS request timed out")]
+    GcloudTimeout,
+    #[error("Google Cloud TTS returned an invalid response")]
+    GcloudResponse,
+    #[error("Google Cloud TTS budget is missing")]
+    GcloudBudgetMissing,
+    #[error("Google Cloud TTS budget denied the request")]
+    GcloudBudgetDenied,
+    #[error("Kokoro sidecar is not configured")]
+    KokoroConfiguration,
+    #[error("Kokoro sidecar process failed")]
+    KokoroProcess,
+    #[error("Kokoro sidecar timed out")]
+    KokoroTimeout,
+    #[error("Kokoro sidecar returned an invalid response")]
+    KokoroResponse,
+    #[error("Kokoro does not support this language")]
+    KokoroUnsupportedLanguage,
     #[error("TTS I/O failed: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -364,6 +396,7 @@ fn single_segment_request(
         asset_path: None,
         speed: request.speed,
         engine: request.engine,
+        gcloud_budget: request.gcloud_budget.clone(),
         segments: None,
         single_voice: Some(true),
         emphasis_source: None,
@@ -510,6 +543,7 @@ mod tests {
             asset_path: None,
             speed: 1.0,
             engine: vozen_core::SynthesisEngine::Default,
+            gcloud_budget: None,
             segments: None,
             single_voice: None,
             emphasis_source: None,

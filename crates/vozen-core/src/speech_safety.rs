@@ -30,6 +30,20 @@ pub enum SynthesisEngine {
     Gcloud,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GcloudBudgetScope {
+    User,
+    Pass,
+    Guild,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GcloudBudget {
+    pub scope: GcloudBudgetScope,
+    pub key: String,
+    pub seats: Option<i64>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SynthRequest {
     pub text: String,
@@ -38,6 +52,9 @@ pub struct SynthRequest {
     pub asset_path: Option<std::path::PathBuf>,
     pub speed: f64,
     pub engine: SynthesisEngine,
+    /// Paid Google Cloud requests must carry a server-resolved budget descriptor. The provider
+    /// rejects the request before network I/O when this is absent.
+    pub gcloud_budget: Option<GcloudBudget>,
     pub segments: Option<Vec<SpeechSegment>>,
     pub single_voice: Option<bool>,
     pub emphasis_source: Option<String>,
@@ -121,6 +138,7 @@ pub fn redact_request(request: &SynthRequest, blocklist: &[String]) -> SynthRequ
         asset_path: request.asset_path.clone(),
         speed: request.speed,
         engine: request.engine,
+        gcloud_budget: request.gcloud_budget.clone(),
         segments,
         single_voice: request.single_voice,
         emphasis_source: request.emphasis_source.clone(),
@@ -161,6 +179,7 @@ pub fn cap_synth_request(request: &SynthRequest) -> SynthRequest {
         asset_path: request.asset_path.clone(),
         speed: request.speed,
         engine: request.engine,
+        gcloud_budget: request.gcloud_budget.clone(),
         segments,
         single_voice: request.single_voice,
         emphasis_source: request.emphasis_source.clone(),
@@ -235,6 +254,7 @@ mod tests {
             asset_path: None,
             speed: 1.0,
             engine: SynthesisEngine::Default,
+            gcloud_budget: None,
             segments: None,
             single_voice: Some(true),
             emphasis_source: Some(text.to_owned()),

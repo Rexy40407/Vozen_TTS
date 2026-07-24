@@ -5,8 +5,9 @@
 //! gateway handler cannot accidentally use a different precedence for `/tts` and auto-read.
 
 use vozen_core::{
-    CleanTextOptions, MediaAnnouncement, SpeechPreparationInput, SynthRequest, SynthesisEngine,
-    VoicePreference, has_readable_text, prepare_speech, redact_blocked, redact_request,
+    CleanTextOptions, GcloudBudget, GcloudBudgetScope, MediaAnnouncement, SpeechPreparationInput,
+    SynthRequest, SynthesisEngine, VoicePreference, has_readable_text, prepare_speech,
+    redact_blocked, redact_request,
 };
 use vozen_store::{ChannelProfile, GuildConfig, SqliteStore, StoreError, VoiceEffect};
 
@@ -168,7 +169,14 @@ pub fn finish_message_speech(
         announce_speaker: input.announce_speaker,
         media: input.media,
     });
-    let request = redact_request(&prepared.request, &blocklist);
+    let mut request = redact_request(&prepared.request, &blocklist);
+    request.gcloud_budget = gcloud_budget_for(
+        store,
+        input.guild_id,
+        input.user_id,
+        request.engine,
+        system_now_ms(),
+    );
     if !has_readable_text(&request.text)
         && !request.segments.as_deref().is_some_and(|segments| {
             segments
@@ -183,6 +191,54 @@ pub fn finish_message_speech(
         request,
         personal_effect: store.voice_effect(input.guild_id, input.user_id)?,
     }))
+}
+
+/// Resolves the same paid-pool precedence as the Node engine resolver. Returning `None` is
+/// intentional: the Google adapter must reject before network I/O when entitlement lookup fails.
+pub fn gcloud_budget_for(
+    store: &SqliteStore,
+    guild_id: &str,
+    user_id: &str,
+    engine: SynthesisEngine,
+    now_ms: i64,
+) -> Option<GcloudBudget> {
+    if engine != SynthesisEngine::Gcloud {
+        return None;
+    }
+    if store.is_user_premium(user_id, now_ms).unwrap_or(false) {
+        return Some(GcloudBudget {
+            scope: GcloudBudgetScope::User,
+            key: user_id.to_owned(),
+            seats: None,
+        });
+    }
+    if let Some(owner) = store
+        .resolve_guild_pass_owner(guild_id, now_ms)
+        .ok()
+        .flatten()
+    {
+        return Some(GcloudBudget {
+            scope: GcloudBudgetScope::Pass,
+            key: owner.owner_id,
+            seats: Some(owner.seats),
+        });
+    }
+    if store.is_guild_premium(guild_id, now_ms).unwrap_or(false) {
+        return Some(GcloudBudget {
+            scope: GcloudBudgetScope::Guild,
+            key: guild_id.to_owned(),
+            seats: None,
+        });
+    }
+    None
+}
+
+fn system_now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
 }
 
 fn synthesis_engine(engine: vozen_store::UserEngine) -> SynthesisEngine {

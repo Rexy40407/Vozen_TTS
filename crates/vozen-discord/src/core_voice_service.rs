@@ -20,8 +20,8 @@ use vozen_store::{SqliteStore, UserEngine};
 use crate::{
     CommandSpeechInput, CommandSpeechOutcome, CommandSpeechPipeline, CoreVoiceCommand,
     GatewayState, GuildSynthesisCoordinator, JoinVoiceOutcome, LeaveVoiceOutcome, MicroFunKind,
-    VoiceSessionService, VoiceSessionTransport, joke_lang_by_key, laughter_for_model,
-    laughter_for_prefix, pick_joke,
+    VoiceSessionService, VoiceSessionTransport, gcloud_budget_for, joke_lang_by_key,
+    laughter_for_model, laughter_for_prefix, pick_joke,
 };
 
 #[derive(Debug, Error)]
@@ -278,6 +278,19 @@ impl<T, S, P> CoreVoiceService<T, S, P> {
             now_ms,
         }
     }
+
+    fn paid_budget(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        engine: SynthesisEngine,
+        now_ms: i64,
+    ) -> Option<vozen_core::GcloudBudget> {
+        self.store
+            .lock()
+            .ok()
+            .and_then(|store| gcloud_budget_for(&store, guild_id, user_id, engine, now_ms))
+    }
 }
 
 impl<T, S, P> CoreVoiceService<T, S, P>
@@ -407,6 +420,12 @@ where
             self.settings.default_speed
         };
         request.engine = engine;
+        request.gcloud_budget = self.paid_budget(
+            invocation.guild_id,
+            invocation.user_id,
+            engine,
+            (self.now_ms)(),
+        );
         request.segments = None;
         request.single_voice = Some(true);
         match self
@@ -553,6 +572,12 @@ where
             asset_path: None,
             speed,
             engine,
+            gcloud_budget: self.paid_budget(
+                invocation.guild_id,
+                invocation.user_id,
+                engine,
+                (self.now_ms)(),
+            ),
             segments: None,
             single_voice: Some(true),
             emphasis_source: None,
@@ -746,6 +771,12 @@ where
             asset_path: None,
             speed,
             engine,
+            gcloud_budget: self.paid_budget(
+                invocation.guild_id,
+                invocation.user_id,
+                engine,
+                (self.now_ms)(),
+            ),
             segments: None,
             single_voice: Some(true),
             emphasis_source: None,
@@ -901,6 +932,7 @@ where
             asset_path: None,
             speed,
             engine,
+            gcloud_budget: self.paid_budget(invocation.guild_id, invocation.user_id, engine, now),
             segments: None,
             single_voice: Some(true),
             emphasis_source: None,
@@ -918,6 +950,7 @@ where
                 // Curated WAVs bypass the user's TTS provider. Keeping this as `Default` lets the
                 // Piper adapter accept the asset even when the pickup line used a paid engine.
                 engine: SynthesisEngine::Default,
+                gcloud_budget: None,
                 segments: None,
                 single_voice: Some(true),
                 emphasis_source: None,
@@ -1060,6 +1093,7 @@ where
             ))),
             speed: self.settings.default_speed,
             engine: SynthesisEngine::Default,
+            gcloud_budget: None,
             segments: None,
             single_voice: Some(true),
             emphasis_source: None,
@@ -1225,6 +1259,12 @@ where
             asset_path: None,
             speed,
             engine,
+            gcloud_budget: self.paid_budget(
+                invocation.guild_id,
+                invocation.user_id,
+                engine,
+                (self.now_ms)(),
+            ),
             segments: None,
             single_voice: Some(true),
             emphasis_source: None,
@@ -1280,6 +1320,12 @@ where
                 asset_path: None,
                 speed,
                 engine,
+                gcloud_budget: self.paid_budget(
+                    invocation.guild_id,
+                    invocation.user_id,
+                    engine,
+                    (self.now_ms)(),
+                ),
                 segments: None,
                 single_voice: Some(true),
                 emphasis_source: None,
