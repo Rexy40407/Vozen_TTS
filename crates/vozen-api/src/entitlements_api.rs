@@ -110,32 +110,42 @@ fn resolve_from_store(
     request: &ResolveRequest,
     now: i64,
 ) -> Result<ResolveResponse, rusqlite::Error> {
+    let status = store
+        .premium_status(&request.subject_id, now)
+        .map_err(|_| rusqlite::Error::InvalidQuery)?;
     let (plan, guild_limit, active, expires_at_ms, scope) =
         if let Some(guild_id) = request.guild_id.as_deref() {
-            let expiry = store
+            let guild_expiry = store
                 .effective_guild_premium_expiry(guild_id, now)
                 .map_err(|_| rusqlite::Error::InvalidQuery)?;
-            match expiry {
-                Some(expiry) => ("premium", 1, true, Some(expiry), "guild"),
-                None => ("free", 1, true, None, "guild"),
-            }
-        } else {
-            let status = store
-                .premium_status(&request.subject_id, now)
-                .map_err(|_| rusqlite::Error::InvalidQuery)?;
-            if let Some(pass) = status.pass.filter(|pass| pass.active) {
-                (
-                    "premium",
-                    u16::try_from(pass.seats.max(1)).unwrap_or(u16::MAX),
-                    true,
-                    Some(pass.expires_at),
-                    "user",
-                )
+            let activated_pass = status.pass.as_ref().filter(|pass| {
+                pass.active && pass.guilds.iter().any(|activated| activated == guild_id)
+            });
+            if let Some(guild_expiry) = guild_expiry {
+                let seats = activated_pass
+                    .map(|pass| u16::try_from(pass.seats.max(1)).unwrap_or(u16::MAX))
+                    .unwrap_or(1);
+                let expiry = activated_pass
+                    .map(|pass| pass.expires_at.max(guild_expiry))
+                    .unwrap_or(guild_expiry);
+                ("premium", seats, true, Some(expiry), "guild")
             } else if status.plus_active {
-                ("plus", 1, true, status.plus_expires_at, "user")
+                ("plus", 1, true, status.plus_expires_at, "guild")
             } else {
-                ("free", 1, true, None, "user")
+                ("free", 1, true, None, "guild")
             }
+        } else if let Some(pass) = status.pass.filter(|pass| pass.active) {
+            (
+                "premium",
+                u16::try_from(pass.seats.max(1)).unwrap_or(u16::MAX),
+                true,
+                Some(pass.expires_at),
+                "user",
+            )
+        } else if status.plus_active {
+            ("plus", 1, true, status.plus_expires_at, "user")
+        } else {
+            ("free", 1, true, None, "user")
         };
     Ok(ResolveResponse {
         product: "vozen",
@@ -255,5 +265,41 @@ mod tests {
         let cache = Arc::new(Mutex::new(HashMap::new()));
         assert!(verify_request(&headers, body, "secret", &cache));
         assert!(!verify_request(&headers, body, "secret", &cache));
+    }
+
+    #[test]
+    fn guild_resolution_keeps_user_plus_and_activated_pass_entitlements() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = OffsetDateTime::now_utc().unix_timestamp_nanos() as i64 / 1_000_000;
+        store
+            .grant_user_premium("plus-user", 30, "test", now)
+            .unwrap();
+        let plus = resolve_from_store(
+            &store,
+            &ResolveRequest {
+                subject_id: "plus-user".into(),
+                guild_id: Some("guild".into()),
+            },
+            now,
+        )
+        .unwrap();
+        assert_eq!(plus.plan, "plus");
+        assert_eq!(plus.scope, "guild");
+
+        store
+            .grant_guild_pass("premium-user", 3, 30, "test", now)
+            .unwrap();
+        store.activate_seat("premium-user", "guild", now).unwrap();
+        let premium = resolve_from_store(
+            &store,
+            &ResolveRequest {
+                subject_id: "premium-user".into(),
+                guild_id: Some("guild".into()),
+            },
+            now,
+        )
+        .unwrap();
+        assert_eq!(premium.plan, "premium");
+        assert_eq!(premium.guild_limit, 3);
     }
 }
