@@ -50,6 +50,7 @@ import {
   rustRandomizerOwnsCommand,
   rustCastOwnsCommand,
   rustRuntimeFullEnabled,
+  rustRuntimeReady,
   FULL_RUST_RUNTIME_FLAGS,
 } from '../src/migration/rustVoiceAuthority';
 
@@ -76,6 +77,13 @@ describe('Rust core voice migration ownership', () => {
       }),
     ).toBe(false);
     expect(FULL_RUST_RUNTIME_FLAGS).toContain('RUST_GAME_PLAY_ENABLED');
+  });
+
+  it('requires an explicit runtime-ready acknowledgement before Node can yield', () => {
+    expect(rustRuntimeReady({})).toBe(false);
+    expect(rustRuntimeReady({ RUST_RUNTIME_READY: 'false' })).toBe(false);
+    expect(rustRuntimeReady({ RUST_RUNTIME_READY: 'yes' })).toBe(false);
+    expect(rustRuntimeReady({ RUST_RUNTIME_READY: ' TRUE ' })).toBe(true);
   });
 
   it('recognises a complete explicit cutover contract without reading process.env', () => {

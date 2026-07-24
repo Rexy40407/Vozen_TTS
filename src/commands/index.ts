@@ -92,6 +92,7 @@ import {
   rustOwnerCommandsOwnCommand,
   rustTranscriptionControlOwnsCommand,
   rustTranscriptionLiveOwnsCommand,
+  rustRuntimeReady,
 } from '../migration/rustVoiceAuthority';
 import { handleQueue } from './handlers/queue';
 import { handleTranslate } from './handlers/translation';
@@ -308,131 +309,132 @@ export async function handleInteraction(
     i.commandName === 'pronunciation' || i.commandName === 'server-pronunciation'
       ? i.options.getSubcommand(false)
       : null;
-  // The Rust process responds to this exact interaction when the explicitly opt-in migration
-  // flag is active. Returning before any defer/write prevents a double response from the two
-  // Discord gateway sessions; every other command remains Node-owned.
+  // The Rust process responds to this exact interaction only after the runtime-ready acknowledgement
+  // and the matching opt-in migration flag are active. Returning before any defer/write prevents a
+  // double response from the two Discord gateway sessions; every other command remains Node-owned.
   if (
-    rustOwnerCommandsOwnCommand(i.commandName) ||
-    rustTranscriptionControlOwnsCommand(
-      i.commandName,
-      i.commandName === 'transcribe' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustTranscriptionLiveOwnsCommand(
-      i.commandName,
-      i.commandName === 'transcribe' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustPublicCommandsOwnCommand(
-      i.commandName,
-      i.commandName === 'game' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustVoiceOwnsCommand(i.commandName) ||
-    rustRandomizerOwnsCommand(i.commandName) ||
-    rustCastOwnsCommand(i.commandName) ||
-    rustQueueOwnsCommand(i.commandName) ||
-    rustPronunciationOwnsCommand(i.commandName, pronunciationSubcommand) ||
-    rustConfigLanguageOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigTogglesOwnCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigNumericOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigRoleOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigDefaultVoiceOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigChannelOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustSetupOwnsCommand(i.commandName) ||
-    rustConfigQueueRolesOwnCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigGreetLanguageOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigBlockwordOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommandGroup(false) : null,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigShowOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustConfigResetOwnsCommand(
-      i.commandName,
-      i.commandName === 'config' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustUptimeOwnsCommand(i.commandName) ||
-    rustInviteOwnsCommand(i.commandName) ||
-    rustHelpOwnsCommand(i.commandName) ||
-    rustVoteOwnsCommand(i.commandName) ||
-    rustTopSpeakersOwnsCommand(i.commandName) ||
-    rustPrivacyOwnsCommand(
-      i.commandName,
-      i.commandName === 'privacy' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustBirthdayOwnsCommand(
-      i.commandName,
-      i.commandName === 'birthday' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustBotStatsOwnsCommand(i.commandName) ||
-    rustServerStatsOwnsCommand(i.commandName) ||
-    rustStatsOwnsCommand(i.commandName) ||
-    rustPremiumInfoOwnsCommand(
-      i.commandName,
-      i.commandName === 'premium' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustPremiumMutationOwnsCommand(
-      i.commandName,
-      i.commandName === 'premium' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustRedeemOwnsCommand(i.commandName) ||
-    rustGameListOwnsCommand(
-      i.commandName,
-      i.commandName === 'game' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustGameScoresOwnsCommand(
-      i.commandName,
-      i.commandName === 'game' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustGamePlayOwnsCommand(
-      i.commandName,
-      i.commandName === 'game' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustTranslationOwnsCommand(
-      i.commandName,
-      i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustTranslationPreviewOwnsCommand(
-      i.commandName,
-      i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustTranslationAdminOwnsCommand(
-      i.commandName,
-      i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustTranslationPreferencesOwnCommand(
-      i.commandName,
-      i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
-    ) ||
-    rustVoicePreferencesOwnCommand(
-      i.commandName,
-      i.commandName === 'voice' ? i.options.getSubcommand(false) : null,
-    )
+    rustRuntimeReady() &&
+    (rustOwnerCommandsOwnCommand(i.commandName) ||
+      rustTranscriptionControlOwnsCommand(
+        i.commandName,
+        i.commandName === 'transcribe' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustTranscriptionLiveOwnsCommand(
+        i.commandName,
+        i.commandName === 'transcribe' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustPublicCommandsOwnCommand(
+        i.commandName,
+        i.commandName === 'game' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustVoiceOwnsCommand(i.commandName) ||
+      rustRandomizerOwnsCommand(i.commandName) ||
+      rustCastOwnsCommand(i.commandName) ||
+      rustQueueOwnsCommand(i.commandName) ||
+      rustPronunciationOwnsCommand(i.commandName, pronunciationSubcommand) ||
+      rustConfigLanguageOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigTogglesOwnCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigNumericOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigRoleOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigDefaultVoiceOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigChannelOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustSetupOwnsCommand(i.commandName) ||
+      rustConfigQueueRolesOwnCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigGreetLanguageOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigBlockwordOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommandGroup(false) : null,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigShowOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustConfigResetOwnsCommand(
+        i.commandName,
+        i.commandName === 'config' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustUptimeOwnsCommand(i.commandName) ||
+      rustInviteOwnsCommand(i.commandName) ||
+      rustHelpOwnsCommand(i.commandName) ||
+      rustVoteOwnsCommand(i.commandName) ||
+      rustTopSpeakersOwnsCommand(i.commandName) ||
+      rustPrivacyOwnsCommand(
+        i.commandName,
+        i.commandName === 'privacy' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustBirthdayOwnsCommand(
+        i.commandName,
+        i.commandName === 'birthday' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustBotStatsOwnsCommand(i.commandName) ||
+      rustServerStatsOwnsCommand(i.commandName) ||
+      rustStatsOwnsCommand(i.commandName) ||
+      rustPremiumInfoOwnsCommand(
+        i.commandName,
+        i.commandName === 'premium' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustPremiumMutationOwnsCommand(
+        i.commandName,
+        i.commandName === 'premium' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustRedeemOwnsCommand(i.commandName) ||
+      rustGameListOwnsCommand(
+        i.commandName,
+        i.commandName === 'game' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustGameScoresOwnsCommand(
+        i.commandName,
+        i.commandName === 'game' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustGamePlayOwnsCommand(
+        i.commandName,
+        i.commandName === 'game' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustTranslationOwnsCommand(
+        i.commandName,
+        i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustTranslationPreviewOwnsCommand(
+        i.commandName,
+        i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustTranslationAdminOwnsCommand(
+        i.commandName,
+        i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustTranslationPreferencesOwnCommand(
+        i.commandName,
+        i.commandName === 'translate' ? i.options.getSubcommand(false) : null,
+      ) ||
+      rustVoicePreferencesOwnCommand(
+        i.commandName,
+        i.commandName === 'voice' ? i.options.getSubcommand(false) : null,
+      ))
   )
     return;
   try {

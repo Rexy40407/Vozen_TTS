@@ -32,6 +32,7 @@ import { resolveQueueLane } from '../voice/queuePolicy';
 import { handleTranslationMessage } from '../translation/messageListener';
 import {
   rustTranslationOwnsAutomaticMessages,
+  rustRuntimeReady,
   rustVoiceOwnsAutoRead,
 } from '../migration/rustVoiceAuthority';
 import { translateTextForSpeech } from '../translation/explicit';
@@ -165,13 +166,14 @@ export async function handleMessage(message: Message, deps: BotDeps): Promise<vo
     const me = deps.client.user;
     if (!me) return;
     // Text translation is an independent, never-spoken path. It runs before normal auto-read
-    // admission and retains its own default-deny mappings and quotas.
-    if (!rustTranslationOwnsAutomaticMessages()) {
+    // admission and retains its own default-deny mappings and quotas. Rust may suppress this
+    // Node path only after the runtime-ready acknowledgement is present.
+    if (!(rustRuntimeReady() && rustTranslationOwnsAutomaticMessages())) {
       await handleTranslationMessage(message, deps);
     }
     // Vozen NEVER reads itself — anti-loop, regardless of read_bots.
     if (message.author.id === me.id) return;
-    if (rustVoiceOwnsAutoRead()) return;
+    if (rustRuntimeReady() && rustVoiceOwnsAutoRead()) return;
 
     // Guild kill-switch and bot gate BEFORE the games hook. The kill-switch
     // (/config enabled:off) must stop EVERYTHING — including a running /game

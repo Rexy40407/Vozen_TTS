@@ -32,6 +32,7 @@ import {
   rustSpeakContextOwnsCommand,
   rustTranslateContextOwnsCommand,
   rustTranscriptionOwnsCommand,
+  rustRuntimeReady,
 } from '../../migration/rustVoiceAuthority';
 
 /** File exports are intentionally shorter than normal in-call TTS. */
@@ -363,11 +364,12 @@ export async function handleMessageContextMenu(
   deps: BotDeps,
 ): Promise<void> {
   try {
-    // Rust replies to promoted context menus only when their explicit canary is on. Returning
-    // before defer prevents two gateway sessions from racing the same interaction.
-    if (rustSpeakContextOwnsCommand(i.commandName)) return;
-    if (rustTranslateContextOwnsCommand(i.commandName)) return;
-    if (rustTranscriptionOwnsCommand(i.commandName)) return;
+    // Rust replies to promoted context menus only when the runtime-ready acknowledgement and
+    // explicit canary are on. Returning before defer prevents two gateway sessions from racing
+    // the same interaction.
+    if (rustRuntimeReady() && rustSpeakContextOwnsCommand(i.commandName)) return;
+    if (rustRuntimeReady() && rustTranslateContextOwnsCommand(i.commandName)) return;
+    if (rustRuntimeReady() && rustTranscriptionOwnsCommand(i.commandName)) return;
     if (i.commandName === 'Translate') {
       await handleTranslateMessage(i, deps);
       return;

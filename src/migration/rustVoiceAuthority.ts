@@ -77,6 +77,15 @@ export function rustRuntimeFullEnabled(env: NodeJS.ProcessEnv = process.env): bo
   );
 }
 
+/**
+ * A partial canary may only make Node yield after the Rust process has explicitly been marked
+ * ready. This is a deployment acknowledgement, not a replacement for the full-mode contract:
+ * it prevents a stale/early Node process from blackholing traffic while Rust is still booting.
+ */
+export function rustRuntimeReady(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.RUST_RUNTIME_READY?.trim().toLowerCase() === 'true';
+}
+
 function nonEmpty(value: string | undefined): boolean {
   return (value?.trim().length ?? 0) > 0;
 }
