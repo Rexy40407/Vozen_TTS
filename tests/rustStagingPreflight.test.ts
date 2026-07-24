@@ -74,6 +74,32 @@ describe('Rust staging preflight', () => {
     }
   });
 
+  it('ignores Discord response metadata while checking registered command shape', async () => {
+    const fetchImpl = happyFetch();
+    fetchImpl.mockImplementationOnce(async () => response({ id: env.CLIENT_ID }));
+    fetchImpl.mockImplementationOnce(async () => response({ id: env.RUST_COMMANDS_GUILD_ID }));
+    fetchImpl.mockImplementationOnce(async () =>
+      response(
+        [...contract.public_commands, ...contract.owner_commands].map((command, index) => ({
+          ...command,
+          id: `${100000000000000000 + index}`,
+          application_id: env.CLIENT_ID,
+          guild_id: env.RUST_COMMANDS_GUILD_ID,
+          version: `${200000000000000000 + index}`,
+        })),
+      ),
+    );
+
+    await expect(
+      runRustStagingPreflight({ env, fetchImpl, apiBaseUrl: 'https://discord.test/api/v10' }),
+    ).resolves.toMatchObject({
+      guildCommandCount: 42,
+      expectedGuildCommandCount: 42,
+      globalCommandCount: 0,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+  });
+
   it('fails before network access when required configuration is missing or invalid', async () => {
     const fetchImpl = vi.fn();
     await expect(
