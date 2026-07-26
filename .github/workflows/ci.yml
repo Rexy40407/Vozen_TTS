@@ -58,7 +58,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npm rebuild esbuild
+      # The schema-contract exporter opens an in-memory SQLite database, so this
+      # job needs the audited native binding as well as esbuild.
+      - run: npm rebuild better-sqlite3 esbuild
       - run: rustup toolchain install 1.97.1 --profile minimal
       - run: rustup component add clippy rustfmt --toolchain 1.97.1
       - run: npm run check:rust-contracts

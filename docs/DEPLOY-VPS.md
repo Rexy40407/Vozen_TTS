@@ -237,26 +237,29 @@ breve" e passa a ter o botão real de login com Discord.
 
 ## 11. Deploys seguintes (manual)
 
-Sempre que houver código novo, até termos o deploy automático (passo 12):
+O runtime de produção é Rust desde 2026-07-26. Para um deploy manual:
 
 ```bash
-cd ~/discord-bot-Vozen
-git pull
-npm ci
-npm run build
-sudo systemctl restart vozen.service
+cd ~/vozen-rust-prod
+git fetch origin
+git reset --hard origin/main
+bash scripts/deploy-rust-vps.sh
 ```
+
+O script compila a imagem enquanto o container atual continua online, cria e
+verifica um backup SQLite consistente, recria o container, espera por health +
+gateway Ready e volta à imagem anterior se o arranque falhar.
 
 ## 12. Deploy automático (GitHub Actions → SSH ao VPS)
 
-> **JÁ ATIVO (2026-07-09).** O workflow `.github/workflows/deploy-bot.yml` existe e os
-> secrets `VPS_HOST`/`VPS_USER`/`VPS_SSH_KEY` e os dois segredos de votos estão configurados no repositório. A cada
-> push à `main` que altere `src/**`, o bot atualiza-se sozinho no VPS (~1 min). O texto
-> abaixo é o registo de COMO foi montado (para refazer noutra máquina/servidor).
+> **ATUALIZADO PARA RUST (2026-07-26).** O workflow
+> `.github/workflows/deploy-bot.yml` só avança depois de a CI completa passar na
+> `main`. Usa os secrets `VPS_HOST`, `VPS_USER` e `VPS_SSH_KEY`.
 
-Automatiza-se como o site: a cada push à `main` que altere o bot, um workflow do
-GitHub faz SSH ao VPS, cria um backup SQLite online, corre o gate completo, sincroniza
-apenas os dois segredos de votos permitidos e reinicia o serviço.
+Depois da CI verde, o GitHub faz SSH ao VPS, alinha
+`~/vozen-rust-prod` com `origin/main` e executa
+`scripts/deploy-rust-vps.sh`. Os segredos funcionais continuam apenas em
+`.env.rust.prod`; não atravessam os logs nem são enviados a cada deploy.
 
 **No VPS**, gera um par de chaves SSH dedicado ao deploy (não uses a tua
 chave pessoal):
@@ -275,82 +278,29 @@ cat ~/.ssh/deploy_key        # copia esta CHAVE PRIVADA para o passo seguinte
 | `VPS_HOST` | o IP do VPS |
 | `VPS_USER` | `vozen` |
 | `VPS_SSH_KEY` | o conteúdo da chave **privada** (`~/.ssh/deploy_key`, tudo incluindo `-----BEGIN...-----`) |
-| `TOPGG_WEBHOOK_SECRET` | o segredo `whs_...` mostrado pelo webhook do top.gg |
-| `VOTE_REDEMPTION_SECRET` | uma chave estável gerada uma vez com `openssl rand -hex 32`; nunca a rodar sem migração do ledger |
 
-**No repositório**, cria `.github/workflows/deploy-bot.yml`:
-
-```yaml
-name: Deploy bot to VPS
-
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'package.json'
-      - 'package-lock.json'
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            cd ~/discord-bot-Vozen
-            git pull
-            npm ci
-            npm run build
-            sudo systemctl restart vozen.service
-```
-
-Para o `sudo systemctl restart` não pedir password nesse comando específico,
-no VPS:
-
-```bash
-sudo visudo -f /etc/sudoers.d/vozen-deploy
-```
-
-Conteúdo (uma linha, restringe ao mínimo — só este comando, sem password):
-
-```
-vozen ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart vozen.service
-```
-
-A partir daqui, cada `git push` à `main` com alterações em `src/` publica-se
-sozinho no VPS em ~1 minuto — tal como o site já faz no GitHub Pages.
-
-O workflow real executa `npm run backup:db` antes dos testes e do restart. A
-cópia online inclui alterações ainda presentes no WAL e fica, por defeito, em
-`~/vozen-backups`, fora do checkout que recebe `git reset --hard`. Isto protege
-reinícios e deploys, mas **não** a perda total do disco/VPS: copia regularmente
-`tts.db`, `~/vozen-backups/` e `.env` para armazenamento externo cifrado.
-
-Depois do gate, `scripts/sync-deploy-env.mjs` grava atomicamente no `.env` apenas
-`TOPGG_WEBHOOK_SECRET` e `VOTE_REDEMPTION_SECRET`, recebidos dos GitHub Actions
-Secrets. O script rejeita valores vazios/fracos, remove linhas duplicadas e nunca
-imprime os valores. Os outros segredos do `.env` não são tocados.
+A cópia online inclui alterações committed ainda presentes no WAL e fica em
+`~/vozen-backups`, fora do checkout. Isto protege reinícios e deploys, mas
+**não** a perda total do disco/VPS: copia regularmente `rust-data/tts.db`,
+`~/vozen-backups/` e `.env.rust.prod` para armazenamento externo cifrado.
 
 ## Checklist rápida
 
 - [ ] VPS criado (Ubuntu 24.04), IP anotado
 - [ ] DNS `api.vozen.org` → IP do VPS
-- [ ] Node 22 (>=22.12) + ffmpeg + build-essential instalados
-- [ ] Repo clonado, `npm ci && npm run build` sem erros
-- [ ] `.env` preenchido, `PREMIUM_API_ENABLED=true`, `PREMIUM_API_ORIGIN=https://vozen.org`
-- [ ] `vozen.service` a correr (`systemctl status`)
+- [ ] Docker Engine + Compose instalados
+- [ ] Repo em `~/vozen-rust-prod` alinhado com `origin/main`
+- [ ] `.env.rust.prod` preenchido e protegido (`chmod 600`)
+- [ ] `vozen.service` Node parado/desativado
+- [ ] `vozen-prod-vozen-1` a correr e healthy
 - [ ] Caddy a servir `https://api.vozen.org` com certificado válido
 - [ ] `ufw` ativo, só 22/80/443 abertas
 - [ ] `PREMIUM_API_BASE` atualizado no site + push
 - [ ] Redirect URI adicionado no Discord Developer Portal
-- [ ] Deploy automático (passo 12): secrets no GitHub + `deploy-bot.yml` + sudoers
+- [ ] Deploy automático (passo 12): três secrets SSH no GitHub + workflow Rust
 - [ ] `VOTE_REDEMPTION_SECRET` gerado uma vez e guardado com a cópia cifrada do `.env`
-- [ ] `npm run backup:db` cria uma cópia restaurável fora do checkout Git
-- [ ] Backup externo cifrado de `tts.db`, `vozen-backups/` e `.env`
+- [ ] `scripts/backup-rust-db.py` cria uma cópia restaurável fora do checkout Git
+- [ ] Backup externo cifrado de `rust-data/tts.db`, `vozen-backups/` e `.env.rust.prod`
 
 ## Estado real do VPS (feito em 2026-07-09)
 

@@ -6,17 +6,26 @@ import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 
 describe('production SQLite backup', () => {
-  it('runs before checks and the production service restart', () => {
+  it('waits for green CI and backs up before the Rust container cutover', () => {
     const workflow = readFileSync('.github/workflows/deploy-bot.yml', 'utf8');
-    const backupAt = workflow.indexOf('npm run backup:db');
-    const checksAt = workflow.indexOf('npm run check');
-    const secretsAt = workflow.indexOf('node scripts/sync-deploy-env.mjs');
-    const restartAt = workflow.indexOf('sudo -n systemctl restart vozen.service');
+    const deploy = readFileSync('scripts/deploy-rust-vps.sh', 'utf8');
+    const buildAt = deploy.indexOf('build "$SERVICE"');
+    const backupAt = deploy.indexOf('python3 scripts/backup-rust-db.py');
+    const recreateAt = deploy.indexOf('up -d --force-recreate "$SERVICE"');
+    const readyAt = deploy.indexOf('healthy: Ready');
 
+    expect(workflow).toContain('workflow_run:');
+    expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
+    expect(workflow).toContain('bash scripts/deploy-rust-vps.sh');
+    expect(workflow).not.toContain('systemctl restart vozen.service');
+    expect(buildAt).toBeGreaterThan(-1);
     expect(backupAt).toBeGreaterThan(-1);
-    expect(checksAt).toBeGreaterThan(backupAt);
-    expect(secretsAt).toBeGreaterThan(checksAt);
-    expect(restartAt).toBeGreaterThan(secretsAt);
+    expect(backupAt).toBeGreaterThan(buildAt);
+    expect(recreateAt).toBeGreaterThan(backupAt);
+    expect(readyAt).toBeGreaterThan(recreateAt);
+    expect(deploy).toContain('Rolling back to the previous Rust image.');
+    expect(deploy).toContain('PRAGMA integrity_check');
+    expect(deploy).toContain('PRAGMA foreign_key_check');
   });
 
   it('creates a consistent restorable copy outside the live database', () => {
