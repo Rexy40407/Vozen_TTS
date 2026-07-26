@@ -32,7 +32,6 @@ import { removePlayer } from './bot/deps';
 import { GameManager } from './games/manager';
 import { systemClock } from './games/types';
 import { channelCard } from './ui/messages';
-import { isGuildPremium } from './store/premium';
 import {
   claimVoteReward,
   initializeVoteRedemptionLedger,

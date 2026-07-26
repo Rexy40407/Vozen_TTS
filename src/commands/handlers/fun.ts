@@ -133,11 +133,7 @@ export async function handleJoke(i: ChatInputCommandInteraction, deps: BotDeps):
     return;
   }
   const risos = i.options.getBoolean('laughter', true);
-  const explicitEngine = i.options.getString('engine') as
-    | 'google'
-    | 'piper'
-    | 'kokoro'
-    | null;
+  const explicitEngine = i.options.getString('engine') as 'google' | 'piper' | 'kokoro' | null;
   if (
     explicitEngine === 'kokoro' &&
     !isUserPremium(deps.db, i.user.id, Date.now()) &&
@@ -272,10 +268,7 @@ export async function handleRizz(i: ChatInputCommandInteraction, deps: BotDeps):
   }
   const sound = i.options.getBoolean('sound') ?? false;
   const explicitEngine = i.options.getString('engine', true) as
-    | 'google'
-    | 'piper'
-    | 'kokoro'
-    | null;
+    'google' | 'piper' | 'kokoro' | null;
   const cfg = getGuildConfig(deps.db, i.guildId!);
 
   // per-user rate-limit (SAME limiter as /tts and /joke): AFTER deferReply.

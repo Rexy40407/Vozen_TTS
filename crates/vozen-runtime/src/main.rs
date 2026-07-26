@@ -122,6 +122,10 @@ const DISCORD_COMMAND_CONTRACT: &str = include_str!("../../../contracts/discord-
 // The legacy runtime exposes one synthetic Google voice for every locale not covered by
 // an installed Piper model. Games such as Guess the Language use this same public voice
 // catalogue to decide how many distinct playable languages exist.
+// Only the voice-driver build needs to expand Piper's installed catalogue with
+// the legacy synthetic Google voices. Keep the helper available to its unit
+// tests in the portable build as well.
+#[allow(dead_code)]
 const GTTS_SYNTHETIC_LOCALES: &[&str] = &[
     "ar_JO", "ca_ES", "cs_CZ", "cy_GB", "da_DK", "de_DE", "el_GR", "en_GB", "en_US", "es_ES",
     "es_MX", "fa_IR", "fi_FI", "fr_FR", "hu_HU", "is_IS", "it_IT", "ja_JP", "ka_GE", "kk_KZ",
@@ -1807,6 +1811,7 @@ fn discover_piper_models(models_dir: &std::path::Path) -> Result<Vec<String>, Ru
     Ok(models)
 }
 
+#[allow(dead_code)]
 fn available_models_for_default_provider(
     mut piper_models: Vec<String>,
     default_engine: SynthesisEngine,

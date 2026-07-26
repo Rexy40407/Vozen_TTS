@@ -13,6 +13,7 @@ import type { BotDeps } from '../src/bot/deps';
 import { initDb } from '../src/store/db';
 import { getGuildConfig, setGuildConfig } from '../src/store/guildConfig';
 import { getBlocklist, addBlockword } from '../src/store/blocklist';
+import { commandDefs } from '../src/commands/definitions';
 import type Database from 'better-sqlite3';
 
 const GUILD = 'g-config-test';
@@ -676,33 +677,13 @@ describe('/config — locale wiring (PT when locale="pt")', () => {
   });
 });
 
-// ── always-on (24/7 in-call) ──────────────────────────────────────────────────
-
-describe('/config always-on — toggle 24/7 in-call (default OFF)', () => {
-  let db: Database.Database;
-  beforeEach(() => {
-    db = initDb(':memory:');
-  });
-  afterEach(() => {
-    db.close();
-  });
-
-  it('default OFF (even without touching anything)', () => {
-    expect(getGuildConfig(db, GUILD).stayInCall).toBe(false);
-  });
-
-  it('turning on persists stayInCall=true and warns that Premium is required', async () => {
-    const i = makeConfigInteraction({ sub: 'always-on', optionsMap: { active: true } });
-    await handleInteraction(i as any, makeConfigDeps(db));
-    expect(getGuildConfig(db, GUILD).stayInCall).toBe(true);
-    expect(i.replies.join('\n')).toMatch(/Premium/i);
-  });
-
-  it('turning off persists stayInCall=false', async () => {
-    setGuildConfig(db, GUILD, { stayInCall: true });
-    const i = makeConfigInteraction({ sub: 'always-on', optionsMap: { active: false } });
-    await handleInteraction(i as any, makeConfigDeps(db));
-    expect(getGuildConfig(db, GUILD).stayInCall).toBe(false);
+// The always-on command was intentionally removed. The legacy SQLite column is
+// retained only for rollback/schema compatibility and must not be exposed again.
+describe('/config always-on — removed', () => {
+  it('does not register the removed subcommand', () => {
+    const config = commandDefs.find((entry) => entry.name === 'config');
+    const options = (config?.options ?? []) as Array<{ name?: string }>;
+    expect(options.some((option) => option.name === 'always-on')).toBe(false);
   });
 });
 

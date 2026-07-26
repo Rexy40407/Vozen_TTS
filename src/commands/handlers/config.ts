@@ -130,7 +130,7 @@ export async function handleConfig(i: ChatInputCommandInteraction, deps: BotDeps
     const on = i.options.getBoolean('active', true);
     setGuildConfig(deps.db, i.guildId!, { autojoin: on });
     await reply(i, on ? t('config.autojoinOn', locale) : t('config.autojoinOff', locale));
-  /* removed always-on feature
+    /* removed always-on feature
     // 24/7 in-call: the bot stays in the channel even when empty + is restored on startup. OFF by
     // default (opt-in). It only takes EFFECT with Premium (the gate in AloneWatcher/rejoin requires it);
     // storing the toggle is free — the ON message warns that it needs Premium.

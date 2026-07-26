@@ -877,11 +877,7 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
   new SlashCommandBuilder()
     .setName('game')
     .setDescription('Play a minigame with the server')
-    .addSubcommand((s) =>
-      s
-        .setName('play')
-        .setDescription('Start a game'),
-    )
+    .addSubcommand((s) => s.setName('play').setDescription('Start a game'))
     .addSubcommand((s) => s.setName('stop').setDescription('Stop the current game'))
     .addSubcommand((s) => s.setName('list').setDescription('List the available games'))
     .addSubcommand((s) =>

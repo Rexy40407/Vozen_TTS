@@ -27,4 +27,4 @@ services:
       - /home/vozen/discord-bot-Vozen/models:/models:ro
       - /home/vozen/piper:/opt/piper:ro
     ports:
-      - "3001:3001"
+      - '3001:3001'
