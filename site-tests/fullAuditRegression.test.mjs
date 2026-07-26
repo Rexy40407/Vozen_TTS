@@ -80,9 +80,9 @@ describe('full product audit regressions', () => {
     const architecture = source('docs/ARCHITECTURE.md');
     expect(readme).toContain('Live voice transcription is a server Premium feature');
     expect(readme).not.toMatch(/Plus[^\n]*and[^\n]*Premium[^\n]*\n?[^\n]*transcription/i);
-    expect(architecture).toContain('default OFF; opt-in via `/voice detection on`');
-    expect(architecture).toContain('cap 3 Free / 50 com Premium da guild');
-    expect(architecture).not.toContain('A deteção automática de língua foi **removida**');
-    expect(architecture).not.toContain('cap fixo 3');
+    expect(architecture).toContain('Rust workspace');
+    expect(architecture).toContain('Top.gg, Ko-fi, OAuth, Premium');
+    expect(architecture).toContain('docker-compose.rust.prod.yml');
+    expect(architecture).not.toContain('Node/TypeScript bot');
   });
 });
