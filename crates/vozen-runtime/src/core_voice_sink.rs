@@ -13,17 +13,19 @@ use std::{
     time::Duration,
 };
 
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use async_trait::async_trait;
 use serenity::{
     builder::{
-        CreateActionRow, CreateAllowedMentions, CreateButton, CreateInputText,
+        CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed, CreateInputText,
         CreateInteractionResponse, CreateInteractionResponseFollowup,
         CreateInteractionResponseMessage, CreateMessage, CreateModal, CreateSelectMenu,
         CreateSelectMenuKind, CreateSelectMenuOption, CreateThread, EditInteractionResponse,
     },
     client::Context,
+    http::{LightMethod, Request, Route},
     model::{
         Permissions,
         application::{
@@ -54,6 +56,7 @@ use vozen_discord::{
 use vozen_store::CommunityPromoKind;
 use vozen_store::{GuildConfigPatch, SqliteStore, utc_day_key};
 
+use crate::ui::{color_for_content, danger_embed, message_embed};
 use crate::{
     CoreVoiceRuntimeOptions,
     activity_poster::{LeaderboardPoster, VotePromoPoster, random_unit},
@@ -84,15 +87,31 @@ struct VoiceDependencies {
 
 const GAME_PICK_TTL_MS: i64 = 60_000;
 const GAME_THREAD_DELETE_DELAY: Duration = Duration::from_secs(5);
+const GAME_LANGUAGE_CHOICES: [(&str, &str); 4] = [
+    ("en", "English"),
+    ("pt", "Portuguese"),
+    ("es", "Spanish"),
+    ("fr", "French"),
+];
+const GAME_ENGINE_CHOICES: [(&str, &str); 3] = [
+    ("google", "Google (gTTS)"),
+    ("piper", "Piper"),
+    ("kokoro", "Kokoro"),
+];
+const SETUP_TIMEOUT: Duration = Duration::from_secs(20);
 const GREET_COOLDOWN_MS: i64 = 5 * 60 * 1_000;
 const GREET_COOLDOWN_MAX_ENTRIES: usize = 10_000;
+const CAST_NOT_IN_VOICE: &str =
+    "Ainda nao estou num canal de voz — entra num e corre /join, depois tenta outra vez.";
 
 #[derive(Clone)]
 struct PendingGamePick {
     guild_id: String,
     parent_channel_id: String,
     user_id: String,
+    selected_game: Option<String>,
     language: Option<String>,
+    engine: String,
     locale: String,
     guild_locale: Option<String>,
     issued_at_ms: i64,
@@ -106,10 +125,12 @@ struct GameRuntime {
     gateway_state: GatewayState,
     coordinator: Arc<Mutex<GameCoordinator>>,
     pending_picks: Mutex<BTreeMap<String, PendingGamePick>>,
+    session_engines: Mutex<BTreeMap<String, SynthesisEngine>>,
     localizer: VoiceResponseLocalizer,
     available_models: Vec<String>,
     default_voice: String,
     default_speed: f64,
+    default_engine: SynthesisEngine,
     executor: Mutex<Option<Arc<Executor>>>,
     tick_started: AtomicBool,
 }
@@ -173,7 +194,11 @@ impl GameRuntime {
                 guild_id: guild_id.to_owned(),
                 channel_id: channel_id.to_owned(),
                 user_id: bot_id,
-                member_role_ids: None,
+                // Game narration is trusted bot-generated speech. `None` means the Discord
+                // member cache is missing and deliberately fails closed when queue-role policy
+                // is configured; a present empty list keeps the standard lane without applying
+                // a human member's blocked/priority roles to the bot itself.
+                member_role_ids: Some(Vec::new()),
             })
     }
 
@@ -187,12 +212,12 @@ impl GameRuntime {
             .parse::<u64>()
             .map(ChannelId::new)
             .map_err(|_| GatewayEventDispatchError)?;
-        channel_id
-            .send_message(
-                &context.http,
-                CreateMessage::new()
-                    .content(content)
-                    .allowed_mentions(no_mentions()),
+        let body = game_card_body(&content).map_err(|_| GatewayEventDispatchError)?;
+        context
+            .http
+            .request(
+                Request::new(Route::ChannelMessages { channel_id }, LightMethod::Post)
+                    .body(Some(body)),
             )
             .await
             .map_err(|_| GatewayEventDispatchError)?;
@@ -215,6 +240,12 @@ impl GameRuntime {
             .lock()
             .ok()
             .and_then(|current| current.clone());
+        let engine = self
+            .session_engines
+            .lock()
+            .ok()
+            .and_then(|engines| engines.get(guild_id).copied())
+            .unwrap_or(self.default_engine);
         for rendered in actions {
             if let Some(content) = rendered.content(&self.localizer, Some(locale), guild_locale) {
                 self.send_content(context, channel_id, content).await?;
@@ -231,6 +262,10 @@ impl GameRuntime {
             let Some(facts) = self.bot_speech_facts(guild_id, channel_id) else {
                 continue;
             };
+            let Some(speech_text) = speech.render(&self.localizer, Some(locale), guild_locale)
+            else {
+                continue;
+            };
             let model = speech
                 .model
                 .as_deref()
@@ -239,20 +274,32 @@ impl GameRuntime {
                         .iter()
                         .any(|candidate| candidate == model)
                 })
-                .unwrap_or(self.default_voice.as_str());
+                .unwrap_or_else(|| self.model_for_locale(locale));
             let speed = speech.speed.unwrap_or(self.default_speed);
             let _ = executor
-                .speak_text_with_voice(
-                    &facts,
-                    &speech.text,
-                    model,
-                    speed,
-                    SynthesisEngine::Piper,
-                    false,
-                )
+                .speak_text_with_voice(&facts, &speech_text, model, speed, engine, false)
                 .await;
         }
         Ok(())
+    }
+
+    fn model_for_locale(&self, locale: &str) -> &str {
+        let base = locale
+            .split(['-', '_'])
+            .next()
+            .unwrap_or(locale)
+            .to_ascii_lowercase();
+        self.available_models
+            .iter()
+            .find(|model| {
+                model
+                    .split(['-', '_'])
+                    .next()
+                    .unwrap_or(model)
+                    .eq_ignore_ascii_case(&base)
+            })
+            .map(String::as_str)
+            .unwrap_or(self.default_voice.as_str())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -300,6 +347,9 @@ impl GameRuntime {
         let Some(session) = session else {
             return Ok(());
         };
+        if let Ok(mut engines) = self.session_engines.lock() {
+            engines.remove(&session.guild_id);
+        }
         let Some(parent) = session.parent_channel_id else {
             return Ok(());
         };
@@ -367,25 +417,34 @@ impl GameRuntime {
                 if let Ok(store) = self.store.lock() {
                     let _ = store.persist_game_scores(&session.guild_id, &points);
                 }
-                let standings = session
-                    .scores
-                    .iter()
-                    .map(|score| GameStanding {
-                        name: format!("<@{}>", score.user_id),
-                        points: score.points,
-                    })
-                    .collect::<Vec<_>>();
-                let finish = render_game_finish(&standings);
-                self.send_rendered_actions(
-                    context,
-                    &session.guild_id,
-                    &session.channel_id,
-                    &session.locale,
-                    None,
-                    &finish,
-                    false,
-                )
-                .await?;
+                if game_uses_shared_standings(&session.game_id) {
+                    let mut standings = Vec::with_capacity(session.scores.len());
+                    for score in &session.scores {
+                        let name = match score.user_id.parse::<u64>() {
+                            Ok(user_id) => UserId::new(user_id)
+                                .to_user(&context.http)
+                                .await
+                                .map(|user| user.global_name.unwrap_or(user.name))
+                                .unwrap_or_else(|_| format!("<@{}>", score.user_id)),
+                            Err(_) => format!("<@{}>", score.user_id),
+                        };
+                        standings.push(GameStanding {
+                            name,
+                            points: score.points,
+                        });
+                    }
+                    let finish = render_game_finish(&standings);
+                    self.send_rendered_actions(
+                        context,
+                        &session.guild_id,
+                        &session.channel_id,
+                        &session.locale,
+                        None,
+                        &finish,
+                        speech_allowed,
+                    )
+                    .await?;
+                }
                 if let Some(parent) = session.parent_channel_id {
                     let winner = session
                         .scores
@@ -413,6 +472,9 @@ impl GameRuntime {
                     self.send_content(context, &parent, content).await?;
                     self.schedule_thread_delete(context, session.channel_id)
                         .await;
+                }
+                if let Ok(mut engines) = self.session_engines.lock() {
+                    engines.remove(&session.guild_id);
                 }
             }
             GameManagerEvent::VoiceLeft => {
@@ -487,6 +549,7 @@ impl GameRuntime {
         guild_locale: Option<String>,
         game_id: Option<String>,
         language: Option<String>,
+        engine: Option<String>,
     ) -> Result<String, GatewayEventDispatchError> {
         let Some(game_id) = game_id
             .as_deref()
@@ -513,6 +576,18 @@ impl GameRuntime {
                 )
             })
             .unwrap_or((false, false));
+        let selected_engine = engine
+            .as_deref()
+            .and_then(Self::game_engine)
+            .unwrap_or(self.default_engine);
+        if selected_engine == SynthesisEngine::Kokoro && !user_premium && !guild_premium {
+            return self.render(
+                "voice.engine.kokoroLocked",
+                Some(&locale),
+                guild_locale.as_deref(),
+                &BTreeMap::new(),
+            );
+        }
         let active_channel_id = self
             .coordinator
             .lock()
@@ -535,11 +610,12 @@ impl GameRuntime {
                 active_channel_id.as_deref(),
             );
         }
+        let game_locale = language.as_deref().unwrap_or(&locale).to_owned();
         let game_name = vozen_discord::game_definition(game_id)
             .and_then(|definition| {
                 self.render(
                     definition.name_key,
-                    Some(&locale),
+                    Some(&game_locale),
                     guild_locale.as_deref(),
                     &BTreeMap::new(),
                 )
@@ -592,12 +668,16 @@ impl GameRuntime {
                 );
             }
         };
+        self.session_engines
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .insert(guild_id.clone(), selected_engine);
         let speech_allowed = self.gateway_state.bot_voice_channel_id(&guild_id).is_some();
         self.send_actions(
             context,
             &guild_id,
             &game_channel_id,
-            &locale,
+            &game_locale,
             guild_locale.as_deref(),
             &actions,
             speech_allowed,
@@ -691,6 +771,203 @@ impl GameRuntime {
         }
     }
 
+    fn default_game_language(locale: &str) -> &'static str {
+        let locale = locale.to_ascii_lowercase();
+        if locale.starts_with("pt") {
+            "pt"
+        } else if locale.starts_with("es") {
+            "es"
+        } else if locale.starts_with("fr") {
+            "fr"
+        } else {
+            "en"
+        }
+    }
+
+    fn game_language_label(value: &str) -> &'static str {
+        GAME_LANGUAGE_CHOICES
+            .iter()
+            .find(|(key, _)| *key == value)
+            .map(|(_, label)| *label)
+            .unwrap_or("English")
+    }
+
+    fn game_engine(value: &str) -> Option<SynthesisEngine> {
+        match value {
+            "google" => Some(SynthesisEngine::Default),
+            "piper" => Some(SynthesisEngine::Piper),
+            "kokoro" => Some(SynthesisEngine::Kokoro),
+            _ => None,
+        }
+    }
+
+    fn game_engine_label(value: &str) -> &'static str {
+        GAME_ENGINE_CHOICES
+            .iter()
+            .find(|(key, _)| *key == value)
+            .map(|(_, label)| *label)
+            .unwrap_or("Google (gTTS)")
+    }
+
+    fn game_pick_components(
+        &self,
+        interaction_id: &str,
+        locale: &str,
+        guild_locale: Option<&str>,
+        selected_game: Option<&str>,
+        selected_language: &str,
+        selected_engine: &str,
+    ) -> Result<(String, Vec<CreateActionRow>), GatewayEventDispatchError> {
+        let prompt = self.render(
+            "game.pickPrompt",
+            Some(locale),
+            guild_locale,
+            &BTreeMap::new(),
+        )?;
+        let game_placeholder = self.render(
+            "game.pickPlaceholder",
+            Some(locale),
+            guild_locale,
+            &BTreeMap::new(),
+        )?;
+        let language_label = if locale.to_ascii_lowercase().starts_with("pt") {
+            "Idioma (Word Chain)"
+        } else {
+            "Language (Word Chain)"
+        };
+        let language_placeholder = if locale.to_ascii_lowercase().starts_with("pt") {
+            "Escolhe uma língua (Word Chain)"
+        } else {
+            "Choose a language (Word Chain)"
+        };
+        let engine_label = if locale.to_ascii_lowercase().starts_with("pt") {
+            "Motor"
+        } else {
+            "Engine"
+        };
+        let engine_placeholder = if locale.to_ascii_lowercase().starts_with("pt") {
+            "Escolhe um motor de voz"
+        } else {
+            "Choose a voice engine"
+        };
+        let options = GAME_CATALOG
+            .iter()
+            .map(|game| {
+                let label = self
+                    .render(game.name_key, Some(locale), guild_locale, &BTreeMap::new())
+                    .unwrap_or_else(|_| game.id.to_owned());
+                let description = self
+                    .render(game.desc_key, Some(locale), guild_locale, &BTreeMap::new())
+                    .unwrap_or_default();
+                CreateSelectMenuOption::new(label, game.id)
+                    .default_selection(selected_game == Some(game.id))
+                    .description(description.chars().take(100).collect::<String>())
+            })
+            .collect::<Vec<_>>();
+        let languages = GAME_LANGUAGE_CHOICES
+            .iter()
+            .map(|(value, label)| {
+                CreateSelectMenuOption::new(*label, *value)
+                    .default_selection(*value == selected_language)
+            })
+            .collect::<Vec<_>>();
+        let engines = GAME_ENGINE_CHOICES
+            .iter()
+            .map(|(value, label)| {
+                CreateSelectMenuOption::new(*label, *value)
+                    .default_selection(*value == selected_engine)
+            })
+            .collect::<Vec<_>>();
+        let game_menu = CreateSelectMenu::new(
+            format!("gamePick:{interaction_id}"),
+            CreateSelectMenuKind::String { options },
+        )
+        .placeholder(game_placeholder)
+        .min_values(1)
+        .max_values(1);
+        let language_menu = CreateSelectMenu::new(
+            format!("gameLanguage:{interaction_id}"),
+            CreateSelectMenuKind::String { options: languages },
+        )
+        .placeholder(language_placeholder)
+        .min_values(1)
+        .max_values(1);
+        let engine_menu = CreateSelectMenu::new(
+            format!("gameEngine:{interaction_id}"),
+            CreateSelectMenuKind::String { options: engines },
+        )
+        .placeholder(engine_placeholder)
+        .min_values(1)
+        .max_values(1);
+        let start_label = if locale.to_ascii_lowercase().starts_with("pt") {
+            "Começar jogo"
+        } else {
+            "Start game"
+        };
+        let start_button = CreateButton::new(format!("gameStart:{interaction_id}"))
+            .label(start_label)
+            .style(ButtonStyle::Primary)
+            .disabled(selected_game.is_none());
+        let selected_game_label = selected_game
+            .and_then(|id| GAME_CATALOG.iter().find(|game| game.id == id))
+            .and_then(|game| {
+                self.render(game.name_key, Some(locale), guild_locale, &BTreeMap::new())
+                    .ok()
+            });
+        let content = format!(
+            "{prompt}\n{language_label}: {}\n{engine_label}: {}{}",
+            Self::game_language_label(selected_language),
+            Self::game_engine_label(selected_engine),
+            selected_game_label
+                .map(|game| format!("\nGame: {game}"))
+                .unwrap_or_default()
+        );
+        Ok((
+            content,
+            vec![
+                CreateActionRow::SelectMenu(game_menu),
+                CreateActionRow::SelectMenu(language_menu),
+                CreateActionRow::SelectMenu(engine_menu),
+                CreateActionRow::Buttons(vec![start_button]),
+            ],
+        ))
+    }
+
+    fn game_pick_payload(content: &str, rows: Vec<CreateActionRow>) -> Value {
+        let rows = serde_json::to_value(rows).expect("game pick action rows are serializable");
+        let mut children = vec![json!({"type": 10, "content": content})];
+        if let Value::Array(rows) = rows {
+            children.extend(rows);
+        }
+        json!({
+            "type": 4,
+            "data": {
+                "flags": 32832,
+                "components": [{
+                    "type": 17,
+                    "accent_color": 0x5865F2u32,
+                    "components": children,
+                }]
+            }
+        })
+    }
+
+    fn game_pick_edit_payload(content: &str, rows: Vec<CreateActionRow>) -> Value {
+        let rows = serde_json::to_value(rows).expect("game pick action rows are serializable");
+        let mut children = vec![json!({"type": 10, "content": content})];
+        if let Value::Array(rows) = rows {
+            children.extend(rows);
+        }
+        json!({
+            "flags": 32768,
+            "components": [{
+                "type": 17,
+                "accent_color": 0x5865F2u32,
+                "components": children,
+            }]
+        })
+    }
+
     async fn handle_command(
         &self,
         context: &Context,
@@ -704,72 +981,49 @@ impl GameRuntime {
             parse_game_play_command(&command.data).map_err(|_| GatewayEventDispatchError)?
         {
             if play.game.is_none() {
-                let custom_id = format!("gamePick:{}", command.id.get());
                 let locale = command.locale.clone();
                 let guild_locale = command.guild_locale.clone();
-                let prompt = self.render(
-                    "game.pickPrompt",
-                    Some(&locale),
-                    guild_locale.as_deref(),
-                    &BTreeMap::new(),
-                )?;
-                let placeholder = self.render(
-                    "game.pickPlaceholder",
-                    Some(&locale),
-                    guild_locale.as_deref(),
-                    &BTreeMap::new(),
-                )?;
-                let options = GAME_CATALOG
-                    .iter()
-                    .map(|game| {
-                        let label = self
-                            .render(
-                                game.name_key,
-                                Some(&locale),
-                                guild_locale.as_deref(),
-                                &BTreeMap::new(),
-                            )
-                            .unwrap_or_else(|_| game.id.to_owned());
-                        let description = self
-                            .render(
-                                game.desc_key,
-                                Some(&locale),
-                                guild_locale.as_deref(),
-                                &BTreeMap::new(),
-                            )
-                            .unwrap_or_default();
-                        CreateSelectMenuOption::new(label, game.id)
-                            .description(description.chars().take(100).collect::<String>())
+                let selected_language = play
+                    .language
+                    .as_deref()
+                    .filter(|language| {
+                        GAME_LANGUAGE_CHOICES
+                            .iter()
+                            .any(|(value, _)| value == language)
                     })
-                    .collect::<Vec<_>>();
+                    .unwrap_or_else(|| Self::default_game_language(&locale))
+                    .to_owned();
+                let (content, rows) = self.game_pick_components(
+                    &command.id.get().to_string(),
+                    &locale,
+                    guild_locale.as_deref(),
+                    None,
+                    &selected_language,
+                    "google",
+                )?;
                 if let Ok(mut picks) = self.pending_picks.lock() {
                     picks.insert(
-                        custom_id.clone(),
+                        format!("gamePick:{}", command.id.get()),
                         PendingGamePick {
                             guild_id: guild_id.clone(),
                             parent_channel_id: command.channel_id.get().to_string(),
                             user_id: command.user.id.get().to_string(),
-                            language: play.language,
+                            selected_game: None,
+                            language: Some(selected_language),
+                            engine: "google".to_owned(),
                             locale,
                             guild_locale,
                             issued_at_ms: system_now_ms(),
                         },
                     );
                 }
-                let select =
-                    CreateSelectMenu::new(custom_id, CreateSelectMenuKind::String { options })
-                        .placeholder(placeholder)
-                        .min_values(1)
-                        .max_values(1);
-                command
-                    .create_response(
-                        context,
-                        CreateInteractionResponse::Message(
-                            CreateInteractionResponseMessage::new()
-                                .content(prompt)
-                                .ephemeral(true)
-                                .components(vec![CreateActionRow::SelectMenu(select)]),
-                        ),
+                context
+                    .http
+                    .create_interaction_response(
+                        command.id,
+                        &command.token,
+                        &Self::game_pick_payload(&content, rows),
+                        Vec::new(),
                     )
                     .await
                     .map_err(|_| GatewayEventDispatchError)?;
@@ -789,10 +1043,16 @@ impl GameRuntime {
                     command.guild_locale.clone(),
                     play.game,
                     play.language,
+                    None,
                 )
                 .await?;
-            command
-                .edit_response(context, EditInteractionResponse::new().content(content))
+            context
+                .http
+                .edit_original_interaction_response(
+                    &command.token,
+                    &Self::game_pick_edit_payload(&content, Vec::new()),
+                    Vec::new(),
+                )
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
             return Ok(true);
@@ -895,7 +1155,248 @@ impl GameRuntime {
         context: &Context,
         component: serenity::model::application::ComponentInteraction,
     ) -> Result<bool, GatewayEventDispatchError> {
-        let Some(id) = component.data.custom_id.strip_prefix("gamePick:") else {
+        if let Some(id) = component.data.custom_id.strip_prefix("gameLanguage:") {
+            component
+                .defer(context)
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            self.prune_picks(system_now_ms());
+            let key = format!("gamePick:{id}");
+            let selected_language = match &component.data.kind {
+                ComponentInteractionDataKind::StringSelect { values } if values.len() == 1 => {
+                    values[0].as_str()
+                }
+                _ => return Ok(true),
+            };
+            if !GAME_LANGUAGE_CHOICES
+                .iter()
+                .any(|(value, _)| *value == selected_language)
+            {
+                return Ok(true);
+            }
+            let pick_state = {
+                let mut picks = self
+                    .pending_picks
+                    .lock()
+                    .map_err(|_| GatewayEventDispatchError)?;
+                picks
+                    .get_mut(&key)
+                    .filter(|pick| {
+                        component
+                            .guild_id
+                            .is_some_and(|guild| guild.get().to_string() == pick.guild_id)
+                            && component.user.id.get().to_string() == pick.user_id
+                    })
+                    .map(|pick| {
+                        pick.language = Some(selected_language.to_owned());
+                        (
+                            pick.locale.clone(),
+                            pick.guild_locale.clone(),
+                            pick.selected_game.clone(),
+                            pick.language.clone().unwrap_or_else(|| "en".to_owned()),
+                            pick.engine.clone(),
+                        )
+                    })
+            };
+            let Some((locale, guild_locale, selected_game, selected_language, selected_engine)) =
+                pick_state
+            else {
+                let content = self.render(
+                    "game.pickTimeout",
+                    Some(&component.locale),
+                    component.guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?;
+                context
+                    .http
+                    .edit_original_interaction_response(
+                        &component.token,
+                        &Self::game_pick_edit_payload(&content, Vec::new()),
+                        Vec::new(),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                return Ok(true);
+            };
+            let (content, rows) = self.game_pick_components(
+                id,
+                &locale,
+                guild_locale.as_deref(),
+                selected_game.as_deref(),
+                &selected_language,
+                &selected_engine,
+            )?;
+            context
+                .http
+                .edit_original_interaction_response(
+                    &component.token,
+                    &Self::game_pick_edit_payload(&content, rows),
+                    Vec::new(),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(true);
+        }
+        if let Some(id) = component.data.custom_id.strip_prefix("gameEngine:") {
+            component
+                .defer(context)
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            self.prune_picks(system_now_ms());
+            let key = format!("gamePick:{id}");
+            let selected_engine = match &component.data.kind {
+                ComponentInteractionDataKind::StringSelect { values } if values.len() == 1 => {
+                    values[0].as_str()
+                }
+                _ => return Ok(true),
+            };
+            if Self::game_engine(selected_engine).is_none() {
+                return Ok(true);
+            }
+            let pick_state = {
+                let mut picks = self
+                    .pending_picks
+                    .lock()
+                    .map_err(|_| GatewayEventDispatchError)?;
+                picks
+                    .get_mut(&key)
+                    .filter(|pick| {
+                        component
+                            .guild_id
+                            .is_some_and(|guild| guild.get().to_string() == pick.guild_id)
+                            && component.user.id.get().to_string() == pick.user_id
+                    })
+                    .map(|pick| {
+                        pick.engine = selected_engine.to_owned();
+                        (
+                            pick.locale.clone(),
+                            pick.guild_locale.clone(),
+                            pick.selected_game.clone(),
+                            pick.language.clone().unwrap_or_else(|| "en".to_owned()),
+                            pick.engine.clone(),
+                        )
+                    })
+            };
+            let Some((locale, guild_locale, selected_game, selected_language, selected_engine)) =
+                pick_state
+            else {
+                let content = self.render(
+                    "game.pickTimeout",
+                    Some(&component.locale),
+                    component.guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?;
+                context
+                    .http
+                    .edit_original_interaction_response(
+                        &component.token,
+                        &Self::game_pick_edit_payload(&content, Vec::new()),
+                        Vec::new(),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                return Ok(true);
+            };
+            let (content, rows) = self.game_pick_components(
+                id,
+                &locale,
+                guild_locale.as_deref(),
+                selected_game.as_deref(),
+                &selected_language,
+                &selected_engine,
+            )?;
+            context
+                .http
+                .edit_original_interaction_response(
+                    &component.token,
+                    &Self::game_pick_edit_payload(&content, rows),
+                    Vec::new(),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(true);
+        }
+        if let Some(id) = component.data.custom_id.strip_prefix("gamePick:") {
+            component
+                .defer(context)
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            self.prune_picks(system_now_ms());
+            let key = format!("gamePick:{id}");
+            let selected_game = match &component.data.kind {
+                ComponentInteractionDataKind::StringSelect { values } if values.len() == 1 => {
+                    values[0].clone()
+                }
+                _ => return Ok(true),
+            };
+            if !GAME_CATALOG.iter().any(|game| game.id == selected_game) {
+                return Ok(true);
+            }
+            let pick_state = {
+                let mut picks = self
+                    .pending_picks
+                    .lock()
+                    .map_err(|_| GatewayEventDispatchError)?;
+                picks
+                    .get_mut(&key)
+                    .filter(|pick| {
+                        component
+                            .guild_id
+                            .is_some_and(|guild| guild.get().to_string() == pick.guild_id)
+                            && component.user.id.get().to_string() == pick.user_id
+                    })
+                    .map(|pick| {
+                        pick.selected_game = Some(selected_game);
+                        (
+                            pick.locale.clone(),
+                            pick.guild_locale.clone(),
+                            pick.selected_game.clone(),
+                            pick.language.clone().unwrap_or_else(|| "en".to_owned()),
+                            pick.engine.clone(),
+                        )
+                    })
+            };
+            let Some((locale, guild_locale, selected_game, selected_language, selected_engine)) =
+                pick_state
+            else {
+                let content = self.render(
+                    "game.pickTimeout",
+                    Some(&component.locale),
+                    component.guild_locale.as_deref(),
+                    &BTreeMap::new(),
+                )?;
+                context
+                    .http
+                    .edit_original_interaction_response(
+                        &component.token,
+                        &Self::game_pick_edit_payload(&content, Vec::new()),
+                        Vec::new(),
+                    )
+                    .await
+                    .map_err(|_| GatewayEventDispatchError)?;
+                return Ok(true);
+            };
+            let (content, rows) = self.game_pick_components(
+                id,
+                &locale,
+                guild_locale.as_deref(),
+                selected_game.as_deref(),
+                &selected_language,
+                &selected_engine,
+            )?;
+            context
+                .http
+                .edit_original_interaction_response(
+                    &component.token,
+                    &Self::game_pick_edit_payload(&content, rows),
+                    Vec::new(),
+                )
+                .await
+                .map_err(|_| GatewayEventDispatchError)?;
+            return Ok(true);
+        }
+
+        let Some(id) = component.data.custom_id.strip_prefix("gameStart:") else {
             return Ok(false);
         };
         component
@@ -922,18 +1423,18 @@ impl GameRuntime {
                 component.guild_locale.as_deref(),
                 &BTreeMap::new(),
             )?;
-            component
-                .edit_response(context, EditInteractionResponse::new().content(content))
+            context
+                .http
+                .edit_original_interaction_response(
+                    &component.token,
+                    &Self::game_pick_edit_payload(&content, Vec::new()),
+                    Vec::new(),
+                )
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
             return Ok(true);
         };
-        let Some(game_id) = (match &component.data.kind {
-            ComponentInteractionDataKind::StringSelect { values } if values.len() == 1 => {
-                Some(values[0].clone())
-            }
-            _ => None,
-        }) else {
+        let Some(game_id) = pick.selected_game else {
             return Ok(true);
         };
         let content = self
@@ -946,10 +1447,16 @@ impl GameRuntime {
                 pick.guild_locale,
                 Some(game_id),
                 pick.language,
+                Some(pick.engine),
             )
             .await?;
-        component
-            .edit_response(context, EditInteractionResponse::new().content(content))
+        context
+            .http
+            .edit_original_interaction_response(
+                &component.token,
+                &Self::game_pick_edit_payload(&content, Vec::new()),
+                Vec::new(),
+            )
             .await
             .map_err(|_| GatewayEventDispatchError)?;
         Ok(true)
@@ -1033,8 +1540,42 @@ impl GameRuntime {
         if let Ok(mut picks) = self.pending_picks.lock() {
             picks.retain(|_, pick| pick.guild_id != guild_id);
         }
+        if let Ok(mut engines) = self.session_engines.lock() {
+            engines.remove(guild_id);
+        }
         Ok(())
     }
+}
+
+fn game_uses_shared_standings(game_id: &str) -> bool {
+    matches!(
+        game_id,
+        "guess-language"
+            | "math"
+            | "skip-count"
+            | "spelling"
+            | "spell-out"
+            | "fast-speech"
+            | "accent-swap"
+            | "reflexes"
+            | "vozen-says"
+            | "headsOrTails"
+    )
+}
+
+fn game_card_body(content: &str) -> Result<Vec<u8>, serde_json::Error> {
+    serde_json::to_vec(&json!({
+        "flags": 1_u64 << 15,
+        "components": [{
+            "type": 17,
+            "accent_color": color_for_content(content),
+            "components": [{
+                "type": 10,
+                "content": content
+            }]
+        }],
+        "allowed_mentions": { "parse": [] }
+    }))
 }
 
 impl CoreVoiceGatewaySink {
@@ -1061,10 +1602,12 @@ impl CoreVoiceGatewaySink {
                                 ),
                             ))),
                             pending_picks: Mutex::new(BTreeMap::new()),
+                            session_engines: Mutex::new(BTreeMap::new()),
                             localizer,
                             available_models: options.settings.available_models.clone(),
                             default_voice: options.settings.default_voice.clone(),
                             default_speed: options.settings.default_speed,
+                            default_engine: options.settings.default_engine,
                             executor: Mutex::new(None),
                             tick_started: AtomicBool::new(false),
                         })
@@ -1418,23 +1961,17 @@ impl CoreVoiceGatewaySink {
         if humans > 0 {
             return;
         }
-        let stay_in_call = self
-            .store
-            .lock()
-            .ok()
-            .and_then(|store| {
-                let config = store.guild_config(guild_id).ok()?;
-                let premium = store.is_guild_premium(guild_id, system_now_ms()).ok()?;
-                Some(config.stay_in_call && premium)
-            })
-            .unwrap_or(false);
-        if stay_in_call {
-            return;
-        }
         let Ok(executor) = self.executor(context) else {
             return;
         };
         let _ = executor.leave_for_lifecycle(guild_id).await;
+        // A new voice session must announce its first speaker again.  Keep this state
+        // independent of the selected TTS engine: switching between Google and Piper must
+        // never make xsaid appear to work in one engine only because the previous session's
+        // speaker marker was still cached.
+        if let Ok(mut speakers) = self.last_speakers.lock() {
+            speakers.remove(guild_id);
+        }
     }
 
     /// Restores calls only once per process and only after checking every persisted channel
@@ -1902,7 +2439,7 @@ impl CoreVoiceGatewaySink {
             "piper" => "Piper",
             "kokoro" => "Kokoro",
             "gcloud" => "Google HD",
-            _ => "Google",
+            _ => "Google (gTTS)",
         };
         let mut content = format!(
             "🎭 **Create a cast for your voice call**\nTheme: {theme}\nLanguage: {language}\nEngine: {engine}"
@@ -1915,7 +2452,56 @@ impl CoreVoiceGatewaySink {
         content
     }
 
-    fn cast_panel_response(
+    fn cast_panel_payload(interaction_id: &str, session: &CastSession) -> Value {
+        json!({
+            "type": 4,
+            "data": {
+                "flags": 32832,
+                "components": [Self::cast_panel_container(interaction_id, session)]
+            }
+        })
+    }
+
+    /// Components V2 is the only Discord layout that visually nests action rows inside the
+    /// rounded card. Serenity 0.12 does not expose type 17 yet, so we serialize this small
+    /// payload directly while continuing to use Serenity's builders for every child control.
+    fn cast_panel_container(interaction_id: &str, session: &CastSession) -> Value {
+        let rows = serde_json::to_value(Self::cast_panel_components(interaction_id, session))
+            .expect("cast action rows are serializable");
+        let mut children = vec![json!({
+            "type": 10,
+            "content": Self::cast_panel_content(session),
+        })];
+        if let Value::Array(rows) = rows {
+            children.extend(rows);
+        }
+        json!({
+            "type": 17,
+            "accent_color": 0x5865F2u32,
+            "components": children,
+        })
+    }
+
+    fn cast_panel_edit_payload(interaction_id: &str, session: &CastSession) -> Value {
+        json!({
+            "flags": 32768,
+            "components": [Self::cast_panel_container(interaction_id, session)]
+        })
+    }
+
+    fn cast_terminal_edit_payload(content: &str, accent_color: u32) -> Value {
+        json!({
+            "flags": 32768,
+            "components": [{
+                "type": 17,
+                "accent_color": accent_color,
+                "components": [{"type": 10, "content": content}]
+            }]
+        })
+    }
+
+    #[allow(dead_code)]
+    fn cast_panel_response_legacy(
         interaction_id: &str,
         session: &CastSession,
     ) -> CreateInteractionResponse {
@@ -1934,10 +2520,9 @@ impl CoreVoiceGatewaySink {
             })
             .collect();
         let engines = [
-            ("Google", "google"),
+            ("Google (gTTS)", "google"),
             ("Piper", "piper"),
             ("Kokoro", "kokoro"),
-            ("Google HD", "gcloud"),
         ]
         .into_iter()
         .map(|(label, value)| {
@@ -1974,7 +2559,7 @@ impl CoreVoiceGatewaySink {
             .style(ButtonStyle::Secondary);
         CreateInteractionResponse::Message(
             CreateInteractionResponseMessage::new()
-                .content(Self::cast_panel_content(session))
+                .embed(message_embed(Self::cast_panel_content(session)))
                 .ephemeral(true)
                 .components(vec![
                     CreateActionRow::SelectMenu(theme_menu),
@@ -1990,22 +2575,39 @@ impl CoreVoiceGatewaySink {
         context: &Context,
         content: String,
     ) -> Result<(), GatewayEventDispatchError> {
-        command
-            .create_response(
-                context,
-                CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new()
-                        .content(content)
-                        .ephemeral(true)
-                        .allowed_mentions(
-                            CreateAllowedMentions::new()
-                                .all_users(false)
-                                .all_roles(false)
-                                .everyone(false),
-                        ),
-                ),
+        let accent_color = if content.trim_start().starts_with('❌') {
+            0xED4245
+        } else if content.trim_start().starts_with('⚠') {
+            0xFEE75C
+        } else {
+            0x5865F2
+        };
+        context
+            .http
+            .edit_original_interaction_response(
+                &command.token,
+                &Self::cast_terminal_edit_payload(&content, accent_color),
+                Vec::new(),
             )
             .await
+            .map(|_| ())
+            .map_err(|_| GatewayEventDispatchError)
+    }
+
+    async fn setup_embed_reply(
+        command: &serenity::model::application::CommandInteraction,
+        context: &Context,
+        embed: CreateEmbed,
+    ) -> Result<(), GatewayEventDispatchError> {
+        command
+            .edit_response(
+                context,
+                EditInteractionResponse::new()
+                    .embeds(vec![embed])
+                    .allowed_mentions(no_mentions()),
+            )
+            .await
+            .map(|_| ())
             .map_err(|_| GatewayEventDispatchError)
     }
 
@@ -2022,6 +2624,14 @@ impl CoreVoiceGatewaySink {
         let Some(guild_id) = command.guild_id else {
             return Ok(());
         };
+        // `/setup` performs several REST lookups and may join Songbird before it can render the
+        // permission report. A direct response would race Discord's three-second interaction
+        // deadline, producing the misleading "application did not respond" message. Claim the
+        // interaction immediately, then edit the deferred ephemeral response at every exit.
+        command
+            .defer_ephemeral(context)
+            .await
+            .map_err(|_| GatewayEventDispatchError)?;
         let can_manage = command
             .member
             .as_ref()
@@ -2209,7 +2819,12 @@ impl CoreVoiceGatewaySink {
         lines.push(String::new());
         lines.push(render("setup.membersHeader", &BTreeMap::new())?);
         lines.push(render("setup.membersBody", &BTreeMap::new())?);
-        Self::setup_reply(command, context, lines.join("\n")).await
+        let any_missing =
+            !can_view || !can_send || (voice_id.is_some() && (!can_connect || !can_speak));
+        let embed = CreateEmbed::new()
+            .color(if any_missing { 0xFEE75C } else { 0x57F287 })
+            .description(lines.join("\n"));
+        Self::setup_embed_reply(command, context, embed).await
     }
 
     async fn fetch_cast_members(
@@ -2326,7 +2941,7 @@ impl CoreVoiceGatewaySink {
                     context,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new()
-                            .content("You must be in Vozen's voice call to use this command.")
+                            .embed(danger_embed(CAST_NOT_IN_VOICE))
                             .ephemeral(true),
                     ),
                 )
@@ -2345,7 +2960,7 @@ impl CoreVoiceGatewaySink {
                     context,
                     CreateInteractionResponse::Message(
                         CreateInteractionResponseMessage::new()
-                            .content("You must be in Vozen's voice call to use this command.")
+                            .embed(danger_embed(CAST_NOT_IN_VOICE))
                             .ephemeral(true),
                     ),
                 )
@@ -2361,7 +2976,6 @@ impl CoreVoiceGatewaySink {
             .map(|voice| match voice.engine {
                 vozen_store::UserEngine::Piper => "piper",
                 vozen_store::UserEngine::Kokoro => "kokoro",
-                vozen_store::UserEngine::Gcloud => "gcloud",
                 _ => "google",
             })
             .unwrap_or("piper")
@@ -2381,10 +2995,13 @@ impl CoreVoiceGatewaySink {
             sessions.insert(command.id.get().to_string(), session.clone());
         }
         let _ = facts;
-        command
-            .create_response(
-                context,
-                Self::cast_panel_response(&command.id.get().to_string(), &session),
+        context
+            .http
+            .create_interaction_response(
+                command.id,
+                &command.token,
+                &Self::cast_panel_payload(&command.id.get().to_string(), &session),
+                Vec::new(),
             )
             .await
             .map_err(|_| GatewayEventDispatchError)?;
@@ -2455,7 +3072,7 @@ impl CoreVoiceGatewaySink {
             CastAction::Engine => {
                 if selected
                     .as_deref()
-                    .is_none_or(|value| !matches!(value, "google" | "piper" | "kokoro" | "gcloud"))
+                    .is_none_or(|value| !matches!(value, "google" | "piper" | "kokoro"))
                 {
                     return Ok(true);
                 }
@@ -2469,10 +3086,12 @@ impl CoreVoiceGatewaySink {
                     .defer(context)
                     .await
                     .map_err(|_| GatewayEventDispatchError)?;
-                component
-                    .edit_response(
-                        context,
-                        EditInteractionResponse::new().content("Cast cancelled."),
+                context
+                    .http
+                    .edit_original_interaction_response(
+                        &component.token,
+                        &Self::cast_terminal_edit_payload("Cast cancelled.", 0x5865F2),
+                        Vec::new(),
                     )
                     .await
                     .map_err(|_| GatewayEventDispatchError)?;
@@ -2503,12 +3122,12 @@ impl CoreVoiceGatewaySink {
             .defer(context)
             .await
             .map_err(|_| GatewayEventDispatchError)?;
-        component
-            .edit_response(
-                context,
-                EditInteractionResponse::new()
-                    .content(Self::cast_panel_content(&session))
-                    .components(Self::cast_panel_components(&session_id, &session)),
+        context
+            .http
+            .edit_original_interaction_response(
+                &component.token,
+                &Self::cast_panel_edit_payload(&session_id, &session),
+                Vec::new(),
             )
             .await
             .map_err(|_| GatewayEventDispatchError)?;
@@ -2531,10 +3150,9 @@ impl CoreVoiceGatewaySink {
             })
             .collect();
         let engines = [
-            ("Google", "google"),
+            ("Google (gTTS)", "google"),
             ("Piper", "piper"),
             ("Kokoro", "kokoro"),
-            ("Google HD", "gcloud"),
         ]
         .into_iter()
         .map(|(label, value)| {
@@ -2594,11 +3212,12 @@ impl CoreVoiceGatewaySink {
                 .as_deref()
                 != Some(session.voice_channel_id.as_str())
         {
-            component
-                .edit_response(
-                    context,
-                    EditInteractionResponse::new()
-                        .content("You must still be in Vozen's voice call to reveal this cast."),
+            context
+                .http
+                .edit_original_interaction_response(
+                    &component.token,
+                    &Self::cast_terminal_edit_payload(CAST_NOT_IN_VOICE, 0xED4245),
+                    Vec::new(),
                 )
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
@@ -2615,10 +3234,15 @@ impl CoreVoiceGatewaySink {
             let message = if humans.len() > CAST_MAX_MEMBERS {
                 "There are too many people in this call. `/cast` supports up to 25 humans."
             } else {
-                "Nobody else is available in the voice call."
+                "Ninguem esta disponivel no canal de voz."
             };
-            component
-                .edit_response(context, EditInteractionResponse::new().content(message))
+            context
+                .http
+                .edit_original_interaction_response(
+                    &component.token,
+                    &Self::cast_terminal_edit_payload(message, 0xED4245),
+                    Vec::new(),
+                )
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
             return Ok(());
@@ -2636,12 +3260,15 @@ impl CoreVoiceGatewaySink {
         let Some((model, speed, engine)) =
             self.cast_voice_settings(&session.guild_id, &session.user_id, session)
         else {
-            component
-                .edit_response(
-                    context,
-                    EditInteractionResponse::new().content(
-                        "The selected language has no installed Piper voice. Choose another language and run `/cast` again.",
+            context
+                .http
+                .edit_original_interaction_response(
+                    &component.token,
+                    &Self::cast_terminal_edit_payload(
+                        "A lingua selecionada nao tem uma voz instalada. Escolhe outra lingua e corre `/cast` novamente.",
+                        0xED4245,
                     ),
+                    Vec::new(),
                 )
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
@@ -2686,17 +3313,20 @@ impl CoreVoiceGatewaySink {
                 | CoreTtsOutcome::StoreUnavailable
         ) {
             let message = match first_tts {
-                CoreTtsOutcome::NotInSameVoice => {
-                    "You must still be in Vozen's voice call to reveal this cast."
-                }
+                CoreTtsOutcome::NotInSameVoice => CAST_NOT_IN_VOICE,
                 CoreTtsOutcome::Blocked => "You cannot use voice commands in this server.",
                 CoreTtsOutcome::RateLimited => {
                     "You're doing that too quickly. Try again in a moment."
                 }
                 _ => "This cast could not be spoken right now. Run `/cast` again.",
             };
-            component
-                .edit_response(context, EditInteractionResponse::new().content(message))
+            context
+                .http
+                .edit_original_interaction_response(
+                    &component.token,
+                    &Self::cast_terminal_edit_payload(message, 0xED4245),
+                    Vec::new(),
+                )
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
             return Ok(());
@@ -2750,14 +3380,20 @@ impl CoreVoiceGatewaySink {
                 }
             }
         }
-        component
-            .edit_response(
-                context,
-                EditInteractionResponse::new().content(if spoken {
-                    "Cast revealed and spoken in the call."
-                } else {
-                    "Cast revealed in chat; voice is busy."
-                }),
+        let terminal_message = if spoken {
+            "Cast revelado e falado no canal de voz."
+        } else {
+            "Cast revelado no chat; a voz esta ocupada."
+        };
+        context
+            .http
+            .edit_original_interaction_response(
+                &component.token,
+                &Self::cast_terminal_edit_payload(
+                    terminal_message,
+                    if spoken { 0x57F287 } else { 0xED4245 },
+                ),
+                Vec::new(),
             )
             .await
             .map_err(|_| GatewayEventDispatchError)?;
@@ -3032,6 +3668,10 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         interaction: Interaction,
     ) -> Result<(), GatewayEventDispatchError> {
         if let Some(game) = &self.game_runtime {
+            // The Rust sink can be promoted after the gateway READY event.  Lazily bind the
+            // shared voice executor here as well so game rounds can speak even in that case.
+            let executor = self.executor(&context)?;
+            game.start_tick(context.clone(), executor);
             match &interaction {
                 Interaction::Component(component) => {
                     if game.handle_component(&context, component.clone()).await? {
@@ -3051,7 +3691,44 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
             && let Interaction::Command(command) = &interaction
             && command.data.name == "setup"
         {
-            return self.handle_setup_command(&context, command).await;
+            return match tokio::time::timeout(
+                SETUP_TIMEOUT,
+                self.handle_setup_command(&context, command),
+            )
+            .await
+            {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(_)) => {
+                    eprintln!("[setup] setup flow failed after claiming the interaction");
+                    command
+                        .edit_response(
+                            &context,
+                            EditInteractionResponse::new()
+                                .content(
+                                    "Setup could not finish. Check the bot's channel permissions and try again.",
+                                )
+                                .allowed_mentions(no_mentions()),
+                        )
+                        .await
+                        .map(|_| ())
+                        .map_err(|_| GatewayEventDispatchError)
+                }
+                Err(_) => {
+                    eprintln!("[setup] setup flow timed out after claiming the interaction");
+                    command
+                        .edit_response(
+                            &context,
+                            EditInteractionResponse::new()
+                                .content(
+                                    "Setup timed out while checking Discord or voice state. Try again after checking the bot's voice permissions.",
+                                )
+                                .allowed_mentions(no_mentions()),
+                        )
+                        .await
+                        .map(|_| ())
+                        .map_err(|_| GatewayEventDispatchError)
+                }
+            };
         }
         if self.options.randomizer_enabled || self.options.cast_enabled {
             match &interaction {
@@ -3145,7 +3822,10 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
         };
         if defer_ephemeral || defer_public {
             command
-                .edit_response(&context, EditInteractionResponse::new().content(content))
+                .edit_response(
+                    &context,
+                    EditInteractionResponse::new().embeds(vec![message_embed(content)]),
+                )
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
         } else {
@@ -3153,7 +3833,8 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 .create_response(
                     &context,
                     CreateInteractionResponse::Message(
-                        CreateInteractionResponseMessage::new().content(content),
+                        CreateInteractionResponseMessage::new()
+                            .embeds(vec![message_embed(content)]),
                     ),
                 )
                 .await
@@ -3208,6 +3889,10 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 .await;
             self.leave_if_alone(&context, &guild_id, &bot_channel_id)
                 .await;
+        } else if let Ok(mut speakers) = self.last_speakers.lock() {
+            // The bot left the call (manual leave, disconnect, or permission loss).  The next
+            // session starts fresh so xsaid behaves identically for Google and Piper.
+            speakers.remove(&guild_id);
         }
         Ok(())
     }
@@ -3576,5 +4261,65 @@ mod tests {
             .set_detection_on("guild", "user", true)
             .expect("enable");
         assert_eq!(sink.detected_language(&facts, "Olá!"), Some("por"));
+    }
+
+    #[test]
+    fn game_cards_use_the_same_components_v2_container_as_node() {
+        let body: Value =
+            serde_json::from_slice(&game_card_body("Round 1/5").expect("serialize game card"))
+                .expect("valid payload");
+        assert_eq!(body["flags"], 1_u64 << 15);
+        assert_eq!(body["components"][0]["type"], 17);
+        assert_eq!(body["components"][0]["components"][0]["type"], 10);
+        assert_eq!(
+            body["components"][0]["components"][0]["content"],
+            "Round 1/5"
+        );
+        assert_eq!(body["allowed_mentions"]["parse"], json!([]));
+    }
+
+    #[test]
+    fn game_engine_picker_routes_every_visible_choice() {
+        assert_eq!(
+            GameRuntime::game_engine("google"),
+            Some(SynthesisEngine::Default)
+        );
+        assert_eq!(
+            GameRuntime::game_engine("piper"),
+            Some(SynthesisEngine::Piper)
+        );
+        assert_eq!(
+            GameRuntime::game_engine("kokoro"),
+            Some(SynthesisEngine::Kokoro)
+        );
+        assert_eq!(GameRuntime::game_engine("gcloud"), None);
+    }
+
+    #[test]
+    fn only_node_scoreboard_games_receive_the_shared_final_card() {
+        for game in [
+            "guess-language",
+            "math",
+            "skip-count",
+            "spelling",
+            "spell-out",
+            "fast-speech",
+            "accent-swap",
+            "reflexes",
+            "vozen-says",
+            "headsOrTails",
+        ] {
+            assert!(game_uses_shared_standings(game), "{game}");
+        }
+        for game in [
+            "roulette",
+            "hangman",
+            "wordle",
+            "tictactoe",
+            "chess",
+            "word-chain",
+        ] {
+            assert!(!game_uses_shared_standings(game), "{game}");
+        }
     }
 }

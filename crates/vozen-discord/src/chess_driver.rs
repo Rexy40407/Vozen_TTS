@@ -12,6 +12,8 @@ pub enum ChessDriverAction {
         fen: String,
         white_id: Option<String>,
         black_id: Option<String>,
+        white_name: Option<String>,
+        black_name: Option<String>,
     },
     NotYourTurn {
         user_id: String,
@@ -30,18 +32,24 @@ pub enum ChessDriverAction {
         next: ChessColor,
         in_check: bool,
         fen: String,
+        white_name: Option<String>,
+        black_name: Option<String>,
     },
     Checkmate {
         winner_id: String,
         winner_name: String,
         text: String,
         fen: String,
+        white_name: Option<String>,
+        black_name: Option<String>,
     },
     Draw {
         text: String,
         fen: String,
         white_id: Option<String>,
         black_id: Option<String>,
+        white_name: Option<String>,
+        black_name: Option<String>,
     },
     Resigned {
         user_id: String,
@@ -162,6 +170,8 @@ impl ChessDriver {
             fen: self.game.board_fen(),
             white_id: self.game.white_id().map(str::to_owned),
             black_id: self.game.black_id().map(str::to_owned),
+            white_name: self.game.white_name().map(str::to_owned),
+            black_name: self.game.black_name().map(str::to_owned),
         }
     }
 
@@ -193,6 +203,8 @@ impl ChessDriver {
                     next,
                     in_check,
                     fen: self.game.board_fen(),
+                    white_name: self.game.white_name().map(str::to_owned),
+                    black_name: self.game.black_name().map(str::to_owned),
                 }
             }
             ChessEvent::Checkmate {
@@ -206,6 +218,8 @@ impl ChessDriver {
                     winner_name,
                     text,
                     fen: self.game.board_fen(),
+                    white_name: self.game.white_name().map(str::to_owned),
+                    black_name: self.game.black_name().map(str::to_owned),
                 }
             }
             ChessEvent::Draw { text } => {
@@ -215,6 +229,8 @@ impl ChessDriver {
                     fen: self.game.board_fen(),
                     white_id: self.game.white_id().map(str::to_owned),
                     black_id: self.game.black_id().map(str::to_owned),
+                    white_name: self.game.white_name().map(str::to_owned),
+                    black_name: self.game.black_name().map(str::to_owned),
                 }
             }
             ChessEvent::Resigned {
@@ -269,7 +285,7 @@ mod tests {
         let mut driver = ChessDriver::new();
         assert!(matches!(
             driver.start(1_000),
-            ChessDriverAction::Intro { fen, white_id: None, black_id: None }
+            ChessDriverAction::Intro { fen, white_id: None, black_id: None, .. }
                 if fen.starts_with("rnbqkbnr/")
         ));
         assert_eq!(driver.deadline_ms(), Some(301_000));
@@ -312,6 +328,8 @@ mod tests {
             fen: "fen".into(),
             white_id: Some("w".into()),
             black_id: Some("b".into()),
+            white_name: Some("White".into()),
+            black_name: Some("Black".into()),
         });
         assert!(matches!(
             actions.as_slice(),

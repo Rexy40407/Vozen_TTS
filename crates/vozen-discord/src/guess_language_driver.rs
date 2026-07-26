@@ -1,8 +1,10 @@
 //! Lifecycle adapter for Guess the Language.
 
+use std::collections::BTreeMap;
+
 use vozen_core::{GuessLanguageEvent, GuessLanguageGame, LanguagePrompt};
 
-use crate::{GameDriver, GameDriverAction, GameMessage};
+use crate::{GameAnnouncementAction, GameDriver, GameDriverAction, GameMessage};
 
 const ROUND_MS: i64 = 25_000;
 
@@ -54,11 +56,21 @@ impl GuessLanguageGameDriver {
 
 impl GameDriver for GuessLanguageGameDriver {
     fn on_start(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
-        self.inner
-            .start(now_ms)
-            .into_iter()
-            .flat_map(to_manager_actions)
-            .collect()
+        let rounds = self.inner.game.rounds();
+        let round_actions = self.inner.start(now_ms);
+        if rounds == 0 {
+            return round_actions
+                .into_iter()
+                .flat_map(to_manager_actions)
+                .collect();
+        }
+        let mut parameters = BTreeMap::new();
+        parameters.insert("rounds", rounds.to_string());
+        let mut actions = vec![GameDriverAction::Announcement(
+            GameAnnouncementAction::message("game.guessLanguage.intro", parameters),
+        )];
+        actions.extend(round_actions.into_iter().flat_map(to_manager_actions));
+        actions
     }
 
     fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {

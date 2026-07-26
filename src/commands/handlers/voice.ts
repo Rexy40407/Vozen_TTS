@@ -135,9 +135,9 @@ async function handleVoiceConfig(
         new StringSelectMenuBuilder()
           .setCustomId(`vcfg:engine:${i.id}`)
           .setPlaceholder(t('voice.config.pickEngine', locale))
-          // Same labels as every other surface (engineLabel); 💎 marks paid engines.
+          // Same labels as every other surface; 💎 marks the paid Kokoro engine.
           .addOptions(
-            (['google', 'piper', 'kokoro', 'gcloud'] as const).map((e) => ({
+            (['google', 'piper', 'kokoro'] as const).map((e) => ({
               label: isPremiumVoiceEngine(e)
                 ? `💎 ${engineLabel(e, locale, deps.config.ttsEngine)}`
                 : engineLabel(e, locale, deps.config.ttsEngine),
@@ -419,7 +419,7 @@ export async function handleVoice(i: ChatInputCommandInteraction, deps: BotDeps)
     // Clamp preserved: no-op for valid provided values (already in [0.5,2.0]); keeps
     // the old behavior for the omitted->defaultSpeed path.
     const clamped = Math.min(2.0, Math.max(0.5, speed));
-    // Per-user engine: new option (google/piper/kokoro/gcloud). If OMITTED, PRESERVES
+    // Per-user engine: google/piper/kokoro/gcloud. If OMITTED, PRESERVES
     // the user's current engine — otherwise changing only the voice would reset the engine to Google (read-first).
     const engineOpt = i.options.getString('engine') as
       'google' | 'piper' | 'kokoro' | 'gcloud' | null;
@@ -523,6 +523,7 @@ export async function handleVoice(i: ChatInputCommandInteraction, deps: BotDeps)
   } else if (sub === 'preview') {
     const SAMPLE = t('preview.sample', locale);
     const explicitModel = i.options.getString('model');
+    const explicitEngine = i.options.getString('engine') as UserEngine | null;
 
     // Validates the explicit model BEFORE checking the player.
     if (explicitModel !== null && !deps.availableModels.includes(explicitModel)) {
@@ -575,14 +576,24 @@ export async function handleVoice(i: ChatInputCommandInteraction, deps: BotDeps)
     // singleVoice: the preview is a DEMO of ONE specific voice; detection must never
     // override it nor split the sample phrase by language. The engine is the user's (the preview
     // must sound like what they will actually hear).
+    const previewEngine =
+      explicitEngine === 'kokoro'
+        ? { engine: 'kokoro' as const }
+        : resolveUserEngine(
+            deps.db,
+            i.guildId!,
+            i.user.id,
+            explicitEngine ?? stored?.engine,
+            Date.now(),
+          );
     const req: SynthRequest = {
       text: SAMPLE,
       model,
       speed,
       singleVoice: true,
-      // The preview must sound like what the user will hear; the resolver applies the paid-engine
-      // gate and the Google HD budget — engine + gcloudBudget.
-      ...resolveUserEngine(deps.db, i.guildId!, i.user.id, stored?.engine, Date.now()),
+      // Preview is a free sample: an explicit Kokoro choice is allowed without Premium. Normal
+      // saved-message playback remains gated by resolveUserEngine.
+      ...previewEngine,
     };
     // say() returns false when the queue is at the cap: in that case do NOT lie "now
     // playing" — we reuse the same tts.busy key as /tts (consistency).

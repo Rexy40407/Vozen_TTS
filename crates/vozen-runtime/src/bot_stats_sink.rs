@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeMap, time::Instant};
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -104,7 +105,7 @@ impl GatewayEventSink for BotStatsGatewaySink {
                 &context,
                 CreateInteractionResponse::Message(
                     CreateInteractionResponseMessage::new()
-                        .content(self.response(&command)?)
+                        .embeds(vec![message_embed(self.response(&command)?)])
                         .ephemeral(true),
                 ),
             )

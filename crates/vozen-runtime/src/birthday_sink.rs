@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -120,7 +121,7 @@ impl GatewayEventSink for BirthdayGatewaySink {
             return Ok(());
         };
         let response = CreateInteractionResponseMessage::new()
-            .content(self.response(&command, parsed)?)
+            .embeds(vec![message_embed(self.response(&command, parsed)?)])
             .ephemeral(true);
         command
             .create_response(&context, CreateInteractionResponse::Message(response))

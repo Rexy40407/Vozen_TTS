@@ -29,6 +29,7 @@ use vozen_discord::{
 use vozen_store::{SqliteStore, UserEngine, VoiceEffect};
 
 use crate::system_now_ms;
+use crate::ui::message_embed;
 
 const BROWSE_PAGE_SIZE: usize = 8;
 const BROWSE_TTL_SECONDS: i64 = 120;
@@ -288,10 +289,10 @@ impl VoicePreferenceGatewaySink {
             ));
         }
 
-        let engines = ["google", "piper", "kokoro", "gcloud"]
+        let engines = ["google", "piper", "kokoro"]
             .into_iter()
             .map(|engine| {
-                let label = if matches!(engine, "kokoro" | "gcloud") {
+                let label = if engine == "kokoro" {
                     format!("💎 {}", config_engine_label(engine))
                 } else {
                     config_engine_label(engine).to_owned()
@@ -419,7 +420,12 @@ impl VoicePreferenceGatewaySink {
             .unwrap_or(self.default_speed);
         let engine = current_voice
             .as_ref()
-            .map(|voice| engine_label(voice.engine))
+            // Google HD is no longer offered. Treat profiles created before this
+            // removal as the free Google gTTS choice instead of rendering a dead option.
+            .map(|voice| match voice.engine {
+                UserEngine::Gcloud => "google",
+                engine => engine_token(engine),
+            })
             .unwrap_or("google")
             .to_owned();
         let session_id = command.id.get().to_string();
@@ -620,7 +626,7 @@ impl VoicePreferenceGatewaySink {
                     true
                 }
             }
-            "engine" if matches!(selected.as_str(), "google" | "piper" | "kokoro" | "gcloud") => {
+            "engine" if matches!(selected.as_str(), "google" | "piper" | "kokoro") => {
                 session.engine = selected;
                 true
             }
@@ -1107,10 +1113,21 @@ fn format_voice_list(
 
 fn engine_label(engine: UserEngine) -> &'static str {
     match engine {
+        // Keep the confirmation text user-facing. The stored enum value is an
+        // implementation token, not a label Discord users should see.
+        UserEngine::Google => "Google (gTTS)",
+        UserEngine::Piper => "Piper",
+        UserEngine::Kokoro => "Kokoro",
+        UserEngine::Gcloud => "Google HD",
+    }
+}
+
+fn engine_token(engine: UserEngine) -> &'static str {
+    match engine {
         UserEngine::Google => "google",
         UserEngine::Piper => "piper",
         UserEngine::Kokoro => "kokoro",
-        UserEngine::Gcloud => "gcloud",
+        UserEngine::Gcloud => "google",
     }
 }
 
@@ -1119,7 +1136,7 @@ fn config_engine_label(engine: &str) -> &'static str {
         "piper" => "Piper",
         "kokoro" => "Kokoro",
         "gcloud" => "Google HD",
-        _ => "Google",
+        _ => "Google (gTTS)",
     }
 }
 
@@ -1285,7 +1302,7 @@ impl GatewayEventSink for VoicePreferenceGatewaySink {
             .edit_response(
                 &context,
                 EditInteractionResponse::new()
-                    .content(content)
+                    .embeds(vec![message_embed(content)])
                     .allowed_mentions(
                         CreateAllowedMentions::new()
                             .all_users(false)
@@ -1476,9 +1493,9 @@ mod tests {
 
     #[test]
     fn preserves_the_node_engine_tokens_in_a_voice_set_response() {
-        assert_eq!(engine_label(UserEngine::Google), "google");
-        assert_eq!(engine_label(UserEngine::Piper), "piper");
-        assert_eq!(engine_label(UserEngine::Kokoro), "kokoro");
-        assert_eq!(engine_label(UserEngine::Gcloud), "gcloud");
+        assert_eq!(engine_label(UserEngine::Google), "Google (gTTS)");
+        assert_eq!(engine_label(UserEngine::Piper), "Piper");
+        assert_eq!(engine_label(UserEngine::Kokoro), "Kokoro");
+        assert_eq!(engine_label(UserEngine::Gcloud), "Google HD");
     }
 }

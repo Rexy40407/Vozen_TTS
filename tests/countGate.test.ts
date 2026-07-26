@@ -9,6 +9,10 @@ import {
 const G = 'g1';
 const U = 'u1';
 
+it('uses a one-second cooldown for countable messages', () => {
+  expect(COUNT_COOLDOWN_MS).toBe(1000);
+});
+
 describe('CountGate — anti-spam gate for the /top-speakers COUNT (not for reading)', () => {
   it('the FIRST message of a (guild,user) always counts', () => {
     const gate = new CountGate();
@@ -34,11 +38,11 @@ describe('CountGate — anti-spam gate for the /top-speakers COUNT (not for read
   it('CAP: at most COUNT_MAX_PER_MIN counted within a single rolling minute', () => {
     const gate = new CountGate();
     let counted = 0;
-    // 1s apart, unique content -> only the 5s cooldown + the per-minute cap gate them.
+    // 1s apart, unique content -> the 1s cooldown allows each, then the per-minute cap gates them.
     for (let i = 0; i < 60; i++) {
       if (gate.shouldCount(G, U, `x-${i}`, i * 1000)) counted++;
     }
-    // Cooldown lets ~1 per 5s through; the cap clamps the first minute to exactly the max.
+    // Cooldown lets ~1 per second through; the cap clamps the first minute to exactly the max.
     expect(counted).toBe(COUNT_MAX_PER_MIN);
   });
 

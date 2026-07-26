@@ -1,8 +1,10 @@
 //! Generic game-manager adapter for Heads or Tails.
 
+use std::collections::BTreeMap;
+
 use vozen_core::{CoinSide, GameWinner, GuessResult, HeadsOrTailsGame};
 
-use crate::{GameDriver, GameDriverAction, GameMessage};
+use crate::{GameAnnouncementAction, GameDriver, GameDriverAction, GameMessage};
 
 const GUESS_WINDOW_MS: i64 = 8_000;
 const NEXT_ROUND_DELAY_MS: i64 = 2_500;
@@ -63,7 +65,13 @@ impl HeadsOrTailsGameDriver {
 
 impl GameDriver for HeadsOrTailsGameDriver {
     fn on_start(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
-        to_manager_actions(self.inner.start(now_ms))
+        let mut parameters = BTreeMap::new();
+        parameters.insert("rounds", HeadsOrTailsGame::rounds().to_string());
+        let mut intro = GameAnnouncementAction::message("game.headsOrTails.intro", parameters);
+        intro.speech_key = Some("game.headsOrTails.introVoice");
+        let mut actions = vec![GameDriverAction::Announcement(intro)];
+        actions.extend(to_manager_actions(self.inner.start(now_ms)));
+        actions
     }
 
     fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {
@@ -269,9 +277,10 @@ mod tests {
         assert_eq!(status, StartGameResult::Started);
         assert!(matches!(
             initial.as_slice(),
-            [GameDriverAction::HeadsOrTails(
-                HeadsOrTailsDriverAction::RoundOpened { .. }
-            )]
+            [
+                GameDriverAction::Announcement(_),
+                GameDriverAction::HeadsOrTails(HeadsOrTailsDriverAction::RoundOpened { .. })
+            ]
         ));
         let _ = manager.handle_message_at(
             &GameMessage {

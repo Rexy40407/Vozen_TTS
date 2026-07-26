@@ -6,6 +6,9 @@
 kokoro-onnx==0.5.0
 soundfile==0.14.0
 onnxruntime==1.27.0
-numpy==2.5.1
+# NumPy 2.5.x is not published for Python 3.11 (the Debian Bookworm
+# runtime); 2.3.5 is the newest compatible release and works with
+# onnxruntime 1.27 on CPU.
+numpy==2.3.5
 phonemizer-fork==3.3.2
 espeakng-loader==0.2.4

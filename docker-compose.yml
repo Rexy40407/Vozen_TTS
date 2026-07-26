@@ -29,13 +29,14 @@ services:
       PIPER_PATH: /opt/piper/piper
 
     # Segredos e tunables do utilizador. Preenche o .env a partir do
-    # .env.example. Obrigatorias: DISCORD_TOKEN, CLIENT_ID.
+    # .env.example. RUST_ENV_FILE pode apontar para um ambiente staging isolado.
+    # Obrigatorias: DISCORD_TOKEN, CLIENT_ID.
     # Opcionais: DEFAULT_VOICE, DEFAULT_SPEED, INACTIVITY_MS, QUEUE_CAP,
     # MAX_CHARS, RATE_PER_MIN, LOG_LEVEL, TTS_ENGINE, OPENAI_API_KEY.
     # NOTA: NAO definas DB_PATH / MODELS_DIR / PIPER_PATH no .env — vem de cima
     # com os caminhos do container.
     env_file:
-      - .env
+      - ${RUST_ENV_FILE:-.env}
 
     # Health endpoint (OPCIONAL). O bot so abre o servidor de health se definires
     # HEALTH_PORT no .env (ex.: HEALTH_PORT=8080); sem essa variavel nao expoe

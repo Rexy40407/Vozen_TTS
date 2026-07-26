@@ -62,6 +62,7 @@ jobs:
       - run: rustup toolchain install 1.97.1 --profile minimal
       - run: rustup component add clippy rustfmt --toolchain 1.97.1
       - run: npm run check:rust-contracts
+      - run: npm run check:rust-canaries
       - run: npm run check:rust
       # The portable Rust build deliberately omits Songbird's native Opus driver. Verify the
       # production voice feature separately on Linux, where CMake and the compiler toolchain are
@@ -70,3 +71,16 @@ jobs:
       - run: npm run check:rust-voice
       # The VPS image is optimized; keep the release + Songbird path green in CI as well.
       - run: cargo test --release -p vozen-runtime --features voice-driver
+
+  # Build the same Linux image used by the explicit Rust staging override. This is intentionally
+  # separate from the runtime tests: a Windows/MSVC build can pass while the Debian/Opus image
+  # still has a broken Docker context, native dependency or healthcheck asset.
+  rust-image:
+    runs-on: ubuntu-latest
+    needs: rust
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: docker build --file Dockerfile.rust --tag vozen-rust:ci .
+      # The default probe is intentionally a no-op without HEALTH_PORT, but running it still
+      # proves the script was copied to the image and is executable by the non-root runtime user.
+      - run: docker run --rm --entrypoint /usr/local/bin/healthcheck-rust.sh vozen-rust:ci

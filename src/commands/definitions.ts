@@ -105,9 +105,20 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
     .addBooleanOption((o) =>
       o.setName('laughter').setDescription('Add laughter at the end?').setRequired(true),
     )
+    .addStringOption((o) =>
+      o
+        .setName('engine')
+        .setDescription('Voice engine (optional)')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Default (Google TTS)', value: 'google' },
+          { name: 'Piper', value: 'piper' },
+          { name: '💎 Kokoro (Premium neural)', value: 'kokoro' },
+        ),
+    )
     .toJSON(),
   // /rizz — sends a pick-up line in the chosen LANGUAGE (same `language` autocomplete as
-  // /joke). `sound` (required) plays the "rizz" sound effect at the end. Needs a call.
+  // /joke). `sound` (optional, default false) plays the "rizz" sound effect at the end.
   new SlashCommandBuilder()
     .setName('rizz')
     .setDescription('Vozen drops a pickup line in the language you pick (💎 Premium)')
@@ -118,8 +129,22 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
         .setRequired(true)
         .setAutocomplete(true),
     )
+    .addStringOption((o) =>
+      o
+        .setName('engine')
+        .setDescription('Voice engine (required)')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Default (Google TTS)', value: 'google' },
+          { name: 'Piper', value: 'piper' },
+          { name: '💎 Kokoro (Premium neural)', value: 'kokoro' },
+        ),
+    )
     .addBooleanOption((o) =>
-      o.setName('sound').setDescription('Add the rizz sound effect at the end?').setRequired(true),
+      o
+        .setName('sound')
+        .setDescription('Add the rizz sound effect at the end? (optional)')
+        .setRequired(false),
     )
     .toJSON(),
   // /sound — plays a short soundboard clip in the call. `name` (OPTIONAL) uses choices
@@ -147,8 +172,47 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
         .setRequired(true)
         .setMaxLength(200),
     )
+    .addStringOption((o) =>
+      o
+        .setName('language')
+        .setDescription('Language of the answer')
+        .setRequired(true)
+        .setAutocomplete(true),
+    )
+    .addStringOption((o) =>
+      o
+        .setName('engine')
+        .setDescription('Voice engine (required)')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Default (Google TTS)', value: 'google' },
+          { name: 'Piper', value: 'piper' },
+          { name: '💎 Kokoro (Premium neural)', value: 'kokoro' },
+        ),
+    )
     .toJSON(),
-  new SlashCommandBuilder().setName('fortune').setDescription('Vozen reads you a fortune').toJSON(),
+  new SlashCommandBuilder()
+    .setName('fortune')
+    .setDescription('Vozen reads you a fortune')
+    .addStringOption((o) =>
+      o
+        .setName('language')
+        .setDescription('Language of the fortune')
+        .setRequired(true)
+        .setAutocomplete(true),
+    )
+    .addStringOption((o) =>
+      o
+        .setName('engine')
+        .setDescription('Voice engine (required)')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Default (Google TTS)', value: 'google' },
+          { name: 'Piper', value: 'piper' },
+          { name: '💎 Kokoro (Premium neural)', value: 'kokoro' },
+        ),
+    )
+    .toJSON(),
   // /cast — randomly assigns a theme entry to every human in Vozen's current voice call.
   // The interactive panel keeps the command beginner-friendly: the language starts in English.
   new SlashCommandBuilder()
@@ -158,10 +222,46 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
   new SlashCommandBuilder()
     .setName('fact')
     .setDescription('Vozen tells you a random fun fact')
+    .addStringOption((o) =>
+      o
+        .setName('language')
+        .setDescription('Language of the fact')
+        .setRequired(true)
+        .setAutocomplete(true),
+    )
+    .addStringOption((o) =>
+      o
+        .setName('engine')
+        .setDescription('Voice engine (required)')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Default (Google TTS)', value: 'google' },
+          { name: 'Piper', value: 'piper' },
+          { name: '💎 Kokoro (Premium neural)', value: 'kokoro' },
+        ),
+    )
     .toJSON(),
   new SlashCommandBuilder()
     .setName('wyr')
     .setDescription('Vozen asks a "would you rather" question')
+    .addStringOption((o) =>
+      o
+        .setName('language')
+        .setDescription('Language of the question')
+        .setRequired(true)
+        .setAutocomplete(true),
+    )
+    .addStringOption((o) =>
+      o
+        .setName('engine')
+        .setDescription('Voice engine (required)')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Default (Google TTS)', value: 'google' },
+          { name: 'Piper', value: 'piper' },
+          { name: '💎 Kokoro (Premium neural)', value: 'kokoro' },
+        ),
+    )
     .toJSON(),
   // /birthday — records your birthday; Vozen says "Happy Birthday" when you join the call
   // on that day. No year (only the day matters). set / clear / show.
@@ -396,13 +496,12 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
         .addStringOption((o) =>
           o
             .setName('engine')
-            .setDescription('Voice engine: default, Piper, Kokoro or Google HD (paid)')
+            .setDescription('Voice engine: Google TTS, Piper or Kokoro (Premium)')
             .setRequired(false)
             .addChoices(
-              { name: 'Default (local Piper)', value: 'google' },
+              { name: 'Default (Google TTS)', value: 'google' },
               { name: 'Piper', value: 'piper' },
               { name: '💎 Kokoro (Premium neural)', value: 'kokoro' },
-              { name: '💎 Google HD (Premium)', value: 'gcloud' },
             ),
         ),
     )
@@ -476,13 +575,24 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
     .addSubcommand((s) =>
       s
         .setName('preview')
-        .setDescription('Play a sample sentence in your current voice (or a specific model)')
+        .setDescription('Preview a language/model with a selected voice engine')
         .addStringOption((o) =>
           o
             .setName('model')
-            .setDescription('Piper model (optional)')
+            .setDescription('Language and voice model (optional)')
             .setRequired(false)
             .setAutocomplete(true),
+        )
+        .addStringOption((o) =>
+          o
+            .setName('engine')
+            .setDescription('Voice engine (optional)')
+            .setRequired(false)
+            .addChoices(
+              { name: 'Default (Google TTS)', value: 'google' },
+              { name: 'Piper', value: 'piper' },
+              { name: '💎 Kokoro (Premium neural)', value: 'kokoro' },
+            ),
         ),
     )
     .addSubcommand((s) =>
@@ -606,14 +716,13 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
         )
         .addBooleanOption((o) => o.setName('active').setDescription('on/off').setRequired(true)),
     )
-    .addSubcommand((s) =>
+    /* removed always-on feature
       s
-        .setName('always-on')
         .setDescription(
           '24/7 in-call (💎 Premium): Vozen stays in the voice channel even when empty',
         )
         .addBooleanOption((o) => o.setName('active').setDescription('on/off').setRequired(true)),
-    )
+    ) */
     .addSubcommand((s) =>
       s
         .setName('read-bots')
@@ -771,22 +880,7 @@ const commandDefsRaw: RESTPostAPIApplicationCommandsJSONBody[] = [
     .addSubcommand((s) =>
       s
         .setName('play')
-        .setDescription('Start a game')
-        .addStringOption((o) =>
-          o
-            .setName('game')
-            // OPTIONAL on purpose (beginner-friendly, plan v4): /game play "empty"
-            // shows a select menu with the games instead of Discord requiring the option.
-            .setDescription('Which game to play (leave empty to pick from a menu)')
-            .setAutocomplete(true),
-        )
-        .addStringOption((o) =>
-          o
-            .setName('language')
-            .setDescription('Language for Word Chain (ignored by other games)')
-            .setRequired(false)
-            .setAutocomplete(true),
-        ),
+        .setDescription('Start a game'),
     )
     .addSubcommand((s) => s.setName('stop').setDescription('Stop the current game'))
     .addSubcommand((s) => s.setName('list').setDescription('List the available games'))

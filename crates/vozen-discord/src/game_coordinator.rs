@@ -111,10 +111,17 @@ impl GameCoordinator {
 
         let definition = game_definition(game_id)
             .ok_or_else(|| GameCoordinatorError::MissingDefinition(game_id.to_owned()))?;
+        // `language` is the public language selected in the game picker. Keep the Discord
+        // interaction locale only as the fallback so every subsequent game message and voice
+        // prompt is rendered in the language the player chose.
+        let game_locale = request
+            .language
+            .clone()
+            .unwrap_or_else(|| request.locale.clone());
         let driver = self.factory.create_for_locale(
             game_id,
             request.language.as_deref(),
-            &request.locale,
+            &game_locale,
             request.seed,
         )?;
         let parent_channel_id = (request.game_channel_id != request.parent_channel_id)
@@ -124,7 +131,7 @@ impl GameCoordinator {
             channel_id: request.game_channel_id.clone(),
             game_id: game_id.to_owned(),
             starter_id: request.starter_id,
-            locale: request.locale,
+            locale: game_locale,
             needs_voice: definition.needs_voice,
             parent_channel_id: parent_channel_id.clone(),
             scores: Vec::new(),

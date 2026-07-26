@@ -272,7 +272,8 @@ pub use file_export_service::{
     MAX_TTS_FILE_CHARS, TtsFileExportInvocation, TtsFileExportOutcome, TtsFileExportService,
 };
 pub use game_action::{
-    GameSpeech, GameStanding, RenderedGameAction, render_game_action, render_game_finish,
+    GameSpeech, GameStanding, RenderedGameAction, RenderedGameSegment, RenderedTextPart,
+    render_game_action, render_game_finish,
 };
 pub use game_catalog::{GAME_CATALOG, GameDefinition, game_by_id};
 pub use game_command::{
@@ -285,7 +286,10 @@ pub use game_coordinator::{
 };
 pub use game_driver_factory::{GameDriverFactory, GameFactoryError};
 pub use game_list_command::{GameListCommand, GameListCommandError, parse_game_list_command};
-pub use game_manager::{GameDriver, GameDriverAction, GameManager, GameManagerEvent, GameMessage};
+pub use game_manager::{
+    GameAnnouncementAction, GameDriver, GameDriverAction, GameManager, GameManagerEvent,
+    GameMessage,
+};
 pub use game_play_admission::{
     GamePlayAdmission, GamePlayAdmissionFacts, admit_game_play, game_definition,
 };

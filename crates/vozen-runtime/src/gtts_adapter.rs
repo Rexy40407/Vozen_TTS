@@ -53,8 +53,11 @@ impl CommandSpeechSynthesizer for GttsCommandSynthesizer {
         let result = self.engine.synth(request).await;
         self.metrics
             .record_synth_latency_ms(started.elapsed().as_millis().min(u64::MAX as u128) as u64);
-        if result.is_err() {
+        if let Err(error) = &result {
             self.metrics.record_synth_error();
+            // Keep provider diagnostics in the container log while returning the same
+            // content-free error contract as the other adapters.
+            eprintln!("[tts:gtts] synthesis failed: {error}");
         }
         result.map_err(|_| CommandSynthesisError)
     }
@@ -66,6 +69,7 @@ impl CommandSpeechSynthesizer for GttsWithPiperFallback {
         match self.primary.synthesize(request).await {
             Ok(path) => Ok(path),
             Err(_) => {
+                eprintln!("[tts:gtts] using Piper fallback");
                 let mut fallback_request = request.clone();
                 fallback_request.engine = SynthesisEngine::Piper;
                 self.fallback.synthesize(&fallback_request).await

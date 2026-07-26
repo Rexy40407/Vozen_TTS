@@ -2,11 +2,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use serenity::{
-    builder::{CreateAllowedMentions, EditInteractionResponse},
-    client::Context,
-    model::application::Interaction,
-};
+use serde_json::{Value, json};
+use serenity::{client::Context, model::application::Interaction};
 use vozen_discord::{
     AttachmentTranscriptionLimits, DiscordAudioAttachment, GatewayEventDispatchError,
     GatewayEventSink, parse_transcribe_message_command,
@@ -29,6 +26,18 @@ pub struct TranscriptionGatewaySink {
 }
 
 impl TranscriptionGatewaySink {
+    fn card_edit_payload(content: &str) -> Value {
+        json!({
+            "flags": 32768,
+            "components": [{
+                "type": 17,
+                "accent_color": 0x5865F2u32,
+                "components": [{"type": 10, "content": content}]
+            }],
+            "allowed_mentions": {"parse": []}
+        })
+    }
+
     pub fn new(store: Arc<Mutex<SqliteStore>>, transcriber: AttachmentTranscriber) -> Self {
         Self {
             store,
@@ -144,11 +153,12 @@ impl GatewayEventSink for TranscriptionGatewaySink {
                 .is_some_and(|kind| kind.to_ascii_lowercase().starts_with("audio/"))
         });
         let Some(attachment) = attachment else {
-            command
-                .edit_response(
-                    &context,
-                    EditInteractionResponse::new()
-                        .content("This message has no supported audio attachment."),
+            context
+                .http
+                .edit_original_interaction_response(
+                    &command.token,
+                    &Self::card_edit_payload("This message has no supported audio attachment."),
+                    Vec::new(),
                 )
                 .await
                 .map_err(|_| GatewayEventDispatchError)?;
@@ -170,17 +180,12 @@ impl GatewayEventSink for TranscriptionGatewaySink {
             )
             .await;
         let (content, _success) = Self::content(result);
-        command
-            .edit_response(
-                &context,
-                EditInteractionResponse::new()
-                    .content(content)
-                    .allowed_mentions(
-                        CreateAllowedMentions::new()
-                            .all_users(false)
-                            .all_roles(false)
-                            .everyone(false),
-                    ),
+        context
+            .http
+            .edit_original_interaction_response(
+                &command.token,
+                &Self::card_edit_payload(&content),
+                Vec::new(),
             )
             .await
             .map_err(|_| GatewayEventDispatchError)?;

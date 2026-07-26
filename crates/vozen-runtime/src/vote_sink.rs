@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{
         CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage,
@@ -136,7 +137,8 @@ impl GatewayEventSink for VoteGatewaySink {
             return Ok(());
         }
         let (content, vote) = self.response(&command)?;
-        let mut response = CreateInteractionResponseMessage::new().content(content);
+        let mut response =
+            CreateInteractionResponseMessage::new().embeds(vec![message_embed(content)]);
         if let Some((url, button_label)) = vote {
             response = response.components(vec![CreateActionRow::Buttons(vec![
                 CreateButton::new_link(url).label(button_label),

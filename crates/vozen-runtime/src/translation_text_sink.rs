@@ -4,6 +4,7 @@
 //! only the command leaves represented by the typed parsers and never claims them unless the
 //! matching runtime flag is enabled.
 
+use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -46,6 +47,18 @@ pub struct TranslationTextGatewaySink {
 }
 
 impl TranslationTextGatewaySink {
+    fn card_edit_payload(content: &str) -> Value {
+        json!({
+            "flags": 32768,
+            "components": [{
+                "type": 17,
+                "accent_color": 0x5865F2u32,
+                "components": [{"type": 10, "content": content}]
+            }],
+            "allowed_mentions": {"parse": []}
+        })
+    }
+
     pub fn new(
         store: Arc<Mutex<SqliteStore>>,
         provider: RuntimeTranslationProvider,
@@ -399,12 +412,12 @@ impl TranslationTextGatewaySink {
                 },
             }
         };
-        command
-            .edit_response(
-                context,
-                EditInteractionResponse::new()
-                    .content(content)
-                    .allowed_mentions(no_mentions()),
+        context
+            .http
+            .edit_original_interaction_response(
+                &command.token,
+                &Self::card_edit_payload(&content),
+                Vec::new(),
             )
             .await
             .map_err(|_| GatewayEventDispatchError)?;

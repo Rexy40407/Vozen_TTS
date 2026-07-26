@@ -89,13 +89,10 @@ impl ReflexesGame {
                 let round = self.round;
                 if round >= ROUNDS {
                     self.phase = None;
-                    return ReflexesEvent::Finished {
-                        scores: self.scores.clone(),
-                    };
+                } else {
+                    let _ = self.next_round(now_ms);
                 }
-                let event = ReflexesEvent::TooSlow { round };
-                let _ = self.next_round(now_ms);
-                event
+                ReflexesEvent::TooSlow { round }
             }
             None => ReflexesEvent::Ignored,
         }
@@ -256,9 +253,10 @@ mod tests {
             assert!(matches!(ready, ReflexesEvent::Opened { .. }));
             now = open_at + OPEN_WINDOW_MS + 1;
             let result = game.advance(now);
-            if round < ROUNDS {
-                assert!(matches!(result, ReflexesEvent::TooSlow { .. }));
-            }
+            assert!(matches!(
+                result,
+                ReflexesEvent::TooSlow { round: actual } if actual == round
+            ));
         }
         assert!(game.is_finished());
         assert!(game.scores().is_empty());

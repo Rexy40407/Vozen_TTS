@@ -9,6 +9,32 @@ use std::collections::BTreeMap;
 
 use crate::{GameSession, GameSessionStore, GameStopDenied, StartGameResult};
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct GameAnnouncementAction {
+    pub key: &'static str,
+    pub parameters: BTreeMap<&'static str, String>,
+    pub speech_key: Option<&'static str>,
+    pub speech_text: Option<String>,
+    pub speech_parameters: BTreeMap<&'static str, String>,
+    pub model: Option<String>,
+    pub speed: Option<f64>,
+}
+
+impl GameAnnouncementAction {
+    #[must_use]
+    pub fn message(key: &'static str, parameters: BTreeMap<&'static str, String>) -> Self {
+        Self {
+            key,
+            parameters,
+            speech_key: None,
+            speech_text: None,
+            speech_parameters: BTreeMap::new(),
+            model: None,
+            speed: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GameMessage {
     pub guild_id: String,
@@ -24,6 +50,7 @@ pub enum GameDriverAction {
     Ignored,
     Award { user_id: String, points: i64 },
     Finished,
+    Announcement(GameAnnouncementAction),
     TextQuiz(crate::text_quiz_driver::TextQuizDriverAction),
     Hangman(crate::hangman_driver::HangmanDriverAction),
     Wordle(crate::wordle_driver::WordleDriverAction),

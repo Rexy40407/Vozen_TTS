@@ -64,7 +64,7 @@ impl<T: VoiceSessionTransport> PlannedRejoinService<T> {
     pub async fn recover(
         &self,
         scope: Option<&PlannedRejoinScope>,
-        now_ms: i64,
+        _now_ms: i64,
         channel_state: impl Fn(&str, &str) -> RejoinChannelState,
     ) -> Result<Vec<PlannedRejoinOutcome>, PlannedRejoinError> {
         let plan = {
@@ -75,20 +75,7 @@ impl<T: VoiceSessionTransport> PlannedRejoinService<T> {
             let presences = store
                 .voice_presences()
                 .map_err(|_| PlannedRejoinError::StoreUnavailable)?;
-            plan_rejoin(
-                presences,
-                scope,
-                |guild_id| {
-                    // `stay_in_call` is merely an administrator preference. It is not an
-                    // entitlement and must never keep a call alive after Premium expired.
-                    store
-                        .guild_config(guild_id)
-                        .map(|config| config.stay_in_call)
-                        .unwrap_or(false)
-                        && store.is_guild_premium(guild_id, now_ms).unwrap_or(false)
-                },
-                channel_state,
-            )
+            plan_rejoin(presences, scope, |_guild_id| false, channel_state)
         };
 
         let mut outcomes = Vec::with_capacity(plan.rejoin.len() + plan.forget.len());
@@ -209,7 +196,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stale_normal_presence_is_forgotten_while_premium_presence_can_recover() {
+    async fn stale_presence_is_forgotten_without_always_on() {
         let (service, store, _) = service(FakeTransport::default());
         {
             let store_guard = store.lock().expect("store");
@@ -243,7 +230,7 @@ mod tests {
                 PlannedRejoinOutcome::Forgotten {
                     guild_id: "normal".into()
                 },
-                PlannedRejoinOutcome::Joined {
+                PlannedRejoinOutcome::Forgotten {
                     guild_id: "premium".into()
                 },
             ]
@@ -254,11 +241,7 @@ mod tests {
                 .expect("store")
                 .voice_presences()
                 .expect("presences"),
-            vec![VoicePresence {
-                guild_id: "premium".into(),
-                channel_id: "voice-b".into(),
-                updated_at: 1,
-            }]
+            Vec::<VoicePresence>::new()
         );
     }
 

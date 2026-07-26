@@ -101,6 +101,16 @@ impl ChessGame {
     }
 
     #[must_use]
+    pub fn white_name(&self) -> Option<&str> {
+        self.white_name.as_deref()
+    }
+
+    #[must_use]
+    pub fn black_name(&self) -> Option<&str> {
+        self.black_name.as_deref()
+    }
+
+    #[must_use]
     pub fn turn(&self) -> ChessColor {
         chess_color(self.game.side_to_move())
     }

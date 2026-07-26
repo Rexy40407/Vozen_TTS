@@ -8,11 +8,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use serde_json::{Value, json};
 use serenity::{
-    builder::{
-        CreateActionRow, CreateInputText, CreateInteractionResponse,
-        CreateInteractionResponseMessage, CreateModal,
-    },
+    builder::{CreateActionRow, CreateInputText, CreateInteractionResponse, CreateModal},
     client::Context,
     model::{
         Permissions,
@@ -89,6 +87,31 @@ impl PronunciationGatewaySink {
         self.localizer
             .render_key(key, locale, guild_locale, parameters)
             .ok_or(GatewayEventDispatchError)
+    }
+
+    /// Matches the TypeScript `replyCard` presentation used by the real Vozen bot. Serenity 0.12
+    /// does not expose Components V2 containers yet, so keep the small envelope as raw JSON just
+    /// like the cast sink does. The response remains ephemeral and mention-safe.
+    fn card_response_payload(content: &str) -> Value {
+        let accent_color = if content.trim_start().starts_with('❌') {
+            0xED4245u32
+        } else if content.trim_start().starts_with('⚠') {
+            0xFEE75Cu32
+        } else {
+            0x5865F2u32
+        };
+        json!({
+            "type": 4,
+            "data": {
+                "flags": 32832,
+                "components": [{
+                    "type": 17,
+                    "accent_color": accent_color,
+                    "components": [{"type": 10, "content": content}]
+                }],
+                "allowed_mentions": {"parse": []}
+            }
+        })
     }
 
     fn add_modal(
@@ -228,17 +251,19 @@ impl PronunciationGatewaySink {
             );
             self.response_localized(&session.locale, session.guild_locale.as_deref(), outcome)?
         };
-        modal
-            .create_response(
-                context,
-                CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new()
-                        .content(content)
-                        .ephemeral(true),
-                ),
+        context
+            .http
+            .create_interaction_response(
+                modal.id,
+                &modal.token,
+                &Self::card_response_payload(&content),
+                Vec::new(),
             )
             .await
-            .map_err(|_| GatewayEventDispatchError)?;
+            .map_err(|error| {
+                eprintln!("[pronunciation] modal card response failed: {error}");
+                GatewayEventDispatchError
+            })?;
         Ok(true)
     }
 
@@ -413,24 +438,30 @@ impl GatewayEventSink for PronunciationGatewaySink {
             parsed.clone(),
         );
         if let PronunciationOutcome::OpenAddForm { scope } = outcome {
+            let modal = self.add_modal(&command, scope)?;
             command
-                .create_response(&context, self.add_modal(&command, scope)?)
+                .create_response(&context, modal)
                 .await
-                .map_err(|_| GatewayEventDispatchError)?;
+                .map_err(|error| {
+                    eprintln!("[pronunciation] add modal response failed: {error}");
+                    GatewayEventDispatchError
+                })?;
             return Ok(());
         }
         let content = self.response(&command, outcome)?;
-        command
-            .create_response(
-                &context,
-                CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new()
-                        .content(content)
-                        .ephemeral(true),
-                ),
+        context
+            .http
+            .create_interaction_response(
+                command.id,
+                &command.token,
+                &Self::card_response_payload(&content),
+                Vec::new(),
             )
             .await
-            .map_err(|_| GatewayEventDispatchError)?;
+            .map_err(|error| {
+                eprintln!("[pronunciation] command card response failed: {error}");
+                GatewayEventDispatchError
+            })?;
         Ok(())
     }
 

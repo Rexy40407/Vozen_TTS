@@ -25,6 +25,7 @@ serde_json.workspace = true
 sha2.workspace = true
 serenity.workspace = true
 songbird.workspace = true
+symphonia.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true

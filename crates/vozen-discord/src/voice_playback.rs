@@ -65,6 +65,30 @@ impl EventHandler for SpokenTrackCounter {
     }
 }
 
+#[cfg(feature = "voice-driver")]
+struct PlaybackLifecycleLogger(&'static str);
+
+#[cfg(feature = "voice-driver")]
+#[async_trait]
+impl EventHandler for PlaybackLifecycleLogger {
+    async fn act(&self, context: &EventContext<'_>) -> Option<Event> {
+        if let EventContext::Track(tracks) = context
+            && let Some((state, _)) = tracks.first()
+        {
+            eprintln!(
+                "[voice:playback] track {}: playing={:?} ready={:?} position_ms={}",
+                self.0,
+                state.playing,
+                state.ready,
+                state.position.as_millis()
+            );
+        } else {
+            eprintln!("[voice:playback] track {}", self.0);
+        }
+        Some(Event::Cancel)
+    }
+}
+
 /// Bounded metadata mirror of Songbird's queue. Songbird is the playback authority; this only
 /// allows the public queue command to find opaque IDs and their authors without reading request
 /// text. Every read receives the live Songbird order and prunes tracks which have ended.
@@ -386,7 +410,61 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
             ),
             std::time::Duration::ZERO,
         );
-        songbird_driver_mut(&mut handler).enqueue(track).await;
+        for (event, stage) in [
+            (TrackEvent::Playable, "playable"),
+            (TrackEvent::Error, "error"),
+            (TrackEvent::End, "ended"),
+        ] {
+            track.events.add_event(
+                EventData::new(Event::Track(event), PlaybackLifecycleLogger(stage)),
+                std::time::Duration::ZERO,
+            );
+        }
+        let handle = songbird_driver_mut(&mut handler).enqueue(track).await;
+        let connected = handler.current_connection().is_some();
+        let muted = songbird_driver(&handler).is_mute();
+        drop(handler);
+
+        if !connected || muted {
+            eprintln!(
+                "[voice:playback] refusing queued track: connected={connected} muted={muted}"
+            );
+            let _ = handle.stop();
+            self.queue_metadata
+                .lock()
+                .map_err(|_| CommandPlaybackError)?
+                .remove(guild_id, id);
+            return Err(CommandPlaybackError);
+        }
+
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            handle.make_playable_async(),
+        )
+        .await
+        {
+            Ok(Ok(())) => {
+                eprintln!("[voice:playback] queued track passed decoder readiness");
+            }
+            Ok(Err(error)) => {
+                eprintln!("[voice:playback] queued track decoder failed: {error:?}");
+                let _ = handle.stop();
+                self.queue_metadata
+                    .lock()
+                    .map_err(|_| CommandPlaybackError)?
+                    .remove(guild_id, id);
+                return Err(CommandPlaybackError);
+            }
+            Err(_) => {
+                eprintln!("[voice:playback] queued track decoder readiness timed out");
+                let _ = handle.stop();
+                self.queue_metadata
+                    .lock()
+                    .map_err(|_| CommandPlaybackError)?
+                    .remove(guild_id, id);
+                return Err(CommandPlaybackError);
+            }
+        }
         Ok(())
     }
 
@@ -647,10 +725,17 @@ pub async fn join_and_enqueue_wav(
         .await
         .map_err(|_| VoicePlaybackError::JoinFailed)?;
     let mut handler = call.lock().await;
-    songbird_driver_mut(&mut handler)
+    let handle = songbird_driver_mut(&mut handler)
         .enqueue_input(songbird::input::File::new(wav).into())
         .await;
-    Ok(())
+    drop(handler);
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        handle.make_playable_async(),
+    )
+    .await
+    .map_err(|_| VoicePlaybackError::JoinFailed)?
+    .map_err(|_| VoicePlaybackError::JoinFailed)
 }
 
 /// Removes the driver call and its tasks after an explicit `/leave`, an alone timeout or a real

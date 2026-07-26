@@ -130,13 +130,14 @@ export async function handleConfig(i: ChatInputCommandInteraction, deps: BotDeps
     const on = i.options.getBoolean('active', true);
     setGuildConfig(deps.db, i.guildId!, { autojoin: on });
     await reply(i, on ? t('config.autojoinOn', locale) : t('config.autojoinOff', locale));
-  } else if (sub === 'always-on') {
+  /* removed always-on feature
     // 24/7 in-call: the bot stays in the channel even when empty + is restored on startup. OFF by
     // default (opt-in). It only takes EFFECT with Premium (the gate in AloneWatcher/rejoin requires it);
     // storing the toggle is free — the ON message warns that it needs Premium.
     const on = i.options.getBoolean('active', true);
     setGuildConfig(deps.db, i.guildId!, { stayInCall: on });
     await reply(i, on ? t('config.stayOn', locale) : t('config.stayOff', locale));
+  */
   } else if (sub === 'read-bots') {
     // Read other bots/webhooks. OFF by default (Vozen never reads itself).
     const on = i.options.getBoolean('active', true);

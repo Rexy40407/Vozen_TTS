@@ -273,7 +273,11 @@ impl VoicePreferenceService {
             None => 1.0,
         };
         let current_engine = match store.get_user_voice(guild_id, user_id) {
-            Ok(Some(voice)) => voice.engine,
+            Ok(Some(voice)) => match voice.engine {
+                // Google HD is no longer selectable; old profiles fall back to free gTTS.
+                UserEngine::Gcloud => UserEngine::Google,
+                engine => engine,
+            },
             Ok(None) => UserEngine::Google,
             Err(_) => return VoicePreferenceOutcome::StoreUnavailable,
         };

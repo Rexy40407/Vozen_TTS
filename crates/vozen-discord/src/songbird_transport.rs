@@ -13,6 +13,8 @@ use serenity::{
         id::{ChannelId, GuildId},
     },
 };
+#[cfg(feature = "voice-driver")]
+use std::time::Duration;
 
 use crate::{VoiceSessionTransport, VoiceSessionTransportError};
 
@@ -40,10 +42,16 @@ impl VoiceSessionTransport for SongbirdVoiceSessionTransport {
         let manager = songbird::get(&self.context)
             .await
             .ok_or(VoiceSessionTransportError::Unavailable)?;
-        manager
-            .join(GuildId::new(guild_id), ChannelId::new(channel_id))
-            .await
-            .map_err(|_| VoiceSessionTransportError::Failed)?;
+        // A Discord voice handshake can remain unresolved when the voice server or channel
+        // permissions are unavailable. Never hold an interaction callback forever: the caller
+        // can render a normal failure response and the next `/join` may retry cleanly.
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            manager.join(GuildId::new(guild_id), ChannelId::new(channel_id)),
+        )
+        .await
+        .map_err(|_| VoiceSessionTransportError::Failed)?
+        .map_err(|_| VoiceSessionTransportError::Failed)?;
         // Songbird only decodes incoming Opus when explicitly configured. Keep this opt-in so a
         // normal Rust voice canary does not pay the receive CPU cost or collect audio; the live
         // STT promotion enables it with `RUST_TRANSCRIBE_LIVE_ENABLED=true` and installs its
@@ -59,7 +67,11 @@ impl VoiceSessionTransport for SongbirdVoiceSessionTransport {
         // Discord places bots in Stage channels as audience by default. Match Node's best-effort
         // behaviour: first self-promote, then request to speak if a moderator must approve it.
         // A Stage moderation failure never invalidates an otherwise successful voice join.
-        promote_stage_speaker(&self.context, ChannelId::new(channel_id)).await;
+        let _ = tokio::time::timeout(
+            Duration::from_secs(5),
+            promote_stage_speaker(&self.context, ChannelId::new(channel_id)),
+        )
+        .await;
         Ok(())
     }
 

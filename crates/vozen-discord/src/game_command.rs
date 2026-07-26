@@ -9,8 +9,6 @@ use vozen_contracts::ContractError;
 
 use crate::{CommandArea, command_path_from_options, route_command};
 
-const MAX_GAME_OPTION_CHARS: usize = 100;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GamePlayCommand {
     pub game: Option<String>,
@@ -37,29 +35,16 @@ pub enum GameCommandError {
 pub fn parse_game_play_command(
     command: &CommandData,
 ) -> Result<Option<GamePlayCommand>, GameCommandError> {
-    parse_game_subcommand(command, "play")?
-        .map(|options| {
-            let mut game = None;
-            let mut language = None;
-            for option in options {
-                let target = match option.name.as_str() {
-                    "game" => &mut game,
-                    "language" => &mut language,
-                    _ => return Err(GameCommandError::UnexpectedOption),
-                };
-                let CommandDataOptionValue::String(value) = &option.value else {
-                    return Err(GameCommandError::InvalidType);
-                };
-                if value.chars().count() > MAX_GAME_OPTION_CHARS {
-                    return Err(GameCommandError::OptionTooLong);
-                }
-                if target.replace(value.trim().to_owned()).is_some() {
-                    return Err(GameCommandError::UnexpectedOption);
-                }
-            }
-            Ok(GamePlayCommand { game, language })
-        })
-        .transpose()
+    let Some(options) = parse_game_subcommand(command, "play")? else {
+        return Ok(None);
+    };
+    if !options.is_empty() {
+        return Err(GameCommandError::UnexpectedOption);
+    }
+    Ok(Some(GamePlayCommand {
+        game: None,
+        language: None,
+    }))
 }
 
 pub fn parse_game_stop_command(
@@ -105,15 +90,15 @@ mod tests {
     }
 
     #[test]
-    fn parses_play_with_optional_values_and_stop_without_values() {
+    fn parses_empty_play_and_stop_without_values() {
         assert_eq!(
             parse_game_play_command(&command(
-                r#"{"id":"1","name":"game","type":1,"options":[{"name":"play","type":1,"options":[{"name":"game","type":3,"value":"headsOrTails"},{"name":"language","type":3,"value":"pt"}]}]}"#
+                r#"{"id":"1","name":"game","type":1,"options":[{"name":"play","type":1,"options":[]}]}"#
             ))
             .expect("play"),
             Some(GamePlayCommand {
-                game: Some("headsOrTails".into()),
-                language: Some("pt".into())
+                game: None,
+                language: None
             })
         );
         assert_eq!(
@@ -131,7 +116,7 @@ mod tests {
             parse_game_play_command(&command(
                 r#"{"id":"1","name":"game","type":1,"options":[{"name":"play","type":1,"options":[{"name":"game","type":4,"value":1}]}]}"#
             )),
-            Err(GameCommandError::InvalidType)
+            Err(GameCommandError::UnexpectedOption)
         ));
         assert!(matches!(
             parse_game_stop_command(&command(

@@ -21,12 +21,14 @@ pub enum CoreVoiceCommand {
     Joke {
         language: String,
         laughter: bool,
+        engine: Option<String>,
     },
     /// Premium pickup lines use the same language catalog as `/joke` and may append a
     /// repository-curated WAV effect.
     Rizz {
         language: String,
         sound: bool,
+        engine: Option<String>,
     },
     /// Curated soundboard clip; omitting the name requests the public discovery list.
     Sound {
@@ -37,6 +39,8 @@ pub enum CoreVoiceCommand {
     MicroFun {
         kind: MicroFunKind,
         question: Option<String>,
+        language: Option<String>,
+        engine: Option<String>,
     },
     Skip,
     ShutUp,
@@ -49,6 +53,7 @@ pub enum CoreVoiceCommand {
     /// admission, bounded queue and synthesis path as `/tts`.
     VoicePreview {
         model: Option<String>,
+        engine: Option<String>,
     },
 }
 
@@ -72,6 +77,8 @@ pub enum CoreVoiceCommandError {
     InvalidLaughter,
     #[error("the rizz command is missing its required sound option")]
     MissingSound,
+    #[error("the rizz command is missing its required engine option")]
+    MissingEngine,
     #[error("the rizz command has a non-boolean sound option")]
     InvalidSound,
     #[error("the sound command contains an invalid option shape")]
@@ -87,8 +94,8 @@ pub enum CoreVoiceCommandError {
 }
 
 /// Parses only the promoted root commands. A contract-valid command from another area, or a
-/// core command that has not yet reached parity (`/tts-file`, etc.), returns `None`
-/// instead of being accidentally consumed by the Rust runtime.
+/// core command that is outside the promoted voice-call route (for example `/tts-file`) returns
+/// `None` instead of being accidentally consumed by the Rust runtime.
 pub fn parse_promoted_core_voice(
     command: &CommandData,
 ) -> Result<Option<CoreVoiceCommand>, CoreVoiceCommandError> {
@@ -147,40 +154,97 @@ fn parse_microfun(
 ) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
     match kind {
         MicroFunKind::EightBall => {
-            if options.len() != 1 || options[0].name != "question" {
+            if options.len() != 3
+                || options.iter().any(|option| {
+                    !matches!(option.name.as_str(), "question" | "language" | "engine")
+                })
+            {
                 return Err(CoreVoiceCommandError::InvalidMicroFunOptions);
             }
-            let question = match &options[0].value {
+            let question = match &options
+                .iter()
+                .find(|option| option.name == "question")
+                .ok_or(CoreVoiceCommandError::MissingQuestion)?
+                .value
+            {
                 CommandDataOptionValue::String(question) => question.clone(),
                 _ => return Err(CoreVoiceCommandError::InvalidQuestion),
             };
             if question.trim().is_empty() {
                 return Err(CoreVoiceCommandError::MissingQuestion);
             }
+            let (language, engine) = parse_microfun_voice_options(options)?;
             Ok(CoreVoiceCommand::MicroFun {
                 kind,
                 question: Some(question),
+                language: Some(language),
+                engine: Some(engine),
             })
         }
-        MicroFunKind::Fortune | MicroFunKind::Fact | MicroFunKind::WouldYouRather => {
-            if !options.is_empty() {
+        MicroFunKind::Fortune | MicroFunKind::Fact => {
+            if options.len() != 2
+                || options
+                    .iter()
+                    .any(|option| !matches!(option.name.as_str(), "language" | "engine"))
+            {
                 return Err(CoreVoiceCommandError::InvalidMicroFunOptions);
             }
+            let (language, engine) = parse_microfun_voice_options(options)?;
             Ok(CoreVoiceCommand::MicroFun {
                 kind,
                 question: None,
+                language: Some(language),
+                engine: Some(engine),
+            })
+        }
+        MicroFunKind::WouldYouRather => {
+            if options.len() != 2
+                || options
+                    .iter()
+                    .any(|option| !matches!(option.name.as_str(), "language" | "engine"))
+            {
+                return Err(CoreVoiceCommandError::InvalidMicroFunOptions);
+            }
+            let (language, engine) = parse_microfun_voice_options(options)?;
+            Ok(CoreVoiceCommand::MicroFun {
+                kind,
+                question: None,
+                language: Some(language),
+                engine: Some(engine),
             })
         }
     }
 }
 
+fn parse_microfun_voice_options(
+    options: &[serenity::model::application::CommandDataOption],
+) -> Result<(String, String), CoreVoiceCommandError> {
+    let language = options
+        .iter()
+        .find(|option| option.name == "language")
+        .ok_or(CoreVoiceCommandError::MissingLanguage)
+        .and_then(|option| match &option.value {
+            CommandDataOptionValue::String(language) => Ok(language.clone()),
+            _ => Err(CoreVoiceCommandError::InvalidLanguage),
+        })?;
+    let engine = options
+        .iter()
+        .find(|option| option.name == "engine")
+        .ok_or(CoreVoiceCommandError::MissingEngine)
+        .and_then(|option| match &option.value {
+            CommandDataOptionValue::String(engine) => Ok(engine.clone()),
+            _ => Err(CoreVoiceCommandError::InvalidText),
+        })?;
+    Ok((language, engine))
+}
+
 fn parse_joke(
     options: &[serenity::model::application::CommandDataOption],
 ) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
-    if options.len() != 2
+    if !(2..=3).contains(&options.len())
         || options
             .iter()
-            .any(|option| option.name != "language" && option.name != "laughter")
+            .any(|option| !matches!(option.name.as_str(), "language" | "laughter" | "engine"))
     {
         return Err(CoreVoiceCommandError::UnexpectedOption);
     }
@@ -200,16 +264,28 @@ fn parse_joke(
             CommandDataOptionValue::Boolean(laughter) => Ok(laughter),
             _ => Err(CoreVoiceCommandError::InvalidLaughter),
         })?;
-    Ok(CoreVoiceCommand::Joke { language, laughter })
+    let engine = options
+        .iter()
+        .find(|option| option.name == "engine")
+        .map(|option| match &option.value {
+            CommandDataOptionValue::String(engine) => Ok(engine.clone()),
+            _ => Err(CoreVoiceCommandError::InvalidText),
+        })
+        .transpose()?;
+    Ok(CoreVoiceCommand::Joke {
+        language,
+        laughter,
+        engine,
+    })
 }
 
 fn parse_rizz(
     options: &[serenity::model::application::CommandDataOption],
 ) -> Result<CoreVoiceCommand, CoreVoiceCommandError> {
-    if options.len() != 2
+    if !(1..=3).contains(&options.len())
         || options
             .iter()
-            .any(|option| option.name != "language" && option.name != "sound")
+            .any(|option| !matches!(option.name.as_str(), "language" | "sound" | "engine"))
     {
         return Err(CoreVoiceCommandError::UnexpectedOption);
     }
@@ -224,12 +300,25 @@ fn parse_rizz(
     let sound = options
         .iter()
         .find(|option| option.name == "sound")
-        .ok_or(CoreVoiceCommandError::MissingSound)
-        .and_then(|option| match option.value {
+        .map(|option| match option.value {
             CommandDataOptionValue::Boolean(sound) => Ok(sound),
             _ => Err(CoreVoiceCommandError::InvalidSound),
+        })
+        .transpose()?
+        .unwrap_or(false);
+    let engine = options
+        .iter()
+        .find(|option| option.name == "engine")
+        .ok_or(CoreVoiceCommandError::MissingEngine)
+        .and_then(|option| match &option.value {
+            CommandDataOptionValue::String(engine) => Ok(engine.clone()),
+            _ => Err(CoreVoiceCommandError::InvalidText),
         })?;
-    Ok(CoreVoiceCommand::Rizz { language, sound })
+    Ok(CoreVoiceCommand::Rizz {
+        language,
+        sound,
+        engine: Some(engine),
+    })
 }
 
 fn parse_sound(
@@ -260,11 +349,16 @@ fn parse_voice_preview(
     else {
         return Err(CoreVoiceCommandError::UnexpectedOption);
     };
-    if options.len() > 1 || options.iter().any(|option| option.name != "model") {
+    if options.len() > 2
+        || options
+            .iter()
+            .any(|option| !matches!(option.name.as_str(), "model" | "engine"))
+    {
         return Err(CoreVoiceCommandError::UnexpectedOption);
     }
     let model = options
-        .first()
+        .iter()
+        .find(|option| option.name == "model")
         .map(|option| {
             let serenity::model::application::CommandDataOptionValue::String(model) = &option.value
             else {
@@ -273,7 +367,19 @@ fn parse_voice_preview(
             Ok(model.clone())
         })
         .transpose()?;
-    Ok(CoreVoiceCommand::VoicePreview { model })
+    let engine = options
+        .iter()
+        .find(|option| option.name == "engine")
+        .map(|option| {
+            let serenity::model::application::CommandDataOptionValue::String(engine) =
+                &option.value
+            else {
+                return Err(CoreVoiceCommandError::InvalidText);
+            };
+            Ok(engine.clone())
+        })
+        .transpose()?;
+    Ok(CoreVoiceCommand::VoicePreview { model, engine })
 }
 
 #[cfg(test)]
@@ -312,34 +418,68 @@ mod tests {
                 r#"{"id":"1","name":"joke","type":1,"options":[{"name":"language","type":3,"value":"pt"},{"name":"laughter","type":5,"value":true}]}"#
             ))
             .expect("joke"),
-            Some(CoreVoiceCommand::Joke { language: "pt".into(), laughter: true })
+            Some(CoreVoiceCommand::Joke {
+                language: "pt".into(),
+                laughter: true,
+                engine: None,
+            })
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
-                r#"{"id":"1","name":"8-ball","type":1,"options":[{"name":"question","type":3,"value":"Will it work?"}]}"#
+                r#"{"id":"1","name":"joke","type":1,"options":[{"name":"language","type":3,"value":"en"},{"name":"laughter","type":5,"value":false},{"name":"engine","type":3,"value":"kokoro"}]}"#
+            ))
+            .expect("joke engine"),
+            Some(CoreVoiceCommand::Joke {
+                language: "en".into(),
+                laughter: false,
+                engine: Some("kokoro".into()),
+            })
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"8-ball","type":1,"options":[{"name":"question","type":3,"value":"Will it work?"},{"name":"language","type":3,"value":"en"},{"name":"engine","type":3,"value":"piper"}]}"#
             ))
             .expect("8-ball"),
             Some(CoreVoiceCommand::MicroFun {
                 kind: MicroFunKind::EightBall,
                 question: Some("Will it work?".into()),
+                language: Some("en".into()),
+                engine: Some("piper".into()),
             })
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
-                r#"{"id":"1","name":"fortune","type":1,"options":[]}"#
+                r#"{"id":"1","name":"fortune","type":1,"options":[{"name":"language","type":3,"value":"pt"},{"name":"engine","type":3,"value":"google"}]}"#
             ))
             .expect("fortune"),
             Some(CoreVoiceCommand::MicroFun {
                 kind: MicroFunKind::Fortune,
                 question: None,
+                language: Some("pt".into()),
+                engine: Some("google".into()),
             })
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
-                r#"{"id":"1","name":"rizz","type":1,"options":[{"name":"language","type":3,"value":"pt"},{"name":"sound","type":5,"value":true}]}"#
+                r#"{"id":"1","name":"rizz","type":1,"options":[{"name":"language","type":3,"value":"pt"},{"name":"engine","type":3,"value":"google"},{"name":"sound","type":5,"value":true}]}"#
             ))
             .expect("rizz"),
-            Some(CoreVoiceCommand::Rizz { language: "pt".into(), sound: true })
+            Some(CoreVoiceCommand::Rizz {
+                language: "pt".into(),
+                sound: true,
+                engine: Some("google".into()),
+            })
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"rizz","type":1,"options":[{"name":"language","type":3,"value":"en"},{"name":"sound","type":5,"value":false},{"name":"engine","type":3,"value":"piper"}]}"#
+            ))
+            .expect("rizz engine"),
+            Some(CoreVoiceCommand::Rizz {
+                language: "en".into(),
+                sound: false,
+                engine: Some("piper".into()),
+            })
         );
         assert_eq!(
             parse_promoted_core_voice(&command(
@@ -377,7 +517,18 @@ mod tests {
             ))
             .expect("voice preview"),
             Some(CoreVoiceCommand::VoicePreview {
-                model: Some("en_US-amy-medium".into())
+                model: Some("en_US-amy-medium".into()),
+                engine: None,
+            })
+        );
+        assert_eq!(
+            parse_promoted_core_voice(&command(
+                r#"{"id":"1","name":"voice","type":1,"options":[{"name":"preview","type":1,"options":[{"name":"model","type":3,"value":"en_US-amy-medium"},{"name":"engine","type":3,"value":"piper"}]}]}"#,
+            ))
+            .expect("voice preview engine"),
+            Some(CoreVoiceCommand::VoicePreview {
+                model: Some("en_US-amy-medium".into()),
+                engine: Some("piper".into()),
             })
         );
         assert_eq!(
@@ -456,7 +607,7 @@ mod tests {
             parse_promoted_core_voice(&command(
                 r#"{"id":"1","name":"rizz","type":1,"options":[{"name":"language","type":3,"value":"pt"}]}"#
             )),
-            Err(CoreVoiceCommandError::UnexpectedOption)
+            Err(CoreVoiceCommandError::MissingEngine)
         );
         assert_eq!(
             parse_promoted_core_voice(&command(

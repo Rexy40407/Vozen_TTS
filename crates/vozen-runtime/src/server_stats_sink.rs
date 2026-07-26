@@ -6,6 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateAllowedMentions, CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -161,7 +162,7 @@ impl GatewayEventSink for ServerStatsGatewaySink {
             return Ok(());
         }
         let response = CreateInteractionResponseMessage::new()
-            .content(self.response(&command)?)
+            .embeds(vec![message_embed(self.response(&command)?)])
             .allowed_mentions(
                 CreateAllowedMentions::new()
                     .all_users(false)

@@ -237,7 +237,12 @@ impl WhisperSidecar {
         let mut command = Command::new(&self.options.python);
         command.arg(&self.options.script);
         if let Some(model) = &self.options.model {
-            command.env("WHISPER_MODEL", model);
+            // Passar também como argumento torna a seleção determinística mesmo
+            // com versões antigas do sidecar que não liam WHISPER_MODEL.
+            command
+                .arg("--model")
+                .arg(model)
+                .env("WHISPER_MODEL", model);
         }
         let mut child = command
             .stdin(std::process::Stdio::piped())

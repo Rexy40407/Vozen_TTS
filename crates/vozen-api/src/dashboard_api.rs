@@ -422,7 +422,7 @@ fn unavailable(id: &str) -> DashboardOption {
 }
 
 fn config_body(config: &GuildConfig) -> Value {
-    json!({"autoread":config.autoread,"xsaid":config.xsaid,"autojoin":config.autojoin,"readBots":config.read_bots,"textInVoice":config.text_in_voice,"antispam":config.antispam,"streakAnnounce":config.streak_announce,"soundboard":config.soundboard,"greetOnJoin":config.greet_on_join,"translationEnabled":config.translation_enabled,"votePromos":config.vote_promos,"stayInCall":config.stay_in_call,"maxChars":config.max_chars,"ratePerMin":config.rate_per_min,"locale":config.locale,"ttsChannelId":config.tts_channel_id,"defaultVoice":config.default_voice,"priorityRoleId":config.priority_role_id,"blockedRoleId":config.blocked_role_id})
+    json!({"autoread":config.autoread,"xsaid":config.xsaid,"autojoin":config.autojoin,"readBots":config.read_bots,"textInVoice":config.text_in_voice,"antispam":config.antispam,"streakAnnounce":config.streak_announce,"soundboard":config.soundboard,"greetOnJoin":config.greet_on_join,"translationEnabled":config.translation_enabled,"votePromos":config.vote_promos,"maxChars":config.max_chars,"ratePerMin":config.rate_per_min,"locale":config.locale,"ttsChannelId":config.tts_channel_id,"defaultVoice":config.default_voice,"priorityRoleId":config.priority_role_id,"blockedRoleId":config.blocked_role_id})
 }
 
 fn profile_body(profile: ChannelProfile) -> Value {

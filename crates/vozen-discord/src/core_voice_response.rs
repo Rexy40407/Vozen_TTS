@@ -26,6 +26,7 @@ pub enum CoreVoiceResponse {
     LaughFailed,
     JokeNotInVoice,
     JokeUnknownLanguage,
+    JokePremiumLocked,
     JokeRateLimited,
     JokeBusy,
     JokePlaying,
@@ -49,6 +50,7 @@ pub enum CoreVoiceResponse {
     MicroFunFortune,
     MicroFunFact,
     MicroFunWouldYouRather,
+    MicroFunPremiumLocked,
     SkipNotInVoice,
     SkipNothingPlaying,
     Skipped,
@@ -112,6 +114,7 @@ impl CoreVoiceResponse {
             Self::LaughQueued => "laugh.playing",
             Self::JokeNotInVoice => "tts.notInVoice",
             Self::JokeUnknownLanguage => "joke.unknownLang",
+            Self::JokePremiumLocked => "voice.engine.kokoroLocked",
             Self::JokeRateLimited => "tts.tooFast",
             Self::JokeBusy => "tts.busy",
             Self::JokePlaying => "joke.playing",
@@ -134,6 +137,7 @@ impl CoreVoiceResponse {
             Self::MicroFunFortune => "fun.fortune",
             Self::MicroFunFact => "fun.fact",
             Self::MicroFunWouldYouRather => "fun.wyr",
+            Self::MicroFunPremiumLocked => "voice.engine.kokoroLocked",
             Self::Queued => "tts.queued",
             Self::PreviewNotInPlayer => "voice.notInVoice",
             Self::PreviewNotInSameVoice => "tts.notInVoice",
@@ -193,6 +197,7 @@ pub fn core_voice_response(outcome: CoreVoiceOutcome) -> CoreVoiceResponse {
                 CoreVoiceResponse::JokeNotInVoice
             }
             CoreJokeOutcome::UnknownLanguage => CoreVoiceResponse::JokeUnknownLanguage,
+            CoreJokeOutcome::PremiumLocked => CoreVoiceResponse::JokePremiumLocked,
             CoreJokeOutcome::RateLimited => CoreVoiceResponse::JokeRateLimited,
             CoreJokeOutcome::Busy => CoreVoiceResponse::JokeBusy,
             CoreJokeOutcome::Queued => CoreVoiceResponse::JokePlaying,
@@ -228,6 +233,9 @@ pub fn core_voice_response(outcome: CoreVoiceOutcome) -> CoreVoiceResponse {
             | CoreSoundOutcome::PlaybackFailed
             | CoreSoundOutcome::StoreUnavailable => CoreVoiceResponse::SoundFailed,
         },
+        CoreVoiceOutcome::MicroFun(result) if result.premium_locked => {
+            CoreVoiceResponse::MicroFunPremiumLocked
+        }
         CoreVoiceOutcome::MicroFun(result) => match result.kind {
             crate::MicroFunKind::EightBall => CoreVoiceResponse::MicroFunEightBall,
             crate::MicroFunKind::Fortune => CoreVoiceResponse::MicroFunFortune,
@@ -338,6 +346,7 @@ mod tests {
                 question: None,
                 text: "Octopuses have three hearts.".into(),
                 queued: false,
+                premium_locked: false,
             })),
             CoreVoiceResponse::MicroFunFact
         );

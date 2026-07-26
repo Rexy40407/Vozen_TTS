@@ -31,7 +31,6 @@ const BOOL_FIELDS = [
   'greetOnJoin',
   'translationEnabled',
   'votePromos',
-  'stayInCall',
 ] as const;
 
 export const DASHBOARD_FIELDS = [

@@ -1,8 +1,10 @@
 //! Clock-aware lifecycle adapter for Vozen Says.
 
+use std::collections::BTreeMap;
+
 use vozen_core::{VozenSaysEvent, VozenSaysGame};
 
-use crate::{GameDriver, GameDriverAction, GameMessage};
+use crate::{GameAnnouncementAction, GameDriver, GameDriverAction, GameMessage};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VozenSaysDriverAction {
@@ -58,11 +60,23 @@ impl VozenSaysGameDriver {
 
 impl GameDriver for VozenSaysGameDriver {
     fn on_start(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
-        self.inner
-            .start(now_ms)
-            .into_iter()
-            .flat_map(to_manager_actions)
-            .collect()
+        let round_actions = self.inner.start(now_ms);
+        if round_actions
+            .iter()
+            .any(|action| matches!(action, VozenSaysDriverAction::Finished))
+        {
+            return round_actions
+                .into_iter()
+                .flat_map(to_manager_actions)
+                .collect();
+        }
+        let mut parameters = BTreeMap::new();
+        parameters.insert("rounds", VozenSaysGame::rounds().to_string());
+        let mut actions = vec![GameDriverAction::Announcement(
+            GameAnnouncementAction::message("game.vozenSays.intro", parameters),
+        )];
+        actions.extend(round_actions.into_iter().flat_map(to_manager_actions));
+        actions
     }
 
     fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {
@@ -267,7 +281,11 @@ mod tests {
             0,
         );
         assert_eq!(status, StartGameResult::Started);
-        let item = match &initial[0] {
+        assert!(matches!(
+            initial.first(),
+            Some(GameDriverAction::Announcement(_))
+        ));
+        let item = match &initial[1] {
             GameDriverAction::VozenSays(VozenSaysDriverAction::RoundOpened { item, .. }) => {
                 item.clone()
             }

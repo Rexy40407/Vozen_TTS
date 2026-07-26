@@ -62,6 +62,7 @@ mod transcription_sink;
 mod translation_preference_sink;
 mod translation_provider;
 mod translation_text_sink;
+mod ui;
 mod uptime_sink;
 mod voice_preference_sink;
 mod vote_sink;
@@ -116,6 +117,17 @@ use crate::transcription_adapter::TranscriptionRuntimeOptions;
 use crate::transcription_control_sink::SttConsentRegistry;
 
 const DISCORD_COMMAND_CONTRACT: &str = include_str!("../../../contracts/discord-commands.json");
+
+// Keep this catalogue in lockstep with `LOCALE_NAMES` in `src/language/voiceMap.ts`.
+// The legacy runtime exposes one synthetic Google voice for every locale not covered by
+// an installed Piper model. Games such as Guess the Language use this same public voice
+// catalogue to decide how many distinct playable languages exist.
+const GTTS_SYNTHETIC_LOCALES: &[&str] = &[
+    "ar_JO", "ca_ES", "cs_CZ", "cy_GB", "da_DK", "de_DE", "el_GR", "en_GB", "en_US", "es_ES",
+    "es_MX", "fa_IR", "fi_FI", "fr_FR", "hu_HU", "is_IS", "it_IT", "ja_JP", "ka_GE", "kk_KZ",
+    "lb_LU", "lv_LV", "ne_NP", "nl_BE", "nl_NL", "no_NO", "pl_PL", "pt_BR", "pt_PT", "ro_RO",
+    "ru_RU", "sk_SK", "sl_SI", "sr_RS", "sv_SE", "sw_CD", "tr_TR", "uk_UA", "vi_VN", "zh_CN",
+];
 
 struct RuntimeConfig {
     discord_token: String,
@@ -711,7 +723,8 @@ fn tts_file_from_environment() -> Result<Option<TtsFileRuntimeOptions>, RuntimeE
     if !tts_file_enabled(env::var("RUST_TTS_FILE_ENABLED").ok().as_deref()) {
         return Ok(None);
     }
-    require_piper_runtime_default(env::var("TTS_ENGINE").ok().as_deref())?;
+    // Private file export is intentionally Piper-backed and independent from the global
+    // voice default. The main voice route may use Google/gTTS with Piper as its fallback.
     let default_voice =
         nonempty_env("DEFAULT_VOICE").unwrap_or_else(|| "en_US-amy-medium".to_owned());
     let default_speed = positive_number_from_environment("DEFAULT_SPEED", 1.0, false)?;
@@ -753,19 +766,51 @@ fn transcription_from_environment() -> Result<Option<TranscriptionRuntimeOptions
     }
     let max_concurrency =
         positive_number_from_environment("STT_MAX_CONCURRENCY", 1.0, true)? as usize;
+    let working_directory = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let (python, script) = resolve_whisper_runtime(
+        &working_directory,
+        nonempty_env("WHISPER_PYTHON").as_deref(),
+        nonempty_env("WHISPER_SCRIPT").as_deref(),
+    );
     Ok(Some(TranscriptionRuntimeOptions {
-        python: nonempty_env("WHISPER_PYTHON")
-            .unwrap_or_else(|| "python3".to_owned())
-            .into(),
-        script: nonempty_env("WHISPER_SCRIPT")
-            .unwrap_or_else(|| "tools/whisper_sidecar.py".to_owned())
-            .into(),
+        python,
+        script,
         model: nonempty_env("WHISPER_MODEL"),
         ffmpeg: nonempty_env("FFMPEG_PATH")
             .unwrap_or_else(|| "ffmpeg".to_owned())
             .into(),
         max_concurrency,
     }))
+}
+
+/// Resolve the same optional Whisper venv layout as the Node runtime. Explicit environment
+/// paths always win; otherwise a project-local venv is preferred so the Rust canaries use the
+/// pinned `faster-whisper` environment installed by `tools/setup-whisper.*`.
+fn resolve_whisper_runtime(
+    working_directory: &Path,
+    explicit_python: Option<&str>,
+    explicit_script: Option<&str>,
+) -> (PathBuf, PathBuf) {
+    let python = explicit_python
+        .map(PathBuf::from)
+        .or_else(|| {
+            [
+                "tools/whisper-venv/bin/python",
+                "tools/whisper-venv/Scripts/python.exe",
+            ]
+            .iter()
+            .map(|candidate| working_directory.join(candidate))
+            .find(|candidate| candidate.is_file())
+        })
+        .unwrap_or_else(|| PathBuf::from("python3"));
+    let script = explicit_script
+        .map(PathBuf::from)
+        .or_else(|| {
+            let candidate = working_directory.join("tools/whisper_sidecar.py");
+            candidate.is_file().then_some(candidate)
+        })
+        .unwrap_or_else(|| PathBuf::from("tools/whisper_sidecar.py"));
+    (python, script)
 }
 
 fn voice_preferences_from_environment()
@@ -943,19 +988,6 @@ fn transcription_control_enabled(raw: Option<&str>) -> bool {
 
 fn live_transcription_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
-}
-
-/// The first Rust voice adapters only have a production Piper backend. The Node bot can use
-/// other default engines, but allowing the Rust canary to start in that configuration would
-/// silently change what users hear. Missing `TTS_ENGINE` keeps Node's Piper default.
-fn piper_runtime_default_compatible(raw: Option<&str>) -> bool {
-    raw.is_none_or(|value| value.trim().is_empty() || value.trim().eq_ignore_ascii_case("piper"))
-}
-
-fn require_piper_runtime_default(raw: Option<&str>) -> Result<(), RuntimeError> {
-    piper_runtime_default_compatible(raw)
-        .then_some(())
-        .ok_or(RuntimeError::RustVoiceRequiresPiperDefault)
 }
 
 fn core_voice_default_engine(raw: Option<&str>) -> Result<SynthesisEngine, RuntimeError> {
@@ -1195,15 +1227,13 @@ fn core_voice_event_sink(
     let Some(mut options) = options else {
         return Ok(None);
     };
-    options.settings.available_models = discover_piper_models(&options.models_dir)?;
-    if !options
-        .settings
-        .available_models
-        .iter()
-        .any(|model| model == &options.settings.default_voice)
-    {
-        return Err(RuntimeError::DefaultVoiceUnavailable);
-    }
+    let piper_models = validate_piper_runtime(
+        &options.piper_path,
+        &options.models_dir,
+        &options.settings.default_voice,
+    )?;
+    options.settings.available_models =
+        available_models_for_default_provider(piper_models, options.settings.default_engine);
     Ok(Some(Arc::new(core_voice_sink::CoreVoiceGatewaySink::new(
         store,
         gateway_state,
@@ -1218,15 +1248,11 @@ fn tts_file_event_sink(
     let Some(mut options) = options else {
         return Ok(None);
     };
-    options.settings.available_models = discover_piper_models(&options.models_dir)?;
-    if !options
-        .settings
-        .available_models
-        .iter()
-        .any(|model| model == &options.settings.default_voice)
-    {
-        return Err(RuntimeError::DefaultVoiceUnavailable);
-    }
+    options.settings.available_models = validate_piper_runtime(
+        &options.piper_path,
+        &options.models_dir,
+        &options.settings.default_voice,
+    )?;
     Ok(Some(Arc::new(
         file_export_sink::TtsFileGatewaySink::new(store, options)
             .map_err(|_| RuntimeError::TtsFileGateway)?,
@@ -1777,6 +1803,92 @@ fn discover_piper_models(models_dir: &std::path::Path) -> Result<Vec<String>, Ru
     Ok(models)
 }
 
+fn available_models_for_default_provider(
+    mut piper_models: Vec<String>,
+    default_engine: SynthesisEngine,
+) -> Vec<String> {
+    if default_engine != SynthesisEngine::Default {
+        return piper_models;
+    }
+    for locale in GTTS_SYNTHETIC_LOCALES {
+        let covered = piper_models
+            .iter()
+            .any(|model| model.split('-').next() == Some(*locale));
+        if !covered {
+            piper_models.push(format!("{locale}-google-medium"));
+        }
+    }
+    piper_models.sort_unstable();
+    piper_models.dedup();
+    piper_models
+}
+
+fn validate_piper_runtime(
+    piper_path: &Path,
+    models_dir: &Path,
+    default_voice: &str,
+) -> Result<Vec<String>, RuntimeError> {
+    if !piper_executable_available(piper_path) {
+        return Err(RuntimeError::PiperExecutableUnavailable);
+    }
+    let models = discover_piper_models(models_dir)?;
+    if !models.iter().any(|model| model == default_voice) {
+        return Err(RuntimeError::DefaultVoiceUnavailable);
+    }
+    if !models_dir
+        .join(format!("{default_voice}.onnx.json"))
+        .is_file()
+    {
+        return Err(RuntimeError::DefaultVoiceConfigUnavailable);
+    }
+    Ok(models)
+}
+
+fn piper_executable_available(configured: &Path) -> bool {
+    if configured.is_absolute() || configured.components().count() > 1 {
+        return is_executable_file(configured);
+    }
+    if is_executable_file(configured) {
+        return true;
+    }
+    let Some(path) = env::var_os("PATH") else {
+        return false;
+    };
+    env::split_paths(&path).any(|directory| {
+        let candidate = directory.join(configured);
+        if is_executable_file(&candidate) {
+            return true;
+        }
+        #[cfg(windows)]
+        {
+            if configured.extension().is_none() {
+                return ["exe", "cmd", "bat", "com"]
+                    .iter()
+                    .any(|extension| is_executable_file(&candidate.with_extension(extension)));
+            }
+        }
+        false
+    })
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
 fn topgg_metrics_from_environment() -> Result<Option<TopggMetricsRuntimeConfig>, RuntimeError> {
     let Some(token) = nonempty_env("TOPGG_TOKEN") else {
         return Ok(None);
@@ -1915,8 +2027,12 @@ enum RuntimeError {
     NeuralApiKeyRequired,
     #[error("a Rust Piper feature requires at least one supported Piper .onnx model")]
     ModelsUnavailable,
+    #[error("PIPER_PATH must point to an executable Piper file when Rust voice is enabled")]
+    PiperExecutableUnavailable,
     #[error("DEFAULT_VOICE must name a supported Piper model when a Rust Piper feature is enabled")]
     DefaultVoiceUnavailable,
+    #[error("DEFAULT_VOICE requires a matching .onnx.json Piper configuration file")]
+    DefaultVoiceConfigUnavailable,
     #[error("private TTS file gateway initialisation failed")]
     TtsFileGateway,
     #[error("private translation gateway initialisation failed")]
@@ -2806,6 +2922,15 @@ mod tests {
     }
 
     #[test]
+    fn setup_promotion_is_exactly_opt_in() {
+        assert!(setup_enabled(Some("true")));
+        assert!(setup_enabled(Some(" TRUE ")));
+        assert!(!setup_enabled(Some("1")));
+        assert!(!setup_enabled(Some("yes")));
+        assert!(!setup_enabled(None));
+    }
+
+    #[test]
     fn autocomplete_promotion_is_exactly_opt_in() {
         assert!(autocomplete_enabled(Some("true")));
         assert!(autocomplete_enabled(Some(" TRUE ")));
@@ -2851,18 +2976,162 @@ mod tests {
     }
 
     #[test]
-    fn piper_only_canaries_remain_explicitly_piper_gated() {
-        assert!(piper_runtime_default_compatible(None));
-        assert!(piper_runtime_default_compatible(Some("  ")));
-        assert!(piper_runtime_default_compatible(Some("PIPER")));
-        assert!(!piper_runtime_default_compatible(Some("gtts")));
-        assert!(!piper_runtime_default_compatible(Some("neural")));
-        assert!(!piper_runtime_default_compatible(Some("router")));
-        assert!(require_piper_runtime_default(Some("piper")).is_ok());
-        assert!(matches!(
-            require_piper_runtime_default(Some("gtts")),
-            Err(RuntimeError::RustVoiceRequiresPiperDefault)
+    fn whisper_runtime_prefers_the_pinned_project_venv() {
+        let root = env::temp_dir().join(format!("vozen-whisper-resolve-{}", std::process::id()));
+        let python = root.join("tools/whisper-venv/bin/python");
+        let script = root.join("tools/whisper_sidecar.py");
+        fs::create_dir_all(python.parent().expect("python parent")).expect("venv directory");
+        fs::write(&python, b"python").expect("python marker");
+        fs::write(&script, b"sidecar").expect("script marker");
+
+        let resolved = resolve_whisper_runtime(&root, None, None);
+        assert_eq!(resolved, (python, script));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn whisper_runtime_keeps_explicit_paths_and_safe_fallbacks() {
+        let root = env::temp_dir().join(format!("vozen-whisper-fallback-{}", std::process::id()));
+        fs::create_dir_all(&root).expect("test root");
+        assert_eq!(
+            resolve_whisper_runtime(&root, Some("custom-python"), Some("custom-sidecar.py")),
+            (
+                PathBuf::from("custom-python"),
+                PathBuf::from("custom-sidecar.py")
+            )
+        );
+        assert_eq!(
+            resolve_whisper_runtime(&root, None, None),
+            (
+                PathBuf::from("python3"),
+                PathBuf::from("tools/whisper_sidecar.py")
+            )
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn piper_runtime_rejects_a_directory_masquerading_as_the_executable() {
+        let root = env::temp_dir().join(format!(
+            "vozen-piper-directory-regression-{}",
+            std::process::id()
         ));
+        let piper_directory = root.join("piper");
+        let models = root.join("models");
+        fs::create_dir_all(&piper_directory).expect("piper directory");
+        fs::create_dir_all(&models).expect("models directory");
+        fs::write(models.join("en_US-amy-medium.onnx"), b"model").expect("model");
+        fs::write(models.join("en_US-amy-medium.onnx.json"), b"{}").expect("model config");
+
+        assert!(matches!(
+            validate_piper_runtime(&piper_directory, &models, "en_US-amy-medium"),
+            Err(RuntimeError::PiperExecutableUnavailable)
+        ));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn piper_runtime_requires_the_default_model_configuration_pair() {
+        let root = env::temp_dir().join(format!(
+            "vozen-piper-config-regression-{}",
+            std::process::id()
+        ));
+        let piper = root.join(if cfg!(windows) { "piper.exe" } else { "piper" });
+        let models = root.join("models");
+        fs::create_dir_all(&models).expect("models directory");
+        fs::write(&piper, b"executable").expect("piper marker");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&piper, fs::Permissions::from_mode(0o755)).expect("executable bit");
+        }
+        fs::write(models.join("en_US-amy-medium.onnx"), b"model").expect("model");
+
+        assert!(matches!(
+            validate_piper_runtime(&piper, &models, "en_US-amy-medium"),
+            Err(RuntimeError::DefaultVoiceConfigUnavailable)
+        ));
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn piper_runtime_accepts_an_executable_and_complete_default_model_pair() {
+        let root = env::temp_dir().join(format!(
+            "vozen-piper-complete-regression-{}",
+            std::process::id()
+        ));
+        let piper = root.join(if cfg!(windows) { "piper.exe" } else { "piper" });
+        let models = root.join("models");
+        fs::create_dir_all(&models).expect("models directory");
+        fs::write(&piper, b"executable").expect("piper marker");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&piper, fs::Permissions::from_mode(0o755)).expect("executable bit");
+        }
+        fs::write(models.join("en_US-amy-medium.onnx"), b"model").expect("model");
+        fs::write(models.join("en_US-amy-medium.onnx.json"), b"{}").expect("model config");
+
+        assert_eq!(
+            validate_piper_runtime(&piper, &models, "en_US-amy-medium")
+                .expect("complete Piper runtime"),
+            vec!["en_US-amy-medium"]
+        );
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn google_default_restores_the_legacy_synthetic_voice_catalogue_for_games() {
+        use vozen_discord::{GameDriverAction, GameDriverFactory, GuessLanguageDriverAction};
+
+        let models = available_models_for_default_provider(
+            vec!["en_US-amy-medium".into()],
+            SynthesisEngine::Default,
+        );
+        assert_eq!(models.len(), GTTS_SYNTHETIC_LOCALES.len());
+        assert!(models.iter().any(|model| model == "pt_PT-google-medium"));
+        assert!(models.iter().any(|model| model == "de_DE-google-medium"));
+        assert_eq!(
+            models
+                .iter()
+                .filter(|model| model.starts_with("en_US-"))
+                .count(),
+            1,
+            "an installed Piper locale must not gain a duplicate synthetic voice"
+        );
+
+        let factory = GameDriverFactory::new(models, "en_US-amy-medium", "en");
+        let mut driver = factory
+            .create("guess-language", None, 42)
+            .expect("Guess the Language driver");
+        let actions = driver.on_start(0);
+        assert!(matches!(
+            actions.as_slice(),
+            [
+                GameDriverAction::Announcement(intro),
+                GameDriverAction::GuessLanguage(GuessLanguageDriverAction::RoundOpened {
+                    round: 1,
+                    total: 5,
+                    ..
+                })
+            ] if intro.parameters.get("rounds").map(String::as_str) == Some("5")
+        ));
+    }
+
+    #[test]
+    fn local_or_neural_defaults_do_not_advertise_google_only_models() {
+        let piper = vec!["en_US-amy-medium".to_owned()];
+        assert_eq!(
+            available_models_for_default_provider(piper.clone(), SynthesisEngine::Piper),
+            piper
+        );
+        assert_eq!(
+            available_models_for_default_provider(
+                vec!["en_US-amy-medium".to_owned()],
+                SynthesisEngine::Neural
+            ),
+            vec!["en_US-amy-medium"]
+        );
     }
 
     #[test]

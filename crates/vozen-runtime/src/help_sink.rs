@@ -16,6 +16,7 @@ use vozen_discord::{
 
 const COMMANDS: &str = include_str!("../../../contracts/discord-commands.json");
 const SOURCE_URL: &str = "https://github.com/Rexy40407/vozen";
+const BRAND_COLOR: u32 = 0x5865F2;
 
 pub struct HelpGatewaySink {
     support_url: String,
@@ -90,6 +91,7 @@ impl HelpGatewaySink {
         footer.insert("command", "/setup".to_owned());
 
         Ok(CreateEmbed::new()
+            .color(BRAND_COLOR)
             .title(self.message(command, "help.embedTitle", &BTreeMap::new())?)
             .description(format!(
                 "{}\n{}\n\n{}\n\n{}\n{}",
@@ -184,5 +186,10 @@ mod tests {
     fn source_and_support_urls_are_stable_inputs() {
         assert_eq!(SOURCE_URL, "https://github.com/Rexy40407/vozen");
         assert!(COMMANDS.contains("\"name\": \"help\""));
+    }
+
+    #[test]
+    fn help_embed_uses_the_typescript_brand_blurple() {
+        assert_eq!(BRAND_COLOR, 0x5865F2);
     }
 }

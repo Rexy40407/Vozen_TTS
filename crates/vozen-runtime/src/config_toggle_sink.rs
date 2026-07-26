@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -71,8 +72,6 @@ impl ConfigToggleGatewaySink {
             (ConfigToggle::Xsaid, false) => "config.xsaidOff",
             (ConfigToggle::AutoJoin, true) => "config.autojoinOn",
             (ConfigToggle::AutoJoin, false) => "config.autojoinOff",
-            (ConfigToggle::AlwaysOn, true) => "config.stayOn",
-            (ConfigToggle::AlwaysOn, false) => "config.stayOff",
             (ConfigToggle::ReadBots, true) => "config.readBotsOn",
             (ConfigToggle::ReadBots, false) => "config.readBotsOff",
             (ConfigToggle::TextInVoice, true) => "config.textInVoiceOn",
@@ -142,7 +141,7 @@ impl GatewayEventSink for ConfigToggleGatewaySink {
                 &context,
                 CreateInteractionResponse::Message(
                     CreateInteractionResponseMessage::new()
-                        .content(content)
+                        .embeds(vec![message_embed(content)])
                         .ephemeral(true),
                 ),
             )

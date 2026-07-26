@@ -1,8 +1,10 @@
 //! Clock-aware lifecycle adapter for Reflexes.
 
+use std::collections::BTreeMap;
+
 use vozen_core::{ReflexesEvent, ReflexesGame};
 
-use crate::{GameDriver, GameDriverAction, GameMessage};
+use crate::{GameAnnouncementAction, GameDriver, GameDriverAction, GameMessage};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReflexesDriverAction {
@@ -54,7 +56,13 @@ impl ReflexesGameDriver {
 
 impl GameDriver for ReflexesGameDriver {
     fn on_start(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
-        to_manager_actions(self.inner.start(now_ms))
+        let mut parameters = BTreeMap::new();
+        parameters.insert("rounds", "3".to_owned());
+        let mut actions = vec![GameDriverAction::Announcement(
+            GameAnnouncementAction::message("game.reflexes.intro", parameters),
+        )];
+        actions.extend(to_manager_actions(self.inner.start(now_ms)));
+        actions
     }
 
     fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {
@@ -129,8 +137,12 @@ impl ReflexesDriver {
     ) -> Vec<ReflexesDriverAction> {
         let event = self.game.play_at(user_id, name, now_ms);
         let mut actions = vec![map_event_with_name(event.clone(), Some(name))];
-        if matches!(event, ReflexesEvent::Winner { .. }) && !self.game.is_finished() {
-            actions.push(self.ready_action(now_ms));
+        if matches!(event, ReflexesEvent::Winner { .. }) {
+            if self.game.is_finished() {
+                actions.push(ReflexesDriverAction::Finished);
+            } else {
+                actions.push(self.ready_action(now_ms));
+            }
         }
         actions
     }
@@ -143,7 +155,11 @@ impl ReflexesDriver {
         let event = self.game.advance(now_ms);
         let mut actions = vec![map_event(event.clone())];
         if matches!(event, ReflexesEvent::TooSlow { .. }) {
-            actions.push(self.ready_action(now_ms));
+            if self.game.is_finished() {
+                actions.push(ReflexesDriverAction::Finished);
+            } else {
+                actions.push(self.ready_action(now_ms));
+            }
         }
         actions
     }
@@ -223,7 +239,7 @@ mod tests {
         let mut driver = ReflexesDriver::new(3);
         let mut now = 0;
         let _ = driver.start(now);
-        for round in 1..=3 {
+        for _round in 1..=3 {
             let open_at = driver.deadline_ms();
             assert!(matches!(
                 driver.advance(open_at),
@@ -231,11 +247,7 @@ mod tests {
             ));
             let close_at = driver.deadline_ms();
             let event = driver.advance(close_at);
-            if round < 3 {
-                assert!(matches!(event, ReflexesDriverAction::TooSlow { .. }));
-            } else {
-                assert_eq!(event, ReflexesDriverAction::Finished);
-            }
+            assert!(matches!(event, ReflexesDriverAction::TooSlow { .. }));
             now = close_at;
         }
         let _ = now;
@@ -258,9 +270,10 @@ mod tests {
         assert_eq!(status, StartGameResult::Started);
         assert!(matches!(
             initial.as_slice(),
-            [GameDriverAction::Reflexes(
-                ReflexesDriverAction::RoundReady { .. }
-            )]
+            [
+                GameDriverAction::Announcement(_),
+                GameDriverAction::Reflexes(ReflexesDriverAction::RoundReady { .. })
+            ]
         ));
         let ready = {
             let mut mirror = ReflexesDriver::new(1);

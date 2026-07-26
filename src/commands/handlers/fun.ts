@@ -133,6 +133,19 @@ export async function handleJoke(i: ChatInputCommandInteraction, deps: BotDeps):
     return;
   }
   const risos = i.options.getBoolean('laughter', true);
+  const explicitEngine = i.options.getString('engine') as
+    | 'google'
+    | 'piper'
+    | 'kokoro'
+    | null;
+  if (
+    explicitEngine === 'kokoro' &&
+    !isUserPremium(deps.db, i.user.id, Date.now()) &&
+    !isGuildPremium(deps.db, i.guildId!, Date.now())
+  ) {
+    await i.editReply(editCard(t('voice.engine.kokoroLocked', locale), { tone: 'danger' }));
+    return;
+  }
 
   // Voice for the chosen language: 1st installed model with the prefix; if none
   // (the language has no installed model), falls back to the guild / .env / amy default.
@@ -162,7 +175,7 @@ export async function handleJoke(i: ChatInputCommandInteraction, deps: BotDeps):
     deps.db,
     i.guildId!,
     i.user.id,
-    stored?.engine,
+    explicitEngine ?? stored?.engine,
     Date.now(),
   );
 
@@ -257,7 +270,12 @@ export async function handleRizz(i: ChatInputCommandInteraction, deps: BotDeps):
     await i.editReply(editCard(t('rizz.unknownLang', locale), { tone: 'danger' }));
     return;
   }
-  const sound = i.options.getBoolean('sound', true);
+  const sound = i.options.getBoolean('sound') ?? false;
+  const explicitEngine = i.options.getString('engine', true) as
+    | 'google'
+    | 'piper'
+    | 'kokoro'
+    | null;
   const cfg = getGuildConfig(deps.db, i.guildId!);
 
   // per-user rate-limit (SAME limiter as /tts and /joke): AFTER deferReply.
@@ -278,7 +296,7 @@ export async function handleRizz(i: ChatInputCommandInteraction, deps: BotDeps):
     deps.db,
     i.guildId!,
     i.user.id,
-    stored?.engine,
+    explicitEngine ?? stored?.engine,
     Date.now(),
   );
 
@@ -407,26 +425,45 @@ export async function handleMicroFun(
   const locale = localeForUser(deps, i);
   const funLoc: FunLocale = funLocaleOf(locale);
   const seed = Date.now();
+  // All spoken micro-fun commands use the same language catalog and engine selector as /joke.
+  const selectedLanguage = i.options.getString('language', true);
+  const selectedLang = selectedLanguage ? jokeLangByKey(selectedLanguage) : undefined;
+  if (!selectedLang) {
+    await i.editReply(editCard(t('joke.unknownLang', locale), { tone: 'danger' }));
+    return;
+  }
+  const explicitEngine = i.options.getString('engine', true) as 'google' | 'piper' | 'kokoro';
+  if (
+    explicitEngine === 'kokoro' &&
+    !isUserPremium(deps.db, i.user.id, Date.now()) &&
+    !isGuildPremium(deps.db, i.guildId!, Date.now())
+  ) {
+    await i.editReply(editCard(t('voice.engine.kokoroLocked', locale), { tone: 'danger' }));
+    return;
+  }
+  // The content bank currently has native EN/PT entries. Other selected languages
+  // still get the correct voice/model; until their bank is curated, spoken text uses EN.
+  const spokenLocale: FunLocale = selectedLanguage === 'pt' ? 'pt' : funLoc;
 
   let spoken: string;
   let replyText: string;
   switch (kind) {
     case '8ball': {
       const question = i.options.getString('question', true);
-      spoken = pickEightball(funLoc, seed);
+      spoken = pickEightball(spokenLocale, seed);
       replyText = t('fun.eightball', locale, { question, answer: spoken });
       break;
     }
     case 'fortune':
-      spoken = pickFortune(funLoc, seed);
+      spoken = pickFortune(spokenLocale, seed);
       replyText = t('fun.fortune', locale, { text: spoken });
       break;
     case 'fact':
-      spoken = pickFact(funLoc, seed);
+      spoken = pickFact(spokenLocale, seed);
       replyText = t('fun.fact', locale, { text: spoken });
       break;
     case 'wyr':
-      spoken = pickWyr(funLoc, seed);
+      spoken = pickWyr(spokenLocale, seed);
       replyText = t('fun.wyr', locale, { text: spoken });
       break;
   }
@@ -442,7 +479,7 @@ export async function handleMicroFun(
     const cfg = getGuildConfig(deps.db, i.guildId!);
     const rl = getLimiter(deps, i.guildId!, cfg.ratePerMin);
     if (rl.allow(i.user.id, Date.now())) {
-      const prefix = funLoc === 'pt' ? 'pt_' : 'en_';
+      const prefix = selectedLang?.prefix || (spokenLocale === 'pt' ? 'pt_' : 'en_');
       const model =
         deps.availableModels.find((m) => m.startsWith(prefix)) ||
         cfg.defaultVoice ||
@@ -453,7 +490,7 @@ export async function handleMicroFun(
         deps.db,
         i.guildId!,
         i.user.id,
-        stored?.engine,
+        explicitEngine ?? stored?.engine,
         Date.now(),
       );
       // singleVoice: the phrase's language is KNOWN (the bank), detection doesn't decide.

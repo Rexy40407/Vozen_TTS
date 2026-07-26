@@ -6,6 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -105,7 +106,7 @@ impl GatewayEventSink for RedeemGatewaySink {
             return Ok(());
         };
         let response = CreateInteractionResponseMessage::new()
-            .content(self.response(&command, &parsed.code)?)
+            .embeds(vec![message_embed(self.response(&command, &parsed.code)?)])
             .ephemeral(true);
         command
             .create_response(&context, CreateInteractionResponse::Message(response))

@@ -226,10 +226,8 @@ async function main(): Promise<void> {
       removePlayer(deps, guildId);
       getVoiceConnection(guildId)?.destroy();
     },
-    // 24/7 in-call: the guild stays in the channel even when alone only if it is Premium AND has the
-    // toggle on (/config always-on, default OFF). isGuildPremium covers direct Premium + passes.
-    stayInCall: (guildId) =>
-      isGuildPremium(db, guildId, Date.now()) && getGuildConfig(db, guildId).stayInCall,
+    // Always-on was removed; an empty voice call is always released.
+    stayInCall: () => false,
   });
 
   // Minigames (/game). The GameManager is decoupled from discord.js/SQLite: it receives a
@@ -634,8 +632,8 @@ async function main(): Promise<void> {
     } catch (err) {
       log.error('[index] failed to start the top.gg event purge job (ignored)', err);
     }
-    // Premium 24/7 always restores. Ordinary calls restore after a planned deploy or clean
-    // administrator/VPS restart; a crash has no clean signal and therefore no marker.
+    // Ordinary calls restore only after a planned deploy or clean administrator/VPS restart;
+    // a crash has no clean signal and therefore no marker.
     try {
       const plannedRejoin = consumePlannedRejoinMarker();
       const resumeAfterDeploy = plannedRejoin !== null;
@@ -656,9 +654,7 @@ async function main(): Promise<void> {
       const rows = listVoicePresence(db);
       if (rows.length > 0) {
         const plan = planRejoin(rows, {
-          stayInCall: (gid) =>
-            restoresPlannedGuild(gid) ||
-            (isGuildPremium(db, gid, Date.now()) && getGuildConfig(db, gid).stayInCall),
+          stayInCall: (gid) => restoresPlannedGuild(gid),
           channelState: channelStateOf,
         });
         for (const gid of plan.forget) forgetVoicePresence(db, gid);

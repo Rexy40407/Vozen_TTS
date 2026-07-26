@@ -117,6 +117,7 @@ pub enum CoreJokeOutcome {
     NotInPlayer,
     NotInSameVoice,
     UnknownLanguage,
+    PremiumLocked,
     RateLimited,
     Busy,
     Queued,
@@ -179,6 +180,7 @@ pub struct CoreMicroFunResult {
     pub question: Option<String>,
     pub text: String,
     pub queued: bool,
+    pub premium_locked: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -291,6 +293,27 @@ impl<T, S, P> CoreVoiceService<T, S, P> {
             .ok()
             .and_then(|store| gcloud_budget_for(&store, guild_id, user_id, engine, now_ms))
     }
+
+    /// Resolves the same saved/guild/runtime model precedence used by `/voice preview`.
+    /// The interaction layer uses this before rendering the sample phrase so its locale follows
+    /// the voice that will actually be synthesized, rather than the Discord UI locale.
+    pub fn preview_model(&self, guild_id: &str, user_id: &str) -> Option<String> {
+        let store = self.store.lock().ok()?;
+        let config = store.guild_config(guild_id).ok()?;
+        let stored = store.get_user_voice(guild_id, user_id).ok().flatten();
+
+        stored
+            .as_ref()
+            .map(|voice| voice.model.clone())
+            .filter(|model| !model.trim().is_empty())
+            .or_else(|| {
+                (!config.default_voice.trim().is_empty()).then(|| config.default_voice.clone())
+            })
+            .or_else(|| {
+                (!self.settings.default_voice.trim().is_empty())
+                    .then(|| self.settings.default_voice.clone())
+            })
+    }
 }
 
 impl<T, S, P> CoreVoiceService<T, S, P>
@@ -319,18 +342,39 @@ where
             CoreVoiceCommand::Laugh => {
                 CoreVoiceOutcome::Laugh(self.execute_laugh(invocation).await)
             }
-            CoreVoiceCommand::Joke { language, laughter } => {
-                CoreVoiceOutcome::Joke(self.execute_joke(invocation, language, *laughter).await)
-            }
-            CoreVoiceCommand::Rizz { language, sound } => {
-                CoreVoiceOutcome::Rizz(self.execute_rizz(invocation, language, *sound).await)
-            }
+            CoreVoiceCommand::Joke {
+                language,
+                laughter,
+                engine,
+            } => CoreVoiceOutcome::Joke(
+                self.execute_joke(invocation, language, *laughter, engine.as_deref())
+                    .await,
+            ),
+            CoreVoiceCommand::Rizz {
+                language,
+                sound,
+                engine,
+            } => CoreVoiceOutcome::Rizz(
+                self.execute_rizz(invocation, language, *sound, engine.as_deref())
+                    .await,
+            ),
             CoreVoiceCommand::Sound { name } => {
                 CoreVoiceOutcome::Sound(self.execute_sound(invocation, name.as_deref()).await)
             }
-            CoreVoiceCommand::MicroFun { kind, question } => CoreVoiceOutcome::MicroFun(
-                self.execute_microfun(invocation, *kind, question.clone())
-                    .await,
+            CoreVoiceCommand::MicroFun {
+                kind,
+                question,
+                language,
+                engine,
+            } => CoreVoiceOutcome::MicroFun(
+                self.execute_microfun(
+                    invocation,
+                    *kind,
+                    question.clone(),
+                    language.as_deref(),
+                    engine.as_deref(),
+                )
+                .await,
             ),
             CoreVoiceCommand::Skip => {
                 CoreVoiceOutcome::Skipped(self.skip(invocation.guild_id).await)
@@ -341,10 +385,11 @@ where
             CoreVoiceCommand::Tts { text } => {
                 CoreVoiceOutcome::Tts(self.execute_tts(invocation, text).await)
             }
-            CoreVoiceCommand::VoicePreview { model } => CoreVoiceOutcome::Preview(
+            CoreVoiceCommand::VoicePreview { model, engine } => CoreVoiceOutcome::Preview(
                 self.execute_preview(
                     invocation,
                     model.as_deref(),
+                    engine.as_deref(),
                     "Hi, I'm Vozen. type it, hear it.",
                 )
                 .await,
@@ -455,6 +500,7 @@ where
         &self,
         invocation: CoreVoiceInvocation<'_>,
         explicit_model: Option<&str>,
+        explicit_engine: Option<&str>,
         sample: &str,
     ) -> CorePreviewOutcome {
         if let Some(model) = explicit_model
@@ -547,6 +593,7 @@ where
                 invocation.guild_id,
                 invocation.user_id,
                 stored.map(|voice| voice.engine),
+                explicit_engine,
                 (self.now_ms)(),
             );
             (model, speed, engine, lane)
@@ -659,19 +706,21 @@ where
                 .unwrap_or_else(|| self.settings.default_voice.clone())
         };
         let sample = laughter_for_model(&model);
-        self.execute_preview(invocation, Some(&model), &sample)
+        self.execute_preview(invocation, Some(&model), None, &sample)
             .await
     }
 
     /// Micro-fun commands always produce their public text answer. When a player exists, they
     /// additionally use the same same-call, role and rate-limit gates as explicit speech and
-    /// queue the answer in the language of the UI. A missing/unauthorized call therefore never
+    /// queue the answer in the selected language. A missing/unauthorized call therefore never
     /// turns a useful text command into an error.
     async fn execute_microfun(
         &self,
         invocation: CoreVoiceInvocation<'_>,
         kind: MicroFunKind,
         question: Option<String>,
+        language: Option<&str>,
+        explicit_engine: Option<&str>,
     ) -> CoreMicroFunResult {
         let locale = self
             .store
@@ -680,13 +729,41 @@ where
             .and_then(|store| store.guild_config(invocation.guild_id).ok())
             .map(|config| config.locale)
             .unwrap_or_else(|| "en".to_owned());
-        let text = crate::pick_microfun(kind, &locale, (self.now_ms)());
+        let spoken_language = language.unwrap_or(&locale);
+        let text = crate::pick_microfun(kind, spoken_language, (self.now_ms)());
         let mut result = CoreMicroFunResult {
             kind,
             question,
             text,
             queued: false,
+            premium_locked: false,
         };
+
+        // An explicit Kokoro choice is an entitlement request, not a silent fallback.
+        // Keep the behavior identical to /joke and /rizz: free users get a clear Premium
+        // response and no audio is queued.
+        if explicit_engine.is_some_and(|value| value.trim().eq_ignore_ascii_case("kokoro")) {
+            let premium = self
+                .store
+                .lock()
+                .ok()
+                .and_then(|store| {
+                    store
+                        .is_user_premium(invocation.user_id, (self.now_ms)())
+                        .ok()
+                        .and_then(|user| {
+                            store
+                                .is_guild_premium(invocation.guild_id, (self.now_ms)())
+                                .ok()
+                                .map(|guild| user || guild)
+                        })
+                })
+                .unwrap_or(false);
+            if !premium {
+                result.premium_locked = true;
+                return result;
+            }
+        }
 
         let Ok(CommandPlaybackState::Active | CommandPlaybackState::Idle) =
             self.playback.state(invocation.guild_id).await
@@ -735,11 +812,15 @@ where
                 .get_user_voice(invocation.guild_id, invocation.user_id)
                 .ok()
                 .flatten();
-            let prefix = if locale.starts_with("pt") {
-                "pt_"
-            } else {
-                "en_"
-            };
+            let prefix = joke_lang_by_key(spoken_language)
+                .map(|info| info.prefix)
+                .unwrap_or_else(|| {
+                    if spoken_language.starts_with("pt") {
+                        "pt_"
+                    } else {
+                        "en_"
+                    }
+                });
             let model = self
                 .settings
                 .available_models
@@ -756,11 +837,20 @@ where
                         self.settings.default_voice.clone()
                     }
                 });
+            let selected_engine = explicit_engine
+                .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
+                    "google" => Some(UserEngine::Google),
+                    "piper" => Some(UserEngine::Piper),
+                    "kokoro" => Some(UserEngine::Kokoro),
+                    _ => None,
+                })
+                .or_else(|| stored.as_ref().map(|voice| voice.engine));
             let engine = resolve_preview_engine(
                 &store,
                 invocation.guild_id,
                 invocation.user_id,
-                stored.as_ref().map(|voice| voice.engine),
+                selected_engine,
+                None,
                 (self.now_ms)(),
             );
             (model, self.settings.default_speed, engine, lane)
@@ -797,6 +887,7 @@ where
         invocation: CoreVoiceInvocation<'_>,
         language: &str,
         sound: bool,
+        explicit_engine: Option<&str>,
     ) -> CoreRizzResult {
         let now = (self.now_ms)();
         let premium = {
@@ -916,11 +1007,20 @@ where
                 .map(|voice| voice.speed)
                 .filter(|speed| speed.is_finite())
                 .unwrap_or(self.settings.default_speed);
+            let selected_engine = explicit_engine
+                .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
+                    "google" => Some(UserEngine::Google),
+                    "piper" => Some(UserEngine::Piper),
+                    "kokoro" => Some(UserEngine::Kokoro),
+                    _ => None,
+                })
+                .or_else(|| stored.as_ref().map(|voice| voice.engine));
             let engine = resolve_preview_engine(
                 &store,
                 invocation.guild_id,
                 invocation.user_id,
-                stored.as_ref().map(|voice| voice.engine),
+                selected_engine,
+                None,
                 now,
             );
             (model, speed, engine, lane)
@@ -1127,6 +1227,7 @@ where
         invocation: CoreVoiceInvocation<'_>,
         language: &str,
         laughter: bool,
+        explicit_engine: Option<&str>,
     ) -> CoreJokeResult {
         let playback_state = match self.playback.state(invocation.guild_id).await {
             Ok(state) => state,
@@ -1242,11 +1343,46 @@ where
                         self.settings.default_voice.clone()
                     }
                 });
+            // An explicitly selected engine follows the same Premium gate as a saved
+            // preference. We pass it as the selected value (rather than the preview-only
+            // explicit argument) so Kokoro remains free only for `/voice preview`.
+            let selected_engine = explicit_engine
+                .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
+                    "google" => Some(UserEngine::Google),
+                    "piper" => Some(UserEngine::Piper),
+                    "kokoro" => Some(UserEngine::Kokoro),
+                    _ => None,
+                })
+                .or_else(|| stored.as_ref().map(|voice| voice.engine));
+            if selected_engine == Some(UserEngine::Kokoro) {
+                let premium = match store
+                    .is_user_premium(invocation.user_id, (self.now_ms)())
+                    .and_then(|user| {
+                        store
+                            .is_guild_premium(invocation.guild_id, (self.now_ms)())
+                            .map(|guild| user || guild)
+                    }) {
+                    Ok(premium) => premium,
+                    Err(_) => {
+                        return CoreJokeResult {
+                            outcome: CoreJokeOutcome::StoreUnavailable,
+                            joke: None,
+                        };
+                    }
+                };
+                if !premium {
+                    return CoreJokeResult {
+                        outcome: CoreJokeOutcome::PremiumLocked,
+                        joke: None,
+                    };
+                }
+            }
             let engine = resolve_preview_engine(
                 &store,
                 invocation.guild_id,
                 invocation.user_id,
-                stored.as_ref().map(|voice| voice.engine),
+                selected_engine,
+                None,
                 (self.now_ms)(),
             );
             let joke = pick_joke(language, (self.now_ms)()).to_owned();
@@ -1570,9 +1706,25 @@ fn resolve_preview_engine(
     guild_id: &str,
     user_id: &str,
     stored: Option<UserEngine>,
+    explicit: Option<&str>,
     now_ms: i64,
 ) -> SynthesisEngine {
-    match stored.unwrap_or(UserEngine::Google) {
+    // Preview is the free product sample: an explicit Kokoro choice must be allowed even when
+    // the caller has no Premium entitlement. Premium gating still applies to saved preferences
+    // and normal message playback; only this one-shot preview bypasses it.
+    if explicit.is_some_and(|value| value.trim().eq_ignore_ascii_case("kokoro")) {
+        return SynthesisEngine::Kokoro;
+    }
+    let selected = explicit
+        .and_then(|value| match value.trim().to_ascii_lowercase().as_str() {
+            "google" => Some(UserEngine::Google),
+            "piper" => Some(UserEngine::Piper),
+            "kokoro" => Some(UserEngine::Kokoro),
+            _ => None,
+        })
+        .or(stored)
+        .unwrap_or(UserEngine::Google);
+    match selected {
         UserEngine::Google => SynthesisEngine::Default,
         UserEngine::Piper => SynthesisEngine::Piper,
         UserEngine::Kokoro => {
@@ -1829,7 +1981,10 @@ mod tests {
             service
                 .execute(
                     invocation(),
-                    &CoreVoiceCommand::VoicePreview { model: None },
+                    &CoreVoiceCommand::VoicePreview {
+                        model: None,
+                        engine: None,
+                    },
                 )
                 .await,
             CoreVoiceOutcome::Preview(CorePreviewOutcome::NotInSameVoice)
@@ -1848,6 +2003,7 @@ mod tests {
                     invocation(),
                     &CoreVoiceCommand::VoicePreview {
                         model: Some("missing-model".into()),
+                        engine: None,
                     },
                 )
                 .await,
@@ -1859,7 +2015,10 @@ mod tests {
             service
                 .execute(
                     invocation(),
-                    &CoreVoiceCommand::VoicePreview { model: None },
+                    &CoreVoiceCommand::VoicePreview {
+                        model: None,
+                        engine: None,
+                    },
                 )
                 .await,
             CoreVoiceOutcome::Preview(CorePreviewOutcome::Queued)
@@ -1892,6 +2051,7 @@ mod tests {
                 &CoreVoiceCommand::Joke {
                     language: "pt".into(),
                     laughter: true,
+                    engine: None,
                 },
             )
             .await;
@@ -1922,6 +2082,7 @@ mod tests {
                     &CoreVoiceCommand::Joke {
                         language: "made-up".into(),
                         laughter: false,
+                        engine: None,
                     },
                 )
                 .await,
@@ -1932,6 +2093,30 @@ mod tests {
         );
         assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
         assert_eq!(service.playback.reservations.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn joke_explicit_kokoro_requires_premium_instead_of_falling_back_to_google() {
+        let (service, _, state) = service(true);
+        state.update_voice_state("guild", "user", Some("voice".into()));
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        assert_eq!(
+            service
+                .execute(
+                    invocation(),
+                    &CoreVoiceCommand::Joke {
+                        language: "en".into(),
+                        laughter: false,
+                        engine: Some("kokoro".into()),
+                    },
+                )
+                .await,
+            CoreVoiceOutcome::Joke(CoreJokeResult {
+                outcome: CoreJokeOutcome::PremiumLocked,
+                joke: None,
+            })
+        );
+        assert_eq!(service.synthesizer.calls.load(Ordering::Relaxed), 0);
     }
 
     #[tokio::test]
@@ -1946,6 +2131,7 @@ mod tests {
                     &CoreVoiceCommand::Rizz {
                         language: "pt".into(),
                         sound: true,
+                        engine: None,
                     },
                 )
                 .await,
@@ -1965,6 +2151,7 @@ mod tests {
                 &CoreVoiceCommand::Rizz {
                     language: "pt".into(),
                     sound: true,
+                    engine: None,
                 },
             )
             .await;
@@ -2003,6 +2190,7 @@ mod tests {
                     &CoreVoiceCommand::Rizz {
                         language: "missing".into(),
                         sound: false,
+                        engine: None,
                     },
                 )
                 .await,
@@ -2147,6 +2335,51 @@ mod tests {
         assert_eq!(
             *service.playback.lanes.lock().expect("lanes"),
             vec![QueueLane::Accessibility]
+        );
+    }
+
+    #[tokio::test]
+    async fn internal_game_speech_queues_with_role_policy_configured() {
+        let (service, store, state) = service(true);
+        store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    priority_role_id: Some(Some("priority".into())),
+                    blocked_role_id: Some(Some("blocked".into())),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("config");
+        state.set_bot_voice_channel("guild", Some("voice".into()));
+        let roles = Vec::new();
+        let invocation = CoreVoiceInvocation {
+            guild_id: "guild",
+            channel_id: "game-thread",
+            user_id: "bot",
+            member_role_ids: Some(&roles),
+            resolve_user: &|_| "Vozen".into(),
+            resolve_channel: &|_| "game-thread".into(),
+        };
+
+        assert_eq!(
+            service
+                .execute_custom_speech(
+                    invocation,
+                    "listen carefully",
+                    "en_US-amy-medium",
+                    1.0,
+                    SynthesisEngine::Piper,
+                    false,
+                )
+                .await,
+            CoreTtsOutcome::Queued
+        );
+        assert_eq!(
+            *service.playback.lanes.lock().expect("lanes"),
+            vec![QueueLane::Standard]
         );
     }
 

@@ -114,6 +114,30 @@ impl VoiceDisplayCatalog {
             )
     }
 
+    /// Returns a language name in the requested UI locale without requiring a voice model.
+    ///
+    /// This mirrors Node's `Intl.DisplayNames` use in the minigames. Unsupported UI locales
+    /// fall back to English, while an unknown language remains visible as its original code.
+    #[must_use]
+    pub fn localized_language_name(
+        &self,
+        interaction_locale: Option<&str>,
+        language: &str,
+    ) -> String {
+        let locale = interaction_locale
+            .and_then(|value| self.supported_locale(value))
+            .unwrap_or("en");
+        self.names
+            .get(locale)
+            .and_then(|names| names.languages.get(language))
+            .or_else(|| {
+                self.names
+                    .get("en")
+                    .and_then(|names| names.languages.get(language))
+            })
+            .map_or_else(|| language.to_owned(), |name| capitalized(name))
+    }
+
     /// Returns the friendly voice label without its language prefix.
     #[must_use]
     pub fn voice_label(model: &str) -> String {
@@ -187,6 +211,25 @@ mod tests {
                 "fr_FR-siwis-medium"
             ),
             "Francês — Siwis"
+        );
+    }
+
+    #[test]
+    fn exposes_complete_localized_language_names_for_games() {
+        let catalog = VoiceDisplayCatalog::from_generated_contract().expect("catalog");
+        assert_eq!(
+            catalog.localized_language_name(Some("pt-PT"), "zh"),
+            "Chinês"
+        );
+        assert_eq!(
+            catalog.localized_language_name(Some("pt"), "fi"),
+            "Finlandês"
+        );
+        assert_eq!(catalog.localized_language_name(Some("pt"), "sv"), "Sueco");
+        assert_eq!(catalog.localized_language_name(Some("zh"), "zh"), "中文");
+        assert_eq!(
+            catalog.localized_language_name(Some("unknown"), "zh"),
+            "Chinese"
         );
     }
 

@@ -9,7 +9,7 @@ pub const REPETITION_MIN_TOKENS: usize = 10;
 pub const REPETITION_UNIQUE_RATIO_MAX: f64 = 0.35;
 pub const DUPLICATE_MIN_CHARS: usize = 40;
 pub const DUPLICATE_WINDOW_MS: i64 = 60_000;
-pub const COUNT_COOLDOWN_MS: i64 = 5_000;
+pub const COUNT_COOLDOWN_MS: i64 = 1_000;
 pub const COUNT_WINDOW_MS: i64 = 60_000;
 pub const COUNT_MAX_PER_MIN: usize = 10;
 const MAX_ENTRIES: usize = 10_000;
@@ -201,10 +201,11 @@ mod tests {
 
     #[test]
     fn count_gate_only_mutates_when_a_message_counts() {
+        assert_eq!(COUNT_COOLDOWN_MS, 1_000);
         let mut gate = CountGate::default();
         assert!(gate.should_count("guild", "user", "first distinct message", 0));
-        assert!(!gate.should_count("guild", "user", "second distinct message", 4_999));
-        assert!(!gate.should_count("guild", "user", "first distinct message", 5_000));
-        assert!(gate.should_count("guild", "user", "second distinct message", 5_000));
+        assert!(!gate.should_count("guild", "user", "second distinct message", 999));
+        assert!(!gate.should_count("guild", "user", "first distinct message", 1_000));
+        assert!(gate.should_count("guild", "user", "second distinct message", 1_000));
     }
 }

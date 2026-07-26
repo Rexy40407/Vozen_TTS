@@ -2,7 +2,8 @@
 //!
 //! `vozen-tts` deliberately knows nothing about Discord. This one-way adapter maps only a
 //! synthesis failure into the command service's content-free error, so neither a filesystem path
-//! nor a Piper process diagnostic can reach Discord or the process log through a user request.
+//! nor a Piper process diagnostic can reach Discord through a user request. A content-free local
+//! diagnostic remains in the process log so an operator can distinguish synthesis from playback.
 
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
@@ -90,8 +91,9 @@ where
         let result = self.engine.synth(request).await;
         self.metrics
             .record_synth_latency_ms(started.elapsed().as_millis().min(u64::MAX as u128) as u64);
-        if result.is_err() {
+        if let Err(error) = &result {
             self.metrics.record_synth_error();
+            eprintln!("[tts:piper] synthesis failed: {error}");
         }
         result.map_err(|_| CommandSynthesisError)
     }

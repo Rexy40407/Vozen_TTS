@@ -146,7 +146,6 @@ describe('sanitizePatch - whitelist, validation and channel behaviour', () => {
         'blockedRoleId',
         'translationEnabled',
         'votePromos',
-        'stayInCall',
       ]),
     );
   });

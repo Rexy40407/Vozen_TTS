@@ -15,6 +15,7 @@ pub enum HangmanDriverAction {
     Intro {
         masked: String,
         remaining: u8,
+        wrong: Vec<char>,
     },
     Hit {
         user_id: String,
@@ -22,6 +23,7 @@ pub enum HangmanDriverAction {
         letter: char,
         masked: String,
         remaining: u8,
+        wrong: Vec<char>,
     },
     Miss {
         user_id: String,
@@ -29,16 +31,19 @@ pub enum HangmanDriverAction {
         letter: char,
         masked: String,
         remaining: u8,
+        wrong: Vec<char>,
     },
     Won {
         user_id: String,
         name: String,
         word: String,
         masked: String,
+        wrong: Vec<char>,
     },
     Lost {
         word: String,
         masked: String,
+        wrong: Vec<char>,
     },
     Idle {
         word: String,
@@ -142,6 +147,7 @@ impl HangmanDriver {
         HangmanDriverAction::Intro {
             masked: self.game.masked(),
             remaining: self.game.remaining_lives() as u8,
+            wrong: self.game.wrong_letters(),
         }
     }
 
@@ -167,6 +173,7 @@ impl HangmanDriver {
                     letter,
                     masked: self.game.masked(),
                     remaining: self.game.remaining_lives() as u8,
+                    wrong: self.game.wrong_letters(),
                 }
             }
             HangmanEvent::Miss {
@@ -182,6 +189,7 @@ impl HangmanDriver {
                     letter,
                     masked: self.game.masked(),
                     remaining,
+                    wrong: self.game.wrong_letters(),
                 }
             }
             HangmanEvent::Won {
@@ -195,6 +203,7 @@ impl HangmanDriver {
                     name,
                     word,
                     masked: self.game.masked(),
+                    wrong: self.game.wrong_letters(),
                 }
             }
             HangmanEvent::Lost { word } => {
@@ -202,6 +211,7 @@ impl HangmanDriver {
                 HangmanDriverAction::Lost {
                     word,
                     masked: self.game.masked(),
+                    wrong: self.game.wrong_letters(),
                 }
             }
             HangmanEvent::WrongWord => HangmanDriverAction::WrongWord,
@@ -242,6 +252,7 @@ mod tests {
             HangmanDriverAction::Intro {
                 masked: "_ _ _".into(),
                 remaining: 6,
+                wrong: Vec::new(),
             }
         );
         assert_eq!(driver.deadline_ms(), Some(181_000));

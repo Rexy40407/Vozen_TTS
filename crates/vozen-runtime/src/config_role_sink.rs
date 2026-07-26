@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -117,7 +118,7 @@ impl GatewayEventSink for ConfigRoleGatewaySink {
                 &context,
                 CreateInteractionResponse::Message(
                     CreateInteractionResponseMessage::new()
-                        .content(content)
+                        .embeds(vec![message_embed(content)])
                         .ephemeral(true),
                 ),
             )

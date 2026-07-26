@@ -54,7 +54,9 @@ export function seedPanelState(
   return {
     model: current?.model ?? defaults.model,
     speed: current?.speed ?? defaults.speed,
-    engine: current?.engine ?? 'google',
+    // Google HD was removed from the selectable engines. Old profiles are
+    // intentionally migrated to the free Google gTTS default when the panel opens.
+    engine: current?.engine === 'gcloud' ? 'google' : (current?.engine ?? 'google'),
     langPage: 0,
   };
 }

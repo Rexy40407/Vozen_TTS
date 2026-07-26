@@ -1,8 +1,10 @@
 //! Shared lifecycle adapter for Math and Skip Count.
 
+use std::collections::BTreeMap;
+
 use vozen_core::{MathGame, MathGuessResult, MathOperation, SkipCountGame, SkipCountGuessResult};
 
-use crate::{GameDriver, GameDriverAction, GameMessage};
+use crate::{GameAnnouncementAction, GameDriver, GameDriverAction, GameMessage};
 
 const ROUND_MS: i64 = 20_000;
 
@@ -82,11 +84,22 @@ impl NumericQuizGameDriver {
 
 impl GameDriver for NumericQuizGameDriver {
     fn on_start(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
-        self.inner
-            .start(now_ms)
-            .into_iter()
-            .map(GameDriverAction::NumericQuiz)
-            .collect()
+        let mut parameters = BTreeMap::new();
+        parameters.insert("rounds", "5".to_owned());
+        let intro_key = match self.inner.mode {
+            NumericQuizMode::Math => "game.math.intro",
+            NumericQuizMode::SkipCount => "game.skipCount.intro",
+        };
+        let mut actions = vec![GameDriverAction::Announcement(
+            GameAnnouncementAction::message(intro_key, parameters),
+        )];
+        actions.extend(
+            self.inner
+                .start(now_ms)
+                .into_iter()
+                .map(GameDriverAction::NumericQuiz),
+        );
+        actions
     }
 
     fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {
@@ -345,9 +358,10 @@ mod tests {
         assert_eq!(status, StartGameResult::Started);
         assert!(matches!(
             initial.as_slice(),
-            [GameDriverAction::NumericQuiz(
-                NumericQuizAction::RoundOpened { .. }
-            )]
+            [
+                GameDriverAction::Announcement(_),
+                GameDriverAction::NumericQuiz(NumericQuizAction::RoundOpened { .. })
+            ]
         ));
         let answer = {
             let _ = &initial;

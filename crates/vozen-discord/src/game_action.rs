@@ -13,8 +13,76 @@ use crate::{GameDriverAction, VoiceResponseLocalizer};
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameSpeech {
     pub text: String,
+    pub key: Option<&'static str>,
+    pub parameters: BTreeMap<&'static str, String>,
+    pub parts: Option<Vec<RenderedTextPart>>,
     pub model: Option<String>,
     pub speed: Option<f64>,
+}
+
+impl GameSpeech {
+    #[must_use]
+    pub fn raw(text: impl Into<String>, model: Option<String>, speed: Option<f64>) -> Self {
+        Self {
+            text: text.into(),
+            key: None,
+            parameters: BTreeMap::new(),
+            parts: None,
+            model,
+            speed,
+        }
+    }
+
+    #[must_use]
+    pub fn localized(
+        key: &'static str,
+        parameters: BTreeMap<&'static str, String>,
+        model: Option<String>,
+        speed: Option<f64>,
+    ) -> Self {
+        Self {
+            text: String::new(),
+            key: Some(key),
+            parameters,
+            parts: None,
+            model,
+            speed,
+        }
+    }
+
+    #[must_use]
+    pub fn composed(
+        parts: Vec<RenderedTextPart>,
+        model: Option<String>,
+        speed: Option<f64>,
+    ) -> Self {
+        Self {
+            text: String::new(),
+            key: None,
+            parameters: BTreeMap::new(),
+            parts: Some(parts),
+            model,
+            speed,
+        }
+    }
+
+    #[must_use]
+    pub fn render(
+        &self,
+        localizer: &VoiceResponseLocalizer,
+        interaction_locale: Option<&str>,
+        guild_locale: Option<&str>,
+    ) -> Option<String> {
+        if let Some(parts) = &self.parts {
+            return render_text_parts(parts, localizer, interaction_locale, guild_locale);
+        }
+        match self.key {
+            Some(key) => {
+                localizer.render_key(key, interaction_locale, guild_locale, &self.parameters)
+            }
+            None => Some(self.text.clone()),
+        }
+    }
 }
 
 /// Display name and points captured during one match. The durable score store keeps only the
@@ -30,7 +98,38 @@ pub struct RenderedGameAction {
     pub key: &'static str,
     pub parameters: BTreeMap<&'static str, String>,
     pub attachment: Option<String>,
+    pub segments: Option<Vec<RenderedGameSegment>>,
     pub speech: Option<GameSpeech>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RenderedGameSegment {
+    Text(String),
+    Localized {
+        key: &'static str,
+        parameters: BTreeMap<&'static str, String>,
+    },
+    LocalizedWithParameter {
+        key: &'static str,
+        parameters: BTreeMap<&'static str, String>,
+        parameter: &'static str,
+        parts: Vec<RenderedTextPart>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RenderedTextPart {
+    Text(String),
+    Localized {
+        key: &'static str,
+        parameters: BTreeMap<&'static str, String>,
+    },
+    LocalizedWithParameter {
+        key: &'static str,
+        parameters: BTreeMap<&'static str, String>,
+        parameter: &'static str,
+        parts: Vec<RenderedTextPart>,
+    },
 }
 
 impl RenderedGameAction {
@@ -51,6 +150,36 @@ impl RenderedGameAction {
         interaction_locale: Option<&str>,
         guild_locale: Option<&str>,
     ) -> Option<String> {
+        if let Some(segments) = &self.segments {
+            let mut output = Vec::new();
+            for segment in segments {
+                match segment {
+                    RenderedGameSegment::Text(text) => output.push(text.clone()),
+                    RenderedGameSegment::Localized { key, parameters } => output.push(
+                        localizer.render_key(key, interaction_locale, guild_locale, parameters)?,
+                    ),
+                    RenderedGameSegment::LocalizedWithParameter {
+                        key,
+                        parameters,
+                        parameter,
+                        parts,
+                    } => {
+                        let mut parameters = parameters.clone();
+                        parameters.insert(
+                            parameter,
+                            render_text_parts(parts, localizer, interaction_locale, guild_locale)?,
+                        );
+                        output.push(localizer.render_key(
+                            key,
+                            interaction_locale,
+                            guild_locale,
+                            &parameters,
+                        )?);
+                    }
+                }
+            }
+            return Some(output.join("\n"));
+        }
         let message = self.render(localizer, interaction_locale, guild_locale)?;
         Some(match &self.attachment {
             Some(attachment) if !attachment.is_empty() => format!("{message}\n{attachment}"),
@@ -67,6 +196,30 @@ impl RenderedGameAction {
 #[must_use]
 pub fn render_game_action(action: &GameDriverAction) -> Option<RenderedGameAction> {
     match action {
+        GameDriverAction::Announcement(action) => {
+            let speech = action
+                .speech_key
+                .map(|key| {
+                    GameSpeech::localized(
+                        key,
+                        action.speech_parameters.clone(),
+                        action.model.clone(),
+                        action.speed,
+                    )
+                })
+                .or_else(|| {
+                    action.speech_text.as_ref().map(|text| {
+                        GameSpeech::raw(text.clone(), action.model.clone(), action.speed)
+                    })
+                });
+            Some(RenderedGameAction {
+                key: action.key,
+                parameters: action.parameters.clone(),
+                attachment: None,
+                segments: None,
+                speech,
+            })
+        }
         GameDriverAction::TextQuiz(action) => render_text_quiz(action),
         GameDriverAction::Hangman(action) => render_hangman(action),
         GameDriverAction::Wordle(action) => render_wordle(action),
@@ -75,11 +228,7 @@ pub fn render_game_action(action: &GameDriverAction) -> Option<RenderedGameActio
             "game.roulette.header",
             BTreeMap::new(),
             action.prompt.clone(),
-            Some(GameSpeech {
-                text: action.prompt.clone(),
-                model: None,
-                speed: None,
-            }),
+            Some(GameSpeech::raw(action.prompt.clone(), None, None)),
         )),
         GameDriverAction::Chess(action) => render_chess(action),
         GameDriverAction::NumericQuiz(action) => render_numeric(action),
@@ -104,15 +253,31 @@ pub fn render_game_finish(standings: &[GameStanding]) -> Vec<RenderedGameAction>
     }
     let mut ranked = standings.to_vec();
     ranked.sort_by_key(|standing| std::cmp::Reverse(standing.points));
-    let mut rendered = vec![message("game.finish.title", BTreeMap::new())];
-    rendered.extend(ranked.into_iter().enumerate().map(|(index, standing)| {
+    let winner = ranked
+        .first()
+        .filter(|standing| standing.points > 0)
+        .cloned();
+    let mut segments = vec![RenderedGameSegment::Localized {
+        key: "game.finish.title",
+        parameters: BTreeMap::new(),
+    }];
+    segments.extend(ranked.into_iter().enumerate().map(|(index, standing)| {
         let mut parameters = BTreeMap::new();
         parameters.insert("rank", rank_medal(index + 1));
         parameters.insert("user", standing.name);
         parameters.insert("points", standing.points.to_string());
-        message("game.finish.line", parameters)
+        RenderedGameSegment::Localized {
+            key: "game.finish.line",
+            parameters,
+        }
     }));
-    rendered
+    vec![RenderedGameAction {
+        key: "game.finish.title",
+        parameters: BTreeMap::new(),
+        attachment: None,
+        segments: Some(segments),
+        speech: winner.map(|standing| winner_speech(&standing.name)),
+    }]
 }
 
 fn message(key: &'static str, parameters: BTreeMap<&'static str, String>) -> RenderedGameAction {
@@ -120,6 +285,7 @@ fn message(key: &'static str, parameters: BTreeMap<&'static str, String>) -> Ren
         key,
         parameters,
         attachment: None,
+        segments: None,
         speech: None,
     }
 }
@@ -134,6 +300,7 @@ fn message_with_attachment(
         key,
         parameters,
         attachment: Some(attachment),
+        segments: None,
         speech,
     }
 }
@@ -156,11 +323,8 @@ fn render_text_quiz(action: &crate::TextQuizDriverAction) -> Option<RenderedGame
                 key: announce_key,
                 parameters,
                 attachment: None,
-                speech: Some(GameSpeech {
-                    text: prompt.clone(),
-                    model: model.clone(),
-                    speed: *speed,
-                }),
+                segments: None,
+                speech: Some(GameSpeech::raw(prompt.clone(), model.clone(), *speed)),
             })
         }
         TextQuizDriverAction::Accepted {
@@ -197,76 +361,94 @@ fn insert_quiz_value(parameters: &mut BTreeMap<&'static str, String>, name: &str
 fn render_hangman(action: &crate::HangmanDriverAction) -> Option<RenderedGameAction> {
     use crate::HangmanDriverAction;
     match action {
-        HangmanDriverAction::Intro { masked, .. } => Some(message_with_attachment(
+        HangmanDriverAction::Intro {
+            masked,
+            remaining,
+            wrong,
+        } => Some(hangman_card(
             "game.hangman.intro",
             BTreeMap::new(),
-            masked.clone(),
-            None,
+            masked,
+            *remaining,
+            wrong,
         )),
         HangmanDriverAction::Hit {
             name,
             letter,
             masked,
+            remaining,
+            wrong,
             ..
         } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("user", name.clone());
             parameters.insert("letter", letter.to_uppercase().collect());
-            Some(message_with_attachment(
+            Some(hangman_card(
                 "game.hangman.hit",
                 parameters,
-                masked.clone(),
-                None,
+                masked,
+                *remaining,
+                wrong,
             ))
         }
         HangmanDriverAction::Miss {
             name,
             letter,
             masked,
+            remaining,
+            wrong,
             ..
         } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("user", name.clone());
             parameters.insert("letter", letter.to_uppercase().collect());
-            Some(message_with_attachment(
+            Some(hangman_card(
                 "game.hangman.miss",
                 parameters,
-                masked.clone(),
-                None,
+                masked,
+                *remaining,
+                wrong,
             ))
         }
         HangmanDriverAction::Won {
-            name, word, masked, ..
+            name,
+            word,
+            masked,
+            wrong,
+            ..
         } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("user", name.clone());
             parameters.insert("word", word.to_uppercase());
-            Some(message_with_attachment(
+            let mut rendered = hangman_card(
                 "game.hangman.win",
                 parameters,
-                masked.clone(),
-                None,
-            ))
+                masked,
+                6_u8.saturating_sub(wrong.len() as u8),
+                wrong,
+            );
+            rendered.speech = Some(winner_speech(name));
+            Some(rendered)
         }
-        HangmanDriverAction::Lost { word, masked } => {
+        HangmanDriverAction::Lost {
+            word,
+            masked,
+            wrong,
+        } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("word", word.to_uppercase());
-            Some(message_with_attachment(
+            Some(hangman_card(
                 "game.hangman.lose",
                 parameters,
-                masked.clone(),
-                None,
+                masked,
+                0,
+                wrong,
             ))
         }
-        HangmanDriverAction::Idle { word, masked } => {
+        HangmanDriverAction::Idle { word, .. } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("word", word.to_uppercase());
-            Some(message_with_attachment(
-                "game.hangman.idle",
-                parameters,
-                masked.clone(),
-                None,
-            ))
+            Some(message("game.hangman.idle", parameters))
         }
         HangmanDriverAction::WrongWord
         | HangmanDriverAction::AlreadyTried
@@ -293,12 +475,12 @@ fn render_wordle(action: &crate::WordleDriverAction) -> Option<RenderedGameActio
             let mut parameters = BTreeMap::new();
             parameters.insert("user", name.clone());
             parameters.insert("left", guesses_left.to_string());
-            let keyboard = wordle_keyboard(present, absent);
-            Some(message_with_attachment(
+            Some(wordle_card(
                 "game.wordle.guess",
                 parameters,
-                join_optional_lines(&[render_wordle_grid(rows), keyboard]),
-                None,
+                Some(rows),
+                present,
+                absent,
             ))
         }
         WordleDriverAction::Won {
@@ -312,32 +494,25 @@ fn render_wordle(action: &crate::WordleDriverAction) -> Option<RenderedGameActio
             parameters.insert("user", name.clone());
             parameters.insert("word", word.to_uppercase());
             parameters.insert("n", guesses.to_string());
-            Some(message_with_attachment(
-                "game.wordle.win",
-                parameters,
-                render_wordle_grid(rows),
-                None,
-            ))
+            let mut rendered = wordle_card("game.wordle.win", parameters, Some(rows), &[], &[]);
+            rendered.speech = Some(winner_speech(name));
+            Some(rendered)
         }
         WordleDriverAction::Lost { word, rows, .. } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("word", word.to_uppercase());
-            Some(message_with_attachment(
+            Some(wordle_card(
                 "game.wordle.lose",
                 parameters,
-                render_wordle_grid(rows),
-                None,
+                Some(rows),
+                &[],
+                &[],
             ))
         }
-        WordleDriverAction::Idle { word, rows } => {
+        WordleDriverAction::Idle { word, .. } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("word", word.to_uppercase());
-            Some(message_with_attachment(
-                "game.wordle.idle",
-                parameters,
-                render_wordle_grid(rows),
-                None,
-            ))
+            Some(message("game.wordle.idle", parameters))
         }
         WordleDriverAction::Invalid | WordleDriverAction::Ignored => None,
     }
@@ -364,18 +539,24 @@ fn render_tictactoe(action: &crate::TicTacToeDriverAction) -> Option<RenderedGam
             Some(message("game.tictactoe.taken", parameters))
         }
         TicTacToeDriverAction::Accepted { board, next, .. } => {
-            let mut action = message_with_attachment(
-                "game.tictactoe.turn",
-                next.map_or_else(BTreeMap::new, |mark| {
-                    BTreeMap::from([("mark", mark_name(mark))])
-                }),
-                render_tictactoe_board(board),
-                None,
-            );
-            if next.is_none() {
-                action.key = "game.tictactoe.draw";
-            }
-            Some(action)
+            let key = if next.is_some() {
+                "game.tictactoe.turn"
+            } else {
+                "game.tictactoe.draw"
+            };
+            let parameters = next.map_or_else(BTreeMap::new, |mark| {
+                BTreeMap::from([("mark", mark_name(mark))])
+            });
+            Some(RenderedGameAction {
+                key,
+                parameters: parameters.clone(),
+                attachment: None,
+                segments: Some(vec![
+                    RenderedGameSegment::Text(render_tictactoe_board(board)),
+                    RenderedGameSegment::Localized { key, parameters },
+                ]),
+                speech: None,
+            })
         }
         TicTacToeDriverAction::Won {
             name, mark, board, ..
@@ -387,7 +568,7 @@ fn render_tictactoe(action: &crate::TicTacToeDriverAction) -> Option<RenderedGam
                 "game.tictactoe.win",
                 parameters,
                 render_tictactoe_board(board),
-                None,
+                Some(winner_speech(name)),
             ))
         }
         TicTacToeDriverAction::Draw { board } => Some(message_with_attachment(
@@ -396,12 +577,7 @@ fn render_tictactoe(action: &crate::TicTacToeDriverAction) -> Option<RenderedGam
             render_tictactoe_board(board),
             None,
         )),
-        TicTacToeDriverAction::Idle { board } => Some(message_with_attachment(
-            "game.tictactoe.idle",
-            BTreeMap::new(),
-            render_tictactoe_board(board),
-            None,
-        )),
+        TicTacToeDriverAction::Idle { .. } => Some(message("game.tictactoe.idle", BTreeMap::new())),
         TicTacToeDriverAction::Ignored => None,
     }
 }
@@ -409,27 +585,47 @@ fn render_tictactoe(action: &crate::TicTacToeDriverAction) -> Option<RenderedGam
 fn render_chess(action: &crate::ChessDriverAction) -> Option<RenderedGameAction> {
     use crate::ChessDriverAction;
     match action {
-        ChessDriverAction::Intro { fen, .. } => Some(message_with_attachment(
+        ChessDriverAction::Intro {
+            fen,
+            white_name,
+            black_name,
+            ..
+        } => Some(chess_card(
             "game.chess.intro",
             BTreeMap::new(),
-            fen.clone(),
-            None,
+            fen,
+            white_name.as_deref(),
+            black_name.as_deref(),
+            true,
+            false,
         )),
         ChessDriverAction::NotYourTurn { name, color, .. } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("user", name.clone());
-            parameters.insert("color", chess_color_name(*color));
-            Some(message("game.chess.notYourTurn", parameters))
+            let color_key = match color {
+                ChessColor::White => "game.chess.white",
+                ChessColor::Black => "game.chess.black",
+            };
+            Some(RenderedGameAction {
+                key: "game.chess.notYourTurn",
+                parameters: parameters.clone(),
+                attachment: None,
+                segments: Some(vec![RenderedGameSegment::LocalizedWithParameter {
+                    key: "game.chess.notYourTurn",
+                    parameters,
+                    parameter: "color",
+                    parts: vec![RenderedTextPart::Localized {
+                        key: color_key,
+                        parameters: BTreeMap::new(),
+                    }],
+                }]),
+                speech: None,
+            })
         }
-        ChessDriverAction::IllegalMove { text, fen } => {
+        ChessDriverAction::IllegalMove { text, .. } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("move", text.clone());
-            Some(message_with_attachment(
-                "game.chess.illegalMove",
-                parameters,
-                fen.clone(),
-                None,
-            ))
+            Some(message("game.chess.illegalMove", parameters))
         }
         ChessDriverAction::Spectator => None,
         ChessDriverAction::Moved {
@@ -437,73 +633,212 @@ fn render_chess(action: &crate::ChessDriverAction) -> Option<RenderedGameAction>
             next,
             in_check,
             fen,
+            white_name,
+            black_name,
             ..
         } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("move", text.clone());
-            parameters.insert("color", chess_color_name(*next));
-            let attachment = if *in_check {
-                format!("{}\n{}", fen, "check")
-            } else {
-                fen.clone()
+            let color_key = match next {
+                ChessColor::White => "game.chess.white",
+                ChessColor::Black => "game.chess.black",
             };
-            Some(message_with_attachment(
+            let mut rendered = chess_card(
                 "game.chess.turn",
                 parameters,
-                attachment,
-                None,
-            ))
+                fen,
+                white_name.as_deref(),
+                black_name.as_deref(),
+                false,
+                *in_check,
+            );
+            if let Some(segments) = rendered.segments.as_mut() {
+                let note = segments
+                    .iter_mut()
+                    .find(|segment| {
+                        matches!(
+                            segment,
+                            RenderedGameSegment::Localized {
+                                key: "game.chess.turn",
+                                ..
+                            }
+                        )
+                    })
+                    .expect("turn note is part of the chess card");
+                let parameters = match note {
+                    RenderedGameSegment::Localized { parameters, .. } => parameters.clone(),
+                    _ => unreachable!(),
+                };
+                *note = RenderedGameSegment::LocalizedWithParameter {
+                    key: "game.chess.turn",
+                    parameters,
+                    parameter: "color",
+                    parts: vec![RenderedTextPart::Localized {
+                        key: color_key,
+                        parameters: BTreeMap::new(),
+                    }],
+                };
+            }
+            Some(rendered)
         }
         ChessDriverAction::Checkmate {
             winner_name,
             text,
             fen,
+            white_name,
+            black_name,
             ..
         } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("user", winner_name.clone());
             parameters.insert("move", text.clone());
-            Some(message_with_attachment(
+            let mut rendered = chess_card(
                 "game.chess.checkmate",
                 parameters,
-                fen.clone(),
-                None,
-            ))
+                fen,
+                white_name.as_deref(),
+                black_name.as_deref(),
+                true,
+                false,
+            );
+            rendered.speech = Some(winner_speech(winner_name));
+            Some(rendered)
         }
-        ChessDriverAction::Draw { text, fen, .. } => {
+        ChessDriverAction::Draw {
+            text,
+            fen,
+            white_name,
+            black_name,
+            ..
+        } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("move", text.clone());
-            Some(message_with_attachment(
+            Some(chess_card(
                 "game.chess.draw",
                 parameters,
-                fen.clone(),
-                None,
+                fen,
+                white_name.as_deref(),
+                black_name.as_deref(),
+                true,
+                false,
             ))
         }
         ChessDriverAction::Resigned {
             user_name,
             winner_name,
-            fen,
             ..
         } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("user", user_name.clone());
             parameters.insert("winner", winner_name.clone());
-            Some(message_with_attachment(
-                "game.chess.resigned",
-                parameters,
-                fen.clone(),
-                None,
-            ))
+            let mut rendered = message("game.chess.resigned", parameters);
+            rendered.speech = Some(winner_speech(winner_name));
+            Some(rendered)
         }
-        ChessDriverAction::Idle { fen } => Some(message_with_attachment(
-            "game.chess.idle",
-            BTreeMap::new(),
-            fen.clone(),
-            None,
-        )),
+        ChessDriverAction::Idle { .. } => Some(message("game.chess.idle", BTreeMap::new())),
         ChessDriverAction::Ignored => None,
     }
+}
+
+fn render_text_parts(
+    parts: &[RenderedTextPart],
+    localizer: &VoiceResponseLocalizer,
+    interaction_locale: Option<&str>,
+    guild_locale: Option<&str>,
+) -> Option<String> {
+    let mut output = String::new();
+    for part in parts {
+        match part {
+            RenderedTextPart::Text(text) => output.push_str(text),
+            RenderedTextPart::Localized { key, parameters } => output.push_str(
+                &localizer.render_key(key, interaction_locale, guild_locale, parameters)?,
+            ),
+            RenderedTextPart::LocalizedWithParameter {
+                key,
+                parameters,
+                parameter,
+                parts,
+            } => {
+                let mut parameters = parameters.clone();
+                parameters.insert(
+                    parameter,
+                    render_text_parts(parts, localizer, interaction_locale, guild_locale)?,
+                );
+                output.push_str(&localizer.render_key(
+                    key,
+                    interaction_locale,
+                    guild_locale,
+                    &parameters,
+                )?);
+            }
+        }
+    }
+    Some(output)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn chess_card(
+    key: &'static str,
+    parameters: BTreeMap<&'static str, String>,
+    fen: &str,
+    white_name: Option<&str>,
+    black_name: Option<&str>,
+    note_first: bool,
+    in_check: bool,
+) -> RenderedGameAction {
+    let seats = RenderedGameSegment::Localized {
+        key: "game.chess.seats",
+        parameters: BTreeMap::from([
+            ("white", white_name.unwrap_or("?").to_owned()),
+            ("black", black_name.unwrap_or("?").to_owned()),
+        ]),
+    };
+    let note = RenderedGameSegment::Localized {
+        key,
+        parameters: parameters.clone(),
+    };
+    let mut board = vec![seats, RenderedGameSegment::Text(render_chess_board(fen))];
+    let mut segments = if note_first {
+        let mut result = vec![note];
+        result.append(&mut board);
+        result
+    } else {
+        board.push(note);
+        board
+    };
+    if in_check {
+        segments.push(RenderedGameSegment::Localized {
+            key: "game.chess.check",
+            parameters: BTreeMap::new(),
+        });
+    }
+    RenderedGameAction {
+        key,
+        parameters,
+        attachment: None,
+        segments: Some(segments),
+        speech: None,
+    }
+}
+
+fn render_chess_board(fen: &str) -> String {
+    let board = fen.split_whitespace().next().unwrap_or_default();
+    let files = "a b c d e f g h";
+    let mut lines = vec![format!("  {files}")];
+    for (index, row) in board.split('/').take(8).enumerate() {
+        let mut cells = Vec::new();
+        for character in row.chars() {
+            if let Some(empty) = character.to_digit(10) {
+                cells.extend(std::iter::repeat_n(".".to_owned(), empty as usize));
+            } else {
+                cells.push(character.to_string());
+            }
+        }
+        let rank = 8_usize.saturating_sub(index);
+        lines.push(format!("{rank} {} {rank}", cells.join(" ")));
+    }
+    lines.push(format!("  {files}"));
+    format!("```\n{}\n```", lines.join("\n"))
 }
 
 fn render_numeric(action: &crate::NumericQuizAction) -> Option<RenderedGameAction> {
@@ -522,7 +857,29 @@ fn render_numeric(action: &crate::NumericQuizAction) -> Option<RenderedGameActio
             parameters.insert("a", a.to_string());
             parameters.insert("b", b.to_string());
             parameters.insert("op", math_symbol(*operation).to_owned());
-            Some(message("game.math.round", parameters))
+            let operation_key = match operation {
+                MathOperation::Plus => "game.math.plus",
+                MathOperation::Minus => "game.math.minus",
+                MathOperation::Times => "game.math.times",
+            };
+            Some(RenderedGameAction {
+                key: "game.math.round",
+                parameters,
+                attachment: None,
+                segments: None,
+                speech: Some(GameSpeech::composed(
+                    vec![
+                        RenderedTextPart::Text(format!("{a} ")),
+                        RenderedTextPart::Localized {
+                            key: operation_key,
+                            parameters: BTreeMap::new(),
+                        },
+                        RenderedTextPart::Text(format!(" {b}")),
+                    ],
+                    None,
+                    None,
+                )),
+            })
         }
         NumericQuizAction::RoundOpened {
             mode: NumericQuizMode::SkipCount,
@@ -534,15 +891,23 @@ fn render_numeric(action: &crate::NumericQuizAction) -> Option<RenderedGameActio
             let mut parameters = BTreeMap::new();
             parameters.insert("n", round.to_string());
             parameters.insert("total", total.to_string());
-            let mut action = message("game.skipCount.round", parameters);
-            action.attachment = Some(
-                sequence
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            );
-            Some(action)
+            Some(RenderedGameAction {
+                key: "game.skipCount.round",
+                parameters,
+                // The missing number is the answer. Node only speaks this sequence; showing it
+                // in the card gives the puzzle away.
+                attachment: None,
+                segments: None,
+                speech: Some(GameSpeech::raw(
+                    sequence
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    None,
+                    None,
+                )),
+            })
         }
         NumericQuizAction::Accepted {
             mode: NumericQuizMode::Math,
@@ -605,11 +970,8 @@ fn render_guess_language(action: &crate::GuessLanguageDriverAction) -> Option<Re
                 key: "game.guessLanguage.round",
                 parameters,
                 attachment: None,
-                speech: Some(GameSpeech {
-                    text: phrase.clone(),
-                    model: model.clone(),
-                    speed: None,
-                }),
+                segments: None,
+                speech: Some(GameSpeech::raw(phrase.clone(), model.clone(), None)),
             })
         }
         GuessLanguageDriverAction::Accepted { name, language, .. } => {
@@ -634,9 +996,31 @@ fn render_reflexes(action: &crate::ReflexesDriverAction) -> Option<RenderedGameA
             let mut parameters = BTreeMap::new();
             parameters.insert("n", round.to_string());
             parameters.insert("total", "3".to_owned());
-            Some(message("game.reflexes.ready", parameters))
+            Some(RenderedGameAction {
+                key: "game.reflexes.ready",
+                parameters,
+                attachment: None,
+                segments: None,
+                speech: Some(GameSpeech::localized(
+                    "game.reflexes.countdown",
+                    BTreeMap::new(),
+                    None,
+                    None,
+                )),
+            })
         }
-        ReflexesDriverAction::Opened { .. } => Some(message("game.reflexes.go", BTreeMap::new())),
+        ReflexesDriverAction::Opened { .. } => Some(RenderedGameAction {
+            key: "game.reflexes.go",
+            parameters: BTreeMap::new(),
+            attachment: None,
+            segments: None,
+            speech: Some(GameSpeech::localized(
+                "game.reflexes.goVoice",
+                BTreeMap::new(),
+                None,
+                None,
+            )),
+        }),
         ReflexesDriverAction::FalseStart { name, .. } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("user", name.clone());
@@ -668,20 +1052,35 @@ fn render_vozen_says(action: &crate::VozenSaysDriverAction) -> Option<RenderedGa
             let mut parameters = BTreeMap::new();
             parameters.insert("n", round.to_string());
             parameters.insert("total", total.to_string());
-            parameters.insert("command", item.clone());
+            let mut command = Vec::new();
+            if *real {
+                command.push(RenderedTextPart::Localized {
+                    key: "game.vozenSays.prefix",
+                    parameters: BTreeMap::new(),
+                });
+                command.push(RenderedTextPart::Text(", ".to_owned()));
+            }
+            command.push(RenderedTextPart::Localized {
+                key: "game.vozenSays.verb",
+                parameters: BTreeMap::new(),
+            });
+            command.push(RenderedTextPart::Text(format!(" {item}")));
+            let key = if *real {
+                "game.vozenSays.real"
+            } else {
+                "game.vozenSays.trap"
+            };
             Some(RenderedGameAction {
-                key: if *real {
-                    "game.vozenSays.real"
-                } else {
-                    "game.vozenSays.trap"
-                },
-                parameters,
+                key,
+                parameters: parameters.clone(),
                 attachment: None,
-                speech: Some(GameSpeech {
-                    text: item.clone(),
-                    model: model.clone(),
-                    speed: None,
-                }),
+                segments: Some(vec![RenderedGameSegment::LocalizedWithParameter {
+                    key,
+                    parameters,
+                    parameter: "command",
+                    parts: command.clone(),
+                }]),
+                speech: Some(GameSpeech::composed(command, model.clone(), None)),
             })
         }
         VozenSaysDriverAction::Obeyed { name, .. } => {
@@ -717,11 +1116,31 @@ fn render_word_chain(action: &crate::WordChainDriverAction) -> Option<RenderedGa
             ..
         } => {
             let mut parameters = BTreeMap::new();
-            parameters.insert("lang", language.clone());
+            parameters.insert("lang", word_chain_language_name(language).to_owned());
             parameters.insert("seconds", (duration_ms / 1000).to_string());
             Some(message("game.wordChain.lobby", parameters))
         }
         WordChainDriverAction::Joined { .. } => None,
+        WordChainDriverAction::Started {
+            players,
+            language,
+            welcome,
+            model,
+        } => {
+            let mut parameters = BTreeMap::new();
+            parameters.insert("players", players.clone());
+            parameters.insert("lang", word_chain_language_name(language).to_owned());
+            Some(RenderedGameAction {
+                key: "game.wordChain.begin",
+                parameters,
+                attachment: None,
+                segments: None,
+                speech: Some(GameSpeech::raw(welcome.clone(), model.clone(), None)),
+            })
+        }
+        WordChainDriverAction::NotEnough => {
+            Some(message("game.wordChain.notEnough", BTreeMap::new()))
+        }
         WordChainDriverAction::Turn {
             name,
             language,
@@ -740,12 +1159,21 @@ fn render_word_chain(action: &crate::WordChainDriverAction) -> Option<RenderedGa
             Some(message("game.wordChain.turn", parameters))
         }
         WordChainDriverAction::Accepted {
-            word, next_letter, ..
+            word,
+            next_letter,
+            model,
+            ..
         } => {
             let mut parameters = BTreeMap::new();
             parameters.insert("word", word.clone());
             parameters.insert("letter", next_letter.to_uppercase().collect());
-            Some(message("game.wordChain.accepted", parameters))
+            Some(RenderedGameAction {
+                key: "game.wordChain.accepted",
+                parameters,
+                attachment: None,
+                segments: None,
+                speech: Some(GameSpeech::raw(word.clone(), model.clone(), None)),
+            })
         }
         WordChainDriverAction::Rejected {
             reason,
@@ -796,12 +1224,25 @@ fn render_heads_or_tails(action: &crate::HeadsOrTailsDriverAction) -> Option<Ren
             let mut parameters = BTreeMap::new();
             parameters.insert("n", round.to_string());
             parameters.insert("total", total.to_string());
-            Some(message("game.headsOrTails.round", parameters))
+            Some(RenderedGameAction {
+                key: "game.headsOrTails.round",
+                parameters,
+                attachment: None,
+                segments: None,
+                speech: Some(GameSpeech::localized(
+                    "game.headsOrTails.roundVoice",
+                    BTreeMap::new(),
+                    None,
+                    None,
+                )),
+            })
         }
         HeadsOrTailsDriverAction::Revealed { side, winners, .. } => {
-            let side = coin_side_name(*side);
+            let side_key = match side {
+                CoinSide::Heads => "game.headsOrTails.heads",
+                CoinSide::Tails => "game.headsOrTails.tails",
+            };
             let mut parameters = BTreeMap::new();
-            parameters.insert("side", side);
             let key = if winners.is_empty() {
                 "game.headsOrTails.noWinners"
             } else {
@@ -815,7 +1256,33 @@ fn render_heads_or_tails(action: &crate::HeadsOrTailsDriverAction) -> Option<Ren
                 );
                 "game.headsOrTails.winners"
             };
-            Some(message(key, parameters))
+            Some(RenderedGameAction {
+                key,
+                parameters: parameters.clone(),
+                attachment: None,
+                segments: Some(vec![RenderedGameSegment::LocalizedWithParameter {
+                    key,
+                    parameters,
+                    parameter: "side",
+                    parts: vec![RenderedTextPart::Localized {
+                        key: side_key,
+                        parameters: BTreeMap::new(),
+                    }],
+                }]),
+                speech: Some(GameSpeech::composed(
+                    vec![RenderedTextPart::LocalizedWithParameter {
+                        key: "game.headsOrTails.resultVoice",
+                        parameters: BTreeMap::new(),
+                        parameter: "side",
+                        parts: vec![RenderedTextPart::Localized {
+                            key: side_key,
+                            parameters: BTreeMap::new(),
+                        }],
+                    }],
+                    None,
+                    None,
+                )),
+            })
         }
         HeadsOrTailsDriverAction::GuessAccepted { .. }
         | HeadsOrTailsDriverAction::RoundPaused { .. }
@@ -831,17 +1298,106 @@ fn mark_name(mark: Mark) -> String {
     }
 }
 
-fn chess_color_name(color: ChessColor) -> String {
-    match color {
-        ChessColor::White => "White".to_owned(),
-        ChessColor::Black => "Black".to_owned(),
+fn winner_speech(name: &str) -> GameSpeech {
+    GameSpeech::localized(
+        "game.finish.winnerVoice",
+        BTreeMap::from([("user", name.to_owned())]),
+        None,
+        None,
+    )
+}
+
+fn wordle_card(
+    key: &'static str,
+    parameters: BTreeMap<&'static str, String>,
+    rows: Option<&[vozen_core::WordleRow]>,
+    present: &[char],
+    absent: &[char],
+) -> RenderedGameAction {
+    let mut segments = Vec::new();
+    if let Some(rows) = rows {
+        segments.push(RenderedGameSegment::Text(render_wordle_grid(rows)));
+    }
+    segments.push(RenderedGameSegment::Localized {
+        key,
+        parameters: parameters.clone(),
+    });
+    if !present.is_empty() {
+        segments.push(RenderedGameSegment::Localized {
+            key: "game.wordle.inWord",
+            parameters: BTreeMap::from([("letters", spaced_uppercase(present))]),
+        });
+    }
+    if !absent.is_empty() {
+        segments.push(RenderedGameSegment::Localized {
+            key: "game.wordle.out",
+            parameters: BTreeMap::from([("letters", spaced_uppercase(absent))]),
+        });
+    }
+    RenderedGameAction {
+        key,
+        parameters,
+        attachment: None,
+        segments: Some(segments),
+        speech: None,
     }
 }
 
-fn coin_side_name(side: CoinSide) -> String {
-    match side {
-        CoinSide::Heads => "heads".to_owned(),
-        CoinSide::Tails => "tails".to_owned(),
+fn spaced_uppercase(letters: &[char]) -> String {
+    letters
+        .iter()
+        .flat_map(|letter| letter.to_uppercase())
+        .map(|letter| letter.to_string())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn word_chain_language_name(language: &str) -> &str {
+    match language {
+        "pt" => "Português",
+        "es" => "Español",
+        "fr" => "Français",
+        _ => "English",
+    }
+}
+
+fn hangman_card(
+    key: &'static str,
+    parameters: BTreeMap<&'static str, String>,
+    masked: &str,
+    remaining: u8,
+    wrong: &[char],
+) -> RenderedGameAction {
+    let mut segments = vec![
+        RenderedGameSegment::Localized {
+            key,
+            parameters: parameters.clone(),
+        },
+        RenderedGameSegment::Text(format!("`{masked}`")),
+        RenderedGameSegment::Text(format!(
+            "{}{}",
+            "❤️".repeat(remaining as usize),
+            "🖤".repeat(wrong.len())
+        )),
+    ];
+    if !wrong.is_empty() {
+        let wrong = wrong
+            .iter()
+            .flat_map(|letter| letter.to_uppercase())
+            .map(|letter| letter.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        segments.push(RenderedGameSegment::Localized {
+            key: "game.hangman.wrongLetters",
+            parameters: BTreeMap::from([("letters", wrong)]),
+        });
+    }
+    RenderedGameAction {
+        key,
+        parameters,
+        attachment: None,
+        segments: Some(segments),
+        speech: None,
     }
 }
 
@@ -882,46 +1438,25 @@ fn render_tictactoe_board(board: &[Option<Mark>; 9]) -> String {
 }
 
 fn render_wordle_grid(rows: &[vozen_core::WordleRow]) -> String {
-    rows.iter()
+    let rows = rows
+        .iter()
         .map(|row| {
             row.letters
                 .chars()
                 .zip(row.states)
                 .map(|(letter, state)| {
-                    let tile = match state {
-                        CellState::Green => "🟩",
-                        CellState::Yellow => "🟨",
-                        CellState::Gray => "⬛",
+                    let sgr = match state {
+                        CellState::Green => "1;30;42",
+                        CellState::Yellow => "1;30;43",
+                        CellState::Gray => "1;37;40",
                     };
-                    format!("{tile}{letter}")
+                    format!("\u{1b}[{sgr}m {} \u{1b}[0m", letter.to_uppercase())
                 })
                 .collect::<String>()
         })
         .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn wordle_keyboard(present: &[char], absent: &[char]) -> String {
-    let mut lines = Vec::new();
-    if !present.is_empty() {
-        lines.push(format!(
-            "🟢 in word: {}",
-            present.iter().collect::<String>()
-        ));
-    }
-    if !absent.is_empty() {
-        lines.push(format!("🚫 out: ~~{}~~", absent.iter().collect::<String>()));
-    }
-    lines.join("   ")
-}
-
-fn join_optional_lines(lines: &[String]) -> String {
-    lines
-        .iter()
-        .filter(|line| !line.is_empty())
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+    format!("```ansi\n{rows}\n```")
 }
 
 #[cfg(test)]
@@ -949,6 +1484,56 @@ mod tests {
     }
 
     #[test]
+    fn composed_game_text_reuses_the_original_locale_keys() {
+        let localizer = VoiceResponseLocalizer::from_generated_contract().expect("catalog");
+
+        let math = render_game_action(&GameDriverAction::NumericQuiz(
+            crate::NumericQuizAction::RoundOpened {
+                mode: crate::NumericQuizMode::Math,
+                round: 1,
+                total: 5,
+                math: Some(crate::MathRound {
+                    a: 12,
+                    b: 4,
+                    operation: MathOperation::Plus,
+                }),
+                sequence: None,
+            },
+        ))
+        .expect("math");
+        assert_eq!(
+            math.speech
+                .as_ref()
+                .and_then(|speech| speech.render(&localizer, Some("pt"), None))
+                .as_deref(),
+            Some("12 mais 4")
+        );
+
+        let says = render_game_action(&GameDriverAction::VozenSays(
+            crate::VozenSaysDriverAction::RoundOpened {
+                round: 2,
+                total: 6,
+                item: "batata".into(),
+                real: true,
+                delay_ms: 12_000,
+                model: None,
+            },
+        ))
+        .expect("vozen says");
+        assert_eq!(
+            says.content(&localizer, Some("pt"), None).as_deref(),
+            Some("🗣️ Ronda 2/6 — «Vozen diz, escrevam batata»")
+        );
+        assert_eq!(
+            says.speech
+                .as_ref()
+                .and_then(|speech| speech.render(&localizer, Some("pt"), None))
+                .as_deref(),
+            Some("Vozen diz, escrevam batata")
+        );
+    }
+
+    #[test]
     fn wordle_content_contains_grid_and_keyboard_without_debug_text() {
         let action = GameDriverAction::Wordle(WordleDriverAction::Guess {
             user_id: "u".into(),
@@ -970,14 +1555,12 @@ mod tests {
         });
         let rendered = render_game_action(&action).expect("rendered");
         assert_eq!(rendered.parameters["left"], "7");
-        assert!(rendered.attachment.as_deref().unwrap().contains("in word"));
-        assert!(
-            !rendered
-                .attachment
-                .as_deref()
-                .unwrap()
-                .contains("WordleDriverAction")
-        );
+        let localizer = VoiceResponseLocalizer::from_generated_contract().expect("catalog");
+        let content = rendered
+            .content(&localizer, Some("en"), None)
+            .expect("content");
+        assert!(content.contains("in word"));
+        assert!(!content.contains("WordleDriverAction"));
     }
 
     #[test]
@@ -988,6 +1571,7 @@ mod tests {
             name: "Ana".into(),
             word: "cat".into(),
             masked: "c a t".into(),
+            wrong: Vec::new(),
         }))
         .expect("rendered");
         let content = action
@@ -1033,11 +1617,22 @@ mod tests {
                 points: 0,
             },
         ]);
+        assert_eq!(rendered.len(), 1);
         assert_eq!(rendered[0].key, "game.finish.title");
-        assert_eq!(rendered[1].parameters["rank"], "🥇");
-        assert_eq!(rendered[1].parameters["user"], "Ana");
-        assert_eq!(rendered[2].parameters["rank"], "🥈");
-        assert_eq!(rendered[3].parameters["rank"], "🥉");
-        assert_eq!(rendered[4].parameters["rank"], "#4");
+        let segments = rendered[0].segments.as_ref().expect("scoreboard segments");
+        assert_eq!(segments.len(), 5);
+        let RenderedGameSegment::Localized { parameters, .. } = &segments[1] else {
+            panic!("first ranking line");
+        };
+        assert_eq!(parameters["rank"], "🥇");
+        assert_eq!(parameters["user"], "Ana");
+        let RenderedGameSegment::Localized { parameters, .. } = &segments[4] else {
+            panic!("fourth ranking line");
+        };
+        assert_eq!(parameters["rank"], "#4");
+        assert_eq!(
+            rendered[0].speech.as_ref().and_then(|speech| speech.key),
+            Some("game.finish.winnerVoice")
+        );
     }
 }

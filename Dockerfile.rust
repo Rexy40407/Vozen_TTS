@@ -24,19 +24,51 @@ RUN cargo build --locked --release -p vozen-runtime --features voice-driver
 # ---------- runtime ----------
 FROM debian:bookworm-slim AS runtime
 ENV RUST_BACKTRACE=0
+ENV HF_HOME=/data/huggingface
 WORKDIR /app
+COPY tools/requirements-kokoro.txt /tmp/requirements-kokoro.txt
+COPY tools/requirements-whisper.txt /tmp/requirements-whisper.txt
+
+ARG PIPER_VERSION=2023.11.14-2
+ARG PIPER_LINUX_X86_64_SHA256=a50cb45f355b7af1f6d758c1b360717877ba0a398cc8cbe6d2a7a3a26e225992
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg libopus0 \
+  && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg libopus0 libsndfile1 python3 python3-venv \
   && rm -rf /var/lib/apt/lists/* \
+  && curl --fail --location --retry 3 \
+    --output /tmp/piper-linux-x86_64.tar.gz \
+    "https://github.com/rhasspy/piper/releases/download/${PIPER_VERSION}/piper_linux_x86_64.tar.gz" \
+  && echo "${PIPER_LINUX_X86_64_SHA256}  /tmp/piper-linux-x86_64.tar.gz" | sha256sum --check --strict \
+  && tar --extract --gzip --file /tmp/piper-linux-x86_64.tar.gz --directory /usr/local/lib \
+  && test -x /usr/local/lib/piper/piper \
+  && rm /tmp/piper-linux-x86_64.tar.gz \
+  && mkdir -p /app/tools \
+  && python3 -m venv /app/tools/kokoro-venv \
+  && /app/tools/kokoro-venv/bin/pip install --no-cache-dir --upgrade pip \
+  && /app/tools/kokoro-venv/bin/pip install --no-cache-dir -r /tmp/requirements-kokoro.txt \
+  && python3 -m venv /app/tools/whisper-venv \
+  && /app/tools/whisper-venv/bin/pip install --no-cache-dir --upgrade pip \
+  && /app/tools/whisper-venv/bin/pip install --no-cache-dir -r /tmp/requirements-whisper.txt \
   && useradd --system --uid 1000 --create-home --shell /usr/sbin/nologin vozen \
   && mkdir -p /data \
+  && mkdir -p /data/huggingface \
   && chown -R vozen:vozen /data
+
+ARG KOKORO_RELEASE=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
+ARG KOKORO_MODEL_SHA256=7D5DF8ECF7D4B1878015A32686053FD0EEBE2BC377234608764CC0EF3636A6C5
+ARG KOKORO_VOICES_SHA256=BCA610B8308E8D99F32E6FE4197E7EC01679264EFED0CAC9140FE9C29F1FBF7D
+RUN curl --fail --location --retry 3 --output /app/tools/kokoro-v1.0.onnx "$KOKORO_RELEASE/kokoro-v1.0.onnx" \
+  && echo "$KOKORO_MODEL_SHA256  /app/tools/kokoro-v1.0.onnx" | sha256sum --check --strict \
+  && curl --fail --location --retry 3 --output /app/tools/voices-v1.0.bin "$KOKORO_RELEASE/voices-v1.0.bin" \
+  && echo "$KOKORO_VOICES_SHA256  /app/tools/voices-v1.0.bin" | sha256sum --check --strict
 
 COPY --from=builder /app/target/release/vozen-runtime /usr/local/bin/vozen-runtime
 COPY assets/sfx ./assets/sfx
+COPY tools/kokoro_server.py ./tools/kokoro_server.py
+COPY tools/whisper_sidecar.py ./tools/whisper_sidecar.py
 COPY docker/healthcheck-rust.sh /usr/local/bin/healthcheck-rust.sh
-RUN chmod 0755 /usr/local/bin/healthcheck-rust.sh
+RUN chmod 0755 /usr/local/bin/healthcheck-rust.sh \
+  && chown -R vozen:vozen /app/tools
 
 USER vozen
 

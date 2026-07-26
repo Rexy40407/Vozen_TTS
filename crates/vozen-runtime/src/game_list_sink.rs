@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -89,7 +90,8 @@ impl GatewayEventSink for GameListGatewaySink {
             .create_response(
                 &context,
                 CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new().content(self.response(&command)?),
+                    CreateInteractionResponseMessage::new()
+                        .embeds(vec![message_embed(self.response(&command)?)]),
                 ),
             )
             .await

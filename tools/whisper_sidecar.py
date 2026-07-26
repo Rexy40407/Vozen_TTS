@@ -19,6 +19,7 @@ Se a lingua for invalida/nao suportada, cai na auto-detecao (fallback seguro).
 import sys
 import json
 import argparse
+import os
 
 # Limiares ANTI-ALUCINACAO (ver o filtro no loop). O Whisper inventa frases sobre
 # silencio/ruido; estes cortes usam a confianca do proprio modelo para as descartar.
@@ -30,18 +31,29 @@ AVG_LOGPROB_MIN = -1.0
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="base")
+    # O Rust passa WHISPER_MODEL pelo ambiente. Mantemos ``base`` como fallback
+    # para instalações antigas, mas não ignoramos a configuração do runtime.
+    ap.add_argument("--model", default=os.environ.get("WHISPER_MODEL", "base"))
     ap.add_argument("--compute", default="int8")
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--lang", default="")  # lingua FORCADA; "" => auto-detecao
     args = ap.parse_args()
+
+    try:
+        beam_size = max(1, int(os.environ.get("WHISPER_BEAM_SIZE", "5")))
+    except ValueError:
+        beam_size = 5
 
     from faster_whisper import WhisperModel
 
     model = WhisperModel(
         args.model, device="cpu", compute_type=args.compute, cpu_threads=args.threads
     )
-    forced = args.lang.strip().lower() or None
+    forced = (
+        args.lang.strip().lower()
+        or os.environ.get("WHISPER_LANGUAGE", "").strip().lower()
+        or None
+    )
     print(json.dumps({"ready": True, "model": args.model, "lang": forced or "auto"}), flush=True)
 
     for line in sys.stdin:
@@ -61,7 +73,10 @@ def main() -> None:
         try:
             forced_for_request = request_lang or forced
             kwargs = dict(
-                beam_size=1,
+                # Mensagens gravadas podem pagar alguns ms extra por uma
+                # transcrição substancialmente mais estável que greedy (1).
+                beam_size=beam_size,
+                temperature=0.0,
                 vad_filter=True,
                 # Sem isto, o Whisper repete/arrasta texto de segmentos anteriores (loops).
                 condition_on_previous_text=False,

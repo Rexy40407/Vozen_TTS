@@ -62,10 +62,6 @@ impl ConfigToggleService {
                 autojoin: Some(command.enabled),
                 ..Default::default()
             },
-            ConfigToggle::AlwaysOn => GuildConfigPatch {
-                stay_in_call: Some(command.enabled),
-                ..Default::default()
-            },
             ConfigToggle::ReadBots => GuildConfigPatch {
                 read_bots: Some(command.enabled),
                 ..Default::default()

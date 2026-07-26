@@ -271,19 +271,19 @@ export const catalog: Record<string, Entry> = {
   },
   'ttsFile.tooLong': {
     en: 'Keep an audio file export to {max} characters or fewer.',
-    pt: 'Mantem a exportaÃ§Ã£o de Ã¡udio com {max} caracteres ou menos.',
+    pt: 'Mantém a exportação de áudio com {max} caracteres ou menos.',
   },
   'ttsFile.unavailable': {
     en: 'Your selected voice is not available on this instance. Choose another voice and try again.',
-    pt: 'A voz selecionada nÃ£o estÃ¡ disponÃ­vel nesta instÃ¢ncia. Escolhe outra voz e tenta novamente.',
+    pt: 'A voz selecionada não está disponível nesta instância. Escolhe outra voz e tenta novamente.',
   },
   'ttsFile.ready': {
     en: 'Your private audio file is ready. It is not stored by Vozen after delivery.',
-    pt: 'O teu ficheiro de Ã¡udio privado estÃ¡ pronto. O Vozen nÃ£o o guarda depois da entrega.',
+    pt: 'O teu ficheiro de áudio privado está pronto. O Vozen não o guarda depois da entrega.',
   },
   'ttsFile.failed': {
     en: 'I could not create that audio file. Please try again.',
-    pt: 'NÃ£o consegui criar esse ficheiro de Ã¡udio. Tenta outra vez.',
+    pt: 'Não consegui criar esse ficheiro de áudio. Tenta outra vez.',
   },
 
   // ── /voice ────────────────────────────────────────────────────────────────

@@ -321,7 +321,6 @@ fn set_boolean_fields(source: &serde_json::Map<String, Value>, patch: &mut Guild
     bool_field!("greetOnJoin", greet_on_join);
     bool_field!("translationEnabled", translation_enabled);
     bool_field!("votePromos", vote_promos);
-    bool_field!("stayInCall", stay_in_call);
 }
 
 fn nullable_authorised_id(value: &Value, authorised: &HashSet<String>) -> Option<Option<String>> {

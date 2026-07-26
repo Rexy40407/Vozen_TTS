@@ -40,8 +40,9 @@ impl CommandSpeechSynthesizer for KokoroCommandSynthesizer {
         let result = self.engine.synth(request).await;
         self.metrics
             .record_synth_latency_ms(started.elapsed().as_millis().min(u64::MAX as u128) as u64);
-        if result.is_err() {
+        if let Err(error) = &result {
             self.metrics.record_synth_error();
+            eprintln!("[tts:kokoro] synthesis failed: {error:?}");
         }
         result.map_err(|_| CommandSynthesisError)
     }

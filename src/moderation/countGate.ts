@@ -15,7 +15,7 @@
 import { normalizeForDuplicate } from './antispam';
 
 /** Minimum gap between two COUNTED messages of the same person (burst throttle). */
-export const COUNT_COOLDOWN_MS = 5000;
+export const COUNT_COOLDOWN_MS = 1000;
 /** Rolling window for the per-person cap. */
 export const COUNT_WINDOW_MS = 60_000;
 /** Max messages counted per person within COUNT_WINDOW_MS. */

@@ -5,6 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateAllowedMentions, CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -136,7 +137,7 @@ impl GatewayEventSink for GameScoreGatewaySink {
         };
         let (content, ephemeral) = self.response(&command, action)?;
         let mut response = CreateInteractionResponseMessage::new()
-            .content(content)
+            .embeds(vec![message_embed(content)])
             .allowed_mentions(
                 CreateAllowedMentions::new()
                     .all_users(false)

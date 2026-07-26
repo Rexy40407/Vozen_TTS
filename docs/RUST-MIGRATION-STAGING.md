@@ -39,10 +39,19 @@ alive fails closed instead of creating two sessions with the same token.
 the command leaf whose matching Rust canary is active; Node keeps answering all other suggestions.
 Enable it in staging only after checking model, language, locale, game and pronunciation choices.
 
+Before enabling the voice canaries, install one Piper voice pair (`.onnx` plus `.onnx.json`) in
+`MODELS_DIR` and set `DEFAULT_VOICE` to that file stem. On Windows, point `PIPER_PATH` at the
+extracted `piper.exe`. The Rust Docker image embeds the official Linux x86_64 Piper release,
+version-pinned and SHA-256 verified, and the compose override points at that binary. This avoids
+accidentally mounting a Windows `piper.exe` into the Linux container. Voice-enabled Rust startup
+and the container healthcheck both fail closed when the executable, model or model configuration
+is missing.
+
 ## Preflight and smoke sequence
 
 ```powershell
 $env:Path = 'C:\Users\diogo\.cargo\bin;' + $env:Path
+node tools/check-rust-canaries.mjs
 npm run rust:staging:preflight
 cargo test -p vozen-discord command_registration --lib
 cargo build --release -p vozen-runtime --features voice-driver
@@ -70,6 +79,21 @@ With the staging bot online, verify in the test guild:
 3. A restart leaves the guild command list intact and does not create a second gateway session.
 4. Invalid or missing staging identifiers fail before any REST registration request.
 
+## Container host prerequisites
+
+On Windows, install Docker Desktop with its WSL2 backend before running the container smoke
+([Docker Windows installation](https://docs.docker.com/desktop/setup/install/windows-install/)).
+Confirm both commands from PowerShell:
+
+```powershell
+docker version
+docker compose version
+```
+
+If `docker` or WSL is unavailable, do not substitute the production service: run the Rust image
+build in CI or on a dedicated staging host instead. The local `.env.rust.staging` and the staging
+SQLite volume must remain isolated from `.env` and the production database.
+
 ## Optional Linux container smoke
 
 The default `docker compose up` remains the Node runtime. The Rust image is an explicit override
@@ -88,10 +112,19 @@ the `vozen-staging` project name creates a separate named SQLite volume. The ove
 `voice-driver` feature plus Linux Opus support. Do not point this command at the production
 token while Node is running; the shared single-instance lock protects only processes on the same
 host and cannot protect two different machines.
+The Rust compose override also sets `FFMPEG_PATH=/usr/bin/ffmpeg`; the Windows staging dotenv may
+use the local `ffmpeg-static` path, but that host path must not leak into the Linux container.
+It also stores `RUST_COMMANDS_STATE_PATH` under `/data`, so the Rust-owned command fingerprint
+survives container restarts with the staging SQLite volume.
 
 Only after these checks, the voice-driver build, API contract checks and the remaining R5 module
 canaries pass may the private cutover gate be considered. A control-plane-only build without
 `voice-driver` is useful for portable CI, but it is not evidence that live TTS or Songbird works.
+The transcription canaries also require the pinned Whisper sidecar from `tools/setup-whisper.*`;
+Rust auto-detects `tools/whisper-venv/bin/python` (or the Windows `Scripts/python.exe`) and
+`tools/whisper_sidecar.py`, while explicit `WHISPER_PYTHON`/`WHISPER_SCRIPT` paths override it.
+The Rust Docker image deliberately does not embed the venv or downloaded model: install those
+on the staging host and mount/configure them before enabling `RUST_TRANSCRIBE_*`.
 This document does not authorize a production deployment or a push.
 
 ## Abort and rollback

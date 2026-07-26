@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{
         CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage,
@@ -99,7 +100,8 @@ impl GatewayEventSink for InviteGatewaySink {
             return Ok(());
         }
         let (content, invite) = self.response(&command)?;
-        let mut response = CreateInteractionResponseMessage::new().content(content);
+        let mut response =
+            CreateInteractionResponseMessage::new().embeds(vec![message_embed(content)]);
         if let Some((url, button_label)) = invite {
             response = response.components(vec![CreateActionRow::Buttons(vec![
                 CreateButton::new_link(url).label(button_label),

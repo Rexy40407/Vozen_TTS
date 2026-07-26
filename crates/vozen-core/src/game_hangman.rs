@@ -73,6 +73,11 @@ impl HangmanGame {
     }
 
     #[must_use]
+    pub fn wrong_letters(&self) -> Vec<char> {
+        self.wrong.iter().copied().collect()
+    }
+
+    #[must_use]
     pub fn remaining_lives(&self) -> usize {
         MAX_WRONG.saturating_sub(self.wrong.len())
     }

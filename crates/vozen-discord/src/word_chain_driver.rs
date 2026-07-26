@@ -21,6 +21,13 @@ pub enum WordChainDriverAction {
         user_id: String,
         name: String,
     },
+    Started {
+        players: String,
+        language: String,
+        welcome: String,
+        model: Option<String>,
+    },
+    NotEnough,
     Turn {
         user_id: String,
         name: String,
@@ -35,6 +42,7 @@ pub enum WordChainDriverAction {
         name: String,
         word: String,
         next_letter: char,
+        model: Option<String>,
     },
     Rejected {
         user_id: String,
@@ -79,6 +87,7 @@ pub struct WordChainDriver {
     names: BTreeMap<String, String>,
     lives: BTreeMap<String, u8>,
     index: usize,
+    model: Option<String>,
 }
 
 pub struct WordChainGameDriver {
@@ -91,6 +100,12 @@ impl WordChainGameDriver {
         Self {
             inner: WordChainDriver::new(language, words, seed),
         }
+    }
+
+    #[must_use]
+    pub fn with_voice(mut self, model: Option<String>) -> Self {
+        self.inner.model = model;
+        self
     }
 
     #[must_use]
@@ -166,6 +181,7 @@ impl WordChainDriver {
             names: BTreeMap::new(),
             lives: BTreeMap::new(),
             index: 0,
+            model: None,
         }
     }
 
@@ -230,6 +246,7 @@ impl WordChainDriver {
                         name: name.to_owned(),
                         word,
                         next_letter: engine.required_letter(),
+                        model: self.model.clone(),
                     },
                     self.turn_action(&next_user),
                 ]
@@ -256,7 +273,10 @@ impl WordChainDriver {
         self.deadline_ms = None;
         if self.order.len() < 2 {
             self.phase = Phase::Ended;
-            return vec![WordChainDriverAction::Finished];
+            return vec![
+                WordChainDriverAction::NotEnough,
+                WordChainDriverAction::Finished,
+            ];
         }
         self.phase = Phase::Playing;
         self.index = 0;
@@ -268,7 +288,22 @@ impl WordChainDriver {
         self.deadline_ms =
             Some(now_ms.saturating_add(self.engine.as_ref().map_or(0, |e| e.turn_ms() as i64)));
         let user_id = self.order[0].clone();
-        vec![self.turn_action(&user_id)]
+        let players = self
+            .order
+            .iter()
+            .filter_map(|id| self.names.get(id))
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        vec![
+            WordChainDriverAction::Started {
+                players,
+                language: self.language.clone(),
+                welcome: word_chain_welcome(&self.language).to_owned(),
+                model: self.model.clone(),
+            },
+            self.turn_action(&user_id),
+        ]
     }
 
     fn timeout(&mut self, now_ms: i64) -> Vec<WordChainDriverAction> {
@@ -281,11 +316,7 @@ impl WordChainDriver {
             .unwrap_or(1)
             .saturating_sub(1);
         self.lives.insert(user_id.clone(), remaining);
-        let mut actions = vec![WordChainDriverAction::Timeout {
-            user_id: user_id.clone(),
-            name: name.clone(),
-            lives: remaining,
-        }];
+        let mut actions = Vec::new();
         if remaining == 0 {
             self.order.remove(self.index);
             self.lives.remove(&user_id);
@@ -313,6 +344,11 @@ impl WordChainDriver {
                 self.index = 0;
             }
         } else {
+            actions.push(WordChainDriverAction::Timeout {
+                user_id: user_id.clone(),
+                name,
+                lives: remaining,
+            });
             self.index = (self.index + 1) % self.order.len();
         }
         let next_user = self.order[self.index].clone();
@@ -336,6 +372,15 @@ impl WordChainDriver {
             turn_ms: engine.turn_ms(),
             lives: self.lives.get(user_id).copied().unwrap_or(0),
         }
+    }
+}
+
+fn word_chain_welcome(language: &str) -> &'static str {
+    match language {
+        "pt" => "Bem-vindos ao jogo da cadeia de palavras!",
+        "es" => "¡Bienvenidos al juego de la cadena de palabras!",
+        "fr" => "Bienvenue au jeu de la chaîne de mots !",
+        _ => "Welcome to the word chain game!",
     }
 }
 
@@ -364,10 +409,14 @@ mod tests {
             [WordChainDriverAction::Joined { .. }]
         ));
         let start = driver.advance(20_000);
-        assert!(
-            matches!(start.as_slice(), [WordChainDriverAction::Turn { user_id, .. }] if user_id == "u1")
-        );
-        let letter = match &start[0] {
+        assert!(matches!(
+            start.as_slice(),
+            [
+                WordChainDriverAction::Started { .. },
+                WordChainDriverAction::Turn { user_id, .. }
+            ] if user_id == "u1"
+        ));
+        let letter = match &start[1] {
             WordChainDriverAction::Turn { letter, .. } => *letter,
             _ => unreachable!(),
         };

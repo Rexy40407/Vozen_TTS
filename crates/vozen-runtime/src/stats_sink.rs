@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeMap, time::Instant};
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{CreateEmbed, CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -80,7 +81,7 @@ impl StatsGatewaySink {
         lines.push(self.message("stats.servers", command, &parameters)?);
         parameters.insert("value", self.started_at.elapsed().as_secs().to_string());
         lines.push(self.message("stats.uptime", command, &parameters)?);
-        Ok(CreateEmbed::new().description(lines.join("\n")))
+        Ok(message_embed(lines.join("\n")))
     }
 }
 

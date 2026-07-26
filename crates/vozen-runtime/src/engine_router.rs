@@ -62,11 +62,15 @@ impl PerUserCommandSynthesizer {
         engine: SynthesisEngine,
     ) -> Result<std::path::PathBuf, CommandSynthesisError> {
         let Some(provider) = provider else {
+            eprintln!("[tts:router] {engine:?} provider is not configured; using Google fallback");
             return self.default_synthesis(request).await;
         };
         match provider.synthesize(&with_engine(request, engine)).await {
             Ok(path) => Ok(path),
-            Err(_) => self.default_synthesis(request).await,
+            Err(_) => {
+                eprintln!("[tts:router] {engine:?} provider failed; using Google fallback");
+                self.default_synthesis(request).await
+            }
         }
     }
 }

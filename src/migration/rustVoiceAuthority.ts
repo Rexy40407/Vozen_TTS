@@ -359,7 +359,6 @@ const RUST_CONFIG_TOGGLE_SUBCOMMANDS = new Set([
   'enabled',
   'x-said',
   'auto-join',
-  'always-on',
   'read-bots',
   'text-in-voice',
   'anti-spam',

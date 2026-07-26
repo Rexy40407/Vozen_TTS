@@ -159,13 +159,19 @@ where
                 | crate::CoreVoiceCommand::VoicePreview { .. }
         );
         let defer_public = matches!(command, crate::CoreVoiceCommand::MicroFun { .. });
-        let outcome = if let crate::CoreVoiceCommand::VoicePreview { model } = &command {
+        let outcome = if let crate::CoreVoiceCommand::VoicePreview { model, engine } = &command {
             let guild_locale = self.guild_locale(facts);
+            let configured_model = model
+                .is_none()
+                .then(|| self.service.preview_model(&facts.guild_id, &facts.user_id))
+                .flatten();
+            let selected_model = model.as_deref().or(configured_model.as_deref());
+            let sample_locale = selected_model.and_then(preview_locale_for_model);
             let sample = self
                 .localizer
                 .render_key(
                     "preview.sample",
-                    interaction_locale,
+                    sample_locale.as_deref().or(interaction_locale),
                     guild_locale.as_deref(),
                     &BTreeMap::new(),
                 )
@@ -175,6 +181,7 @@ where
                     .execute_preview(
                         facts.invocation(resolve_user, resolve_channel),
                         model.as_deref(),
+                        engine.as_deref(),
                         &sample,
                     )
                     .await,
@@ -418,6 +425,14 @@ fn channel_mention(channel_id: &str) -> String {
     format!("<#{channel_id}>")
 }
 
+/// Piper/Gcloud model identifiers start with a BCP-47-ish locale, for example
+/// `en_US-amy-medium` or `pt_PT-google-medium`. Preview samples must use that locale;
+/// the Discord interaction locale is only a fallback when the model has no locale prefix.
+fn preview_locale_for_model(model: &str) -> Option<String> {
+    let locale = model.split_once('-')?.0.trim();
+    (!locale.is_empty()).then(|| locale.replace('_', "-"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -443,7 +458,10 @@ mod tests {
         );
         assert_eq!(
             crate::parse_promoted_core_voice(&preview).expect("preview parse"),
-            Some(crate::CoreVoiceCommand::VoicePreview { model: None })
+            Some(crate::CoreVoiceCommand::VoicePreview {
+                model: None,
+                engine: None,
+            })
         );
         assert!(
             CoreVoiceInteractionExecutor::<(), (), ()>::requires_ephemeral_defer(&preview)
@@ -464,7 +482,7 @@ mod tests {
     #[test]
     fn public_micro_fun_commands_defer_publicly_but_other_commands_do_not() {
         let eight_ball = command(
-            r#"{"id":"1","name":"8-ball","type":1,"options":[{"name":"question","type":3,"value":"Will it work?"}]}"#,
+            r#"{"id":"1","name":"8-ball","type":1,"options":[{"name":"question","type":3,"value":"Will it work?"},{"name":"language","type":3,"value":"en"},{"name":"engine","type":3,"value":"piper"}]}"#,
         );
         assert!(
             CoreVoiceInteractionExecutor::<(), (), ()>::requires_public_defer(&eight_ball)
@@ -483,5 +501,18 @@ mod tests {
     #[test]
     fn channel_mentions_are_safe_discord_references_not_untrusted_names() {
         assert_eq!(channel_mention("123"), "<#123>");
+    }
+
+    #[test]
+    fn preview_sample_locale_follows_voice_model() {
+        assert_eq!(
+            preview_locale_for_model("en_US-amy-medium").as_deref(),
+            Some("en-US")
+        );
+        assert_eq!(
+            preview_locale_for_model("pt_PT-google-medium").as_deref(),
+            Some("pt-PT")
+        );
+        assert_eq!(preview_locale_for_model("model"), None);
     }
 }

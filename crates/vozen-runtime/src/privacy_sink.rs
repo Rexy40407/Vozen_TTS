@@ -5,6 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::ui::message_embed;
 use serenity::{
     builder::{
         CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage,
@@ -131,7 +132,7 @@ impl GatewayEventSink for PrivacyGatewaySink {
                 let issued_at = now_seconds();
                 let user_id = command.user.id.to_string();
                 let response = CreateInteractionResponseMessage::new()
-                    .content(self.warning(&command)?)
+                    .embeds(vec![message_embed(self.warning(&command)?)])
                     .components(vec![CreateActionRow::Buttons(vec![
                         CreateButton::new(Self::confirmation_id("yes", &user_id, issued_at))
                             .label(self.message(
@@ -165,11 +166,11 @@ impl GatewayEventSink for PrivacyGatewaySink {
                 let now = now_seconds();
                 if expected_user != current_user || !confirmation_is_fresh(issued_at, now) {
                     let response = CreateInteractionResponseMessage::new()
-                        .content(self.message(
+                        .embeds(vec![message_embed(self.message(
                             "privacy.eraseCancelled",
                             &component.locale,
                             component.guild_locale.as_deref(),
-                        )?)
+                        )?)])
                         .ephemeral(true);
                     component
                         .create_response(&context, CreateInteractionResponse::Message(response))
@@ -203,7 +204,7 @@ impl GatewayEventSink for PrivacyGatewaySink {
                     )?
                 };
                 let response = CreateInteractionResponseMessage::new()
-                    .content(content)
+                    .embeds(vec![message_embed(content)])
                     .components(Vec::new())
                     .ephemeral(true);
                 component

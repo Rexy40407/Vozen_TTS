@@ -519,6 +519,27 @@ mod tests {
     }
 
     #[test]
+    fn xsaid_text_is_identical_for_google_piper_and_kokoro_requests() {
+        let available = models();
+        for engine in [
+            SynthesisEngine::Default,
+            SynthesisEngine::Piper,
+            SynthesisEngine::Kokoro,
+        ] {
+            let voice = VoicePreference {
+                model: "en_US-amy-medium".into(),
+                speed: 1.0,
+                engine,
+            };
+            let mut input = input("hello", &available);
+            input.user_voice = Some(&voice);
+            input.announce_speaker = Some("Alex");
+            let prepared = prepare_speech(input);
+            assert_eq!(prepared.request.text, "Alex said hello");
+        }
+    }
+
+    #[test]
     fn markdown_announcements_are_spoken_without_exposing_the_protected_body() {
         let mut available = models();
         available.push("fr_FR-siwis-medium".into());

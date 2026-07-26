@@ -4,9 +4,11 @@
 //! Node `QuizGame` used to provide: a bounded round list, a deadline per open round, semantic
 //! i18n keys for feedback, and the deliberate voice request for each prompt.
 
+use std::collections::BTreeMap;
+
 use vozen_core::{TextQuizEvent, TextQuizGame};
 
-use crate::{GameDriver, GameDriverAction, GameMessage};
+use crate::{GameAnnouncementAction, GameDriver, GameDriverAction, GameMessage};
 
 const ROUND_MS: i64 = 25_000;
 const FAST_SPEECH_MS: i64 = 20_000;
@@ -21,6 +23,15 @@ pub enum TextQuizMode {
 }
 
 impl TextQuizMode {
+    fn intro_key(self) -> &'static str {
+        match self {
+            Self::Spelling => "game.spelling.intro",
+            Self::SpellOut => "game.spellOut.intro",
+            Self::AccentSwap => "game.accentSwap.intro",
+            Self::FastSpeech => "game.fastSpeech.intro",
+        }
+    }
+
     fn round_key(self) -> &'static str {
         match self {
             Self::Spelling => "game.spelling.round",
@@ -116,7 +127,17 @@ impl TextQuizGameDriver {
 
 impl GameDriver for TextQuizGameDriver {
     fn on_start(&mut self, now_ms: i64) -> Vec<GameDriverAction> {
-        to_manager_actions(self.inner.start(now_ms))
+        let round = self.inner.start(now_ms);
+        if matches!(round, TextQuizDriverAction::Finished) {
+            return to_manager_actions(round);
+        }
+        let mut parameters = BTreeMap::new();
+        parameters.insert("rounds", self.inner.game.rounds().to_string());
+        let mut actions = vec![GameDriverAction::Announcement(
+            GameAnnouncementAction::message(self.inner.mode.intro_key(), parameters),
+        )];
+        actions.extend(to_manager_actions(round));
+        actions
     }
 
     fn on_message(&mut self, message: &GameMessage) -> Vec<GameDriverAction> {
@@ -402,9 +423,10 @@ mod tests {
         assert_eq!(status, StartGameResult::Started);
         assert!(matches!(
             initial.as_slice(),
-            [GameDriverAction::TextQuiz(
-                TextQuizDriverAction::RoundOpened { .. }
-            )]
+            [
+                GameDriverAction::Announcement(_),
+                GameDriverAction::TextQuiz(TextQuizDriverAction::RoundOpened { .. })
+            ]
         ));
         let event = manager.handle_message(&GameMessage {
             guild_id: "guild".into(),
@@ -448,9 +470,10 @@ mod tests {
         );
         assert!(matches!(
             initial.as_slice(),
-            [GameDriverAction::TextQuiz(
-                TextQuizDriverAction::RoundOpened { .. }
-            )]
+            [
+                GameDriverAction::Announcement(_),
+                GameDriverAction::TextQuiz(TextQuizDriverAction::RoundOpened { .. })
+            ]
         ));
         let event = manager.handle_message_at(
             &GameMessage {

@@ -3,6 +3,7 @@ dist
 coverage/
 .env
 .env.rust.staging
+.staging/
 cache/
 *.db
 *.db-*
