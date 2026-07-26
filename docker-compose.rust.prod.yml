@@ -1,0 +1,29 @@
+services:
+  vozen:
+    build:
+      context: .
+      dockerfile: Dockerfile.rust
+    image: vozen-rust:prod
+    restart: unless-stopped
+    env_file:
+      - .env.rust.prod
+    environment:
+      DB_PATH: /data/tts.db
+      MODELS_DIR: /models
+      PIPER_PATH: /usr/local/lib/piper/piper
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      RUST_VOICE_CACHE_DIR: /data/audio-cache/rust
+      RUST_TTS_FILE_CACHE_DIR: /data/audio-cache/rust-file
+      RUST_GTTS_CACHE_DIR: /data/audio-cache/rust-gtts
+      RUST_NEURAL_CACHE_DIR: /data/audio-cache/rust-neural
+      RUST_GCLOUD_CACHE_DIR: /data/audio-cache/rust-gcloud
+      RUST_KOKORO_CACHE_DIR: /data/audio-cache/rust-kokoro
+      KOKORO_CMD: /app/tools/kokoro-venv/bin/python /app/tools/kokoro_server.py
+      KOKORO_LANGS: en,es,fr,hi,it,pt,ja
+      RUST_COMMANDS_STATE_PATH: /data/commands-state-rust.json
+    volumes:
+      - ./rust-data:/data
+      - ./models:/models:ro
+      - ./piper:/opt/piper:ro
+    ports:
+      - "3001:3001"
