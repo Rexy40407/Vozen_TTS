@@ -69,7 +69,7 @@ mod vote_sink;
 
 use std::{
     env,
-    net::{SocketAddr, TcpListener},
+    net::{IpAddr, SocketAddr, TcpListener},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -360,6 +360,10 @@ impl RuntimeConfig {
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("./tts.db"));
+        let health_host = nonempty_env("HEALTH_HOST").unwrap_or_else(|| "127.0.0.1".to_owned());
+        let health_ip = health_host
+            .parse::<IpAddr>()
+            .map_err(|_| RuntimeError::InvalidHealthHost)?;
         let health_bind = match env::var("HEALTH_PORT") {
             Ok(raw) if raw.trim().is_empty() => None,
             Ok(raw) => {
@@ -369,7 +373,7 @@ impl RuntimeConfig {
                     .ok()
                     .filter(|port| *port != 0)
                     .ok_or(RuntimeError::InvalidHealthPort)?;
-                Some(SocketAddr::from(([127, 0, 0, 1], port)))
+                Some(SocketAddr::new(health_ip, port))
             }
             Err(env::VarError::NotPresent) => None,
             Err(env::VarError::NotUnicode(_)) => return Err(RuntimeError::InvalidHealthPort),
@@ -1987,6 +1991,8 @@ enum RuntimeError {
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
     InvalidHealthPort,
+    #[error("HEALTH_HOST must be a valid IP address")]
+    InvalidHealthHost,
     #[error("SINGLE_INSTANCE_PORT must be `off`, `0`, or an integer from 1 to 65535")]
     InvalidSingleInstancePort,
     #[error("another Vozen runtime already owns the single-instance lock")]
