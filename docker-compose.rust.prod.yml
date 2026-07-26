@@ -23,7 +23,8 @@ services:
       RUST_COMMANDS_STATE_PATH: /data/commands-state-rust.json
     volumes:
       - ./rust-data:/data
-      - ./models:/models:ro
-      - ./piper:/opt/piper:ro
+      # Production keeps the existing model/Piper directories outside this checkout.
+      - /home/vozen/discord-bot-Vozen/models:/models:ro
+      - /home/vozen/piper:/opt/piper:ro
     ports:
       - "3001:3001"
