@@ -1,9 +1,7 @@
 # Vozen Rust runtime image.
 #
-# This file is deliberately separate from Dockerfile: the default hosted image remains the
-# Node/TypeScript runtime until the Rust staging gate, voice smoke test and rollback rehearsal
-# are complete. Build this image only with the Rust compose override documented in the staging
-# runbook.
+# This is the production image for the Rust runtime. The legacy Node/TypeScript image has been
+# removed; the explicit filename keeps production deploys and rollback intent unambiguous.
 
 # ---------- builder ----------
 FROM rust:1.97.1-bookworm AS builder

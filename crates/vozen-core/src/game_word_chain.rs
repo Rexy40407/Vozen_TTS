@@ -1,6 +1,6 @@
 //! Pure rules engine for the Word Chain game.
 //!
-//! This mirrors `src/games/wordchain/core.ts`; orchestration (turns, lives, voice and Discord
+//! This preserves the public word-chain rules; orchestration (turns, lives, voice and Discord
 //! messages) remains outside the core. Dictionaries are supplied by the adapter as already
 //! normalised words, so validation never performs I/O.
 

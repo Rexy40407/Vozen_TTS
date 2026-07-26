@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_from": "src/commands/definitions.ts",
+  "generated_from": "crates/vozen-contracts/src/commands.rs",
   "public_commands": [
     {
       "options": [],

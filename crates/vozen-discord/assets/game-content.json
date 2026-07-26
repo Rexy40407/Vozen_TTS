@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_from": "src/games/content/languagePhrases.ts + roulettePrompts.ts + shortPhrases.ts + words.ts + wordleWords.ts",
+  "generated_from": "crates/vozen-discord/src/generated_game_content.rs",
   "language_phrases": {
     "pt": [
       "Olá a todos, hoje está um dia muito bonito para conversarmos juntos.",

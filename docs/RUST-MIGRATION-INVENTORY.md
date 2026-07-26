@@ -1,37 +1,34 @@
-# Inventário da migração Rust
+# Inventário da migração Rust — concluído
 
-Este inventário é a barreira de segurança antes de remover o legado TypeScript.
-O branch `legacy-typescript` preserva o estado anterior à limpeza.
+O runtime Discord, a store SQLite, TTS, jogos, comandos e APIs do Vozen vivem
+agora nos crates Rust. Não existem ficheiros `.ts` no branch `main`. O branch
+`legacy-typescript` preserva o snapshot anterior à limpeza para recuperação.
 
-## Fontes TypeScript ainda referenciadas
+## Contratos preservados
 
-| Área | Ficheiros de origem | Substituto/consumidor Rust |
+| Área | Fonte Rust | Verificação |
 | --- | --- | --- |
-| Contratos Discord | `src/contracts/*`, `tools/export-rust-contracts.ts` | `crates/vozen-contracts`, contrato gerado em `crates/vozen-discord` |
-| Schema SQLite | `src/contracts/sqliteSchemaContract.ts`, `tools/export-rust-schema.ts` | `crates/vozen-store` e migrações Rust |
-| Voz e i18n | `src/language/*`, `src/i18n/*`, exporters Rust | `crates/vozen-tts`, `crates/vozen-discord`, catálogos gerados |
-| Jogos e conteúdo | `src/games/*`, `src/games/content/*`, exporters Rust | `crates/vozen-core`, `crates/vozen-discord/assets` |
-| Site | `tools/i18n-src/*`, `tools/*.mjs`, `site/*` | Continua separado do runtime; não depende do bot TypeScript |
+| Comandos Discord | `crates/vozen-contracts` e `crates/vozen-discord` | contrato JSON + testes de parsing/registro |
+| SQLite | `crates/vozen-store` | schema JSON, migrações e integridade |
+| Voz e i18n | `crates/vozen-tts`, `crates/vozen-discord` | catálogo gerado e testes de modelos/idiomas |
+| Jogos e conteúdo | `crates/vozen-core`, `crates/vozen-discord/assets` | conteúdo JSON + testes de todas as rondas |
+| Site | `site/`, `tools/*.mjs`, `site-tests/` | 54 testes, i18n, copy e minificação |
 
-## Integrações que não podem regredir
+## Integrações mantidas
 
-| Contrato | Implementação Rust | Verificação obrigatória |
-| --- | --- | --- |
-| Top.gg webhook e recompensas | `crates/vozen-api/src/topgg_webhook.rs` | assinatura, replay, duplicados, recompensa e `/webhook/topgg` |
-| Top.gg métricas/comandos | `crates/vozen-runtime/src/topgg_metrics.rs` | sincronização de comandos e publicação periódica |
-| Ko-fi | `crates/vozen-api/src/kofi_webhook.rs` | token, idempotência, pending grant e `/webhook/kofi` |
-| Premium/OAuth | `crates/vozen-api/src/premium_api.rs`, `discord_oauth.rs` | `/api/me/premium`, CORS, audience, email verificado |
-| Dashboard/admin | `crates/vozen-api/src/dashboard_api.rs`, `admin_api.rs` | autorização Discord e respostas compatíveis |
-| Site | `site/`, `site/js/*`, `site/css/*` | build do Pages, `https://vozen.org`, `https://api.vozen.org/health` |
+- Top.gg: webhook autenticado, replay/idempotência, recompensas e métricas.
+- Ko-fi: token, pending/claim e concessões idempotentes.
+- Premium/OAuth: `/api/me/premium`, CORS, audience e email verificado.
+- Dashboard/admin: autorização Discord e estado de configuração.
+- Site/API: Pages em `vozen.org` e health/API em `api.vozen.org`.
 
-## Regras de remoção
+Os nomes de ambiente e os caminhos HTTP públicos permanecem compatíveis. O
+deploy faz backup SQLite, healthcheck, canário de gateway e rollback da imagem;
+nenhuma base de produção é apagada ou migrada destrutivamente.
 
-1. Não remover uma origem TypeScript enquanto o substituto Rust não tiver teste de paridade.
-2. Não alterar `tts.db` nesta limpeza; o deploy continua a usar backup e rollback.
-3. Não remover nomes de variáveis do `.env.rust.prod` sem atualizar runtime, documentação e teste de arranque.
-4. O site continua com build independente; apenas o runtime do bot muda para Rust-only.
+## Gates de saída
 
-## Critério de saída
-
-O legado só sai da `main` quando os contratos acima passarem em CI, o staging responder
-com `Ready`, e o deploy de produção confirmar DB íntegra, API acessível e rollback disponível.
+`node tools/check-rust-contracts.mjs`, `node tools/check-rust-canaries.mjs`,
+`cargo fmt`, `cargo check`, `cargo clippy`, `cargo test` e `npm run check:site`
+passam antes de publicar. A CI constrói `Dockerfile.rust`; o deploy em `main`
+usa apenas `docker-compose.rust.prod.yml`.

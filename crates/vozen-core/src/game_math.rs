@@ -1,6 +1,6 @@
 //! Pure state for the five-round spoken arithmetic game.
 //!
-//! Numbers and seeded generation match `src/games/math.ts`; localization and voice delivery stay
+//! Numbers and seeded generation preserve the public game contract; localization and voice delivery stay
 //! in the adapter layer.
 
 const ROUNDS: u8 = 5;

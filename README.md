@@ -95,8 +95,8 @@ there is nothing easier than inviting the hosted bot:
 | Level      | Who it's for                             | How                                                                                                                                                                         |
 | ---------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Easy**   | Everyone                                 | [Invite the public bot](https://discord.com/oauth2/authorize?client_id=1523826014935842997&permissions=326420745216&scope=bot%20applications.commands) — nothing to install |
-| **Normal** | You want it on your own VPS              | `docker compose` — [self-hosting guide §5](docs/SELF-HOST.md#5-deploy-on-a-vps-docker)                                                                                      |
-| **Hard**   | You want to change it or tune the voices | From source: Node + Piper + models — [self-hosting guide §1](docs/SELF-HOST.md#1-prerequisites)                                                                             |
+| **Normal** | You want it on your own VPS              | `docker compose -f docker-compose.rust.prod.yml` — [Rust self-hosting guide](docs/SELF-HOST.md)                                                                             |
+| **Hard**   | You want to change it or tune the voices | Rust workspace + Piper/models — [development checks](docs/SELF-HOST.md#development-checks)                                                                                  |
 
 ## Privacy and terms
 

@@ -2,7 +2,7 @@
 //
 // Generates the soundboard clips (/sound) as SYNTHETIC tones — no third-party rights
 // (CC0 by own authorship). Output: WAV PCM 22050 Hz / mono / 16-bit in assets/sfx/.
-// The keys must match src/content/sounds.ts (the test tests/sounds.test.ts fails
+// The keys must match the Rust sound catalog (the Rust contract tests fail
 // if any registered clip has no file). Run:  node tools/gen-sfx.mjs
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -150,7 +150,7 @@ function toWav(buf) {
   return Buffer.concat([header, data]);
 }
 
-// ── the clips (keys == src/content/sounds.ts) ───────────────────────────────────
+// ── the clips (keys == Rust sound catalog) ─────────────────────────────────────
 const honk = (secs, f) =>
   mix([note(secs, f, saw, secs, 0.5), note(secs, f * 1.01, saw, secs, 0.25)]);
 

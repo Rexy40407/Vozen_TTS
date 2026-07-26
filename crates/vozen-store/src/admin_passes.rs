@@ -1,6 +1,6 @@
 //! Owner-only premium overview and revocation helpers.
 //!
-//! These operations mirror `src/store/adminPasses.ts`. They are deliberately kept in the store
+//! These operations mirror the original admin-pass contract. They are deliberately kept in the store
 //! crate so an eventual Rust HTTP handler cannot accidentally implement a second entitlement
 //! policy. Listing is read-only; pass revocation removes the pass and its seat activations in one
 //! transaction so no orphan activation can keep a guild premium.

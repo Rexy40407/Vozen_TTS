@@ -118,7 +118,7 @@ use crate::transcription_control_sink::SttConsentRegistry;
 
 const DISCORD_COMMAND_CONTRACT: &str = include_str!("../../../contracts/discord-commands.json");
 
-// Keep this catalogue in lockstep with `LOCALE_NAMES` in `src/language/voiceMap.ts`.
+// Keep this catalogue in lockstep with the generated Rust voice-display contract.
 // The legacy runtime exposes one synthetic Google voice for every locale not covered by
 // an installed Piper model. Games such as Guess the Language use this same public voice
 // catalogue to decide how many distinct playable languages exist.

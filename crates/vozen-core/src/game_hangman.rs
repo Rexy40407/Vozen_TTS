@@ -1,7 +1,7 @@
 //! Pure state for the collaborative text Hangman game.
 //!
 //! Discord rendering, localisation and the idle timer remain adapter concerns. The state mirrors
-//! `src/games/hangman.ts`: whole-word guesses only win when correct, single letters are tolerant
+//! The original Hangman contract: whole-word guesses only win when correct, single letters are tolerant
 //! to accents/case, repeated letters do not consume a life, and six misses end the game.
 
 use std::collections::BTreeSet;

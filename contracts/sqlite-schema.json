@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_from": "src/store/db.ts",
+  "generated_from": "crates/vozen-store/src/schema.rs",
   "objects": [
     {
       "type": "table",

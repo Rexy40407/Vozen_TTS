@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Instala o sidecar de STT (faster-whisper) em tools/whisper-venv — auto-detetado por
-# src/voice/whisperSidecar.ts::resolveWhisperCmd. OPT-IN: sem este venv o STT fica inerte.
+# Rust Whisper sidecar command. OPT-IN: sem este venv o STT fica inerte.
 # Sem PyTorch nem cmake (CTranslate2). Ver docs/SPIKE-STT.md para os números do VPS.
 # Correr na raiz do projeto:  bash tools/setup-whisper.sh
 set -euo pipefail

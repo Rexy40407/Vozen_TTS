@@ -1,4 +1,4 @@
-//! Canonical multilingual joke catalog ported from `src/content/jokes.ts`.
+//! Canonical multilingual joke catalog owned by the Rust runtime.
 //!
 //! The key, prefix, ordering and seeded selection intentionally match Node.
 

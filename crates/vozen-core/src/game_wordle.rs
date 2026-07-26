@@ -1,7 +1,7 @@
 //! Pure state for the collaborative five-letter Wordle game.
 //!
 //! Rendering (emoji tiles/ANSI), localisation and the idle timer stay in the Discord adapter.
-//! The repeated-letter accounting intentionally mirrors `src/games/wordle.ts` so a guess cannot
+//! The repeated-letter accounting preserves the public Wordle contract so a guess cannot
 //! mark more occurrences yellow than the target contains.
 
 use std::collections::{BTreeMap, BTreeSet};

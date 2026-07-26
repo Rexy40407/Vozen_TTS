@@ -25,7 +25,7 @@ resume o essencial e **liga** para o detalhe; não repete os guias completos.
 
 ## 3. Deployar 24/7
 
-- [ ] Escolhe **uma** das 3 opções de hospedagem (Oracle free / VPS / PaaS) e arranca a instância; **verifica:** os logs mostram `[client] online como ...` (e, se definires `HEALTH_PORT`, o `GET /health` responde `200`). _~15-30 min na 1.ª vez — passos e comandos: [DEPLOY.md](DEPLOY.md)._
+- [ ] Arranca a VPS com `docker compose -f docker-compose.rust.prod.yml up -d --build`; **verifica:** os logs mostram `healthy: Ready` e o `GET /health` responde `200`. _~15-30 min na 1.ª vez — passos e comandos: [DEPLOY.md](DEPLOY.md)._
 
 ## 4. Adicionar a um servidor de teste
 

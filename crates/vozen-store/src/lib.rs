@@ -266,7 +266,7 @@ fn install_current_schema(connection: &Connection) -> Result<(), StoreError> {
             contract.schema_version,
         ));
     }
-    if contract.generated_from != "src/store/db.ts" {
+    if contract.generated_from != "crates/vozen-store/src/schema.rs" {
         return Err(StoreError::InvalidSchemaObject(
             "schema contract source is not the Node database migrator".into(),
         ));

@@ -1,6 +1,6 @@
 //! Pure /cast content, assignment and speech formatting.
 //!
-//! The lists intentionally mirror `src/content/cast.ts`; the gateway adapter can therefore
+//! The lists intentionally preserve the public cast contract; the gateway adapter can therefore
 //! be promoted without making Discord users depend on Node-owned randomization.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

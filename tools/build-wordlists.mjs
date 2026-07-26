@@ -23,7 +23,7 @@ const CACHE = join(root, 'scratchpad', 'dict-spike'); // reuses the spike downlo
 const LANGS = ['pt', 'en', 'es', 'fr'];
 
 // IMPORTANT: this normalization MUST be byte-for-byte identical to the normalize() in
-// src/games/wordchain/core.ts — otherwise the runtime normalizes the user's input
+// Rust word-chain core — otherwise the runtime normalizes the user's input
 // differently from the list and valid words are rejected. There is a test in core that
 // pins the canonical outputs (Cães->caes, éléphant->elephant).
 const RE_PLAYABLE = /^[a-z]+$/;

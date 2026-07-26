@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_from": "src/language/voiceMap.ts + src/i18n/index.ts",
+  "generated_from": "crates/vozen-discord/src/generated_voice_display.rs",
   "supported_locales": [
     "en",
     "pt",

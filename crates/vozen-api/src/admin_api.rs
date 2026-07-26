@@ -1,6 +1,6 @@
 //! Owner-only admin console logic.
 //!
-//! This is the Rust counterpart of `src/premium/adminApi.ts`. HTTP wiring is intentionally kept
+//! This is the Rust premium admin API. HTTP wiring is intentionally kept
 //! separate so the authentication and money-surface decisions can be tested without opening a
 //! listener. A caller must still install this service behind an owner-only route.
 

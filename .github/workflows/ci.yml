@@ -6,30 +6,6 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # 22.x is the supported floor; 24.x provides forward-compatibility coverage.
-        node-version: [22.x, 24.x]
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: npm
-      # Block dependency install scripts by default, then rebuild only the four packages
-      # whose native/binary installation is required by the application.
-      - run: npm ci --ignore-scripts
-      # Add any future native dependency here and in deploy-bot.yml.
-      - run: npm rebuild better-sqlite3 @discordjs/opus esbuild ffmpeg-static
-      - run: npm run build
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run test:coverage
-
   # Site-specific gate used by both pull requests and the Pages deployment. Keeping this
   # separate from the native bot matrix makes the deploy gate fast while still testing the
   # exact static bundle that will be uploaded.
@@ -47,8 +23,7 @@ jobs:
       - run: npm rebuild esbuild
       - run: npm run check:site
 
-  # Keep the Rust migration independently verifiable without running the same
-  # compiler work twice for the Node 22/24 compatibility matrix above.
+  # Keep the Rust runtime independently verifiable from the static-site job.
   rust:
     runs-on: ubuntu-latest
     steps:
@@ -56,11 +31,6 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci --ignore-scripts
-      # The schema-contract exporter opens an in-memory SQLite database, so this
-      # job needs the audited native binding as well as esbuild.
-      - run: npm rebuild better-sqlite3 esbuild
       - run: rustup toolchain install 1.97.1 --profile minimal
       - run: rustup component add clippy rustfmt --toolchain 1.97.1
       - run: npm run check:rust-contracts

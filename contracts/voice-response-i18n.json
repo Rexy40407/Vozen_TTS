@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_from": "src/i18n/catalog.ts + src/i18n/locales",
+  "generated_from": "crates/vozen-discord/src/generated_voice_i18n.rs",
   "default_locale": "en",
   "supported_locales": [
     "en",
