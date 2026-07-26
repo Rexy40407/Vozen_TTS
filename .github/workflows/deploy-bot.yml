@@ -32,7 +32,10 @@ jobs:
           script: |
             set -euo pipefail
             cd ~/vozen-rust-prod
-            git fetch origin
+            # The production clone was originally created as a single-branch
+            # checkout, so fetch main explicitly instead of relying on its
+            # persisted remote refspec.
+            git fetch origin +refs/heads/main:refs/remotes/origin/main
             current_commit="$(git rev-parse HEAD)"
             target_commit="$(git rev-parse origin/main)"
             if [ "$current_commit" = "$target_commit" ]; then
