@@ -134,8 +134,8 @@
 // (nomes recomendados; ajustar apenas se colidirem com convenções existentes)
 export type DeclaredProduct =
   | 'plus_30' | 'plus_365'
-  | 'premium3_30' | 'premium3_365'
-  | 'premium8_30' | 'premium8_365';
+  | 'premium2_30' | 'premium2_365'
+  | 'premium5_30' | 'premium5_365';
 export type ProductMatch = 'match' | 'mismatch' | 'undeclared';
 export type BindingState = 'none' | 'self' | 'other';
 // NOTA: o matcher produz sempre um destes 4. O caso "matching indisponível" (sem token, §15)
@@ -155,10 +155,10 @@ Mapping `DeclaredProduct` → spec (função única no backend, `declaredProduct
 |---|---|---|---|---|
 | `plus_30` | plus | 30 | **ignorado** (§5: Plus seats=3 por irrelevância) | Plus — monthly |
 | `plus_365` | plus | 365 | ignorado | Plus — annual |
-| `premium3_30` | premium | 30 | `=== 3` | Premium 3 servers — monthly |
-| `premium3_365` | premium | 365 | `=== 3` | Premium 3 servers — annual |
-| `premium8_30` | premium | 30 | `=== 8` | Premium 8 servers — monthly |
-| `premium8_365` | premium | 365 | `=== 8` | Premium 8 servers — annual |
+| `premium2_30` | premium | 30 | `=== 2` | Premium 2 servers — monthly |
+| `premium2_365` | premium | 365 | `=== 2` | Premium 2 servers — annual |
+| `premium5_30` | premium | 30 | `=== 5` | Premium 5 servers — monthly |
+| `premium5_365` | premium | 365 | `=== 5` | Premium 5 servers — annual |
 
 Pendings legacy/custom (days/seats fora do catálogo) nunca são `match` de um declarado diferente;
 a UI mostra os valores reais ("custom: premium 5srv 90d").
@@ -314,7 +314,7 @@ CREATE TABLE IF NOT EXISTS claim_help_request (
   user_id                      TEXT NOT NULL,
   email_hash                   TEXT NOT NULL,
   declared_product             TEXT CHECK (declared_product IN
-    ('plus_30','plus_365','premium3_30','premium3_365','premium8_30','premium8_365')),
+    ('plus_30','plus_365','premium2_30','premium2_365','premium5_30','premium5_365')),
   status                       TEXT NOT NULL DEFAULT 'open'
                                CHECK (status IN ('open','applied','dismissed')),
   first_at                     INTEGER NOT NULL,

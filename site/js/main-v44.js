@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   Vozen site — main-v43.js
+   Vozen site — main-v44.js
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -278,13 +278,13 @@
     }),
   );
 
-  /* ── toggle 3/10 servidores (só no cartão Premium) ────── */
+  /* ── toggle 2/5 servidores (só no cartão Premium) ─────── */
   // Mesma tier, muda o nº de licenças e o preço. Como o bill-toggle: só troca uma classe
-  // (.is-10 no cartão); o CSS mostra o combo certo (preço/período/riscado/deal/nota).
+  // (.is-5 no cartão); o CSS mostra o combo certo (preço/período/riscado/deal/nota).
   const proCard = $(".price-card--pro");
   $$(".seat-toggle__btn").forEach((b) =>
     b.addEventListener("click", () => {
-      if (proCard) proCard.classList.toggle("is-10", b.dataset.seats === "10");
+      if (proCard) proCard.classList.toggle("is-5", b.dataset.seats === "5");
       $$(".seat-toggle__btn").forEach((x) => x.classList.toggle("is-active", x === b));
       syncKofiLinks();
     }),
@@ -294,21 +294,21 @@
      As memberships do Ko-fi só cobram ao MES, por isso os passes anuais sao produtos da
      Shop, cada um com o seu link proprio. Os toggles acima so trocam uma classe e deixam o
      CSS mostrar o preco certo — mas um href nao e algo que o CSS mude. Sem isto, quem
-     escolhe "anual" ve €18.99 e aterra na pagina generica, onde esse produto nao existe.
+     escolhe "anual" vê o preço anual e recebe o link direto para o produto correspondente.
      Os codigos tem de bater certo com o KOFI_SHOP_MAP do bot: e o direct_link_code que diz
      ao webhook o que foi comprado (o Ko-fi nao envia o nome do produto). */
   const KOFI_PAGE = "https://ko-fi.com/rexy00";
   const KOFI_ANNUAL_PLUS = "https://ko-fi.com/s/e1a8ba4ca5";
-  const KOFI_ANNUAL_PRO_3 = "https://ko-fi.com/s/64240758ef";
-  const KOFI_ANNUAL_PRO_8 = "https://ko-fi.com/s/8f72543ad0";
+  const KOFI_ANNUAL_PRO_2 = "https://ko-fi.com/s/64240758ef";
+  const KOFI_ANNUAL_PRO_5 = "https://ko-fi.com/s/8f72543ad0";
   const plusBuy = $(".price-card__buy.js-kofi:not(.price-card__buy--pro)");
   const proBuy = $(".price-card__buy--pro");
   function syncKofiLinks() {
     const annual = !!pricingGrid && pricingGrid.classList.contains("is-annual");
     if (plusBuy) plusBuy.href = annual ? KOFI_ANNUAL_PLUS : KOFI_PAGE;
     if (proBuy) {
-      const eight = !!proCard && proCard.classList.contains("is-10");
-      proBuy.href = !annual ? KOFI_PAGE : eight ? KOFI_ANNUAL_PRO_8 : KOFI_ANNUAL_PRO_3;
+      const five = !!proCard && proCard.classList.contains("is-5");
+      proBuy.href = !annual ? KOFI_PAGE : five ? KOFI_ANNUAL_PRO_5 : KOFI_ANNUAL_PRO_2;
     }
   }
   syncKofiLinks();
@@ -517,7 +517,7 @@
           pass: {
             active: true,
             used: 1,
-            seats: 3,
+            seats: 2,
             expiresAt: "2026-10-19T00:00:00.000Z",
             servers: [{ id: "123456789012345678", name: "Vozen Lab" }],
           },

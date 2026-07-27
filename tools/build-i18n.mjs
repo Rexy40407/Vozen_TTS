@@ -15,7 +15,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = join(ROOT, 'tools', 'i18n-src');
 // Order = order in the site selector.
 const LANGS = ['en', 'pt', 'fr', 'es', 'de', 'tr', 'ar', 'zh', 'ru', 'ko'];
-const OUTPUT = join(ROOT, 'site', 'js', 'i18n-v40.js');
+const OUTPUT = join(ROOT, 'site', 'js', 'i18n-v41.js');
 const checkOnly = process.argv.includes('--check');
 const normalizeLineEndings = (value) => value.replace(/\r\n?/g, '\n');
 
@@ -95,7 +95,7 @@ if (checkOnly) {
     // The same actionable error covers a missing output and a stale one.
   }
   if (normalizeLineEndings(current) !== normalizeLineEndings(out)) {
-    throw new Error('site/js/i18n-v40.js is out of date; run npm run build:i18n');
+    throw new Error('site/js/i18n-v41.js is out of date; run npm run build:i18n');
   }
   console.log(
     `[check-i18n] ${LANGS.length} languages · ${uiKeys.length} UI keys · generated bundle is current`,
@@ -103,6 +103,6 @@ if (checkOnly) {
 } else {
   writeFileSync(OUTPUT, out);
   console.log(
-    `[build-i18n] ${LANGS.length} languages · ${uiKeys.length} UI keys · ${FAQ.length} FAQ -> site/js/i18n-v40.js`,
+    `[build-i18n] ${LANGS.length} languages · ${uiKeys.length} UI keys · ${FAQ.length} FAQ -> site/js/i18n-v41.js`,
   );
 }

@@ -79,7 +79,7 @@ fn parse_grant(options: &[CommandDataOption]) -> Result<OwnerCommand, OwnerComma
     let plan = parse_plan(required_string(options, "plan")?)?;
     let days = optional_integer(options, "days")?.unwrap_or(30);
     validate_range(days, MIN_DAYS, MAX_DAYS)?;
-    let seats = optional_integer(options, "seats")?.unwrap_or(3);
+    let seats = optional_integer(options, "seats")?.unwrap_or(2);
     validate_range(seats, MIN_SEATS, MAX_SEATS)?;
     Ok(OwnerCommand::Grant {
         user_id,
@@ -97,7 +97,7 @@ fn parse_generate_code(options: &[CommandDataOption]) -> Result<OwnerCommand, Ow
     let plan = parse_plan(required_string(options, "plan")?)?;
     let days = optional_integer(options, "days")?.unwrap_or(30);
     validate_range(days, MIN_DAYS, MAX_DAYS)?;
-    let seats = optional_integer(options, "seats")?.unwrap_or(3);
+    let seats = optional_integer(options, "seats")?.unwrap_or(2);
     validate_range(seats, MIN_SEATS, MAX_SEATS)?;
     let amount = optional_integer(options, "amount")?.unwrap_or(1);
     validate_range(amount, MIN_AMOUNT, MAX_AMOUNT)?;
@@ -212,7 +212,7 @@ mod tests {
             Some(OwnerCommand::GenerateCode {
                 plan: OwnerPlan::Premium,
                 days: 30,
-                seats: 3,
+                seats: 2,
                 amount: 2,
                 expires_days: Some(7),
             })

@@ -5,7 +5,7 @@ const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 
 const LANGS = ['en', 'pt', 'fr', 'es', 'de', 'tr', 'ar', 'zh', 'ru', 'ko'];
 describe('site UX polish contract', () => {
   it('requires a translated, accessible confirmation before logging out', () => {
-    const script = source('site/js/main-v43.js');
+    const script = source('site/js/main-v44.js');
     expect(script).toContain('function logoutConfirmModal()');
     expect(script).toContain('id="ppLogoutConfirm"');
     expect(script).toContain('role="dialog"');
@@ -19,7 +19,7 @@ describe('site UX polish contract', () => {
     );
   });
   it('shows a specific inline error before submitting an empty Ko-fi receipt', () => {
-    const script = source('site/js/main-v43.js');
+    const script = source('site/js/main-v44.js');
     const emptyGuard = script.indexOf('setMsg(t("claim.receiptRequired"), "err")');
     const linkRequest = script.indexOf('PREMIUM_API_BASE + "/api/link"');
     const instantMessage = script.indexOf('id="ppInstantMsg"');
@@ -37,8 +37,8 @@ describe('site UX polish contract', () => {
     expect(receiptMessage).toBeGreaterThan(receiptBody);
   });
   it('fits translated hero lines without changing the shared visual footprint', () => {
-    const script = source('site/js/main-v43.js');
-    const css = source('site/css/main-v42.css');
+    const script = source('site/js/main-v44.js');
+    const css = source('site/css/main-v43.css');
     expect(script).toContain('function fitHeroTitle()');
     expect(script).toContain('fitHeroTitle();');
     expect(css).toMatch(/\.hero__title span\s*\{[^}]*white-space:\s*nowrap;/s);
@@ -51,7 +51,7 @@ describe('site UX polish contract', () => {
   });
   it('has a short-desktop account layout and equal paid-plan CTA footers', () => {
     const accountCss = source('site/css/account-v6.css');
-    const siteCss = source('site/css/main-v42.css');
+    const siteCss = source('site/css/main-v43.css');
     expect(accountCss).toMatch(/@media\s*\(min-width:\s*1021px\)\s*and\s*\(max-height:\s*699px\)/);
     expect(accountCss).toMatch(/\.ppanel__logoutconfirm\s*\{/);
     expect(siteCss).toMatch(/\.paid-plans\s+\.price-card__idnote\s*\{[^}]*min-height:/s);

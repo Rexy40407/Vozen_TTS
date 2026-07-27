@@ -21,7 +21,7 @@ do Discord ID no checkout, e uma compra de teste end-to-end validada.
 
 **Regra de ouro — o parser lê o NOME do tier** (`src/premium/kofi.ts`, campo `tier_name`):
 - contém `plus` → plano Plus · contém `premium` → plano Premium
-- contém `(N servers)` → N licenças (ex. "(3 servers)", "(8 servers)")
+- contém `(N servers)` → N licenças (ex. "(2 servers)", "(5 servers)")
 - (memberships são sempre 30 dias — o parser já trata disso)
 
 ## Como fica (o resultado visível)
@@ -29,9 +29,9 @@ do Discord ID no checkout, e uma compra de teste end-to-end validada.
 ```
 Página Ko-fi do Vozen
 └── Secção "Membership"  ← UMA coisa, o comprador escolhe o tier
-    ├── Vozen Plus                    €1.99/mês   (perks pessoais, qualquer servidor)
-    ├── Vozen Premium (3 servers)     €3.99/mês   (servidor inteiro, 3 servidores)
-    └── Vozen Premium (8 servers)     €7.99/mês   (servidor inteiro, 8 servidores)
+    ├── Vozen Plus                    €3.99/mês   (perks pessoais, qualquer servidor)
+    ├── Vozen Premium (2 servers)     €6.99/mês   (servidor inteiro, 2 servidores)
+    └── Vozen Premium (5 servers)    €13.99/mês   (servidor inteiro, 5 servidores)
 ```
 Sem produtos de loja. Limpo. É "Vozen, escolhe o teu plano" numa secção só.
 
@@ -57,14 +57,14 @@ Sem produtos de loja. Limpo. É "Vozen, escolhe o teu plano" numa secção só.
 ### Fase 1 — Criar a membership + tiers [Diogo]
 - [ ] Ko-fi → Memberships → Membership Mode = **"Membership tiers"**.
 - [ ] **Add Tier** ×3, EXATAMENTE com estes nomes (o webhook lê-os):
-  - [ ] **Vozen Plus** — €1.99/mês
+  - [ ] **Vozen Plus** — €3.99/mês
         Descrição: "Premium perks that follow YOU into every server — 8 voice effects,
         voice cloning, 50 personal pronunciations, /rizz and the premium games."
-  - [ ] **Vozen Premium (3 servers)** — €3.99/mês
-        Descrição: "Unlock Premium for everyone on up to 3 servers. Activate with
+  - [ ] **Vozen Premium (2 servers)** — €6.99/mês
+        Descrição: "Unlock Premium for everyone on up to 2 servers. Activate with
         /premium activate."
-  - [ ] **Vozen Premium (8 servers)** — €7.99/mês
-        Descrição: "Premium for everyone on up to 8 servers."
+  - [ ] **Vozen Premium (5 servers)** — €13.99/mês
+        Descrição: "Premium for everyone on up to 5 servers."
 - [ ] Em cada tier, adicionar a instrução do Discord ID (Fase 2) na descrição.
 - [ ] Enable nos 3 tiers.
 - [ ] Arquivar/apagar tiers antigos que sobrem (ex. "(10 servers)", "Max") — renovações
@@ -98,7 +98,7 @@ Texto sugerido (EN, público internacional) para a descrição de cada tier:
       - vozen.org/account mostra o estado
       - idempotência: retry do Ko-fi não duplica (ledger já testado em unit)
 - [ ] Repor o preço; cancelar a subscrição de teste no Ko-fi.
-- [ ] (Se der) repetir com "(3 servers)" para validar seats + /premium activate.
+- [ ] (Se der) repetir com "(2 servers)" para validar seats + /premium activate.
 
 ## Riscos
 
@@ -115,4 +115,4 @@ Texto sugerido (EN, público internacional) para a descrição de cada tier:
 Fases 1+2+4 com o tier **Vozen Plus** validado end-to-end — a partir daí o dinheiro flui;
 os tiers Premium são o mesmo padrão com seats.
 
-Próxima ação concreta: Fase 1 — no painel Ko-fi, pôr Membership Mode em "Membership tiers" e criar o tier "Vozen Plus" a €1.99/mês.
+Próxima ação concreta: Fase 1 — no painel Ko-fi, pôr Membership Mode em "Membership tiers" e criar o tier "Vozen Plus" a €3.99/mês.

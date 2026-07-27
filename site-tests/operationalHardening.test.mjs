@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 'utf8' });
 // The site's assets are cache-busted by FILENAME (never a query string), so every rename churns
 // these tests too. One constant each: the rename is then a one-line edit here, not a hunt.
-const SITE_JS = 'site/js/main-v43.js';
-const SITE_I18N = 'site/js/i18n-v40.js';
-const SITE_CSS = 'site/css/main-v42.css';
+const SITE_JS = 'site/js/main-v44.js';
+const SITE_I18N = 'site/js/i18n-v41.js';
+const SITE_CSS = 'site/css/main-v43.css';
 const ACCOUNT_CSS = 'site/css/account-v6.css';
 /** Body of a top-level function in the site bundle, comments stripped. Comments are dropped
  *  because these assertions are about the markup a function RENDERS — a comment explaining why
@@ -54,7 +54,7 @@ describe('operational security configuration', () => {
       'site/terms.html',
     ]) {
       const page = source(pagePath);
-      expect(page, pagePath).toContain('css/main-v42.css');
+      expect(page, pagePath).toContain('css/main-v43.css');
       expect(page, pagePath).not.toContain('css/main-v41.css');
     }
     expect(existsSync(resolve(process.cwd(), 'site/css/main-v41.css'))).toBe(false);
@@ -95,7 +95,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('class="account-membership"');
     expect(page).toContain('class="account-tasklist"');
     expect(page).toContain('id="accountActivateOpen"');
-    expect(page).toContain('js/main-v43.js');
+    expect(page).toContain('js/main-v44.js');
     expect(css).toContain('body.page-account');
     expect(css).toMatch(/@media\s*\(max-width:\s*760px\)/);
     expect(css).toMatch(/@media\s*\(min-width:\s*1280px\)\s*and\s*\(min-height:\s*800px\)/);

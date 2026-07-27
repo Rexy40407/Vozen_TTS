@@ -15,10 +15,10 @@ endpoint não-oficial), escolha de género de voz, e latência/fiabilidade consi
 
 **Economia:** $4/1M chars, com **free tier de 4M chars/mês (permanente)**. Allowances
 FINAIS decididos pelo Diogo (2026-07-11): **Plus 100k chars/MÊS por pessoa; Premium
-400k chars/MÊS por passe de 3 servidores; 1M chars/MÊS por passe de 8 servidores** —
+400k chars/MÊS por passe de 2 servidores; 1M chars/MÊS por passe de 5 servidores** —
 o pool do passe é partilhado entre os servidores dele (gastar no servidor A desconta
 ao B). Pior caso absoluto (allowance esgotado, free tier já consumido): Plus $0.40 vs
-€1.99 (margem ≥81%); passe 3s $1.60 vs €3.99 (≥63%); passe 8s $4.00 vs €7.99 (≥54%).
+€3.99 (margem ≥89%); passe 2s $1.60 vs €6.99 (≥77%); passe 5s $4.00 vs €13.99 (≥71%).
 **Margem garantida por construção em todos os planos**; com o free tier, custo real €0
 até ~10 passes esgotados/mês.
 
@@ -63,8 +63,8 @@ sem `GOOGLE_TTS_API_KEY` no `.env`, o motor degrada para gTTS (padrão Kokoro-se
     (~2 000 mensagens; custo máx $0.40)
   - **Premium (POR PASSE, não por servidor)**: pool mensal PARTILHADO entre os
     servidores do passe, escalado pelos seats:
-    - passe de 3 servidores → `GCLOUD_PASS3_MONTHLY_CHARS`, default **400 000** (máx $1.60)
-    - passe de 8 servidores → `GCLOUD_PASS8_MONTHLY_CHARS`, default **1 000 000** (máx $4.00)
+    - passe de 2 servidores → `GCLOUD_PASS3_MONTHLY_CHARS`, default **400 000** (máx $1.60; nome env legado)
+    - passe de 5 servidores → `GCLOUD_PASS8_MONTHLY_CHARS`, default **1 000 000** (máx $4.00; nome env legado)
     - (seats intermédios/grandfathered ex. 10: usar o tier mais próximo ≥ seats, i.e. 1M)
     Gastar no servidor A desconta ao pool do passe todo. O contador é keyed pelo DONO
     do passe (owner user id), resolvido a partir da guild ativa → passe que a ativou.
@@ -72,7 +72,7 @@ sem `GOOGLE_TTS_API_KEY` no `.env`, o motor degrada para gTTS (padrão Kokoro-se
     (esgotado → gTTS, NÃO passa para o pool do passe — evita um Plus drenar o dono do
     passe); NÃO tem Plus → gasta do pool do passe/servidor que cobre o servidor
   - Servidor Premium DIRETO (redeem/discord/manual, sem passe): pool com scope `guild`
-    keyed por guildId, limite = tier de 3 servidores (400k) por defeito (fecha o buraco
+    keyed por guildId, limite = tier de 2 servidores (400k) por defeito (fecha o buraco
     de um premium sem dono de passe)
   - Tie-break do dono do passe: `premium_pass_activation` não tem UNIQUE em guild_id, por
     isso dois donos PODERIAM ativar a mesma guild — escolhe-se determinística o de

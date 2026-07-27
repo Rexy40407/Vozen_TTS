@@ -31,7 +31,7 @@ const htmlNodes = (html, predicate) => {
 describe('site acquisition and trust contracts', () => {
   it('keeps the bot, runtime, HTML fallbacks, and README on one invite bitfield', () => {
     expect(INVITE_PERMISSIONS).toBe(CANONICAL_PERMISSIONS);
-    const runtime = source('site/js/main-v43.js');
+    const runtime = source('site/js/main-v44.js');
     const rustInvite = source('crates/vozen-runtime/src/invite_sink.rs');
     expect(rustInvite).toContain(
       `pub const INVITE_PERMISSIONS: &str = "${CANONICAL_PERMISSIONS}";`,
@@ -60,7 +60,7 @@ describe('site acquisition and trust contracts', () => {
       'site/index.html',
       'site/privacy.html',
       'site/terms.html',
-      'site/js/main-v43.js',
+      'site/js/main-v44.js',
     ]) {
       const urls = supportUrls(source(path));
       expect(urls.length, path).toBeGreaterThan(0);
@@ -97,7 +97,7 @@ describe('site acquisition and trust contracts', () => {
   it('documents /cast publicly without exposing bot-only theme names', () => {
     const siteFiles = [
       'site/index.html',
-      'site/js/i18n-v40.js',
+      'site/js/i18n-v41.js',
       ...['en', 'pt', 'fr', 'es', 'de', 'tr', 'ar', 'zh', 'ru', 'ko'].map(
         (lang) => `tools/i18n-src/${lang}.json`,
       ),

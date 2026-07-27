@@ -11,9 +11,9 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 /// Number of guild licences included with the normal Premium pass.
-pub const PREMIUM_PASS_SEATS: i64 = 3;
-/// Number of guild licences included with the legacy Premium Max pass.
-pub const PREMIUM_MAX_SEATS: i64 = 8;
+pub const PREMIUM_PASS_SEATS: i64 = 2;
+/// Number of guild licences included with the large Premium pass.
+pub const PREMIUM_MAX_SEATS: i64 = 5;
 const MAX_SHOP_DAYS: i64 = 3_650;
 const MAX_SHOP_SEATS: i64 = 100;
 
@@ -389,6 +389,8 @@ mod tests {
         let map = HashMap::new();
         let plus =
             parse_kofi_payload(&payload(r#", "tier_name":"Premium Plus 1 year""#)).expect("plus");
+        let standard = parse_kofi_payload(&payload(r#", "tier_name":"Vozen Premium Monthly""#))
+            .expect("standard");
         let max =
             parse_kofi_payload(&payload(r#", "tier_name":"Vozen Premium Max""#)).expect("max");
         let grandfathered = parse_kofi_payload(&payload(
@@ -400,6 +402,13 @@ mod tests {
             Some(KofiGrant {
                 plan: KofiPlan::Plus,
                 days: 365,
+                ..
+            })
+        ));
+        assert!(matches!(
+            map_kofi_to_grant(&standard, &map),
+            Some(KofiGrant {
+                seats: PREMIUM_PASS_SEATS,
                 ..
             })
         ));

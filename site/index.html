@@ -41,7 +41,7 @@
 
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 
-    <link rel="stylesheet" href="css/main-v42.css" />
+    <link rel="stylesheet" href="css/main-v43.css" />
 
     <!-- FAQ structured data (Google rich results). Mantém em sincronia com
          window.VOZEN_FAQ (js/i18n.js) — o JSON-LD tem de ser ESTÁTICO porque os
@@ -52,7 +52,7 @@
       "@type": "FAQPage",
       "mainEntity": [
         { "@type": "Question", "name": "Is Vozen really free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes — the core is free forever: 38 Piper voices in 35 languages, auto-read, greetings, most games and every admin control. Kokoro and Google HD are Premium voice engines; Plus unlocks them personally and server Premium unlocks them for that server." } },
-        { "@type": "Question", "name": "What does Premium include?", "acceptedAnswer": { "@type": "Answer", "text": "Kokoro neural and Google HD voice engines, all 8 voice effects, 24/7 in-call, 50 personal pronunciations, /rizz and the premium games (Word Chain, Wordle, Chess). Server Premium also includes live voice transcription. €3.99/month covers 3 servers, or €7.99/month covers 8; annual saves about 20%. Vozen Plus (€1.99/month) gives the personal perks on any server." } },
+        { "@type": "Question", "name": "What does Premium include?", "acceptedAnswer": { "@type": "Answer", "text": "Kokoro neural and Google HD voice engines, all 8 voice effects, 24/7 in-call, 50 personal pronunciations, /rizz and the premium games (Word Chain, Wordle, Chess). Server Premium also includes live voice transcription. €6.99/month covers 2 servers, or €13.99/month covers 5; annual saves about 20%. Vozen Plus (€3.99/month) gives the personal perks on any server." } },
         { "@type": "Question", "name": "How do I add Vozen to my server?", "acceptedAnswer": { "@type": "Answer", "text": "Click \"Add to Discord\", pick your server (you need Manage Server), and run /setup. That's it." } },
         { "@type": "Question", "name": "Which languages does it support?", "acceptedAnswer": { "@type": "Answer", "text": "35 languages with 38 neural voices — Portuguese, English, Spanish, French, German, Japanese, Arabic, Russian and many more, each with a native voice." } },
         { "@type": "Question", "name": "Do I need to configure anything?", "acceptedAnswer": { "@type": "Answer", "text": "No. /setup does it in one step. After that, everything works with sensible defaults — you can fine-tune later with /config." } },
@@ -305,7 +305,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M9 3l3 6 3-6M12 21l-3-12M12 21l3-12"/></svg>
               </span>
               <h3 data-i18n="feat.8.t">Fair Premium</h3>
-              <p data-i18n="feat.8.d">€3.99/month unlocks Kokoro and the server-wide extras. The essential Piper-powered core stays free.</p>
+              <p data-i18n="feat.8.d">€6.99/month unlocks Kokoro and the server-wide extras. The essential Piper-powered core stays free.</p>
             </article>
 
             <article class="card card--accent reveal">
@@ -490,7 +490,7 @@
                 <span class="seat-toggle__btn is-active" data-i18n="price.m.17">Goes with you to any server</span>
               </div>
               <div class="price-card__price">
-                <span class="price-line"><b><span class="amt amt--m">€1.99</span><span class="amt amt--y">€18.99</span></b><s class="was was--y">€23.88</s></span>
+                <span class="price-line"><b><span class="amt amt--m">€3.99</span><span class="amt amt--y">€37.99</span></b><s class="was was--y">€47.88</s></span>
                 <span class="per per--m" data-i18n="price.plus.per">/ month · per user</span>
                 <span class="per per--y" data-i18n="price.plus.perYear">/ year · per user</span>
               </div>
@@ -503,7 +503,7 @@
                 <li data-i18n="price.m.12">Wordle game</li>
                 <li data-i18n="price.m.14">/rizz</li>
               </ul>
-              <p class="price-card__note" data-i18n="price.plus.note">€18.99/year (save ~20%) · buy on Ko-fi</p>
+              <p class="price-card__note" data-i18n="price.plus.note">€37.99/year (save ~20%) · buy on Ko-fi</p>
               <a class="price-card__buy js-kofi" href="https://ko-fi.com/rexy00" target="_blank" rel="noopener">Get Vozen Plus</a>
               <p class="price-card__idnote">
                 <span data-i18n="price.idNote">⚠️ After buying on Ko-fi, activate your plan at vozen.org/account — just log in with Discord.</span>              </p>
@@ -515,25 +515,20 @@
               </div>
               <h3 data-i18n="price.pro.name">Vozen Premium</h3>
               <p class="price-card__pitch" data-i18n="price.pro.pitch">Unlock the full Vozen experience for everyone in your community.</p>
-              <!-- Toggle de licenças: mesma tier, muda só o nº de servidores (e o preço). A
-                   classe .is-10 no cartão faz o CSS trocar preço/período/riscado/deal/nota;
-                   as variantes --s10 reutilizam as chaves i18n price.max.* (já em 10 línguas).
-                   NOTA: data-seats="10"/.is-10/--s10/seats10 são IDENTIFICADORES internos
-                   legados — o deal grande passou a 8 servidores (2026-07-11); só o TEXTO
-                   visível diz 8, para não partir main.js/CSS com renames em cascata. -->
+              <!-- Toggle de licenças: a mesma tier muda o número de servidores e o preço. -->
               <div class="seat-toggle" role="group" aria-label="Servers per subscription">
-                <button type="button" class="seat-toggle__btn is-active" data-seats="3" data-i18n="price.pro.seats3">3 servers</button>
-                <button type="button" class="seat-toggle__btn" data-seats="10" data-i18n="price.pro.seats10">8 servers</button>
+                <button type="button" class="seat-toggle__btn is-active" data-seats="2" data-i18n="price.pro.seats2">2 servers</button>
+                <button type="button" class="seat-toggle__btn" data-seats="5" data-i18n="price.pro.seats5">5 servers</button>
               </div>
               <div class="price-card__price">
-                <span class="price-line"><b><span class="amt amt--m amt--s3">€3.99</span><span class="amt amt--m amt--s10">€7.99</span><span class="amt amt--y amt--s3">€37.99</span><span class="amt amt--y amt--s10">€75.99</span></b><s class="was was--y was--s3">€47.88</s><s class="was was--y was--s10">€95.88</s></span>
-                <span class="per per--m per--s3" data-i18n="price.pro.per">/ month · 3 servers</span>
-                <span class="per per--m per--s10" data-i18n="price.max.per">/ month · 8 servers</span>
-                <span class="per per--y per--s3" data-i18n="price.pro.perYear">/ year · 3 servers</span>
-                <span class="per per--y per--s10" data-i18n="price.max.perYear">/ year · 8 servers</span>
+                <span class="price-line"><b><span class="amt amt--m amt--s2">€6.99</span><span class="amt amt--m amt--s5">€13.99</span><span class="amt amt--y amt--s2">€66.99</span><span class="amt amt--y amt--s5">€133.99</span></b><s class="was was--y was--s2">€83.88</s><s class="was was--y was--s5">€167.88</s></span>
+                <span class="per per--m per--s2" data-i18n="price.pro.per">/ month · 2 servers</span>
+                <span class="per per--m per--s5" data-i18n="price.max.per">/ month · 5 servers</span>
+                <span class="per per--y per--s2" data-i18n="price.pro.perYear">/ year · 2 servers</span>
+                <span class="per per--y per--s5" data-i18n="price.max.perYear">/ year · 5 servers</span>
               </div>
-              <p class="price-card__deal deal--s3" data-i18n="price.pro.deal">🎁 Three servers. One subscription.</p>
-              <p class="price-card__deal deal--s10" data-i18n="price.max.deal">🎁 Eight servers. One subscription.</p>
+              <p class="price-card__deal deal--s2" data-i18n="price.pro.deal">🎁 Two servers. One subscription.</p>
+              <p class="price-card__deal deal--s5" data-i18n="price.max.deal">🎁 Five servers. One subscription.</p>
               <ul class="ticks ticks--amber price-card__highlights">
                 <li data-i18n="price.m.18">Works for everyone in the server</li>
                 <li data-i18n="price.m.21">Kokoro neural engine</li>
@@ -544,8 +539,8 @@
                 <li data-i18n="price.m.23">Live voice transcription</li>
                 <li data-i18n="price.m.11">Word Chain game</li>
               </ul>
-              <p class="price-card__note note--s3" data-i18n="price.pro.note">€37.99/year (save ~20%) · buy on Ko-fi</p>
-              <p class="price-card__note note--s10" data-i18n="price.max.note">€75.99/year (save ~20%) · buy on Ko-fi</p>
+              <p class="price-card__note note--s2" data-i18n="price.pro.note">€66.99/year (save ~20%) · buy on Ko-fi</p>
+              <p class="price-card__note note--s5" data-i18n="price.max.note">€133.99/year (save ~20%) · buy on Ko-fi</p>
               <a class="price-card__buy price-card__buy--pro js-kofi" href="https://ko-fi.com/rexy00" target="_blank" rel="noopener">Get Vozen Premium</a>
               <p class="price-card__idnote">
                 <span data-i18n="price.idNote">⚠️ After buying on Ko-fi, activate your plan at vozen.org/account — just log in with Discord.</span>              </p>
@@ -667,7 +662,7 @@
       </div>
     </footer>
 
-    <script defer src="js/i18n-v40.js"></script>
-    <script defer src="js/main-v43.js"></script>
+    <script defer src="js/i18n-v41.js"></script>
+    <script defer src="js/main-v44.js"></script>
   </body>
 </html>

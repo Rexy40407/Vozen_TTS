@@ -15,9 +15,9 @@ Paid tiers:
 
 | Tier | Price | What it is |
 | ---- | ----- | ---------- |
-| Vozen Plus | €1.99/month or €18.99/year | Personal pass — perks follow the user on any server |
-| Vozen Premium (3 servers) | €3.99/month or €37.99/year | Server pass, up to 3 servers |
-| Vozen Premium (8 servers) | €7.99/month or €75.99/year | Server pass, up to 8 servers |
+| Vozen Plus | €3.99/month or €37.99/year | Personal pass — perks follow the user on any server |
+| Vozen Premium (2 servers) | €6.99/month or €66.99/year | Server pass, up to 2 servers |
+| Vozen Premium (5 servers) | €13.99/month or €133.99/year | Server pass, up to 5 servers |
 
 Payments go through **Ko-fi**. Monthly tiers are Ko-fi memberships; the annual passes are
 Ko-fi **Shop items** (Ko-fi memberships can only bill monthly).

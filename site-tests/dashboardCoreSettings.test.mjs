@@ -6,7 +6,7 @@ const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 
 describe('dashboard channel and voice controls', () => {
   it('ships cache-busted assets and removes the immediately replaced versions', () => {
     const page = source('site/dashboard.html');
-    expect(page).toContain('js/i18n-v40.js');
+    expect(page).toContain('js/i18n-v41.js');
     expect(page).toContain('js/dashboard-v7.js');
     expect(page).not.toContain('js/dashboard-v6.js');
     expect(page).not.toContain('js/i18n-v39.js');

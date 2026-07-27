@@ -915,10 +915,10 @@ body > *:not(.grain):not(.orbs):not(.nav):not(.ppmodal):not(.skip-link) { positi
 .price-card--plus .price-card__price .was { text-decoration-color: rgba(102, 114, 255, 0.6); }
 .price-card--max .price-card__price .was { text-decoration-color: rgba(167, 106, 255, 0.55); }
 /* O preço grande (colorido) fica SEMPRE a 46px — igual no mensal e no anual. */
-/* ── Cartão Premium: toggle 3 / 10 servidores ───────────────────────
+/* ── Cartão Premium: toggle 2 / 5 servidores ────────────────────────
    Mesma tier, muda só o nº de licenças (e o preço). Dois eixos independentes: período
-   (mês/ano, via .pricing.is-annual) × licenças (3/10, via .is-10 no cartão). Só o combo
-   ativo aparece; as variantes --s10 reutilizam as chaves i18n price.max.* (já em 10 línguas). */
+   (mês/ano, via .pricing.is-annual) × licenças (2/5, via .is-5 no cartão). Só o combo
+   ativo aparece; as variantes --s5 reutilizam as chaves i18n price.max.* (já em 10 línguas). */
 .seat-toggle {
   display: inline-flex; align-self: flex-start; margin: 2px 0 16px; padding: 3px;
   border-radius: 999px; background: rgba(255, 255, 255, 0.06);
@@ -937,22 +937,22 @@ body > *:not(.grain):not(.orbs):not(.nav):not(.ppmodal):not(.skip-link) { positi
 .price-card--pro .price-line .amt,
 .price-card--pro .price-card__price .per,
 .price-card--pro .price-line .was { display: none; }
-/* 3 servidores (cartão SEM .is-10) */
-.pricing:not(.is-annual) .price-card--pro:not(.is-10) .amt--m.amt--s3,
-.pricing:not(.is-annual) .price-card--pro:not(.is-10) .per--m.per--s3 { display: inline; }
-.pricing.is-annual .price-card--pro:not(.is-10) .amt--y.amt--s3,
-.pricing.is-annual .price-card--pro:not(.is-10) .per--y.per--s3,
-.pricing.is-annual .price-card--pro:not(.is-10) .was--s3 { display: inline; }
-/* 10 servidores (cartão COM .is-10) */
-.pricing:not(.is-annual) .price-card--pro.is-10 .amt--m.amt--s10,
-.pricing:not(.is-annual) .price-card--pro.is-10 .per--m.per--s10 { display: inline; }
-.pricing.is-annual .price-card--pro.is-10 .amt--y.amt--s10,
-.pricing.is-annual .price-card--pro.is-10 .per--y.per--s10,
-.pricing.is-annual .price-card--pro.is-10 .was--s10 { display: inline; }
+/* 2 servidores (cartão SEM .is-5) */
+.pricing:not(.is-annual) .price-card--pro:not(.is-5) .amt--m.amt--s2,
+.pricing:not(.is-annual) .price-card--pro:not(.is-5) .per--m.per--s2 { display: inline; }
+.pricing.is-annual .price-card--pro:not(.is-5) .amt--y.amt--s2,
+.pricing.is-annual .price-card--pro:not(.is-5) .per--y.per--s2,
+.pricing.is-annual .price-card--pro:not(.is-5) .was--s2 { display: inline; }
+/* 5 servidores (cartão COM .is-5) */
+.pricing:not(.is-annual) .price-card--pro.is-5 .amt--m.amt--s5,
+.pricing:not(.is-annual) .price-card--pro.is-5 .per--m.per--s5 { display: inline; }
+.pricing.is-annual .price-card--pro.is-5 .amt--y.amt--s5,
+.pricing.is-annual .price-card--pro.is-5 .per--y.per--s5,
+.pricing.is-annual .price-card--pro.is-5 .was--s5 { display: inline; }
 /* deal + nota: só dependem do nº de licenças (não do período) */
-.price-card--pro .deal--s10, .price-card--pro .note--s10 { display: none; }
-.price-card--pro.is-10 .deal--s3, .price-card--pro.is-10 .note--s3 { display: none; }
-.price-card--pro.is-10 .deal--s10, .price-card--pro.is-10 .note--s10 { display: block; }
+.price-card--pro .deal--s5, .price-card--pro .note--s5 { display: none; }
+.price-card--pro.is-5 .deal--s2, .price-card--pro.is-5 .note--s2 { display: none; }
+.price-card--pro.is-5 .deal--s5, .price-card--pro.is-5 .note--s5 { display: block; }
 /* Troca Mensal→Anual: os elementos anuais entram com um fade+subida curto. Só sob
    .is-annual → o load inicial (mensal) nunca anima. */
 @keyframes priceIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -1803,7 +1803,7 @@ body.is-modal-open { overflow: hidden; }
   }
 }
 
-/* Every translation keeps the hero as two deliberate phrases. main-v43.js reduces the shared
+/* Every translation keeps the hero as two deliberate phrases. main-v44.js reduces the shared
    font size only when the real glyph width would exceed this line. */
 .hero__title span {
   white-space: nowrap;

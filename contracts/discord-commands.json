@@ -1721,7 +1721,7 @@
           "min_value": 1,
           "type": 4,
           "name": "seats",
-          "description": "Premium only: number of server licences (default 3)",
+          "description": "Premium only: number of server licences (default 2)",
           "required": false
         }
       ],
@@ -1760,7 +1760,7 @@
           "min_value": 1,
           "type": 4,
           "name": "seats",
-          "description": "Premium only: server licences (default 3)",
+          "description": "Premium only: server licences (default 2)",
           "required": false
         },
         {

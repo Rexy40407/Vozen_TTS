@@ -8,9 +8,9 @@
 
 | Tier | Price | Scope | Notes |
 |------|-------|-------|-------|
-| **Vozen Premium** | **€3.99 / month** | per **server** | A touch under TTS Bot Premium (~$4.99). Pitch: "cheaper — and our games are free." |
-| **Vozen Premium (annual)** | **€40 / year** | per server | 2 months free (€48 → €40) |
-| **Vozen Plus** | **€1.99 / month** | per **user** | Personal perks that follow you across servers |
+| **Vozen Premium** | **€6.99 / month** or **€66.99 / year** | up to **2 servers** | Full Premium benefits for everyone in the activated servers |
+| **Vozen Premium Max** | **€13.99 / month** or **€133.99 / year** | up to **5 servers** | The same benefits with five server licences |
+| **Vozen Plus** | **€3.99 / month** or **€37.99 / year** | per **user** | Personal perks that follow the user across servers |
 
 Payment: ideally Discord **App Subscriptions** (native, in-app) — requires a **verified**
 bot (~75 servers) + team-owned app. Until then: **Ko-fi / Patreon + `/redeem` codes**.
@@ -84,7 +84,7 @@ bot (~75 servers) + team-owned app. Until then: **Ko-fi / Patreon + `/redeem` co
 3. **The bot runs on a home PC.** Before charging, it needs a VPS (~€5–10/mo). First goal
    of revenue is to cover that.
 4. **Timing:** grow first (site, top.gg, votes), monetize at ~50–100 active servers.
-   Charging 3 servers doesn't pay for the effort.
+   The current paid bundles cover 2 or 5 servers.
 
 ---
 
@@ -116,9 +116,10 @@ app. Vozen is neither yet (verification needs ~75 servers), so the rule does not
 
 | Offering | Ko-fi / external | Discord SKU (USD) | Discord type | Notes |
 |---|---|---|---|---|
-| **Vozen Premium** (per server) | €3.99 / mo | **$3.99 / mo** guild subscription | monthly sub ✅ supported | Parity: Discord ($3.99) ≈ external (€3.99 ≈ $4.3). Discord ≤ external ✅. |
-| **Vozen Plus** (per user) | €1.99 / mo | **$1.99 / mo** user subscription | monthly sub ✅ supported | Parity: Discord ≤ external. |
-| **Vozen Premium (annual)** | €40 / yr | — | annual sub ⏳ not yet supported | Offer via Discord once annual subs ship; grace period applies. |
+| **Vozen Premium** (2 servers) | €6.99 / mo | Configure at or below the external EUR-equivalent | subscription | Preserve price parity during Discord onboarding. |
+| **Vozen Premium Max** (5 servers) | €13.99 / mo | Configure at or below the external EUR-equivalent | subscription | Preserve price parity during Discord onboarding. |
+| **Vozen Plus** (per user) | €3.99 / mo | Configure at or below the external EUR-equivalent | user subscription | Personal entitlement. |
+| **Annual plans** | €37.99 / €66.99 / €133.99 | — | annual sub ⏳ not yet supported | Offer via Discord once annual subs ship; grace period applies. |
 
 > Rule of thumb: the **final** Discord price (after any discount) must be **≤** the price on
 > any other channel. Keep the USD SKU at or below the EUR-equivalent so parity always holds.
