@@ -657,17 +657,24 @@
     u.searchParams.set("scope", "identify email");
     u.searchParams.set("state", state);
     if (options && options.popup === true) {
-      billingAuthPopup = window.open(
-        u.toString(),
-        "vozenDiscordLogin",
-        "popup=yes,width=520,height=760,resizable=yes,scrollbars=yes",
-      );
-      if (!billingAuthPopup) {
-        try { sessionStorage.removeItem(STATE_KEY); } catch {}
-        const status = document.getElementById("vozenBillingAuthStatus");
-        if (status) status.textContent = "Allow the Discord sign-in window to continue.";
+      // Use a named link instead of assigning window.location. Some browsers
+      // treat window.open() as a navigation in embedded/webview contexts,
+      // which would close the checkout modal. A named target always leaves
+      // the checkout page open while Discord handles OAuth in another context.
+      let authLink = document.getElementById("vozenBillingAuthLink");
+      if (!authLink) {
+        authLink = document.createElement("a");
+        authLink.id = "vozenBillingAuthLink";
+        authLink.hidden = true;
+        authLink.setAttribute("aria-hidden", "true");
+        document.body.appendChild(authLink);
       }
-      return billingAuthPopup;
+      authLink.href = u.toString();
+      authLink.target = "vozenDiscordLogin";
+      authLink.rel = "opener";
+      billingAuthPopup = null;
+      authLink.click();
+      return true;
     }
     location.href = u.toString();
     return null;
