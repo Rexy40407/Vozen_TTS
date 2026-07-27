@@ -22,12 +22,12 @@
 
 .billing-modal__dialog {
   position: relative;
-  width: min(100%, 540px);
+  width: min(100%, 392px);
   max-height: min(92vh, 900px);
   overflow: auto;
-  border: 1px solid rgba(138, 174, 255, 0.2);
-  border-radius: 24px;
-  background: #090d16;
+  border: 1px solid rgba(225, 205, 157, 0.2);
+  border-radius: 16px;
+  background: #171613;
   box-shadow: 0 28px 100px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.025) inset;
   color: #f7f8ff;
   outline: none;
@@ -37,8 +37,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
-  padding: 28px 30px 18px;
+  gap: 14px;
+  padding: 20px 22px 14px;
 }
 
 .billing-modal__eyebrow {
@@ -53,14 +53,15 @@
 
 .billing-modal__head h2 {
   margin: 0;
-  font-size: clamp(1.6rem, 4vw, 2.1rem);
+  font-size: clamp(1.45rem, 4vw, 1.85rem);
   letter-spacing: -0.04em;
 }
 
 .billing-modal__head p {
   margin: 8px 0 0;
   color: #9aa6bc;
-  font-size: 0.92rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .billing-modal__close {
@@ -88,7 +89,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 30px 18px;
+  padding: 0 22px 14px;
   color: #77849c;
   font-size: 0.76rem;
   font-weight: 800;
@@ -102,7 +103,7 @@
 }
 
 .billing-modal__steps span + span::before {
-  width: 60px;
+  width: 42px;
   height: 1px;
   margin-right: 12px;
   background: rgba(255, 255, 255, 0.12);
@@ -198,7 +199,7 @@
   margin: 0 12px;
   overflow: hidden;
   border: 1px solid rgba(138, 174, 255, 0.16);
-  border-radius: 16px;
+  border-radius: 12px;
   background: #0c1220;
 }
 

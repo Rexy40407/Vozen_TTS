@@ -1834,3 +1834,47 @@ body.is-modal-open { overflow: hidden; }
 .paid-plans .price-card__idnote {
   min-height: 3em;
 }
+
+/* Billing dashboard composition: a quiet, left-aligned workspace with a compact server list. */
+body.page-dashboard {
+  background: #0c0b09;
+}
+body.page-dashboard .account-section {
+  min-height: calc(100vh - var(--nav-h, 84px));
+  align-items: flex-start;
+  padding-top: clamp(118px, 13vh, 154px);
+  padding-bottom: 96px;
+}
+body.page-dashboard .account-shell,
+body.page-dashboard .dash-root {
+  max-width: 900px;
+}
+body.page-dashboard .account-hero {
+  max-width: 900px;
+  margin-bottom: 30px;
+  text-align: left;
+}
+body.page-dashboard .account-hero h1 {
+  font-size: clamp(42px, 5.5vw, 64px);
+  letter-spacing: -0.055em;
+}
+body.page-dashboard .account-hero p {
+  max-width: 760px;
+  margin-left: 0;
+  font-size: 16px;
+}
+body.page-dashboard .dash-picker {
+  padding: 22px;
+  border-color: rgba(225, 205, 157, 0.13);
+  border-radius: 16px;
+  background: rgba(23, 22, 19, 0.74);
+}
+body.page-dashboard .dash-picker h2 {
+  font-family: var(--f-display);
+  font-size: clamp(1.35rem, 2.4vw, 1.7rem) !important;
+  letter-spacing: -0.035em;
+}
+@media (max-width: 720px) {
+  body.page-dashboard .account-section { padding-top: 96px; }
+  body.page-dashboard .dash-picker { padding: 16px; }
+}

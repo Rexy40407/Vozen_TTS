@@ -190,15 +190,17 @@
   /* Classes precisam de :hover/:focus/::after — impossível em style="" inline;
      injetamos um <style> uma vez. */
   var CSS = [
-    /* picker de servidores */
-    ".dash-guilds{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:14px;margin-top:16px}",
-    ".dash-guild{display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 10px;background:var(--bg-0,#0a0a12);border:1px solid var(--line-2,#23233a);border-radius:14px;cursor:pointer;font:inherit;color:var(--text-1,#e9e9f2);transition:border-color .15s ease,transform .15s ease}",
-    ".dash-guild:hover,.dash-guild:focus-visible{border-color:var(--aqua,#38e0c8);transform:translateY(-2px)}",
-    ".dash-guild:active{transform:scale(.97)}",
-    ".dash-guild__img,.dash-guild__ph{width:64px;height:64px;border-radius:50%;flex:none}",
-    ".dash-guild__img{object-fit:cover;background:var(--panel-2,#12121c)}",
-    ".dash-guild__ph{display:flex;align-items:center;justify-content:center;background:var(--panel-2,#12121c);border:1px solid var(--line-2,#23233a);font-weight:700;font-size:1.05rem;color:var(--aqua,#38e0c8)}",
-    ".dash-guild__name{font-size:.92rem;line-height:1.3;text-align:center;overflow-wrap:anywhere}",
+    /* picker de servidores: lista horizontal, com a densidade do dashboard de billing */
+    ".dash-picker{margin-top:18px;padding:22px;background:rgba(23,22,19,.74);border:1px solid rgba(225,205,157,.13);border-radius:16px}",
+    ".dash-picker__list{display:grid;gap:10px;margin-top:28px}",
+    ".dash-server{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:14px;width:100%;min-height:66px;padding:10px 14px;background:#171613;border:1px solid rgba(225,205,157,.13);border-radius:14px;cursor:pointer;font:inherit;color:var(--text-1,#e9e9f2);text-align:left;transition:border-color .16s ease,background .16s ease,transform .16s ease,box-shadow .16s ease}",
+    ".dash-server:hover,.dash-server:focus-visible{border-color:rgba(225,205,157,.42);background:#1c1a17;box-shadow:0 10px 24px rgba(0,0,0,.16);transform:translateY(-1px)}",
+    ".dash-server:active{transform:translateY(0)}",
+    ".dash-server__img,.dash-server__ph{width:40px;height:40px;border-radius:12px;flex:none}",
+    ".dash-server__img{object-fit:cover;background:#292721}",
+    ".dash-server__ph{display:flex;align-items:center;justify-content:center;background:#292721;border:1px solid rgba(225,205,157,.16);font-weight:800;font-size:.92rem;color:#e8d39a}",
+    ".dash-server__name{min-width:0;font-size:.94rem;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    ".dash-server__arrow{display:grid;width:34px;height:34px;place-items:center;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#d8c99f;font-size:1.2rem;line-height:1}",
     /* formulário */
     ".dash-form{background:var(--panel-2,#12121c);border:1px solid var(--line-2,#23233a);border-radius:16px;padding:22px;margin-top:18px}",
     ".dash-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:4px}",
@@ -240,8 +242,8 @@
     ".dash-profile-field .dash-sel,.dash-profile-field .dash-num{width:100%;max-width:none;text-align:left;box-sizing:border-box}",
     ".dash-profile-actions{display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap}",
     /* mobile: barra de guardar colada ao fundo (forms longos) */
-    "@media(max-width:720px){.dash-savebar{position:sticky;bottom:0;margin:22px -22px -22px;padding:14px 22px;background:var(--panel-2,#12121c);border-top:1px solid var(--line-2,#23233a)}.dash-sel{max-width:150px}.dash-profiles__grid{grid-template-columns:1fr}}",
-    "@media(prefers-reduced-motion:reduce){.dash-guild,.dash-sw__tr,.dash-sw__tr::after,.dash-num,.dash-sel{transition:none}}",
+    "@media(max-width:720px){.dash-savebar{position:sticky;bottom:0;margin:22px -22px -22px;padding:14px 22px;background:var(--panel-2,#171613);border-top:1px solid var(--line-2,#23233a)}.dash-sel{max-width:150px}.dash-profiles__grid{grid-template-columns:1fr}.dash-server{grid-template-columns:38px minmax(0,1fr) auto;gap:11px;padding-left:11px;padding-right:11px}.dash-server__img,.dash-server__ph{width:38px;height:38px}}",
+    "@media(prefers-reduced-motion:reduce){.dash-server,.dash-sw__tr,.dash-sw__tr::after,.dash-num,.dash-sel{transition:none}}",
   ].join("\n");
   var styleEl = document.createElement("style");
   styleEl.textContent = CSS;
@@ -340,35 +342,33 @@
       .map(function (g, i) {
         var url = guildIconUrl(g);
         var art = url
-          ? '<img class="dash-guild__img" src="' + esc(url) + '" alt="">'
-          : '<span class="dash-guild__ph" aria-hidden="true">' +
+          ? '<img class="dash-server__img" src="' + esc(url) + '" alt="">'
+          : '<span class="dash-server__ph" aria-hidden="true">' +
             esc(guildInitials(g.name)) +
             "</span>";
         return (
-          '<button type="button" class="dash-guild" data-i="' +
+          '<button type="button" class="dash-server" data-i="' +
           i +
           '">' +
           art +
-          '<span class="dash-guild__name">' +
+          '<span class="dash-server__name">' +
           esc(g.name) +
-          "</span></button>"
+          '</span><span class="dash-server__arrow" aria-hidden="true">›</span></button>'
         );
       })
       .join("");
     view(
-      '<div style="' +
-        CARD +
-        '"><h2 style="margin:0 0 6px;font-size:1.25rem">' +
+      '<div class="dash-picker"><h2 style="margin:0 0 6px;font-size:1.25rem">' +
         esc(t("dashboard.pick")) +
         '</h2><p style="' +
         MUTED +
         ';margin:0">' +
         esc(t("dashboard.pickHint")) +
-        '</p><div class="dash-guilds">' +
+        '</p><div class="dash-picker__list">' +
         cards +
         "</div></div>",
     );
-    var btns = root.querySelectorAll(".dash-guild");
+    var btns = root.querySelectorAll(".dash-server");
     function onPick(ev) {
       var g = guilds[Number(ev.currentTarget.getAttribute("data-i"))];
       if (g) loadForm(g, guilds);
@@ -376,7 +376,7 @@
     for (var i = 0; i < btns.length; i++) {
       btns[i].addEventListener("click", onPick);
       var g = guilds[i];
-      wireIconFallback(btns[i].querySelector(".dash-guild__img"), g && g.name, "dash-guild__ph");
+      wireIconFallback(btns[i].querySelector(".dash-server__img"), g && g.name, "dash-server__ph");
     }
     onLang = function () {
       renderPicker(guilds);
