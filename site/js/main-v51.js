@@ -1,5 +1,5 @@
 ﻿/* ═══════════════════════════════════════════════════════════
-   Vozen site — main-v50.js
+   Vozen site — main-v51.js
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -415,7 +415,7 @@
     billingCheckoutOpener = document.activeElement;
     billingRequest = { plan, interval, seats, button };
     lockBillingScroll();
-    document.body.insertAdjacentHTML("beforeend", billingCheckoutModal(plan, interval));
+    document.documentElement.insertAdjacentHTML("beforeend", billingCheckoutModal(plan, interval));
     const modal = document.getElementById("vozenBillingModal");
     if (!modal) {
       unlockBillingScroll();

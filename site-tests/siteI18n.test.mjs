@@ -78,7 +78,7 @@ describe('site localization contract', () => {
     for (const pagePath of pages) {
       const page = source(pagePath);
       expect(page, pagePath).toContain('js/i18n-v41.js');
-      expect(page, pagePath).toContain('js/main-v50.js');
+      expect(page, pagePath).toContain('js/main-v51.js');
       expect(page, pagePath).not.toContain('js/i18n-v39.js');
       expect(page, pagePath).not.toContain('js/i18n-v38.js');
       expect(page, pagePath).not.toContain('js/main-v42.js');
@@ -92,7 +92,7 @@ describe('site localization contract', () => {
     expect(existsSync(resolve(process.cwd(), 'site/js/dashboard-v5.js'))).toBe(false);
   });
   it('translates text, accessible attributes and the document title before announcing changes', () => {
-    const script = source('site/js/main-v50.js');
+    const script = source('site/js/main-v51.js');
     expect(script).toContain('[data-i18n]');
     expect(script).toContain('"data-i18n-aria-label"');
     expect(script).toContain('"data-i18n-placeholder"');
