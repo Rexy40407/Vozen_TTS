@@ -128,6 +128,7 @@ impl DiscordOAuthVerifier {
                         id: user.id,
                         username: user.username,
                         avatar: user.avatar,
+                        avatar_decoration_asset: user.avatar_decoration_asset,
                     }),
                     _ => None,
                 }
@@ -246,6 +247,7 @@ struct DiscordUser {
     id: String,
     username: String,
     avatar: Option<String>,
+    avatar_decoration_asset: Option<String>,
     email: Option<String>,
     verified: bool,
 }
@@ -293,12 +295,27 @@ fn parse_user(value: Value) -> Option<DiscordUser> {
             .get("avatar")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        avatar_decoration_asset: object
+            .get("avatar_decoration_data")
+            .and_then(Value::as_object)
+            .and_then(|decoration| decoration.get("asset"))
+            .and_then(Value::as_str)
+            .filter(|asset| is_safe_discord_asset(asset))
+            .map(str::to_owned),
         email: object
             .get("email")
             .and_then(Value::as_str)
             .map(str::to_owned),
         verified: object.get("verified") == Some(&Value::Bool(true)),
     })
+}
+
+fn is_safe_discord_asset(asset: &str) -> bool {
+    !asset.is_empty()
+        && asset.len() <= 128
+        && asset
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
 fn map_oauth_error(error: DiscordHttpError) -> ActivationIdentityError {
@@ -383,6 +400,39 @@ mod tests {
             user: Ok(user("user-b", None, false)),
         });
         assert!(verifier(mismatch).resolve_identity("token").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn carries_a_valid_avatar_decoration_from_discord_identity() {
+        let http = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("vozen-client", "user-a", &["identify"])),
+            user: Ok(json!({
+                "id": "user-a",
+                "username": "Rexy",
+                "avatar": "avatar-hash",
+                "avatar_decoration_data": {"asset": "a_fed43ab12698df65902ba06727e20c0e", "sku_id": "1"}
+            })),
+        });
+
+        let identity = verifier(http).resolve_identity("token").await.unwrap();
+        assert_eq!(identity.username, "Rexy");
+        assert_eq!(identity.avatar.as_deref(), Some("avatar-hash"));
+        assert_eq!(
+            identity.avatar_decoration_asset.as_deref(),
+            Some("a_fed43ab12698df65902ba06727e20c0e")
+        );
+    }
+
+    #[test]
+    fn ignores_an_unsafe_avatar_decoration_asset() {
+        let parsed = parse_user(json!({
+            "id": "user-a",
+            "username": "Rexy",
+            "avatar_decoration_data": {"asset": "not/a-safe-asset"}
+        }))
+        .unwrap();
+        assert_eq!(parsed.avatar_decoration_asset, None);
     }
 
     #[tokio::test]

@@ -41,6 +41,9 @@ pub struct DiscordIdentity {
     pub id: String,
     pub username: String,
     pub avatar: Option<String>,
+    /// Public avatar-decoration asset returned by Discord's `identify` scope.
+    /// This is only carried through the current authenticated request; it is not persisted.
+    pub avatar_decoration_asset: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -762,6 +765,7 @@ mod tests {
                     id: "discord-user".into(),
                     username: "Rexy".into(),
                     avatar: None,
+                    avatar_decoration_asset: None,
                 })
                 .ok_or(())
         }

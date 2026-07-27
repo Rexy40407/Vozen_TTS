@@ -1064,6 +1064,31 @@ body > *:not(.grain):not(.orbs):not(.nav):not(.ppmodal):not(.skip-link) { positi
   display: grid; place-items: center; font-family: var(--f-display); font-size: 12px; font-weight: 800;
   background: rgba(255, 255, 255, 0.18); color: #fff;
 }
+/* Discord returns avatar decorations as a separate CDN image. Keep the avatar's native
+   footprint for layout, then place the decoration above it without blocking the profile link. */
+.discord-avatar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  isolation: isolate;
+  flex: none;
+}
+.discord-avatar > :first-child { position: relative; z-index: 1; }
+.discord-avatar__decoration {
+  position: absolute;
+  z-index: 2;
+  inset: -20%;
+  width: 140%;
+  height: 140%;
+  max-width: none;
+  pointer-events: none;
+  object-fit: contain;
+}
+.nav__login .discord-avatar__decoration {
+  inset: -17%;
+  width: 134%;
+  height: 134%;
+}
 .nav__login--account span:last-child {
   max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }

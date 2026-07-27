@@ -601,16 +601,31 @@
     }
   }
 
+  function discordDecorationAsset(u) {
+    const asset =
+      u.avatarDecorationAsset ||
+      u.avatar_decoration_asset ||
+      u.avatarDecorationData?.asset ||
+      u.avatar_decoration_data?.asset ||
+      "";
+    return /^[A-Za-z0-9_]{1,128}$/.test(asset) ? asset : "";
+  }
+
   function avatarMarkup(u, cls, size) {
     const initial = esc((u.username || "?").slice(0, 1).toUpperCase());
+    let avatar;
     if (u.id && u.avatar) {
       const ext = String(u.avatar).startsWith("a_") ? "gif" : "png";
       const alt = esc(
         t("account.discordAvatar").replace("{name}", u.username || t("account.defaultUser")),
       );
-      return `<img class="${cls}" src="https://cdn.discordapp.com/avatars/${esc(u.id)}/${esc(u.avatar)}.${ext}?size=${size}" alt="${alt}" width="${size}" height="${size}" referrerpolicy="no-referrer">`;
+      avatar = `<img class="${cls}" src="https://cdn.discordapp.com/avatars/${esc(u.id)}/${esc(u.avatar)}.${ext}?size=${size}" alt="${alt}" width="${size}" height="${size}" referrerpolicy="no-referrer">`;
+    } else {
+      avatar = `<span class="${cls} ${cls}--none">${initial}</span>`;
     }
-    return `<span class="${cls} ${cls}--none">${initial}</span>`;
+    const decoration = discordDecorationAsset(u);
+    if (!decoration) return avatar;
+    return `<span class="discord-avatar ${cls}-wrap">${avatar}<img class="discord-avatar__decoration" src="https://cdn.discordapp.com/avatar-decoration-presets/${decoration}.png?size=256" alt="" aria-hidden="true" width="256" height="256" referrerpolicy="no-referrer"></span>`;
   }
 
   function statusRow(label, active, detail) {

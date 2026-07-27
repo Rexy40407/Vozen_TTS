@@ -138,6 +138,7 @@ async fn account_status(
         identity.id,
         identity.username,
         identity.avatar,
+        identity.avatar_decoration_asset,
         status,
         &state,
     )) {
@@ -165,6 +166,8 @@ struct UserBody {
     id: String,
     username: String,
     avatar: Option<String>,
+    #[serde(rename = "avatarDecorationAsset")]
+    avatar_decoration_asset: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -194,6 +197,7 @@ fn account_body(
     id: String,
     username: String,
     avatar: Option<String>,
+    avatar_decoration_asset: Option<String>,
     status: PremiumStatusView,
     state: &AccountApiState,
 ) -> AccountBody {
@@ -202,6 +206,7 @@ fn account_body(
             id,
             username,
             avatar,
+            avatar_decoration_asset,
         },
         plus: PlusBody {
             active: status.plus_active,
@@ -335,6 +340,7 @@ mod tests {
                     id: "user".into(),
                     username: "Rexy".into(),
                     avatar: Some("avatar-hash".into()),
+                    avatar_decoration_asset: Some("a_fed43ab12698df65902ba06727e20c0e".into()),
                 })
                 .ok_or(())
         }
@@ -389,7 +395,7 @@ mod tests {
         assert_eq!(
             body,
             serde_json::json!({
-                "user":{"id":"user","username":"Rexy","avatar":"avatar-hash"},
+                "user":{"id":"user","username":"Rexy","avatar":"avatar-hash","avatarDecorationAsset":"a_fed43ab12698df65902ba06727e20c0e"},
                 "plus":{"active":true,"expiresAt":2_592_001_000i64},
                 "pass":{"seats":3,"used":1,"expiresAt":2_592_001_000i64,"active":true,"servers":[{"id":"guild","name":"Server"}]}
             })
