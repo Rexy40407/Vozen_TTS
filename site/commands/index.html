@@ -26,7 +26,7 @@
       <span class="orb orb--aqua"></span>
     </div>
 
-    <a class="skip-link" href="#commandFinder">Skip to commands</a>
+    <a class="skip-link" href="#commandSearch">Skip to command search</a>
 
     <header class="nav" id="nav">
       <div class="wrap nav__inner">
@@ -67,32 +67,27 @@
 
     <main>
       <section class="commands-hero">
-        <div class="wrap commands-hero__grid">
-          <div>
+        <div class="wrap commands-hero__layout">
+          <div class="commands-hero__copy">
             <p class="eyebrow">Quick reference</p>
             <h1>Commands that make Vozen speak.</h1>
             <p class="commands-hero__lead">Find the right slash command, see what it does, and check whether it needs Premium or server permissions.</p>
+            <p class="commands-hero__proof">
+              <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+              <span><strong>46 live commands</strong> synced with the Rust bot contract.</span>
+            </p>
           </div>
-          <div class="commands-signal" aria-label="Vozen command catalogue summary">
-            <span class="commands-signal__eq eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
-            <span><strong>40+</strong><small>commands in the Rust catalogue</small></span>
-            <span><strong>35</strong><small>languages for voice</small></span>
-          </div>
-        </div>
-      </section>
 
-      <section class="commands-section" id="commandFinder">
-        <div class="wrap">
-          <div class="command-finder">
+          <div class="command-finder" id="commandFinder">
             <div class="command-finder__intro">
-              <p class="command-finder__kicker">Find a command</p>
-              <h2>Start with a word.</h2>
-              <p>Search by command, option or what you want to do. Filter the catalogue when you already know the area.</p>
+              <p class="command-finder__kicker">Command search</p>
+              <h2>What do you want Vozen to do?</h2>
+              <p>Search by name, option or action.</p>
             </div>
             <label class="command-search">
               <span class="sr-only">Search commands</span>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"/></svg>
-              <input id="commandSearch" type="search" autocomplete="off" placeholder="Search commands, like setup or voice" />
+              <input id="commandSearch" type="search" autocomplete="off" placeholder="Try setup, voice or games" />
               <kbd>/</kbd>
             </label>
             <div class="command-filters" role="group" aria-label="Command filters">
@@ -105,6 +100,18 @@
               <button type="button" data-filter="help">Help</button>
             </div>
             <p class="command-results" id="commandResults" aria-live="polite">Showing all commands.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="commands-section" aria-labelledby="catalogueTitle">
+        <div class="wrap">
+          <div class="commands-section__head">
+            <div>
+              <p class="command-finder__kicker">Full catalogue</p>
+              <h2 id="catalogueTitle">Explore every command.</h2>
+            </div>
+            <p>Choose a category above or scan the complete Rust command set below.</p>
           </div>
 
           <div class="commands-layout">

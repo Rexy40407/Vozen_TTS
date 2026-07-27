@@ -81,10 +81,11 @@
       const items = visible.filter(([, , category]) => category === id);
       if (!items.length) return "";
       return `<section class="command-group" aria-labelledby="group-${id}">
-        <div class="command-group__head"><div><p class="command-finder__kicker">Catalogue</p><h2 id="group-${id}">${title}</h2></div><p>${note}</p></div>
+        <div class="command-group__head"><div><div class="command-group__title"><h3 id="group-${id}">${title}</h3><span class="command-group__count">${items.length}</span></div><p>${note}</p></div></div>
         <div class="command-list">${items.map(([name, description, , access, usage]) => `<article class="command-row">
-          <div class="command-row__main"><code>${escapeHtml(name)}</code><p>${escapeHtml(description)}</p></div>
-          <div class="command-row__meta"><span class="command-tag ${tagClass(access)}">${escapeHtml(access)}</span>${usage ? `<span class="command-row__usage">${escapeHtml(usage)}</span>` : ""}</div>
+          <div class="command-row__top"><code>${escapeHtml(name)}</code><span class="command-tag ${tagClass(access)}">${escapeHtml(access)}</span></div>
+          <p>${escapeHtml(description)}</p>
+          ${usage ? `<span class="command-row__usage">${escapeHtml(usage)}</span>` : ""}
         </article>`).join("")}</div>
       </section>`;
     }).join("");
