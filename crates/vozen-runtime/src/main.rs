@@ -1944,7 +1944,14 @@ fn public_status_enabled(raw: Option<&str>) -> bool {
 /// premium API. A typo or a blank value must never expose an authenticated endpoint.
 fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeError> {
     let browser_api_enabled = premium_http_enabled(env::var("PREMIUM_API_ENABLED").ok().as_deref());
-    let kofi_webhook_token = nonempty_env("KOFI_WEBHOOK_TOKEN");
+    // Legacy Ko-fi is fail-closed behind the same payment gate. This prevents an old
+    // webhook secret left in an environment from reactivating the retired provider.
+    let kofi_webhook_token = payments_enabled_from_environment()
+        .then(|| nonempty_env("KOFI_WEBHOOK_TOKEN"))
+        .flatten();
+    let kofi_shop_map = kofi_webhook_token
+        .as_ref()
+        .and_then(|_| nonempty_env("KOFI_SHOP_MAP"));
     if !browser_api_enabled && kofi_webhook_token.is_none() {
         return Ok(None);
     }
@@ -1959,7 +1966,7 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
         client_id,
         origin,
         kofi_webhook_token,
-        kofi_shop_map: nonempty_env("KOFI_SHOP_MAP"),
+        kofi_shop_map,
         claim_help_webhook_url: nonempty_env("CLAIM_HELP_WEBHOOK_URL")
             .or_else(|| nonempty_env("ERROR_WEBHOOK_URL")),
     }))
