@@ -29,11 +29,12 @@ const VERIFY_ONLY = process.argv.includes('--verify-only');
 const SECURITY_HEADERS = {
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
   'Content-Security-Policy':
-    "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; " +
+    "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://js.stripe.com; " +
     "style-src 'self' 'unsafe-inline'; " +
     "font-src 'self'; " +
-    "img-src 'self' data: https://cdn.discordapp.com; " +
-    "connect-src 'self' https://api.vozen.org; media-src 'self'; " +
+    "img-src 'self' data: https://cdn.discordapp.com https://*.stripe.com; " +
+    "connect-src 'self' https://api.vozen.org https://api.stripe.com https://checkout.stripe.com https://r.stripe.com; " +
+    "frame-src https://checkout.stripe.com; media-src 'self'; " +
     "form-action 'self'; frame-ancestors 'none'",
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',

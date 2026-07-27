@@ -27,7 +27,7 @@ contra os recursos reais do site (ver "Porque estes valores" no fim).
 **CSP (uma linha):**
 
 ```
-default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://cdn.discordapp.com; connect-src 'self' https://api.vozen.org; media-src 'self'; form-action 'self'; frame-ancestors 'none'
+default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://*.stripe.com; connect-src 'self' https://api.vozen.org https://api.stripe.com https://checkout.stripe.com https://r.stripe.com; frame-src https://checkout.stripe.com; media-src 'self'; form-action 'self'; frame-ancestors 'none'
 ```
 
 > É o CSP que já está na meta-tag **+ `frame-ancestors 'none'`** (a meta-tag não consegue

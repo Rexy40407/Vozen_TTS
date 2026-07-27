@@ -181,6 +181,9 @@ describe('operational security configuration', () => {
     expect(script).not.toContain('fonts.gstatic.com');
     expect(script).toContain("style-src 'self' 'unsafe-inline'");
     expect(script).toContain("font-src 'self'");
+    expect(script).toContain("script-src 'self' https://js.stripe.com");
+    expect(script).toContain('frame-src https://checkout.stripe.com');
+    expect(script).toContain('https://api.stripe.com');
   });
   it('verifies both downloaded Kokoro model assets against pinned SHA-256 hashes', () => {
     const script = source('tools/setup-kokoro.ps1');
