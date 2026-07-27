@@ -1,18 +1,18 @@
-﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   Vozen site â€” main-v46.js
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+﻿/* ═══════════════════════════════════════════════════════════
+   Vozen site — main-v46.js
+   ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
 
-  /* â”€â”€ config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-     CLIENT_ID Ã© pÃºblico (estÃ¡ em qualquer link de convite).
-     SUPPORT_URL Ã© o convite do servidor de suporte do Vozen. */
+  /* ── config ──────────────────────────────────────────────
+     CLIENT_ID é público (está em qualquer link de convite).
+     SUPPORT_URL é o convite do servidor de suporte do Vozen. */
   const CLIENT_ID = "1523826014935842997";
   const INVITE_PERMISSIONS = "326420745216"; // Connect+Speak+ViewChannel+SendMessages+ReadMessageHistory+EmbedLinks + threads dos jogos (CreatePublicThreads+SendMessagesInThreads+ManageThreads)
   const SUPPORT_URL = "https://discord.gg/4kYw2WUbNN"; // servidor de suporte do Vozen
   // Painel Premium: base HTTPS da API do bot (GET /api/me/premium). VAZIO => o painel fica
-  // escondido (a feature ainda nÃ£o estÃ¡ no ar). Preenche com o teu host quando tiveres o
-  // domÃ­nio/tÃºnel + PREMIUM_API_ENABLED=true no bot. Ex.: "https://api.vozen.xyz".
+  // escondido (a feature ainda não está no ar). Preenche com o teu host quando tiveres o
+  // domínio/túnel + PREMIUM_API_ENABLED=true no bot. Ex.: "https://api.vozen.xyz".
   const PREMIUM_API_BASE = "https://api.vozen.org";
   const ACTIVATION_TERMS_VERSION = "2026-07-19";
   const ACTIVATION_INTENT_KEY = "vozen.activationIntent";
@@ -26,7 +26,7 @@
     CLIENT_ID && CLIENT_ID !== "YOUR_CLIENT_ID" ? `https://top.gg/bot/${CLIENT_ID}/vote` : "#";
 
   // Forma do Ref de encomenda do Ko-fi, como aparece no recibo por email: `Ref: S-M1X823C9FW`.
-  // Nao e um codigo que possamos aceitar â€” o webhook do Ko-fi nao envia este campo â€” mas e a unica
+  // Nao e um codigo que possamos aceitar — o webhook do Ko-fi nao envia este campo — mas e a unica
   // coisa com ar de codigo no email, por isso e o que a pessoa cola. Reconhece-se para a mandar
   // para a ajuda em vez de um 404 seco. Nao ha risco de apanhar um tx id verdadeiro: esses sao
   // UUIDs, e nenhum UUID comeca por "S-".
@@ -36,8 +36,8 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  // PÃ¡gina dedicada da conta (account.html). SÃ³ aÃ­ o painel Premium Ã© o conteÃºdo
-  // principal â€” e mostra o estado "em breve" enquanto o backend nÃ£o estÃ¡ no ar.
+  // Página dedicada da conta (account.html). Só aí o painel Premium é o conteúdo
+  // principal — e mostra o estado "em breve" enquanto o backend não está no ar.
   const IS_ACCOUNT = document.body.classList.contains("page-account");
   // Deterministic fixture for local visual QA. The hostname gate keeps this branch unreachable on
   // vozen.org; it exists so the authenticated layout can be reviewed without copying a real token
@@ -47,7 +47,7 @@
     (location.hostname === "127.0.0.1" || location.hostname === "localhost") &&
     new URLSearchParams(location.search).get("preview") === "account";
 
-  /* â”€â”€ external links â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── external links ──────────────────────────────────── */
   // target=_blank links get rel=noopener noreferrer (reverse-tabnabbing defence). The static
   // HTML links already carry it; these JS-assigned ones must set it too (SEC audit S7).
   $$(".js-invite").forEach((a) => {
@@ -70,18 +70,18 @@
     }
   });
 
-  /* â”€â”€ i18n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── i18n ────────────────────────────────────────────── */
   const DICT = window.VOZEN_I18N;
-  // Idioma por defeito: INGLÃŠS. NÃƒO fazemos sniffing do navigator (senÃ£o um browser PT
-  // abria o site em portuguÃªs). SÃ³ respeitamos uma escolha EXPLÃCITA (guardada quando o
+  // Idioma por defeito: INGLÊS. NÃO fazemos sniffing do navigator (senão um browser PT
+  // abria o site em português). Só respeitamos uma escolha EXPLÍCITA (guardada quando o
   // utilizador carrega no toggle EN/PT). Chave nova ("vozen.lang") para ignorar o valor que
-  // a versÃ£o anterior auto-guardava a partir do navigator â€” assim toda a gente recomeÃ§a em EN.
+  // a versão anterior auto-guardava a partir do navigator — assim toda a gente recomeça em EN.
   const LS_KEY = "vozen.lang";
   let lang = localStorage.getItem(LS_KEY) || "en";
 
-  // Nome de uma lÃ­ngua NA LÃNGUA DO SITE (segue o botÃ£o EN/PT). Via Intl.DisplayNames
-  // (dados do browser) â€” sem tabela Ã  mÃ£o. PT devolve minÃºsculas ("inglÃªs"), por isso
-  // capitalizamos a 1.Âª letra. Falha do ICU -> cÃ³digo em maiÃºsculas.
+  // Nome de uma língua NA LÍNGUA DO SITE (segue o botão EN/PT). Via Intl.DisplayNames
+  // (dados do browser) — sem tabela à mão. PT devolve minúsculas ("inglês"), por isso
+  // capitalizamos a 1.ª letra. Falha do ICU -> código em maiúsculas.
   const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   function hearLangName(code, siteLang) {
     try {
@@ -90,7 +90,7 @@
       return code.toUpperCase();
     }
   }
-  // Reescreve as labels dos chips do "Hear it" (e o nome no cartÃ£o) na lÃ­ngua do site.
+  // Reescreve as labels dos chips do "Hear it" (e o nome no cartão) na língua do site.
   function localizeHear(siteLang) {
     $$(".hear__chip").forEach((c) => {
       const nameEl = c.querySelector(".hear__chip-name");
@@ -130,23 +130,23 @@
     document.fonts.ready.then(scheduleHeroTitleFit).catch(() => {});
   }
 
-  // As 10 lÃ­nguas do seletor: [cÃ³digo, bandeira, autÃ³nimo (nome na prÃ³pria lÃ­ngua)].
-  // O documento inteiro muda para RTL em Ã¡rabe; as restantes lÃ­nguas usam LTR.
+  // As 10 línguas do seletor: [código, bandeira, autónimo (nome na própria língua)].
+  // O documento inteiro muda para RTL em árabe; as restantes línguas usam LTR.
   const LANG_UI = [
-    ["en", "ðŸ‡¬ðŸ‡§", "English"],
-    ["pt", "ðŸ‡µðŸ‡¹", "PortuguÃªs"],
-    ["fr", "ðŸ‡«ðŸ‡·", "FranÃ§ais"],
-    ["es", "ðŸ‡ªðŸ‡¸", "EspaÃ±ol"],
-    ["de", "ðŸ‡©ðŸ‡ª", "Deutsch"],
-    ["tr", "ðŸ‡¹ðŸ‡·", "TÃ¼rkÃ§e"],
-    ["ar", "ðŸ‡¸ðŸ‡¦", "Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©"],
-    ["zh", "ðŸ‡¹ðŸ‡¼", "ç¹é«”ä¸­æ–‡"],
-    ["ru", "ðŸ‡·ðŸ‡º", "Ð ÑƒÑÑÐºÐ¸Ð¹"],
-    ["ko", "ðŸ‡°ðŸ‡·", "í•œêµ­ì–´"],
+    ["en", "🇬🇧", "English"],
+    ["pt", "🇵🇹", "Português"],
+    ["fr", "🇫🇷", "Français"],
+    ["es", "🇪🇸", "Español"],
+    ["de", "🇩🇪", "Deutsch"],
+    ["tr", "🇹🇷", "Türkçe"],
+    ["ar", "🇸🇦", "العربية"],
+    ["zh", "🇹🇼", "繁體中文"],
+    ["ru", "🇷🇺", "Русский"],
+    ["ko", "🇰🇷", "한국어"],
   ];
   const LANG_META = Object.fromEntries(LANG_UI.map(([c, flag, name]) => [c, { flag, name }]));
 
-  // Sincroniza o dropdown custom com a lÃ­ngua ativa: trigger (bandeira+nome) e o item ativo.
+  // Sincroniza o dropdown custom com a língua ativa: trigger (bandeira+nome) e o item ativo.
   function syncLangMenu(code) {
     const m = LANG_META[code];
     if (!m) return;
@@ -189,14 +189,14 @@
     scheduleHeroTitleFit();
     renderCommands();
     renderFaq();
-    renderPanel(); // re-renderiza o painel Premium na lÃ­ngua atual (sem novo fetch)
+    renderPanel(); // re-renderiza o painel Premium na língua atual (sem novo fetch)
     window.dispatchEvent(
       new CustomEvent("vozen:languagechange", { detail: { language: lang } }),
     );
   }
 
-  // Dropdown custom de idioma (estilo MEE6): botÃ£o-trigger + painel role="listbox".
-  // Nativo <select> nÃ£o mostra bandeiras (o <option> Ã© desenhado pelo SO), daÃ­ o custom.
+  // Dropdown custom de idioma (estilo MEE6): botão-trigger + painel role="listbox".
+  // Nativo <select> não mostra bandeiras (o <option> é desenhado pelo SO), daí o custom.
   function buildLangMenu() {
     const menu = $("#langMenu"),
       btn = $("#langBtn"),
@@ -222,7 +222,7 @@
       if (focusBtn) btn.focus();
     };
     const choose = (code) => {
-      localStorage.setItem(LS_KEY, code); // escolha explÃ­cita persiste
+      localStorage.setItem(LS_KEY, code); // escolha explícita persiste
       applyLang(code);
     };
     btn.addEventListener("click", () => (isOpen() ? close(false) : open()));
@@ -267,8 +267,8 @@
   }
   buildLangMenu();
 
-  /* â”€â”€ toggle MÃªs/Ano dos preÃ§os â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  // SÃ³ troca o que se vÃª (classe .is-annual na grelha); os spans .amt/.per fazem o resto.
+  /* ── toggle Mês/Ano dos preços ───────────────────────── */
+  // Só troca o que se vê (classe .is-annual na grelha); os spans .amt/.per fazem o resto.
   const pricingGrid = $(".pricing");
   $$(".bill-toggle__btn").forEach((b) =>
     b.addEventListener("click", () => {
@@ -278,9 +278,9 @@
     }),
   );
 
-  /* â”€â”€ toggle 2/5 servidores (sÃ³ no cartÃ£o Premium) â”€â”€â”€â”€â”€â”€â”€ */
-  // Mesma tier, muda o nÂº de licenÃ§as e o preÃ§o. Como o bill-toggle: sÃ³ troca uma classe
-  // (.is-5 no cartÃ£o); o CSS mostra o combo certo (preÃ§o/perÃ­odo/riscado/deal/nota).
+  /* ── toggle 2/5 servidores (só no cartão Premium) ─────── */
+  // Mesma tier, muda o nº de licenças e o preço. Como o bill-toggle: só troca uma classe
+  // (.is-5 no cartão); o CSS mostra o combo certo (preço/período/riscado/deal/nota).
   const proCard = $(".price-card--pro");
   $$(".seat-toggle__btn").forEach((b) =>
     b.addEventListener("click", () => {
@@ -289,14 +289,14 @@
     }),
   );
 
-  /* â”€â”€ link de compra do Ko-fi por estado dos toggles â”€â”€â”€â”€â”€â”€â”€
-     As memberships do Ko-fi sÃ³ cobram ao MES, por isso os passes anuais sao produtos da
+  /* ── link de compra do Ko-fi por estado dos toggles ───────
+     As memberships do Ko-fi só cobram ao MES, por isso os passes anuais sao produtos da
      Shop, cada um com o seu link proprio. Os toggles acima so trocam uma classe e deixam o
-     CSS mostrar o preco certo â€” mas um href nao e algo que o CSS mude. Sem isto, quem
-     escolhe "anual" vÃª o preÃ§o anual e recebe o link direto para o produto correspondente.
+     CSS mostrar o preco certo — mas um href nao e algo que o CSS mude. Sem isto, quem
+     escolhe "anual" vê o preço anual e recebe o link direto para o produto correspondente.
      Os codigos tem de bater certo com o KOFI_SHOP_MAP do bot: e o direct_link_code que diz
      ao webhook o que foi comprado (o Ko-fi nao envia o nome do produto). */
-  /* â”€â”€ Stripe checkout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── Stripe checkout ───────────────────────────────────────────────── */
   function readBillingIntent() {
     try {
       const raw = sessionStorage.getItem(BILLING_INTENT_KEY);
@@ -514,10 +514,10 @@
   document.querySelector("[data-billing-plan='plus']")?.addEventListener("click", () => void startCheckout("plus", billingInterval(), 1));
   document.querySelector("[data-billing-plan='premium']")?.addEventListener("click", () => void startCheckout("premium", billingInterval(), proCard?.classList.contains("is-5") ? 5 : 2));
 
-  /* â”€â”€ Painel Premium (login com Discord + estado da conta) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  /* ── Painel Premium (login com Discord + estado da conta) ─────────────
      OAuth2 implicit (scopes identify + email): 100% client-side, sem segredo. O token vem no
      fragment (#access_token), guardamo-lo em sessionStorage, limpamos o fragment, e
-     chamamos GET {API_BASE}/api/me/premium. A API valida o token na Discord e devolve sÃ³
+     chamamos GET {API_BASE}/api/me/premium. A API valida o token na Discord e devolve só
      o estado DESTE utilizador. Escondido enquanto PREMIUM_API_BASE estiver vazio. */
   const TOK_KEY = "vozen.dtoken";
   const STATE_KEY = "vozen.oauthstate";
@@ -581,8 +581,8 @@
   function randState() {
     const a = new Uint8Array(16);
     const c = window.crypto || window.msCrypto;
-    // Fail-closed: sem CSPRNG nÃ£o geramos um `state` fraco/previsÃ­vel (seria um orÃ¡culo
-    // de CSRF no OAuth). Abortamos o login â€” todos os browsers modernos tÃªm crypto.
+    // Fail-closed: sem CSPRNG não geramos um `state` fraco/previsível (seria um oráculo
+    // de CSRF no OAuth). Abortamos o login — todos os browsers modernos têm crypto.
     if (!c || typeof c.getRandomValues !== "function") {
       throw new Error("secure-random-unavailable");
     }
@@ -661,7 +661,7 @@
     );
   }
 
-  // LÃª o token do fragment no regresso do OAuth, valida o `state` (CSRF) e LIMPA o fragment.
+  // Lê o token do fragment no regresso do OAuth, valida o `state` (CSRF) e LIMPA o fragment.
   function readTokenFromHash() {
     if (!location.hash || location.hash.length < 2) return null;
     const p = new URLSearchParams(location.hash.slice(1));
@@ -675,7 +675,7 @@
     } catch {}
     history.replaceState(null, "", location.pathname + location.search); // fragment fora do URL
     // CSRF: exige um `state` guardado que bata certo. Sem ele (ou diferente) => descarta o
-    // token â€” nunca aceitamos um fragment que nÃ£o conseguimos verificar como nosso.
+    // token — nunca aceitamos um fragment que não conseguimos verificar como nosso.
     if (!expected || st !== expected) return null;
     return { token: tok, state: st };
   }
@@ -747,9 +747,9 @@
       return;
     }
     if (!PREMIUM_API_BASE) {
-      // Backend ainda nÃ£o estÃ¡ no ar: na pÃ¡gina da conta mostramos "em breve"
-      // (nunca disparamos o OAuth, senÃ£o o redirect nÃ£o registado dava erro no
-      // Discord); nas outras pÃ¡ginas o painel fica escondido.
+      // Backend ainda não está no ar: na página da conta mostramos "em breve"
+      // (nunca disparamos o OAuth, senão o redirect não registado dava erro no
+      // Discord); nas outras páginas o painel fica escondido.
       setPanel(IS_ACCOUNT ? { mode: "soon" } : { mode: "hidden" });
       return;
     }
@@ -759,9 +759,9 @@
         sessionStorage.setItem(TOK_KEY, fromHash.token);
       } catch {}
       activationResume = consumeActivationIntent(fromHash.state);
-      // Bounce de regresso: o /dashboard reutiliza o redirect /account (o Ãºnico registado no
+      // Bounce de regresso: o /dashboard reutiliza o redirect /account (o único registado no
       // portal) para o OAuth com scope `guilds`. O token fica no sessionStorage (mesmo
-      // domÃ­nio), e saltamos de volta. SÃ³ caminhos internos (anti open-redirect).
+      // domínio), e saltamos de volta. Só caminhos internos (anti open-redirect).
       let rt = null;
       try {
         rt = sessionStorage.getItem("vozen.returnTo");
@@ -770,7 +770,7 @@
       // `^\/[^/]` (not just `^\/`): a leading "//" is protocol-relative, so "//evil"
       // would navigate OFF-SITE. Not reachable today (only our own code writes this key,
       // always "/dashboard") and the charset already rejects dots, so no real host could
-      // be named â€” but this is the check that stops it becoming an open redirect the day
+      // be named — but this is the check that stops it becoming an open redirect the day
       // returnTo ever comes from somewhere less trusted.
       if (rt && /^\/[A-Za-z0-9_-][A-Za-z0-9/_-]*$/.test(rt)) {
         location.replace(rt);
@@ -859,7 +859,7 @@
     const text = active ? t("account.active") : t("account.notActive");
     const action = active
       ? ""
-      : `<a class="ppanel__get" href="/#premium">${t("nav.premium")} <span aria-hidden="true">â†’</span></a>`;
+      : `<a class="ppanel__get" href="/#premium">${t("nav.premium")} <span aria-hidden="true">→</span></a>`;
     return (
       `<article class="ppanel__status ${state}">` +
       `<div class="ppanel__status-top"><span class="ppanel__status-label">${esc(label)}</span>` +
@@ -886,9 +886,9 @@
     btn.innerHTML = `${avatarMarkup(u, "nav__login-av", 24)}<span>${esc(username)}</span>`;
   }
 
-  // Card "Ativar uma compra": o comprador cola o cÃ³digo do recibo Ko-fi e reclama a compra
-  // que chegou sem Discord ID (o checkout de subscriÃ§Ã£o nÃ£o tem caixa de mensagem). POST
-  // autenticado a /api/link â€” ver doClaim. Aparece sempre que a pessoa estÃ¡ logada.
+  // Card "Ativar uma compra": o comprador cola o código do recibo Ko-fi e reclama a compra
+  // que chegou sem Discord ID (o checkout de subscrição não tem caixa de mensagem). POST
+  // autenticado a /api/link — ver doClaim. Aparece sempre que a pessoa está logada.
   function claimCard() {
     return "";
     /* return (
@@ -899,9 +899,9 @@
       `<span class="ppanel__claimtitle" id="ppClaimTitle">${t("claim.title")}</span></div>` +
       // Consent is explicit in the label itself, before either delivery path. The server records a
       // stable terms version for instant activation; receipt-code activation keeps its HTTP contract.
-      // {terms} no texto de claim.consent marca onde entra o link â€” substituido por um <a> para
+      // {terms} no texto de claim.consent marca onde entra o link — substituido por um <a> para
       // /terms. O <a> e conteudo interativo: clicar nele abre os termos sem marcar a checkbox
-      // (comportamento do <label> no HTML) â€” confirmado no browser.
+      // (comportamento do <label> no HTML) — confirmado no browser.
       `<section class="ppanel__activationway ppanel__activationway--instant">` +
       `<div class="ppanel__wayhead"><span class="ppanel__waynum">01</span><span><b>${t("claim.instantBtn")}</b><small>${t("account.recommended")}</small></span></div>` +
       `<p class="ppanel__claimhint">${t("claim.instantHint")}</p>` +
@@ -921,7 +921,7 @@
       `<p class="ppanel__claimmsg" id="ppClaimMsg" role="status" aria-live="polite" hidden></p>` +
       // Sits AFTER the status message on purpose: "no purchase found" is the moment someone
       // realises they no longer have the receipt, and the way out should be the next thing they
-      // read. Closing the receipt tab was never a dead end â€” Ko-fi emails every buyer a copy â€”
+      // read. Closing the receipt tab was never a dead end — Ko-fi emails every buyer a copy —
       // but the card never said so, which made it one in practice.
       `<p class="ppanel__claimlost">${t("claim.lost")} <button type="button" class="ppanel__claimlostbtn" id="ppClaimHelpOpen">${t("claim.lostHelp")}</button></p></section>` +
       `</details>` +
@@ -931,19 +931,19 @@
   }
 
   // Modal de ajuda (plano 036). Existe por causa de uma armadilha do recibo do Ko-fi: o email
-  // mostra `Ref: S-M1X823C9FW` â€” a unica coisa com ar de codigo no email inteiro â€” e o Ref NUNCA
+  // mostra `Ref: S-M1X823C9FW` — a unica coisa com ar de codigo no email inteiro — e o Ref NUNCA
   // pode activar nada, porque o webhook do Ko-fi nao no-lo envia. Quem procura um codigo encontra
   // aquilo, cola na caixa de cima, e leva um 404 seco por uma compra que fez mesmo.
   //
   // Passo 1 leva ao caminho que ACTIVA (o botao do email -> endereco da pagina -> caixa de cima).
-  // Passo 2 pede o EMAIL que a pessoa usou no Ko-fi â€” nao o Ref. Porque? A pesquisa de transacoes
+  // Passo 2 pede o EMAIL que a pessoa usou no Ko-fi — nao o Ref. Porque? A pesquisa de transacoes
   // do Ko-fi so casa por nome ou email (confirmado no painel real, 2026-07-17); o Ref nao e
   // procuravel. Um clique manda (Discord ID, email) para o dono, que cola o email na pesquisa do
   // Ko-fi, confirma a encomenda paga e faz o grant. O email e pista de procura, nao prova (plano
   // 021 continua de pe). O suporte fica no rodape, um passo mais dentro.
   //
   // O href do suporte vai inline e nao por class="js-support": essa ligacao corre UMA vez sobre o
-  // documento no arranque e isto e injectado depois do OAuth â€” sairia sem href nenhum.
+  // documento no arranque e isto e injectado depois do OAuth — sairia sem href nenhum.
   function claimHelpModal() {
     return (
       `<div class="ppmodal" id="ppClaimHelp" hidden>` +
@@ -1078,7 +1078,7 @@
       if (item && item.plan === "premium") {
         parts.push(`${Number(item.seats) || 0} ${t("claim.seats")}`);
       }
-      row.textContent = parts.join(" Â· ");
+      row.textContent = parts.join(" · ");
       list.appendChild(row);
     }
     msg.appendChild(list);
@@ -1194,11 +1194,11 @@
     }
   }
 
-  // Submete o cÃ³digo da transaÃ§Ã£o a POST {API_BASE}/api/link (autenticado com o token do OAuth).
+  // Submete o código da transação a POST {API_BASE}/api/link (autenticado com o token do OAuth).
   // 200 => ativado (recarrega o painel); 400 "use_receipt_code" => colaram um email em vez do
-  // cÃ³digo (plano 021: o email jÃ¡ nÃ£o Ã© aceite como prova de posse); 404 => cÃ³digo nÃ£o
-  // encontrado; 429 => rate-limit; 401 => token expirou (re-login). Nunca expÃµe qual cÃ³digo Ã©
-  // vÃ¡lido (404 genÃ©rico do backend).
+  // código (plano 021: o email já não é aceite como prova de posse); 404 => código não
+  // encontrado; 429 => rate-limit; 401 => token expirou (re-login). Nunca expõe qual código é
+  // válido (404 genérico do backend).
   async function doClaim(ev) {
     ev.preventDefault();
     const input = document.getElementById("ppClaimCode");
@@ -1222,15 +1222,15 @@
     }
     // O Ref do recibo (`Ref: S-M1X823C9FW`) e a unica coisa com ar de codigo no email do Ko-fi, e
     // nunca casa com nada: o webhook do Ko-fi nao envia esse campo. Deixa-lo ir ao servidor da um
-    // 404 que a pessoa nao consegue accionar â€” e ela pagou mesmo. Apanha-se aqui, ANTES do fetch,
-    // e abre-se a ajuda â€” que agora pede o EMAIL (o Ref nao serve para ninguem procurar).
+    // 404 que a pessoa nao consegue accionar — e ela pagou mesmo. Apanha-se aqui, ANTES do fetch,
+    // e abre-se a ajuda — que agora pede o EMAIL (o Ref nao serve para ninguem procurar).
     if (REF_RE.test(code)) {
       setMsg(t("claim.help.refPasted"), "err");
       openClaimHelp();
       return;
     }
     // Sem consentimento nao se entrega. Se falhassemos ABERTO aqui, activavamos o passe sem a
-    // pessoa ter reconhecido nada â€” e o direito de retratacao ficava de pe, que e exactamente o
+    // pessoa ter reconhecido nada — e o direito de retratacao ficava de pe, que e exactamente o
     // que isto existe para evitar.
     if (!consent || !consent.checked) {
       setMsg(t("claim.consentRequired"), "err");
@@ -1274,7 +1274,7 @@
         const errBody = await res.json();
         if (errBody && typeof errBody.error === "string") errCode = errBody.error;
       } catch {
-        /* corpo sem JSON vÃ¡lido â€” cai no erro genÃ©rico abaixo */
+        /* corpo sem JSON válido — cai no erro genérico abaixo */
       }
       setMsg(errCode === "use_receipt_code" ? t("claim.useReceiptCode") : t("claim.error"), "err");
     } catch {
@@ -1361,7 +1361,7 @@
   // O modal vive no <body>, NAO dentro do #premiumPanel que o desenha. Nao e preferencia: o
   // .premium-panel tem `transform` e `backdrop-filter`, e qualquer um deles faz do painel o
   // containing block dos descendentes `position: fixed`. La dentro, o modal ficava preso ao
-  // painel â€” media 836px de largura no meio da pagina em vez de cobrir o ecra, e o blur so tapava
+  // painel — media 836px de largura no meio da pagina em vez de cobrir o ecra, e o blur so tapava
   // o proprio painel. Verificado no browser; nenhum teste de string apanha isto.
   //
   // renderPanel reescreve o innerHTML do painel a cada loadPanel, por isso o modal e re-montado
@@ -1383,7 +1383,7 @@
     modal.hidden = false;
     document.body.classList.add("is-modal-open");
     // O foco entra na caixa (nao no input): quem usa leitor de ecra ouve o titulo e os dois
-    // passos antes do campo, que e a ordem que explica o campo. Nao se pre-preenche nada â€” o campo
+    // passos antes do campo, que e a ordem que explica o campo. Nao se pre-preenche nada — o campo
     // e o EMAIL do Ko-fi, e o que a pessoa possa ter colado antes (um Ref) nao e um email.
     document.getElementById("ppClaimHelpBox")?.focus();
   }
@@ -1397,7 +1397,7 @@
     claimHelpOpener = null;
   }
 
-  // Esc fecha. Registado UMA vez no documento (nao por render) â€” o painel volta a desenhar-se a
+  // Esc fecha. Registado UMA vez no documento (nao por render) — o painel volta a desenhar-se a
   // cada loadPanel e um listener por render acumulava-se em silencio.
   document.addEventListener("keydown", (ev) => {
     const billingModal = document.getElementById("vozenBillingModal");
@@ -1436,13 +1436,13 @@
   });
 
   // Um UUID em qualquer forma (codigo solto, ou dentro de um link de recibo). Se aparecer no campo
-  // de email, a pessoa colou o codigo/link no sitio errado â€” e ativa-se na mesma pela caixa
+  // de email, a pessoa colou o codigo/link no sitio errado — e ativa-se na mesma pela caixa
   // principal, sem ela ter de perceber a diferenca.
   const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
   // Quando a notificacao nao sai (API em baixo, webhook por configurar), a pessoa nao pode ficar
   // sem saida: mostra-se a mensagem ja pronta para ela colar no suporte, com o email la dentro. E
-  // o mesmo trabalho, feito a mao â€” mas ela sai daqui com alguma coisa.
+  // o mesmo trabalho, feito a mao — mas ela sai daqui com alguma coisa.
   function showClaimHelpFallback(setMsg, email) {
     setMsg(t("claim.help.sendError"), "err");
     const box = document.getElementById("ppClaimHelpMsg");
@@ -1471,7 +1471,7 @@
     };
     if (!value) return;
     // Colou aqui o codigo verdadeiro (ou o link do recibo)? Manda-se de volta para a caixa
-    // principal e ativa-se â€” a pessoa nao tem de saber a diferenca.
+    // principal e ativa-se — a pessoa nao tem de saber a diferenca.
     if (UUID_RE.test(value)) {
       const main = document.getElementById("ppClaimCode");
       if (main) {
@@ -1481,7 +1481,7 @@
         return;
       }
     }
-    // Nao e um email? Diz-lho antes de enviar â€” o dono nao pode ficar com um ping inutil.
+    // Nao e um email? Diz-lho antes de enviar — o dono nao pode ficar com um ping inutil.
     if (!/^[^@\s]+@[^@\s]+$/.test(value)) {
       setMsg(t("claim.help.notEmail"), "err");
       return;
@@ -1540,10 +1540,10 @@
     }
     el.hidden = false;
     if (IS_ACCOUNT && panelState.mode !== "anon") unlockAccountPage();
-    const head = `<div class="ppanel__head"><span class="ppanel__title">ðŸ’Ž ${t("account.membershipStatus")}</span></div>`;
+    const head = `<div class="ppanel__head"><span class="ppanel__title">💎 ${t("account.membershipStatus")}</span></div>`;
     let body = "";
     if (panelState.mode === "soon") {
-      // Estado dormente da pÃ¡gina da conta: backend ainda nÃ£o configurado.
+      // Estado dormente da página da conta: backend ainda não configurado.
       body = `<p class="ppanel__meta">${t("panel.soon")}</p>`;
     } else if (panelState.mode === "anon") {
       body = `<div class="ppanel__anon"><button type="button" class="btn--discord" id="ppLogin">${DISCORD_MARK}<span>${t("panel.login")}</span></button><p class="ppanel__meta">${t("panel.noneSub")}</p></div>`;
@@ -1609,9 +1609,9 @@
     }
   });
 
-  // BotÃ£o de login na navbar: leva Ã  pÃ¡gina dedicada da conta (account.html). JÃ¡ na
-  // pÃ¡gina da conta, faz login OAuth quando o backend estÃ¡ no ar; senÃ£o faz scroll ao
-  // painel (que mostra "em breve") â€” nunca dispara um redirect que ainda nÃ£o existe.
+  // Botão de login na navbar: leva à página dedicada da conta (account.html). Já na
+  // página da conta, faz login OAuth quando o backend está no ar; senão faz scroll ao
+  // painel (que mostra "em breve") — nunca dispara um redirect que ainda não existe.
   function scrollPremiumPanel() {
     document
       .getElementById("premiumPanel")
@@ -1623,7 +1623,7 @@
   // (respecting the page's scroll container and scroll-behavior) but leaves
   // "/#features" in the address bar; once the browser has applied the fragment
   // (hashchange) we strip it with replaceState, keeping the scroll position.
-  // The OAuth return fragment (#access_token=â€¦) is left for readTokenFromHash.
+  // The OAuth return fragment (#access_token=…) is left for readTokenFromHash.
   window.addEventListener("hashchange", () => {
     const id = location.hash.slice(1);
     if (!id || id.indexOf("=") !== -1) return;
@@ -1649,7 +1649,7 @@
     });
   }
 
-  /* â”€â”€ navbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── navbar ──────────────────────────────────────────── */
   const nav = $("#nav");
   const onScroll = () => nav.classList.toggle("is-stuck", window.scrollY > 12);
   onScroll();
@@ -1673,7 +1673,7 @@
     if (e.key === "Escape" && links.classList.contains("is-open")) closeMobileNav(true);
   });
 
-  /* â”€â”€ reveal on scroll â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── reveal on scroll ────────────────────────────────── */
   const io = new IntersectionObserver(
     (entries) => {
       entries.forEach((e) => {
@@ -1687,7 +1687,7 @@
   );
   $$(".reveal:not([data-r])").forEach((el) => io.observe(el));
 
-  /* â”€â”€ animated counters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── animated counters ───────────────────────────────── */
   const counters = $$(".count");
   const cio = new IntersectionObserver(
     (entries) => {
@@ -1714,19 +1714,19 @@
   );
   counters.forEach((c) => cio.observe(c));
 
-  /* â”€â”€ language marquee â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  // Vitrina de lÃ­nguas (marquee): cada uma NA SUA PRÃ“PRIA LÃNGUA (autÃ³nimo). ~35, a par
-  // do "35 languages" anunciado no site. Ã‰ sÃ³ showcase â€” nÃ£o Ã© a lista funcional do bot.
+  /* ── language marquee ────────────────────────────────── */
+  // Vitrina de línguas (marquee): cada uma NA SUA PRÓPRIA LÍNGUA (autónimo). ~35, a par
+  // do "35 languages" anunciado no site. É só showcase — não é a lista funcional do bot.
   const LANGS = [
-    ["ðŸ‡¬ðŸ‡§", "English"], ["ðŸ‡µðŸ‡¹", "PortuguÃªs"], ["ðŸ‡ªðŸ‡¸", "EspaÃ±ol"], ["ðŸ‡«ðŸ‡·", "FranÃ§ais"],
-    ["ðŸ‡©ðŸ‡ª", "Deutsch"], ["ðŸ‡®ðŸ‡¹", "Italiano"], ["ðŸ‡³ðŸ‡±", "Nederlands"], ["ðŸ‡µðŸ‡±", "Polski"],
-    ["ðŸ‡·ðŸ‡º", "Ð ÑƒÑÑÐºÐ¸Ð¹"], ["ðŸ‡ºðŸ‡¦", "Ð£ÐºÑ€Ð°Ñ—Ð½ÑÑŒÐºÐ°"], ["ðŸ‡¹ðŸ‡·", "TÃ¼rkÃ§e"], ["ðŸ‡¸ðŸ‡ª", "Svenska"],
-    ["ðŸ‡¯ðŸ‡µ", "æ—¥æœ¬èªž"], ["ðŸ‡°ðŸ‡·", "í•œêµ­ì–´"], ["ðŸ‡¨ðŸ‡³", "ä¸­æ–‡"], ["ðŸ‡¸ðŸ‡¦", "Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©"],
-    ["ðŸ‡¬ðŸ‡·", "Î•Î»Î»Î·Î½Î¹ÎºÎ¬"], ["ðŸ‡¨ðŸ‡¿", "ÄŒeÅ¡tina"], ["ðŸ‡©ðŸ‡°", "Dansk"], ["ðŸ‡«ðŸ‡®", "Suomi"],
-    ["ðŸ‡·ðŸ‡´", "RomÃ¢nÄƒ"], ["ðŸ‡­ðŸ‡º", "Magyar"], ["ðŸ‡»ðŸ‡³", "Tiáº¿ng Viá»‡t"], ["ðŸ‡®ðŸ‡¸", "Ãslenska"],
-    ["ðŸ‡¬ðŸ‡ª", "áƒ¥áƒáƒ áƒ—áƒ£áƒšáƒ˜"], ["ðŸ‡®ðŸ‡·", "ÙØ§Ø±Ø³ÛŒ"], ["ðŸ‡®ðŸ‡³", "à¤¹à¤¿à¤¨à¥à¤¦à¥€"], ["ðŸ‡¹ðŸ‡­", "à¹„à¸—à¸¢"],
-    ["ðŸ‡®ðŸ‡©", "Bahasa Indonesia"], ["ðŸ‡·ðŸ‡¸", "Ð¡Ñ€Ð¿ÑÐºÐ¸"], ["ðŸ‡¸ðŸ‡°", "SlovenÄina"], ["ðŸ‡¸ðŸ‡®", "SlovenÅ¡Äina"],
-    ["ðŸ‡±ðŸ‡»", "LatvieÅ¡u"], ["ðŸ‡°ðŸ‡¿", "ÒšÐ°Ð·Ð°Ò› Ñ‚Ñ–Ð»Ñ–"], ["ðŸ‡§ðŸ‡¬", "Ð‘ÑŠÐ»Ð³Ð°Ñ€ÑÐºÐ¸"],
+    ["🇬🇧", "English"], ["🇵🇹", "Português"], ["🇪🇸", "Español"], ["🇫🇷", "Français"],
+    ["🇩🇪", "Deutsch"], ["🇮🇹", "Italiano"], ["🇳🇱", "Nederlands"], ["🇵🇱", "Polski"],
+    ["🇷🇺", "Русский"], ["🇺🇦", "Українська"], ["🇹🇷", "Türkçe"], ["🇸🇪", "Svenska"],
+    ["🇯🇵", "日本語"], ["🇰🇷", "한국어"], ["🇨🇳", "中文"], ["🇸🇦", "العربية"],
+    ["🇬🇷", "Ελληνικά"], ["🇨🇿", "Čeština"], ["🇩🇰", "Dansk"], ["🇫🇮", "Suomi"],
+    ["🇷🇴", "Română"], ["🇭🇺", "Magyar"], ["🇻🇳", "Tiếng Việt"], ["🇮🇸", "Íslenska"],
+    ["🇬🇪", "ქართული"], ["🇮🇷", "فارسی"], ["🇮🇳", "हिन्दी"], ["🇹🇭", "ไทย"],
+    ["🇮🇩", "Bahasa Indonesia"], ["🇷🇸", "Српски"], ["🇸🇰", "Slovenčina"], ["🇸🇮", "Slovenščina"],
+    ["🇱🇻", "Latviešu"], ["🇰🇿", "Қазақ тілі"], ["🇧🇬", "Български"],
   ];
   const track = $("#marqueeTrack");
   if (track) {
@@ -1735,8 +1735,8 @@
     track.innerHTML = LANGS.map(chip).join("") + LANGS.map(chip).join("");
   }
 
-  /* â”€â”€ wordle mock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-  // Solve to VOZEN: VOICE (V,O green) â†’ TOKEN (O,E,N green) â†’ VOZEN (all green).
+  /* ── wordle mock ─────────────────────────────────────── */
+  // Solve to VOZEN: VOICE (V,O green) → TOKEN (O,E,N green) → VOZEN (all green).
   const WORD = [
     [["V", "g"], ["O", "g"], ["I", "x"], ["C", "x"], ["E", "y"]],
     [["T", "x"], ["O", "g"], ["K", "x"], ["E", "g"], ["N", "g"]],
@@ -1752,7 +1752,7 @@
     ).join("");
   }
 
-  /* â”€â”€ commands â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── commands ────────────────────────────────────────── */
   const cmdList = $("#cmdList");
   let activeTab = "general";
   function renderCommands() {
@@ -1770,7 +1770,7 @@
     }),
   );
 
-  /* â”€â”€ faq â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── faq ─────────────────────────────────────────────── */
   const faqList = $("#faq-list");
   function renderFaq() {
     if (!faqList) return;
@@ -1794,12 +1794,12 @@
     );
   }
 
-  /* â”€â”€ animated Discord chat mock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── animated Discord chat mock ──────────────────────── */
   const chat = $("#chat");
   const SCRIPT = [
     { name: "Kai", av: "K", cls: "u", text: "what's the plan tonight?", say: "EN" },
-    { name: "Ana", av: "A", cls: "u", text: "boa noite pessoal ðŸŒ™", say: "PT" },
-    { name: "LÃ©a", av: "L", cls: "u", text: "on lance une partie ? ðŸŽ®", say: "FR" },
+    { name: "Ana", av: "A", cls: "u", text: "boa noite pessoal 🌙", say: "PT" },
+    { name: "Léa", av: "L", cls: "u", text: "on lance une partie ? 🎮", say: "FR" },
   ];
 
   function bubble(m, textHtml, speaking) {
@@ -1810,7 +1810,7 @@
       <div class="msg__b">
         <div class="msg__name">${m.name}</div>
         <div class="msg__text">${textHtml}</div>
-        ${speaking ? `<div class="speaking"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span> Vozen is speakingâ€¦</div>` : ""}
+        ${speaking ? `<div class="speaking"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span> Vozen is speaking…</div>` : ""}
       </div>`;
     return el;
   }
@@ -1822,7 +1822,7 @@
       <div class="msg__av msg__av--v"><span class="eq" style="height:16px"><i></i><i></i><i></i><i></i><i></i></span></div>
       <div class="msg__b">
         <div class="msg__name"><b>Vozen</b><span class="tag">APP</span></div>
-        <div class="speaking"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span> reading it out loudâ€¦</div>
+        <div class="speaking"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span> reading it out loud…</div>
       </div>`;
     return el;
   }
@@ -1859,7 +1859,7 @@
     }
   }
 
-  /* â”€â”€ hero waveform (signature: sound made visible) â”€â”€â”€â”€â”€ */
+  /* ── hero waveform (signature: sound made visible) ───── */
   const wave = $("#wave");
   if (wave && !reduce) {
     const ctx = wave.getContext("2d");
@@ -1910,19 +1910,19 @@
     draw();
   }
 
-  /* â”€â”€ hear (audio demo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── hear (audio demo) ─────────────────────────────────── */
   // Cada amostra: bandeira, nome da lingua e a frase EXATA que foi sintetizada
   // (tem de bater certo com o audio) + o mp3 gerado por tools/gen-samples.mjs.
   const SAMPLES = {
-    // SÃ“ lÃ­nguas audÃ­veis nos 3 motores (Google + Piper + Kokoro) â€” cada uma tem clipe
+    // SÓ línguas audíveis nos 3 motores (Google + Piper + Kokoro) — cada uma tem clipe
     // em todos, por isso NENHUM chip fica desativado. de saiu (sem voz Kokoro) e ja saiu
     // (Kokoro partido + sem Piper). Ver plano 018. Ficheiros: <lang>.mp3 (Google),
     // <lang>-piper.mp3 (Piper), <lang>-kokoro.mp3 (Kokoro).
-    en: { flag: "ðŸ‡¬ðŸ‡§", lang: "English", phrase: "Hey! Welcome to the server. Type anything and I'll read it out loud.", engines: ["google", "piper", "kokoro"] },
-    pt: { flag: "ðŸ‡µðŸ‡¹", lang: "PortuguÃªs", phrase: "OlÃ¡! Escreva qualquer coisa e eu leio em voz alta.", engines: ["google", "piper", "kokoro"] },
-    es: { flag: "ðŸ‡ªðŸ‡¸", lang: "EspaÃ±ol", phrase: "Â¡Hola! Escribe lo que quieras y lo leerÃ© en voz alta.", engines: ["google", "piper", "kokoro"] },
-    fr: { flag: "ðŸ‡«ðŸ‡·", lang: "FranÃ§ais", phrase: "Salut ! Ã‰cris ce que tu veux, je le lis Ã  voix haute.", engines: ["google", "piper", "kokoro"] },
-    it: { flag: "ðŸ‡®ðŸ‡¹", lang: "Italiano", phrase: "Ciao! Scrivi quello che vuoi e lo leggerÃ² ad alta voce.", engines: ["google", "piper", "kokoro"] },
+    en: { flag: "🇬🇧", lang: "English", phrase: "Hey! Welcome to the server. Type anything and I'll read it out loud.", engines: ["google", "piper", "kokoro"] },
+    pt: { flag: "🇵🇹", lang: "Português", phrase: "Olá! Escreva qualquer coisa e eu leio em voz alta.", engines: ["google", "piper", "kokoro"] },
+    es: { flag: "🇪🇸", lang: "Español", phrase: "¡Hola! Escribe lo que quieras y lo leeré en voz alta.", engines: ["google", "piper", "kokoro"] },
+    fr: { flag: "🇫🇷", lang: "Français", phrase: "Salut ! Écris ce que tu veux, je le lis à voix haute.", engines: ["google", "piper", "kokoro"] },
+    it: { flag: "🇮🇹", lang: "Italiano", phrase: "Ciao! Scrivi quello che vuoi e lo leggerò ad alta voce.", engines: ["google", "piper", "kokoro"] },
   };
 
   function initHear() {
@@ -1948,7 +1948,7 @@
       const eng = s.engines.includes(engine) ? engine : "google";
       current = code;
       flagEl.textContent = s.flag;
-      langEl.textContent = hearLangName(code, lang); // nome na lÃ­ngua do site (segue EN/PT)
+      langEl.textContent = hearLangName(code, lang); // nome na língua do site (segue EN/PT)
       phraseEl.textContent = s.phrase;
       engTag.textContent = ENGINE_NAME[eng];
       $$(".hear__chip").forEach((c) => c.classList.toggle("is-active", c.dataset.sample === code));
@@ -1964,7 +1964,7 @@
       });
 
     // Troca de motor: reavalia os chips e recarrega a lingua atual nesse motor (ou cai
-    // numa que o tenha â€” ex.: japones + Piper -> ingles). Mantem o estado tocar/pausa.
+    // numa que o tenha — ex.: japones + Piper -> ingles). Mantem o estado tocar/pausa.
     $$(".hear__eng").forEach((b) =>
       b.addEventListener("click", () => {
         engine = b.dataset.engine;
@@ -1996,7 +1996,7 @@
     select("en", false); // estado inicial: EN + Google, sem tocar
   }
 
-  /* â”€â”€ boot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── boot ────────────────────────────────────────────── */
   applyLang(lang);
   runChat();
   initHear();
