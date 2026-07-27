@@ -20,6 +20,7 @@ use crate::premium_api::{
 
 const DISCORD_ME: &str = "https://discord.com/api/v10/users/@me";
 const DISCORD_OAUTH_ME: &str = "https://discord.com/api/v10/oauth2/@me";
+const DISCORD_USERS: &str = "https://discord.com/api/v10/users/";
 const DISCORD_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 const IDENTITY_TTL_MS: i64 = 60_000;
 const IDENTITY_CACHE_MAX_ENTRIES: usize = 512;
@@ -33,7 +34,8 @@ pub enum DiscordHttpError {
 /// Small HTTP boundary so OAuth semantics can be tested without a real Discord request.
 #[async_trait]
 pub trait DiscordOAuthHttp: Send + Sync {
-    async fn get_json(&self, url: &'static str, bearer: &str) -> Result<Value, DiscordHttpError>;
+    async fn get_json(&self, url: &str, bearer: &str) -> Result<Value, DiscordHttpError>;
+    async fn get_json_as_bot(&self, url: &str, bot_token: &str) -> Result<Value, DiscordHttpError>;
 }
 
 #[derive(Clone)]
@@ -53,11 +55,32 @@ impl ReqwestDiscordOAuthHttp {
 
 #[async_trait]
 impl DiscordOAuthHttp for ReqwestDiscordOAuthHttp {
-    async fn get_json(&self, url: &'static str, bearer: &str) -> Result<Value, DiscordHttpError> {
+    async fn get_json(&self, url: &str, bearer: &str) -> Result<Value, DiscordHttpError> {
         let response = self
             .client
             .get(url)
             .bearer_auth(bearer)
+            .send()
+            .await
+            .map_err(|_| DiscordHttpError::Unavailable)?;
+        let status = response.status();
+        if status.as_u16() == 401 || status.as_u16() == 403 {
+            return Err(DiscordHttpError::InvalidToken);
+        }
+        if !status.is_success() {
+            return Err(DiscordHttpError::Unavailable);
+        }
+        response
+            .json()
+            .await
+            .map_err(|_| DiscordHttpError::Unavailable)
+    }
+
+    async fn get_json_as_bot(&self, url: &str, bot_token: &str) -> Result<Value, DiscordHttpError> {
+        let response = self
+            .client
+            .get(url)
+            .header(reqwest::header::AUTHORIZATION, format!("Bot {bot_token}"))
             .send()
             .await
             .map_err(|_| DiscordHttpError::Unavailable)?;
@@ -78,6 +101,7 @@ impl DiscordOAuthHttp for ReqwestDiscordOAuthHttp {
 #[derive(Clone)]
 pub struct DiscordOAuthVerifier {
     expected_client_id: Arc<str>,
+    bot_token: Option<Arc<str>>,
     http: Arc<dyn DiscordOAuthHttp>,
     now: Arc<dyn Fn() -> i64 + Send + Sync>,
     cache: Arc<Mutex<HashMap<[u8; 32], CachedIdentity>>>,
@@ -90,12 +114,16 @@ struct CachedIdentity {
 }
 
 impl DiscordOAuthVerifier {
-    pub fn production(expected_client_id: impl Into<String>) -> Result<Self, reqwest::Error> {
+    pub fn production(
+        expected_client_id: impl Into<String>,
+        bot_token: Option<String>,
+    ) -> Result<Self, reqwest::Error> {
         Ok(Self::new(
             expected_client_id,
             Arc::new(ReqwestDiscordOAuthHttp::new()?),
             Arc::new(system_now_ms),
-        ))
+        )
+        .with_bot_token(bot_token))
     }
 
     pub fn new(
@@ -105,10 +133,18 @@ impl DiscordOAuthVerifier {
     ) -> Self {
         Self {
             expected_client_id: Arc::from(expected_client_id.into()),
+            bot_token: None,
             http,
             now,
             cache: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    fn with_bot_token(mut self, bot_token: Option<String>) -> Self {
+        self.bot_token = bot_token
+            .filter(|token| !token.trim().is_empty())
+            .map(Arc::from);
+        self
     }
 
     async fn resolve_claim_identity(&self, bearer: &str) -> Option<DiscordIdentity> {
@@ -124,12 +160,24 @@ impl DiscordOAuthVerifier {
                     && oauth.scopes.iter().any(|scope| scope == "identify") =>
             {
                 match self.fetch_user(bearer).await {
-                    Ok(user) if user.id == oauth.user_id => Some(DiscordIdentity {
-                        id: user.id,
-                        username: user.username,
-                        avatar: user.avatar,
-                        avatar_decoration_asset: user.avatar_decoration_asset,
-                    }),
+                    Ok(user) if user.id == oauth.user_id => {
+                        let fallback_decoration = if user.avatar_decoration_asset.is_none() {
+                            self.fetch_user_with_bot(&user.id)
+                                .await
+                                .ok()
+                                .and_then(|bot_user| bot_user.avatar_decoration_asset)
+                        } else {
+                            None
+                        };
+                        Some(DiscordIdentity {
+                            id: user.id,
+                            username: user.username,
+                            avatar: user.avatar,
+                            avatar_decoration_asset: user
+                                .avatar_decoration_asset
+                                .or(fallback_decoration),
+                        })
+                    }
                     _ => None,
                 }
             }
@@ -173,6 +221,15 @@ impl DiscordOAuthVerifier {
 
     async fn fetch_user(&self, bearer: &str) -> Result<DiscordUser, DiscordHttpError> {
         let value = self.http.get_json(DISCORD_ME, bearer).await?;
+        parse_user(value).ok_or(DiscordHttpError::InvalidToken)
+    }
+
+    async fn fetch_user_with_bot(&self, user_id: &str) -> Result<DiscordUser, DiscordHttpError> {
+        let Some(bot_token) = self.bot_token.as_deref() else {
+            return Err(DiscordHttpError::Unavailable);
+        };
+        let url = format!("{DISCORD_USERS}{user_id}");
+        let value = self.http.get_json_as_bot(&url, bot_token).await?;
         parse_user(value).ok_or(DiscordHttpError::InvalidToken)
     }
 
@@ -346,24 +403,30 @@ mod tests {
     use serde_json::json;
 
     struct FakeHttp {
-        calls: Mutex<Vec<&'static str>>,
+        calls: Mutex<Vec<String>>,
         oauth: Result<Value, DiscordHttpError>,
         user: Result<Value, DiscordHttpError>,
+        bot_user: Result<Value, DiscordHttpError>,
     }
 
     #[async_trait]
     impl DiscordOAuthHttp for FakeHttp {
-        async fn get_json(
-            &self,
-            url: &'static str,
-            _bearer: &str,
-        ) -> Result<Value, DiscordHttpError> {
-            self.calls.lock().unwrap().push(url);
+        async fn get_json(&self, url: &str, _bearer: &str) -> Result<Value, DiscordHttpError> {
+            self.calls.lock().unwrap().push(url.to_owned());
             match url {
                 DISCORD_OAUTH_ME => self.oauth.clone(),
                 DISCORD_ME => self.user.clone(),
                 _ => unreachable!(),
             }
+        }
+
+        async fn get_json_as_bot(
+            &self,
+            url: &str,
+            _bot_token: &str,
+        ) -> Result<Value, DiscordHttpError> {
+            self.calls.lock().unwrap().push(url.to_owned());
+            self.bot_user.clone()
         }
     }
 
@@ -385,6 +448,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
             oauth: Ok(oauth("other-client", "user-a", &["identify"])),
             user: Ok(user("user-a", None, false)),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
         assert!(
             verifier(http.clone())
@@ -398,6 +462,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
             oauth: Ok(oauth("vozen-client", "user-a", &["identify"])),
             user: Ok(user("user-b", None, false)),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
         assert!(verifier(mismatch).resolve_identity("token").await.is_err());
     }
@@ -413,6 +478,7 @@ mod tests {
                 "avatar": "avatar-hash",
                 "avatar_decoration_data": {"asset": "a_fed43ab12698df65902ba06727e20c0e", "sku_id": "1"}
             })),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
 
         let identity = verifier(http).resolve_identity("token").await.unwrap();
@@ -421,6 +487,34 @@ mod tests {
         assert_eq!(
             identity.avatar_decoration_asset.as_deref(),
             Some("a_fed43ab12698df65902ba06727e20c0e")
+        );
+    }
+
+    #[tokio::test]
+    async fn uses_the_bot_profile_only_when_oauth_omits_the_avatar_decoration() {
+        let http = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("vozen-client", "user-a", &["identify"])),
+            user: Ok(json!({"id":"user-a", "username":"Rexy", "avatar":"avatar-hash"})),
+            bot_user: Ok(json!({
+                "id": "user-a",
+                "avatar_decoration_data": {"asset": "a_fed43ab12698df65902ba06727e20c0e"}
+            })),
+        });
+        let verifier = verifier(http.clone()).with_bot_token(Some("bot-token".into()));
+
+        let identity = verifier.resolve_identity("token").await.unwrap();
+        assert_eq!(
+            identity.avatar_decoration_asset.as_deref(),
+            Some("a_fed43ab12698df65902ba06727e20c0e")
+        );
+        assert_eq!(
+            http.calls.lock().unwrap().as_slice(),
+            [
+                DISCORD_OAUTH_ME,
+                DISCORD_ME,
+                "https://discord.com/api/v10/users/user-a"
+            ]
         );
     }
 
@@ -441,6 +535,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
             oauth: Ok(oauth("other-client", "user-a", &["identify", "email"])),
             user: Ok(user("user-a", Some("buyer@example.com"), true)),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
         assert_eq!(
             verifier(wrong_audience)
@@ -453,6 +548,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
             oauth: Ok(oauth("vozen-client", "user-a", &["identify"])),
             user: Ok(user("user-a", Some("buyer@example.com"), true)),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
         assert_eq!(
             verifier(no_scope)
@@ -465,6 +561,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
             oauth: Ok(oauth("vozen-client", "user-a", &["identify", "email"])),
             user: Ok(user("user-a", Some("buyer@example.com"), true)),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
         assert_eq!(
             verifier(good).resolve_activation_identity("token").await,
@@ -478,6 +575,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
             oauth: Err(DiscordHttpError::Unavailable),
             user: Ok(user("user-a", Some("buyer@example.com"), true)),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
         assert_eq!(
             verifier(unavailable)
@@ -493,6 +591,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
             oauth: Err(DiscordHttpError::InvalidToken),
             user: Ok(user("user-a", None, false)),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
         let verifier = verifier(http.clone());
         assert!(verifier.resolve_identity("sensitive-token").await.is_err());
@@ -508,6 +607,7 @@ mod tests {
             calls: Mutex::new(Vec::new()),
             oauth: Ok(oauth("vozen-client", "owner", &[])),
             user: Ok(user("owner", None, false)),
+            bot_user: Err(DiscordHttpError::Unavailable),
         });
         assert_eq!(
             verifier(http.clone()).resolve_authorization("token").await,

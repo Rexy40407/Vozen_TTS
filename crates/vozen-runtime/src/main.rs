@@ -2362,6 +2362,7 @@ async fn run() -> Result<(), RuntimeError> {
             Some(Arc::new(CompositeGatewayEventSink::new(event_sinks)) as Arc<dyn GatewayEventSink>)
         }
     };
+    let bot_token = config.discord_token.clone();
     let gateway = run_discord_gateway_with_state_and_sink(
         DiscordRuntimeConfig::from_token(config.discord_token)?,
         gateway_state.clone(),
@@ -2386,6 +2387,7 @@ async fn run() -> Result<(), RuntimeError> {
         config.admin,
         config.topgg_webhook,
         config.public_status,
+        bot_token,
         store,
         gateway_state.clone(),
     )?;
@@ -2443,6 +2445,7 @@ fn build_http_router(
     admin: Option<AdminRuntimeOptions>,
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
     public_status: Option<PublicStatusConfig>,
+    bot_token: String,
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
 ) -> Result<axum::Router, RuntimeError> {
@@ -2483,7 +2486,7 @@ fn build_http_router(
         .client_id
         .clone()
         .map(|client_id| {
-            DiscordOAuthVerifier::production(client_id)
+            DiscordOAuthVerifier::production(client_id, Some(bot_token.clone()))
                 .map(Arc::new)
                 .map_err(|_| RuntimeError::OAuthClient)
         })
@@ -3502,6 +3505,7 @@ mod tests {
             }),
             None,
             None,
+            String::new(),
             store,
             GatewayState::default(),
         );
@@ -3527,6 +3531,7 @@ mod tests {
             None,
             None,
             None,
+            String::new(),
             store,
             GatewayState::default(),
         )
