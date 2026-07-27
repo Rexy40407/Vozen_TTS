@@ -5,12 +5,12 @@
     "claim.placeholder": "Füge den Link deiner Ko-fi-Quittung ein",
     "claim.btn": "Aktivieren",
     "claim.working": "Wird aktiviert…",
-    "claim.ok": "Fertig! Dein Kauf ist jetzt für dieses Konto aktiv.",
-    "claim.notfound": "Kein Kauf dazu gefunden. Öffne deine Ko-fi-Quittung und füge ihre Web-Adresse ein — den ganzen Link.",
-    "claim.receiptRequired": "Füge vor der Aktivierung den Link zu deinem Ko-fi-Beleg ein.",
-    "claim.useReceiptCode": "Das ist eine E-Mail-Adresse. Füge stattdessen die Web-Adresse deiner Ko-fi-Quittung ein — der ganze Link reicht.",
-    "claim.ratelimited": "Zu viele Versuche. Bitte warte ein paar Minuten und versuche es erneut.",
-    "claim.error": "Etwas ist schiefgelaufen. Bitte versuche es gleich noch einmal.",
+    "claim.ok": "Fertig! Dein Kauf ist jetzt für dieses Konto aktiv",
+    "claim.notfound": "Kein Kauf dazu gefunden. Öffne deine Ko-fi-Quittung und füge ihre Web-Adresse ein — den ganzen Link",
+    "claim.receiptRequired": "Füge vor der Aktivierung den Link zu deinem Ko-fi-Beleg ein",
+    "claim.useReceiptCode": "Das ist eine E-Mail-Adresse. Füge stattdessen die Web-Adresse deiner Ko-fi-Quittung ein — der ganze Link reicht",
+    "claim.ratelimited": "Zu viele Versuche. Bitte warte ein paar Minuten und versuche es erneut",
+    "claim.error": "Etwas ist schiefgelaufen. Bitte versuche es gleich noch einmal",
     "nav.features": "Funktionen",
     "nav.games": "Spiele",
     "nav.commands": "Befehle",
@@ -20,76 +20,76 @@
     "cta.add": "Zu Discord hinzufügen",
     "cta.support": "Support-Server beitreten",
     "hero.badge": "Kern für immer kostenlos · Open Source",
-    "hero.title1": "Tippen.",
-    "hero.title2": "Hören.",
-    "hero.sub": "Vozen liest deinen Discord-Chat laut vor — mit natürlichen neuronalen Stimmen in 35 Sprachen, mit Spielen, Gelächter und einem Kern, der für immer kostenlos bleibt.",
+    "hero.title1": "Tippen",
+    "hero.title2": "Hören",
+    "hero.sub": "Vozen liest deinen Discord-Chat laut vor — mit natürlichen neuronalen Stimmen in 35 Sprachen, mit Spielen, Gelächter und einem Kern, der für immer kostenlos bleibt",
     "hero.mini": "35 Sprachen · 38 Stimmen · 16 Minispiele · kostenloser Kern",
     "hear.eyebrow": "Hör es dir an",
-    "hear.title": "Play drücken. Das ist eine echte Vozen-Stimme.",
-    "hear.sub": "Teste alle Engines. Piper ist kostenlos; Kokoro gibt es mit Vozen Plus oder Premium.",
+    "hear.title": "Play drücken. Das ist eine echte Vozen-Stimme",
+    "hear.sub": "Teste alle Engines. Piper ist kostenlos; Kokoro gibt es mit Vozen Plus oder Premium",
     "stat.langs": "Sprachen",
     "stat.voices": "neuronale Stimmen",
     "stat.games": "Minispiele",
     "stat.free": "Kern für immer kostenlos",
     "feat.eyebrow": "Funktionen",
     "feat.title": "Alles, was dein Server braucht",
-    "feat.sub": "Ein Bot. Jede Sprachfunktion, die du dir von Discord gewünscht hast — und der Kern ist für immer kostenlos.",
+    "feat.sub": "Ein Bot. Jede Sprachfunktion, die du dir von Discord gewünscht hast — und der Kern ist für immer kostenlos",
     "feat.new": "NEW",
     "feat.1.t": "Auto-Vorlese-Kanal",
-    "feat.1.d": "Wähle einen Kanal und Vozen liest jede Nachricht laut vor. Einmal mit /setup einrichten.",
+    "feat.1.d": "Wähle einen Kanal und Vozen liest jede Nachricht laut vor. Einmal mit /setup einrichten",
     "feat.2.t": "Deine Stimme, deine Sprache",
-    "feat.2.d": "Jedes Mitglied wählt seine eigene Stimme aus 35 Sprachen — Google oder eine lokale neuronale Engine.",
+    "feat.2.d": "Jedes Mitglied wählt seine eigene Stimme aus 35 Sprachen — Google oder eine lokale neuronale Engine",
     "feat.3.t": "Klingt wie ein Mensch",
-    "feat.3.d": "Nutzt standardmäßig deine gewählte Stimme. Die optionale Erkennung pro Nachricht wird mit /voice detection on aktiviert; ! und GROSSBUCHSTABEN sorgen für Betonung.",
+    "feat.3.d": "Nutzt standardmäßig deine gewählte Stimme. Die optionale Erkennung pro Nachricht wird mit /voice detection on aktiviert; ! und GROSSBUCHSTABEN sorgen für Betonung",
     "feat.4.t": "16 Sprach-Minispiele",
-    "feat.4.d": "Errate die Sprache, Buchstabierwettbewerbe, Wordle, Reflex-Duelle — mit Server-Bestenliste.",
+    "feat.4.d": "Errate die Sprache, Buchstabierwettbewerbe, Wordle, Reflex-Duelle — mit Server-Bestenliste",
     "feat.5.t": "Persönlichkeit inklusive",
-    "feat.5.d": "Begrüßt neue Mitglieder — ohne sich zu wiederholen —, gratuliert zum Geburtstag, erzählt Witze, beantwortet die Magic 8-Ball und trackt die aktivsten Sprecher deines Servers.",
+    "feat.5.d": "Begrüßt neue Mitglieder — ohne sich zu wiederholen —, gratuliert zum Geburtstag, erzählt Witze, beantwortet die Magic 8-Ball und trackt die aktivsten Sprecher deines Servers",
     "feat.6.t": "Ruhe für Admins",
-    "feat.6.d": "Sperrlisten, Rate-Limits, ein Anti-Spam-Filter, der geflutete Nachrichten stummschaltet, Rollen-Gating, Opt-out und ein Kill-Switch. Du behältst die Kontrolle.",
+    "feat.6.d": "Sperrlisten, Rate-Limits, ein Anti-Spam-Filter, der geflutete Nachrichten stummschaltet, Rollen-Gating, Opt-out und ein Kill-Switch. Du behältst die Kontrolle",
     "feat.7.t": "Stimmeneffekte",
-    "feat.7.d": "Roboter, Echo, tief, Chipmunk, Radio, Dämon … deine Nachrichten, verwandelt. Zwei Effekte kostenlos, alle acht mit Premium.",
+    "feat.7.d": "Roboter, Echo, tief, Chipmunk, Radio, Dämon … deine Nachrichten, verwandelt. Zwei Effekte kostenlos, alle acht mit Premium",
     "feat.8.t": "Faires Premium",
-    "feat.8.d": "6,99 €/Monat schalten Kokoro und die Server-Extras frei. Der grundlegende Piper-Kern bleibt kostenlos.",
+    "feat.8.d": "6,99 €/Monat schalten Kokoro und die Server-Extras frei. Der grundlegende Piper-Kern bleibt kostenlos",
     "feat.9.t": "Open Source",
-    "feat.9.d": "Der gesamte Vozen-Code ist öffentlich auf GitHub. Prüfe ihn, lerne von ihm oder öffne einen PR — keine Geheimnisse, keine Spyware.",
+    "feat.9.d": "Der gesamte Vozen-Code ist öffentlich auf GitHub. Prüfe ihn, lerne von ihm oder öffne einen PR — keine Geheimnisse, keine Spyware",
     "lang.eyebrow": "Sprachen",
-    "lang.title": "Ein Server, jede Sprache.",
-    "lang.sub": "Vozen spricht über 35 Sprachen. Jeder wählt seine eigene Stimme — Portugiesisch, Englisch, Japanisch, Arabisch und mehr — mit den Namen in seiner eigenen Sprache.",
+    "lang.title": "Ein Server, jede Sprache",
+    "lang.sub": "Vozen spricht über 35 Sprachen. Jeder wählt seine eigene Stimme — Portugiesisch, Englisch, Japanisch, Arabisch und mehr — mit den Namen in seiner eigenen Sprache",
     "lang.t1": "Über 35 Sprachen",
     "lang.t2": "Eine native Stimme pro Sprache",
     "lang.t3": "Stimmennamen für jeden Nutzer lokalisiert",
     "games.eyebrow": "Minispiele",
-    "games.title": "Spiel es laut aus.",
-    "games.sub": "16 Minispiele, gemacht für die Stimme: eine rundenbasierte Wortkette in deiner Sprache (Vozen liest jedes Wort laut vor), errate die gesprochene Sprache, entschlüssele ultraschnelle Sprache, Buchstabierwettbewerbe, Reflex-Duelle, dazu Wordle, Galgenmännchen, Tic-Tac-Toe und Schach auf echten grafischen Brettern. Jeder Server führt eine Bestenliste.",
+    "games.title": "Spiel es laut aus",
+    "games.sub": "16 Minispiele, gemacht für die Stimme: eine rundenbasierte Wortkette in deiner Sprache (Vozen liest jedes Wort laut vor), errate die gesprochene Sprache, entschlüssele ultraschnelle Sprache, Buchstabierwettbewerbe, Reflex-Duelle, dazu Wordle, Galgenmännchen, Tic-Tac-Toe und Schach auf echten grafischen Brettern. Jeder Server führt eine Bestenliste",
     "games.t1": "Sprach- und Textspiele, wer zuerst antwortet",
     "games.t2": "Server-Bestenliste & persönliche Statistiken",
     "games.t3": "Vozen verkündet den Gewinner laut",
     "setup.eyebrow": "Loslegen",
     "setup.title": "In 30 Sekunden startklar",
     "setup.1.t": "Einladen",
-    "setup.1.d": "Füge Vozen mit einem Klick zu deinem Server hinzu.",
+    "setup.1.d": "Füge Vozen mit einem Klick zu deinem Server hinzu",
     "setup.2.t": "/join",
-    "setup.2.d": "Vozen springt in deinen Sprachkanal.",
+    "setup.2.d": "Vozen springt in deinen Sprachkanal",
     "setup.3.t": "Tippen",
-    "setup.3.d": "Schreib eine Nachricht — und hör sie laut vorgelesen.",
+    "setup.3.d": "Schreib eine Nachricht — und hör sie laut vorgelesen",
     "cmd.eyebrow": "Befehle",
     "cmd.title": "Einfache Slash-Befehle",
     "cmd.general": "Allgemein",
     "cmd.voice": "Stimme",
     "cmd.fun": "Spaß",
     "cmd.admin": "Admin",
-    "cmd.sub": "Mit /cast weist du allen in deinem Sprachkanal eine zufällige thematische Rolle zu und hörst das Ergebnis.",
+    "cmd.sub": "Mit /cast weist du allen in deinem Sprachkanal eine zufällige thematische Rolle zu und hörst das Ergebnis",
     "price.eyebrow": "Preise",
-    "price.title": "Kostenloser Kern. Faires Premium.",
-    "price.sub": "Der Piper-basierte Kern bleibt kostenlos. Premium schaltet Kokoro, Google HD und rechenintensive Extras frei.",
-    "price.choose.title": "Entscheide, wer das Upgrade bekommt.",
-    "price.choose.sub": "Nutze den Kern kostenlos, upgrade dich selbst oder schalte Premium für den ganzen Server frei.",
-    "price.free.pitch": "Alles Wesentliche. Keine Karte, keine Testphase.",
-    "price.plus.pitch": "Deine Premium-Stimmvorteile begleiten dich auf jeden Server.",
-    "price.pro.pitch": "Schalte das volle Vozen-Erlebnis für deine Community frei.",
+    "price.title": "Kostenloser Kern. Faires Premium",
+    "price.sub": "Der Piper-basierte Kern bleibt kostenlos. Premium schaltet Kokoro, Google HD und rechenintensive Extras frei",
+    "price.choose.title": "Entscheide, wer das Upgrade bekommt",
+    "price.choose.sub": "Nutze den Kern kostenlos, upgrade dich selbst oder schalte Premium für den ganzen Server frei",
+    "price.free.pitch": "Alles Wesentliche. Keine Karte, keine Testphase",
+    "price.plus.pitch": "Deine Premium-Stimmvorteile begleiten dich auf jeden Server",
+    "price.pro.pitch": "Schalte das volle Vozen-Erlebnis für deine Community frei",
     "price.compare.title": "Alle Unterschiede im Vergleich",
-    "price.compare.sub": "Der vollständige Planvergleich, ohne Überraschungen.",
+    "price.compare.sub": "Der vollständige Planvergleich, ohne Überraschungen",
     "price.checkout": "Zahlungen sind derzeit deaktiviert",
     "price.recommended": "BESTE WAHL FÜR SERVER",
     "price.free.name": "Free",
@@ -102,20 +102,20 @@
     "price.pro.badge": "PREMIUM",
     "price.pro.name": "Vozen Premium",
     "price.pro.per": "/ Monat · 2 Server",
-    "price.pro.deal": "🎁 Zwei Server. Ein Abo.",
+    "price.pro.deal": "🎁 Zwei Server. Ein Abo",
     "price.pro.note": "€66.99/Jahr (~20 % sparen) · auf Ko-fi kaufen",
     "faq.eyebrow": "FAQ",
     "faq.title": "Fragen, beantwortet",
-    "finale.title": "Gib deinem Server eine Stimme.",
+    "finale.title": "Gib deinem Server eine Stimme",
     "finale.note": "Kern für immer kostenlos · 35 Sprachen · In 30 Sekunden eingerichtet",
-    "foot.tag": "Tippen, hören.",
+    "foot.tag": "Tippen, hören",
     "foot.product": "Produkt",
     "foot.community": "Community",
     "foot.support": "Support-Server",
     "foot.vote": "Auf top.gg abstimmen",
     "foot.privacy": "Datenschutz",
     "foot.terms": "AGB",
-    "foot.legal": "Nicht mit Discord verbunden.",
+    "foot.legal": "Nicht mit Discord verbunden",
     "price.plus.perYear": "/ Jahr · pro Nutzer",
     "price.pro.perYear": "/ Jahr · 2 Server",
     "price.billMonthly": "Monatlich",
@@ -125,25 +125,25 @@
     "panel.loading": "Konto wird geprüft…",
     "panel.logout": "Abmelden",
     "account.logoutConfirmTitle": "Von Vozen abmelden?",
-    "account.logoutConfirmBody": "Du musst dich erneut mit Discord anmelden, um dein Konto anzusehen.",
+    "account.logoutConfirmBody": "Du musst dich erneut mit Discord anmelden, um dein Konto anzusehen",
     "account.logoutCancel": "Angemeldet bleiben",
     "account.logoutConfirmAction": "Abmelden",
     "panel.retry": "Erneut versuchen",
-    "panel.error": "Server nicht erreichbar. Bitte versuche es gleich noch einmal.",
+    "panel.error": "Server nicht erreichbar. Bitte versuche es gleich noch einmal",
     "panel.none": "Noch kein aktiver Plan",
-    "panel.noneSub": "Melde dich an – dein Plus oder Premium erscheint hier.",
-    "panel.soon": "Konto- und Premium-Status folgen in Kürze.",
+    "panel.noneSub": "Melde dich an – dein Plus oder Premium erscheint hier",
+    "panel.soon": "Konto- und Premium-Status folgen in Kürze",
     "panel.activeUntil": "Aktiv bis",
     "panel.expiredOn": "Abgelaufen am",
     "panel.seatsUsed": "Lizenzen in Verwendung",
     "panel.servers": "Aktiv auf:",
-    "panel.noServers": "Noch auf keinem Server aktiviert — nutze /premium activate.",
+    "panel.noServers": "Noch auf keinem Server aktiviert — nutze /premium activate",
     "nav.login": "Anmelden",
     "price.max.badge": "MAX",
     "price.max.name": "Vozen Premium Max",
     "price.max.per": "/ Monat · 5 Server",
     "price.max.perYear": "/ Jahr · 5 Server",
-    "price.max.deal": "🎁 Fünf Server. Ein Abo.",
+    "price.max.deal": "🎁 Fünf Server. Ein Abo",
     "price.max.note": "133,99 €/Jahr (~20 % sparen) · auf Ko-fi kaufen",
     "price.pro.seats2": "2 Server",
     "price.pro.seats5": "5 Server",
@@ -164,95 +164,95 @@
     "price.m.16": "24/7 im Sprachkanal",
     "price.m.17": "Begleitet dich auf jeden Server",
     "price.m.18": "Für alle auf dem Server",
-    "price.idNote": "⚠️ Nach dem Kauf auf Ko-fi aktivierst du deinen Plan auf vozen.org/account — einfach mit Discord anmelden.",
+    "price.idNote": "⚠️ Nach dem Kauf auf Ko-fi aktivierst du deinen Plan auf vozen.org/account — einfach mit Discord anmelden",
     "price.idNoteLink": "Meine ID kopieren →",
     "price.m.19": "50 Server-Aussprachen",
     "price.m.20": "Tägliche Gesprächs-Streaks",
-    "claim.lost": "Quittung weg? Ko-fi hat sie dir beim Bezahlen per E-Mail geschickt — such diese E-Mail und öffne deine Bestellung von dort.",
+    "claim.lost": "Quittung weg? Ko-fi hat sie dir beim Bezahlen per E-Mail geschickt — such diese E-Mail und öffne deine Bestellung von dort",
     "claim.lostHelp": "Nicht zu finden? Hilfe holen →",
     "claim.help.title": "Lass uns deinen Pass aktivieren",
-    "claim.help.step1": "Klick in dieser Ko-fi-E-Mail auf „Go to your order“. Kopiere die Adresse der Seite, die sich öffnet, und füge sie oben ein — damit ist dein Pass sofort aktiv.",
-    "claim.help.step2": "Klappt nicht? Sag uns die E-Mail, die du bei Ko-fi benutzt hast (sie steht auf deiner Quittung), und wir aktivieren deinen Pass von Hand.",
+    "claim.help.step1": "Klick in dieser Ko-fi-E-Mail auf „Go to your order“. Kopiere die Adresse der Seite, die sich öffnet, und füge sie oben ein — damit ist dein Pass sofort aktiv",
+    "claim.help.step2": "Klappt nicht? Sag uns die E-Mail, die du bei Ko-fi benutzt hast (sie steht auf deiner Quittung), und wir aktivieren deinen Pass von Hand",
     "claim.help.emailPlaceholder": "E-Mail, die du bei Ko-fi benutzt hast",
     "claim.help.send": "Um Aktivierung bitten",
-    "claim.help.refPasted": "Das ist die Ref von deiner Quittung — sie aktiviert keinen Pass, und wir können sie nicht suchen. Sag uns lieber die E-Mail, die du bei Ko-fi benutzt hast.",
-    "claim.help.notEmail": "Das sieht nicht nach einer E-Mail aus. Kopier die, die du bei Ko-fi benutzt hast — sie steht auf deiner Quittung.",
-    "claim.help.sent": "Angekommen! Wir aktivieren deinen Pass in Kürze von Hand — er erscheint dann auf dieser Seite.",
-    "claim.help.sendError": "Senden hat nicht geklappt. Kopier die Nachricht unten und schick sie uns auf dem Support-Server.",
+    "claim.help.refPasted": "Das ist die Ref von deiner Quittung — sie aktiviert keinen Pass, und wir können sie nicht suchen. Sag uns lieber die E-Mail, die du bei Ko-fi benutzt hast",
+    "claim.help.notEmail": "Das sieht nicht nach einer E-Mail aus. Kopier die, die du bei Ko-fi benutzt hast — sie steht auf deiner Quittung",
+    "claim.help.sent": "Angekommen! Wir aktivieren deinen Pass in Kürze von Hand — er erscheint dann auf dieser Seite",
+    "claim.help.sendError": "Senden hat nicht geklappt. Kopier die Nachricht unten und schick sie uns auf dem Support-Server",
     "claim.help.stillStuck": "Klappt immer noch nicht? Frag uns auf dem Support-Server →",
     "claim.help.close": "Schließen",
-    "claim.consent": "Ich verlange die sofortige Aktivierung der kostenpflichtigen Funktionen und erkenne an, dass ich mit Beginn der Leistung jedes anwendbare Widerrufsrecht verliere; ich akzeptiere die {terms}.",
+    "claim.consent": "Ich verlange die sofortige Aktivierung der kostenpflichtigen Funktionen und erkenne an, dass ich mit Beginn der Leistung jedes anwendbare Widerrufsrecht verliere; ich akzeptiere die {terms}",
     "claim.consentTerms": "Nutzungsbedingungen",
-    "claim.consentRequired": "Bitte kreuze das Kästchen oben an, um jetzt zu aktivieren.",
-    "claim.instantHint": "Nutze die Sofortaktivierung, wenn dein Ko-fi-Konto dieselbe E-Mail wie dieses Discord-Konto verwendet.",
+    "claim.consentRequired": "Bitte kreuze das Kästchen oben an, um jetzt zu aktivieren",
+    "claim.instantHint": "Nutze die Sofortaktivierung, wenn dein Ko-fi-Konto dieselbe E-Mail wie dieses Discord-Konto verwendet",
     "claim.instantBtn": "Sofortaktivierung",
     "claim.instantWorking": "Dein Kauf wird gesucht…",
-    "claim.giftNote": "Als Geschenk gekauft? Sende der Person den Belegcode — klicke nicht auf Sofortaktivierung.",
+    "claim.giftNote": "Als Geschenk gekauft? Sende der Person den Belegcode — klicke nicht auf Sofortaktivierung",
     "claim.orReceipt": "oder Belegcode einfügen",
-    "claim.activationOk": "Fertig! Diese Käufe sind jetzt auf diesem Konto aktiv.",
-    "claim.activationNotFound": "Kein offener Kauf passt zur verifizierten E-Mail deines Discord-Kontos. Nutze unten den Belegcode.",
+    "claim.activationOk": "Fertig! Diese Käufe sind jetzt auf diesem Konto aktiv",
+    "claim.activationNotFound": "Kein offener Kauf passt zur verifizierten E-Mail deines Discord-Kontos. Nutze unten den Belegcode",
     "claim.downloadConfirmation": "Bestätigung herunterladen",
-    "claim.emailMissing": "Dein Discord-Konto stellt keine E-Mail-Adresse bereit.",
-    "claim.emailUnverified": "Bestätige die E-Mail deines Discord-Kontos vor der Sofortaktivierung.",
-    "claim.serviceUnavailable": "Die Sofortaktivierung ist vorübergehend nicht verfügbar. Versuche es erneut.",
-    "claim.loginAgain": "Melde dich erneut mit Discord an, um fortzufahren.",
-    "claim.resumeExpired": "Die Aktivierungsanfrage ist abgelaufen oder die Bedingungen wurden geändert. Prüfe das Kästchen und versuche es erneut.",
+    "claim.emailMissing": "Dein Discord-Konto stellt keine E-Mail-Adresse bereit",
+    "claim.emailUnverified": "Bestätige die E-Mail deines Discord-Kontos vor der Sofortaktivierung",
+    "claim.serviceUnavailable": "Die Sofortaktivierung ist vorübergehend nicht verfügbar. Versuche es erneut",
+    "claim.loginAgain": "Melde dich erneut mit Discord an, um fortzufahren",
+    "claim.resumeExpired": "Die Aktivierungsanfrage ist abgelaufen oder die Bedingungen wurden geändert. Prüfe das Kästchen und versuche es erneut",
     "claim.days": "Tage",
     "claim.seats": "Plätze",
     "dashboard.documentTitle": "Server-Dashboard — Vozen",
     "dashboard.eyebrow": "Dashboard",
     "dashboard.title": "Servereinstellungen",
-    "dashboard.subtitle": "Konfiguriere Vozen auf deinen Servern — ganz ohne Slash-Befehle.",
+    "dashboard.subtitle": "Konfiguriere Vozen auf deinen Servern — ganz ohne Slash-Befehle",
     "dashboard.loginTitle": "Melde dich an, um deine Server zu verwalten",
-    "dashboard.loginSub": "Du wirst gebeten, die Liste der von dir verwalteten Server zu teilen. Wir berühren nur Server, auf denen du Admin bist und Vozen vorhanden ist.",
+    "dashboard.loginSub": "Du wirst gebeten, die Liste der von dir verwalteten Server zu teilen. Wir berühren nur Server, auf denen du Admin bist und Vozen vorhanden ist",
     "dashboard.loginBtn": "Mit Discord anmelden",
     "dashboard.loading": "Lädt…",
     "dashboard.pick": "Wähle einen Server",
-    "dashboard.pickHint": "Server, auf denen du Admin bist und Vozen hinzugefügt ist.",
+    "dashboard.pickHint": "Server, auf denen du Admin bist und Vozen hinzugefügt ist",
     "dashboard.none": "Keine Server zu verwalten",
-    "dashboard.noneHint": "Du brauchst die Berechtigung „Server verwalten“ auf einem Server mit Vozen. Füge Vozen hinzu und lade neu.",
-    "dashboard.expired": "Deine Sitzung ist abgelaufen — bitte melde dich erneut an.",
-    "dashboard.forbidden": "Du kannst diesen Server nicht verwalten.",
-    "dashboard.error": "Etwas ist schiefgelaufen. Versuch es gleich noch mal.",
+    "dashboard.noneHint": "Du brauchst die Berechtigung „Server verwalten“ auf einem Server mit Vozen. Füge Vozen hinzu und lade neu",
+    "dashboard.expired": "Deine Sitzung ist abgelaufen — bitte melde dich erneut an",
+    "dashboard.forbidden": "Du kannst diesen Server nicht verwalten",
+    "dashboard.error": "Etwas ist schiefgelaufen. Versuch es gleich noch mal",
     "dashboard.save": "Änderungen speichern",
     "dashboard.save1": "1 Änderung speichern",
     "dashboard.saveN": "{n} Änderungen speichern",
     "dashboard.saving": "Speichern…",
     "dashboard.saved": "Gespeichert ✓",
-    "dashboard.saveFail": "Speichern fehlgeschlagen — versuch es noch mal.",
+    "dashboard.saveFail": "Speichern fehlgeschlagen — versuch es noch mal",
     "dashboard.back": "← Anderen Server wählen",
     "dashboard.sec_reading": "Vorlesen",
     "dashboard.sec_voice": "Stimme",
     "dashboard.sec_community": "Community",
     "dashboard.sec_limits": "Limits",
     "dashboard.f_autoread": "Festgelegten Kanal vorlesen",
-    "dashboard.d_autoread": "Liest Nachrichten aus dem festgelegten Kanal laut vor.",
+    "dashboard.d_autoread": "Liest Nachrichten aus dem festgelegten Kanal laut vor",
     "dashboard.f_readBots": "Nachrichten anderer Bots vorlesen",
-    "dashboard.d_readBots": "Liest auch Nachrichten anderer Bots vor.",
+    "dashboard.d_readBots": "Liest auch Nachrichten anderer Bots vor",
     "dashboard.f_textInVoice": "Text-Chat des Sprachkanals vorlesen",
-    "dashboard.d_textInVoice": "Liest den in den Sprachkanal integrierten Text-Chat vor.",
+    "dashboard.d_textInVoice": "Liest den in den Sprachkanal integrierten Text-Chat vor",
     "dashboard.f_antispam": "Anti-Spam-Filter",
-    "dashboard.d_antispam": "Überspringt Spam- oder wiederholte Nachrichten.",
+    "dashboard.d_antispam": "Überspringt Spam- oder wiederholte Nachrichten",
     "dashboard.f_xsaid": "Ansagen, wer geschrieben hat",
-    "dashboard.d_xsaid": "Stellt jeder Nachricht „{name} sagte …“ voran.",
+    "dashboard.d_xsaid": "Stellt jeder Nachricht „{name} sagte …“ voran",
     "dashboard.f_autojoin": "Automatisch dem Sprachkanal beitreten",
-    "dashboard.d_autojoin": "Vozen tritt dem Sprachkanal von selbst bei.",
+    "dashboard.d_autojoin": "Vozen tritt dem Sprachkanal von selbst bei",
     "dashboard.f_greetOnJoin": "Beitretende begrüßen",
-    "dashboard.d_greetOnJoin": "Begrüßt, wenn jemand dem Call beitritt.",
+    "dashboard.d_greetOnJoin": "Begrüßt, wenn jemand dem Call beitritt",
     "dashboard.f_streakAnnounce": "Tägliche 🔥-Serien-Hinweise",
-    "dashboard.d_streakAnnounce": "Kündigt tägliche Aktivitätsserien an.",
+    "dashboard.d_streakAnnounce": "Kündigt tägliche Aktivitätsserien an",
     "dashboard.f_soundboard": "Soundboard (/sound)",
-    "dashboard.d_soundboard": "Lässt Mitglieder mit /sound Soundeffekte abspielen.",
+    "dashboard.d_soundboard": "Lässt Mitglieder mit /sound Soundeffekte abspielen",
     "dashboard.f_maxChars": "Max. Zeichen pro Nachricht",
-    "dashboard.d_maxChars": "Längere Nachrichten werden abgeschnitten.",
+    "dashboard.d_maxChars": "Längere Nachrichten werden abgeschnitten",
     "dashboard.f_ratePerMin": "Nachrichten pro Minute (pro Person)",
-    "dashboard.d_ratePerMin": "Begrenzt, wie schnell eine Person vorgelesen wird.",
+    "dashboard.d_ratePerMin": "Begrenzt, wie schnell eine Person vorgelesen wird",
     "dashboard.f_locale": "Serversprache",
-    "dashboard.d_locale": "Sprache, die Vozen für diesen Server verwendet.",
+    "dashboard.d_locale": "Sprache, die Vozen für diesen Server verwendet",
     "dashboard.f_ttsChannelId": "Kanal automatisch vorlesen",
-    "dashboard.d_ttsChannelId": "Wähle einen Textkanal, in dem Vozen lesen und antworten kann.",
+    "dashboard.d_ttsChannelId": "Wähle einen Textkanal, in dem Vozen lesen und antworten kann",
     "dashboard.f_defaultVoice": "Standardstimme",
-    "dashboard.d_defaultVoice": "Stimme für Mitglieder ohne eigene Auswahl.",
+    "dashboard.d_defaultVoice": "Stimme für Mitglieder ohne eigene Auswahl",
     "dashboard.channelNone": "Kein Kanal",
     "dashboard.voiceGlobal": "Globale Vorgabe verwenden",
     "dashboard.unavailableChannel": "{name} (Kanal nicht verfügbar)",
@@ -268,18 +268,18 @@
     "account.documentTitle": "Dein Konto — Vozen",
     "account.back": "Zurück zu Vozen",
     "account.pageTitle": "Dein Vozen-Konto",
-    "account.pageSubtitle": "Sieh nach, was aktiv ist, und wähle deinen nächsten Schritt.",
+    "account.pageSubtitle": "Sieh nach, was aktiv ist, und wähle deinen nächsten Schritt",
     "account.startHere": "Hier starten",
     "account.nextTitle": "Was möchtest du tun?",
-    "account.nextSubtitle": "Wähle eine Aufgabe. Zu den anderen kannst du jederzeit zurückkehren.",
+    "account.nextSubtitle": "Wähle eine Aufgabe. Zu den anderen kannst du jederzeit zurückkehren",
     "account.tasksLabel": "Kontoaktionen",
     "account.manageServer": "Server verwalten",
-    "account.manageServerDescription": "Stimmen, Kanäle und Bot-Einstellungen ändern.",
+    "account.manageServerDescription": "Stimmen, Kanäle und Bot-Einstellungen ändern",
     "account.activatePurchase": "Kauf aktivieren",
-    "account.activatePurchaseDescription": "Auf Ko-fi gekauftes Plus oder Premium verbinden.",
+    "account.activatePurchaseDescription": "Auf Ko-fi gekauftes Plus oder Premium verbinden",
     "account.comparePlans": "Unsicher, welcher Plan passt? Pläne vergleichen",
-    "account.signInTrustLead": "Discord übernimmt deine Anmeldung.",
-    "account.signInTrustBody": "Vozen sieht dein Discord-Passwort niemals.",
+    "account.signInTrustLead": "Discord übernimmt deine Anmeldung",
+    "account.signInTrustBody": "Vozen sieht dein Discord-Passwort niemals",
     "account.helpLabel": "Kontohilfe",
     "account.signedIn": "Mit Discord angemeldet",
     "account.yourAccount": "Dein Konto",
@@ -290,7 +290,7 @@
     "account.copied": "Kopiert!",
     "account.benefits": "Deine Vorteile",
     "account.activeTitle": "Was aktiv ist",
-    "account.benefitsDescription": "Plus folgt deinem Discord-Konto. Premium wird auf ausgewählten Servern genutzt.",
+    "account.benefitsDescription": "Plus folgt deinem Discord-Konto. Premium wird auf ausgewählten Servern genutzt",
     "account.active": "Aktiv",
     "account.notActive": "Nicht aktiv",
     "account.membershipStatus": "Mitgliedschaftsstatus",
@@ -301,95 +301,209 @@
     "account.defaultUser": "Discord-Nutzer",
     "account.discordAvatar": "Avatar von {name}",
     "dashboard.retry": "Erneut versuchen",
-    "dashboard.secureTokenError": "Dein Browser kann kein sicheres Anmelde-Token erzeugen. Bitte aktualisiere ihn.",
+    "dashboard.secureTokenError": "Dein Browser kann kein sicheres Anmelde-Token erzeugen. Bitte aktualisiere ihn",
     "price.m.21": "Neuronale Kokoro-Engine",
     "price.m.22": "Google-HD-Stimmen",
     "price.m.23": "Live-Sprachtranskription"
   },
   "commands": {
     "general": [
-      ["/help", "Vozens Befehlsliste anzeigen"],
-      ["/join", "Deinem Sprachkanal beitreten"],
-      ["/leave", "Den Sprachkanal verlassen"],
-      ["/tts", "Einen Text laut vorlesen"],
-      ["/tts-file", "Create a private audio file without joining a call"],
-      ["/translate text", "Translate text privately, including as a User App"],
-      ["/skip", "Das aktuelle Audio überspringen"],
-      ["/shut-up", "Vozen sofort verstummen lassen (leert die Warteschlange)"],
-      ["/setup", "Geführtes Ein-Schritt-Setup"],
-      ["/invite", "Den Einladungslink holen"],
-      ["/vote", "Für Vozen auf top.gg abstimmen"],
-      ["/uptime", "Wie lange Vozen schon online ist"],
-      ["/premium", "Premium-Status deines Servers & von dir"]
+      [
+        "/help",
+        "Vozens Befehlsliste anzeigen"
+      ],
+      [
+        "/join",
+        "Deinem Sprachkanal beitreten"
+      ],
+      [
+        "/leave",
+        "Den Sprachkanal verlassen"
+      ],
+      [
+        "/tts",
+        "Einen Text laut vorlesen"
+      ],
+      [
+        "/tts-file",
+        "Create a private audio file without joining a call"
+      ],
+      [
+        "/translate text",
+        "Translate text privately, including as a User App"
+      ],
+      [
+        "/skip",
+        "Das aktuelle Audio überspringen"
+      ],
+      [
+        "/shut-up",
+        "Vozen sofort verstummen lassen (leert die Warteschlange)"
+      ],
+      [
+        "/setup",
+        "Geführtes Ein-Schritt-Setup"
+      ],
+      [
+        "/invite",
+        "Den Einladungslink holen"
+      ],
+      [
+        "/vote",
+        "Für Vozen auf top.gg abstimmen"
+      ],
+      [
+        "/uptime",
+        "Wie lange Vozen schon online ist"
+      ],
+      [
+        "/premium",
+        "Premium-Status deines Servers & von dir"
+      ]
     ],
     "voice": [
-      ["/voice set", "Stimme, Sprache & Engine wählen"],
-      ["/voice list", "Alle Stimmen durchstöbern"],
-      ["/voice favorites", "Open your saved favourite voices"],
-      ["/voice recent", "Open your recently used voices"],
-      ["/voice preview", "Eine Stimmenprobe anhören"],
-      ["/voice effect", "Roboter, Echo, Dämon … Stimmeneffekte"],
-      ["/voice nickname", "Wie Vozen dich laut anspricht"],
-      ["/voice opt-out", "Nicht mehr automatisch vorgelesen werden"],
-      ["/pronunciation", "Bring Vozen bei, ein Wort auszusprechen (nur deins)"]
+      [
+        "/voice set",
+        "Stimme, Sprache & Engine wählen"
+      ],
+      [
+        "/voice list",
+        "Alle Stimmen durchstöbern"
+      ],
+      [
+        "/voice favorites",
+        "Open your saved favourite voices"
+      ],
+      [
+        "/voice recent",
+        "Open your recently used voices"
+      ],
+      [
+        "/voice preview",
+        "Eine Stimmenprobe anhören"
+      ],
+      [
+        "/voice effect",
+        "Roboter, Echo, Dämon … Stimmeneffekte"
+      ],
+      [
+        "/voice nickname",
+        "Wie Vozen dich laut anspricht"
+      ],
+      [
+        "/voice opt-out",
+        "Nicht mehr automatisch vorgelesen werden"
+      ],
+      [
+        "/pronunciation",
+        "Bring Vozen bei, ein Wort auszusprechen (nur deins)"
+      ]
     ],
     "fun": [
-      ["/game play", "Eines von 16 Minispielen starten"],
-      ["/game leaderboard", "Top-Spieler auf dem Server"],
-      ["/game stats", "Deine Punkte, Siege & Rang"],
-      ["/joke", "Ein kurzer Witz in jeder Sprache"],
-      ["/laugh", "Vozen lacht in deiner Stimme"],
-      ["/8-ball", "Frag die Magic 8-Ball, laut"],
-      ["/fact · /fortune · /wyr", "Fun Facts, Wahrsagungen & Dilemmata"],
-      ["/birthday set", "Vozen singt an deinem Geburtstag"],
-      ["/top-speakers", "Wer am meisten redet + Serien"],
-      ["/randomizer", "Vozen wählt zufällig eine Option und sagt sie an"],
+      [
+        "/game play",
+        "Eines von 16 Minispielen starten"
+      ],
+      [
+        "/game leaderboard",
+        "Top-Spieler auf dem Server"
+      ],
+      [
+        "/game stats",
+        "Deine Punkte, Siege & Rang"
+      ],
+      [
+        "/joke",
+        "Ein kurzer Witz in jeder Sprache"
+      ],
+      [
+        "/laugh",
+        "Vozen lacht in deiner Stimme"
+      ],
+      [
+        "/8-ball",
+        "Frag die Magic 8-Ball, laut"
+      ],
+      [
+        "/fact · /fortune · /wyr",
+        "Fun Facts, Wahrsagungen & Dilemmata"
+      ],
+      [
+        "/birthday set",
+        "Vozen singt an deinem Geburtstag"
+      ],
+      [
+        "/top-speakers",
+        "Wer am meisten redet + Serien"
+      ],
+      [
+        "/randomizer",
+        "Vozen wählt zufällig eine Option und sagt sie an"
+      ],
       [
         "/cast",
         "Weise allen in deinem Sprachkanal eine zufällige thematische Rolle zu und höre die Ergebnisse"
       ]
     ],
     "admin": [
-      ["/config greet", "Begrüße Leute, die dem Call beitreten"],
-      ["/config language", "Die Oberflächensprache festlegen"],
-      ["/config default-voice", "Die Standardstimme des Servers festlegen"],
-      ["/config auto-read", "Auto-Vorlesen ein-/ausschalten"],
-      ["/config block-word", "Die Sperrliste verwalten"],
-      ["/server-pronunciation", "Aussprachen für den ganzen Server (Admin, 3 · 50 mit Premium)"]
+      [
+        "/config greet",
+        "Begrüße Leute, die dem Call beitreten"
+      ],
+      [
+        "/config language",
+        "Die Oberflächensprache festlegen"
+      ],
+      [
+        "/config default-voice",
+        "Die Standardstimme des Servers festlegen"
+      ],
+      [
+        "/config auto-read",
+        "Auto-Vorlesen ein-/ausschalten"
+      ],
+      [
+        "/config block-word",
+        "Die Sperrliste verwalten"
+      ],
+      [
+        "/server-pronunciation",
+        "Aussprachen für den ganzen Server (Admin, 3 · 50 mit Premium)"
+      ]
     ]
   },
   "faq": [
     [
       "Ist Vozen wirklich kostenlos?",
-      "Ja — der Kern bleibt kostenlos: 38 Piper-Stimmen in 35 Sprachen, Auto-Vorlesen, Begrüßungen, die meisten Spiele und alle Admin-Kontrollen. Kokoro und Google HD sind Premium-Engines; Plus schaltet sie persönlich frei, Premium für den Server."
+      "Ja — der Kern bleibt kostenlos: 38 Piper-Stimmen in 35 Sprachen, Auto-Vorlesen, Begrüßungen, die meisten Spiele und alle Admin-Kontrollen. Kokoro und Google HD sind Premium-Engines; Plus schaltet sie persönlich frei, Premium für den Server"
     ],
     [
       "Was ist in Premium enthalten?",
-      "Kokoro und Google HD, alle 8 Stimmeffekte, 24/7 im Sprachkanal, 50 persönliche Aussprachen, /rizz und die Premium-Spiele. Server-Premium enthält außerdem Live-Sprachtranskription. 6,99 €/Monat decken 2 Server ab, 13,99 €/Monat 5; Vozen Plus (3,99 €/Monat) bietet die persönlichen Vorteile auf jedem Server."
+      "Kokoro und Google HD, alle 8 Stimmeffekte, 24/7 im Sprachkanal, 50 persönliche Aussprachen, /rizz und die Premium-Spiele. Server-Premium enthält außerdem Live-Sprachtranskription. 6,99 €/Monat decken 2 Server ab, 13,99 €/Monat 5; Vozen Plus (3,99 €/Monat) bietet die persönlichen Vorteile auf jedem Server"
     ],
     [
       "Wie füge ich Vozen zu meinem Server hinzu?",
-      "Klick auf \"Zu Discord hinzufügen\", wähle deinen Server (du brauchst „Server verwalten“) und führe /setup aus. Das war's."
+      "Klick auf \"Zu Discord hinzufügen\", wähle deinen Server (du brauchst „Server verwalten“) und führe /setup aus. Das war's"
     ],
     [
       "Welche Sprachen werden unterstützt?",
-      "35 Sprachen mit 38 neuronalen Stimmen — Portugiesisch, Englisch, Spanisch, Französisch, Deutsch, Japanisch, Arabisch, Russisch und viele mehr, jede mit einer nativen Stimme."
+      "35 Sprachen mit 38 neuronalen Stimmen — Portugiesisch, Englisch, Spanisch, Französisch, Deutsch, Japanisch, Arabisch, Russisch und viele mehr, jede mit einer nativen Stimme"
     ],
     [
       "Muss ich irgendetwas konfigurieren?",
-      "Nein. /setup erledigt es in einem Schritt. Danach läuft alles mit sinnvollen Voreinstellungen — später kannst du mit /config feinjustieren."
+      "Nein. /setup erledigt es in einem Schritt. Danach läuft alles mit sinnvollen Voreinstellungen — später kannst du mit /config feinjustieren"
     ],
     [
       "Kann jeder eine andere Stimme haben?",
-      "Ja. Jedes Mitglied legt mit /voice set Stimme und Sprache fest. Diese Stimme ist der Standard; die optionale Erkennung pro Nachricht wird mit /voice detection on aktiviert."
+      "Ja. Jedes Mitglied legt mit /voice set Stimme und Sprache fest. Diese Stimme ist der Standard; die optionale Erkennung pro Nachricht wird mit /voice detection on aktiviert"
     ],
     [
       "Piper, Kokoro oder Google HD — welche Stimmen-Engine?",
-      "Piper ist die kostenlose lokale Engine. Kokoro und Google HD benötigen Vozen Plus für dich oder Vozen Premium auf dem Server. Wechsel mit /voice set; nach Ablauf geht es automatisch zur kostenlosen Engine zurück."
+      "Piper ist die kostenlose lokale Engine. Kokoro und Google HD benötigen Vozen Plus für dich oder Vozen Premium auf dem Server. Wechsel mit /voice set; nach Ablauf geht es automatisch zur kostenlosen Engine zurück"
     ],
     [
       "Wie schalte ich Funktionen aus?",
-      "Alles ist über /config schaltbar — die Begrüßung, das Auto-Vorlesen, die Wer-hat-gesagt-Ansagen, der Anti-Spam-Filter und mehr. Es gibt außerdem einen kompletten Kill-Switch."
+      "Alles ist über /config schaltbar — die Begrüßung, das Auto-Vorlesen, die Wer-hat-gesagt-Ansagen, der Anti-Spam-Filter und mehr. Es gibt außerdem einen kompletten Kill-Switch"
     ]
   ]
 }

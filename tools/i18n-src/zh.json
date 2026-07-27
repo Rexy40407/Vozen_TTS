@@ -144,7 +144,7 @@
     "price.max.per": "/ 月 · 5 个服务器",
     "price.max.perYear": "/ 年 · 5 个服务器",
     "price.max.deal": "🎁 五個伺服器。一份訂閱。",
-    "price.max.note": "€133.99/年（省约 20%）· 在 Ko-fi 购买",
+    "price.max.note": "€143.99/年（省约 20%）· 在 Ko-fi 购买",
     "price.pro.seats2": "2 個伺服器",
     "price.pro.seats5": "5 個伺服器",
     "price.m.1": "38 种 Piper 语音",
@@ -308,51 +308,168 @@
   },
   "commands": {
     "general": [
-      ["/help", "顯示 Vozen 的指令清單"],
-      ["/join", "加入你的語音頻道"],
-      ["/leave", "離開語音頻道"],
-      ["/tts", "大聲朗讀一段文字"],
-      ["/tts-file", "Create a private audio file without joining a call"],
-      ["/translate text", "Translate text privately, including as a User App"],
-      ["/skip", "略過目前的音訊"],
-      ["/shut-up", "立刻讓 Vozen 安靜（清空佇列）"],
-      ["/setup", "一步到位的引導式設定"],
-      ["/invite", "取得邀請連結"],
-      ["/vote", "在 top.gg 上為 Vozen 投票"],
-      ["/uptime", "Vozen 已上線多久"],
-      ["/premium", "你的伺服器與你的 Premium 狀態"]
+      [
+        "/help",
+        "顯示 Vozen 的指令清單"
+      ],
+      [
+        "/join",
+        "加入你的語音頻道"
+      ],
+      [
+        "/leave",
+        "離開語音頻道"
+      ],
+      [
+        "/tts",
+        "大聲朗讀一段文字"
+      ],
+      [
+        "/tts-file",
+        "Create a private audio file without joining a call"
+      ],
+      [
+        "/translate text",
+        "Translate text privately, including as a User App"
+      ],
+      [
+        "/skip",
+        "略過目前的音訊"
+      ],
+      [
+        "/shut-up",
+        "立刻讓 Vozen 安靜（清空佇列）"
+      ],
+      [
+        "/setup",
+        "一步到位的引導式設定"
+      ],
+      [
+        "/invite",
+        "取得邀請連結"
+      ],
+      [
+        "/vote",
+        "在 top.gg 上為 Vozen 投票"
+      ],
+      [
+        "/uptime",
+        "Vozen 已上線多久"
+      ],
+      [
+        "/premium",
+        "你的伺服器與你的 Premium 狀態"
+      ]
     ],
     "voice": [
-      ["/voice set", "選擇你的語音、語言與引擎"],
-      ["/voice list", "瀏覽所有語音"],
-      ["/voice favorites", "Open your saved favourite voices"],
-      ["/voice recent", "Open your recently used voices"],
-      ["/voice preview", "試聽語音範例"],
-      ["/voice effect", "機器人、回音、惡魔……語音特效"],
-      ["/voice nickname", "Vozen 大聲稱呼你的方式"],
-      ["/voice opt-out", "停止被自動朗讀"],
-      ["/pronunciation", "教 Vozen 唸一個字（只影響你）"]
+      [
+        "/voice set",
+        "選擇你的語音、語言與引擎"
+      ],
+      [
+        "/voice list",
+        "瀏覽所有語音"
+      ],
+      [
+        "/voice favorites",
+        "Open your saved favourite voices"
+      ],
+      [
+        "/voice recent",
+        "Open your recently used voices"
+      ],
+      [
+        "/voice preview",
+        "試聽語音範例"
+      ],
+      [
+        "/voice effect",
+        "機器人、回音、惡魔……語音特效"
+      ],
+      [
+        "/voice nickname",
+        "Vozen 大聲稱呼你的方式"
+      ],
+      [
+        "/voice opt-out",
+        "停止被自動朗讀"
+      ],
+      [
+        "/pronunciation",
+        "教 Vozen 唸一個字（只影響你）"
+      ]
     ],
     "fun": [
-      ["/game play", "開始 16 款小遊戲之一"],
-      ["/game leaderboard", "伺服器上的頂尖玩家"],
-      ["/game stats", "你的分數、勝場與排名"],
-      ["/joke", "任何語言的一則短笑話"],
-      ["/laugh", "Vozen 用你的聲音大笑"],
-      ["/8-ball", "大聲詢問神奇八號球"],
-      ["/fact · /fortune · /wyr", "趣味知識、運勢與兩難抉擇"],
-      ["/birthday set", "Vozen 在你生日時獻唱"],
-      ["/top-speakers", "誰講話最多＋連續紀錄"],
-      ["/randomizer", "Vozen 隨機選一個選項並唸出來"],
-      ["/cast", "為語音通話中的每個人隨機分配主題角色，然後聽取結果"]
+      [
+        "/game play",
+        "開始 16 款小遊戲之一"
+      ],
+      [
+        "/game leaderboard",
+        "伺服器上的頂尖玩家"
+      ],
+      [
+        "/game stats",
+        "你的分數、勝場與排名"
+      ],
+      [
+        "/joke",
+        "任何語言的一則短笑話"
+      ],
+      [
+        "/laugh",
+        "Vozen 用你的聲音大笑"
+      ],
+      [
+        "/8-ball",
+        "大聲詢問神奇八號球"
+      ],
+      [
+        "/fact · /fortune · /wyr",
+        "趣味知識、運勢與兩難抉擇"
+      ],
+      [
+        "/birthday set",
+        "Vozen 在你生日時獻唱"
+      ],
+      [
+        "/top-speakers",
+        "誰講話最多＋連續紀錄"
+      ],
+      [
+        "/randomizer",
+        "Vozen 隨機選一個選項並唸出來"
+      ],
+      [
+        "/cast",
+        "為語音通話中的每個人隨機分配主題角色，然後聽取結果"
+      ]
     ],
     "admin": [
-      ["/config greet", "向加入通話的成員打招呼"],
-      ["/config language", "設定介面語言"],
-      ["/config default-voice", "設定伺服器的預設語音"],
-      ["/config auto-read", "開啟／關閉自動朗讀"],
-      ["/config block-word", "管理封鎖清單"],
-      ["/server-pronunciation", "全服务器发音（管理员，3 个 · Premium 50 个）"]
+      [
+        "/config greet",
+        "向加入通話的成員打招呼"
+      ],
+      [
+        "/config language",
+        "設定介面語言"
+      ],
+      [
+        "/config default-voice",
+        "設定伺服器的預設語音"
+      ],
+      [
+        "/config auto-read",
+        "開啟／關閉自動朗讀"
+      ],
+      [
+        "/config block-word",
+        "管理封鎖清單"
+      ],
+      [
+        "/server-pronunciation",
+        "全服务器发音（管理员，3 个 · Premium 50 个）"
+      ]
     ]
   },
   "faq": [
@@ -362,7 +479,7 @@
     ],
     [
       "Premium 包含哪些內容？",
-      "Kokoro 神经语音与 Google HD 引擎、全部 8 种语音特效、全天候驻留、50 条个人发音、/rizz 和 Premium 游戏。伺服器 Premium 也包含即時語音轉錄。每月 €6.99 覆盖 2 个服务器，€13.99 覆盖 5 个；Vozen Plus（每月 €3.99）可在任何服务器提供个人权益。"
+      "Kokoro 神经语音与 Google HD 引擎、全部 8 种语音特效、全天候驻留、50 条个人发音、/rizz 和 Premium 游戏。伺服器 Premium 也包含即時語音轉錄。每月 €6.99 覆盖 2 个服务器，€14.99 覆盖 5 个；Vozen Plus（每月 €3.99）可在任何服务器提供个人权益。"
     ],
     [
       "我要怎麼把 Vozen 加入我的伺服器？",

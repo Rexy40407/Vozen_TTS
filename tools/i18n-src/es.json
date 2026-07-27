@@ -5,12 +5,12 @@
     "claim.placeholder": "Pega el enlace de tu recibo de Ko-fi",
     "claim.btn": "Activar",
     "claim.working": "Activando…",
-    "claim.ok": "¡Listo! Tu compra ya está activa en esta cuenta.",
-    "claim.notfound": "No encontré ninguna compra con eso. Abre tu recibo de Ko-fi y pega su dirección web — el enlace entero.",
-    "claim.receiptRequired": "Pega el enlace de tu recibo de Ko-fi antes de activar.",
-    "claim.useReceiptCode": "Eso es un correo electrónico. Pega la dirección web de tu recibo de Ko-fi — el enlace entero vale.",
-    "claim.ratelimited": "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.",
-    "claim.error": "Algo salió mal. Inténtalo de nuevo en un momento.",
+    "claim.ok": "¡Listo! Tu compra ya está activa en esta cuenta",
+    "claim.notfound": "No encontré ninguna compra con eso. Abre tu recibo de Ko-fi y pega su dirección web — el enlace entero",
+    "claim.receiptRequired": "Pega el enlace de tu recibo de Ko-fi antes de activar",
+    "claim.useReceiptCode": "Eso es un correo electrónico. Pega la dirección web de tu recibo de Ko-fi — el enlace entero vale",
+    "claim.ratelimited": "Demasiados intentos. Espera unos minutos e inténtalo de nuevo",
+    "claim.error": "Algo salió mal. Inténtalo de nuevo en un momento",
     "nav.features": "Funciones",
     "nav.games": "Juegos",
     "nav.commands": "Comandos",
@@ -20,76 +20,76 @@
     "cta.add": "Añadir a Discord",
     "cta.support": "Únete al servidor de soporte",
     "hero.badge": "Núcleo gratis para siempre · Código abierto",
-    "hero.title1": "Escríbelo.",
-    "hero.title2": "Escúchalo.",
-    "hero.sub": "Vozen lee tu chat de Discord en voz alta con voces neuronales naturales — en 35 idiomas, con juegos, risas y un núcleo que es gratis para siempre.",
+    "hero.title1": "Escríbelo",
+    "hero.title2": "Escúchalo",
+    "hero.sub": "Vozen lee tu chat de Discord en voz alta con voces neuronales naturales — en 35 idiomas, con juegos, risas y un núcleo que es gratis para siempre",
     "hero.mini": "35 idiomas · 38 voces · 16 minijuegos · núcleo gratis",
     "hear.eyebrow": "Escúchalo",
-    "hear.title": "Dale al play. Esa es una voz real de Vozen.",
-    "hear.sub": "Prueba todos los motores. Piper es gratis; Kokoro se desbloquea con Vozen Plus o Premium.",
+    "hear.title": "Dale al play. Esa es una voz real de Vozen",
+    "hear.sub": "Prueba todos los motores. Piper es gratis; Kokoro se desbloquea con Vozen Plus o Premium",
     "stat.langs": "idiomas",
     "stat.voices": "voces neuronales",
     "stat.games": "minijuegos",
     "stat.free": "núcleo gratis para siempre",
     "feat.eyebrow": "Funciones",
     "feat.title": "Todo lo que tu servidor necesita",
-    "feat.sub": "Un solo bot. Todas las funciones de voz que soñabas para Discord — y el núcleo es gratis para siempre.",
+    "feat.sub": "Un solo bot. Todas las funciones de voz que soñabas para Discord — y el núcleo es gratis para siempre",
     "feat.new": "NEW",
     "feat.1.t": "Canal de lectura automática",
-    "feat.1.d": "Elige un canal y Vozen lee cada mensaje en voz alta. Configúralo una vez con /setup.",
+    "feat.1.d": "Elige un canal y Vozen lee cada mensaje en voz alta. Configúralo una vez con /setup",
     "feat.2.t": "Tu voz, tu idioma",
-    "feat.2.d": "Cada miembro elige su propia voz entre 35 idiomas — Google o un motor neuronal local.",
+    "feat.2.d": "Cada miembro elige su propia voz entre 35 idiomas — Google o un motor neuronal local",
     "feat.3.t": "Habla como una persona",
-    "feat.3.d": "Usa tu voz elegida de forma predeterminada. La detección opcional por mensaje se activa con /voice detection on; ! y MAYÚSCULAS añaden énfasis.",
+    "feat.3.d": "Usa tu voz elegida de forma predeterminada. La detección opcional por mensaje se activa con /voice detection on; ! y MAYÚSCULAS añaden énfasis",
     "feat.4.t": "16 minijuegos de voz",
-    "feat.4.d": "Adivina el idioma, concursos de deletreo, Wordle, duelos de reflejos — con una clasificación del servidor.",
+    "feat.4.d": "Adivina el idioma, concursos de deletreo, Wordle, duelos de reflejos — con una clasificación del servidor",
     "feat.5.t": "Personalidad incluida",
-    "feat.5.d": "Saluda a quien entra — sin repetirse —, felicita cumpleaños, cuenta chistes, responde a la bola 8 mágica y sigue a los que más hablan en tu servidor.",
+    "feat.5.d": "Saluda a quien entra — sin repetirse —, felicita cumpleaños, cuenta chistes, responde a la bola 8 mágica y sigue a los que más hablan en tu servidor",
     "feat.6.t": "Tranquilidad para admins",
-    "feat.6.d": "Listas de bloqueo, límites de uso, un filtro antispam que silencia los mensajes en avalancha, control por roles, opción de exclusión y un botón de apagado. Tú mandas.",
+    "feat.6.d": "Listas de bloqueo, límites de uso, un filtro antispam que silencia los mensajes en avalancha, control por roles, opción de exclusión y un botón de apagado. Tú mandas",
     "feat.7.t": "Efectos de voz",
-    "feat.7.d": "Robot, eco, grave, ardilla, radio, demonio… tus mensajes, transformados. Dos efectos gratis, los ocho con Premium.",
+    "feat.7.d": "Robot, eco, grave, ardilla, radio, demonio… tus mensajes, transformados. Dos efectos gratis, los ocho con Premium",
     "feat.8.t": "Premium justo",
-    "feat.8.d": "6,99 €/mes desbloquea Kokoro y los extras del servidor. El núcleo esencial con Piper sigue siendo gratis.",
+    "feat.8.d": "6,99 €/mes desbloquea Kokoro y los extras del servidor. El núcleo esencial con Piper sigue siendo gratis",
     "feat.9.t": "Código abierto",
-    "feat.9.d": "Todo el código de Vozen es público en GitHub. Audítalo, aprende de él o abre un PR — sin secretos, sin spyware.",
+    "feat.9.d": "Todo el código de Vozen es público en GitHub. Audítalo, aprende de él o abre un PR — sin secretos, sin spyware",
     "lang.eyebrow": "Idiomas",
-    "lang.title": "Un servidor, todos los idiomas.",
-    "lang.sub": "Vozen habla más de 35 idiomas. Cada uno elige su propia voz — portugués, inglés, japonés, árabe y más — con los nombres mostrados en su idioma.",
+    "lang.title": "Un servidor, todos los idiomas",
+    "lang.sub": "Vozen habla más de 35 idiomas. Cada uno elige su propia voz — portugués, inglés, japonés, árabe y más — con los nombres mostrados en su idioma",
     "lang.t1": "Más de 35 idiomas",
     "lang.t2": "Una voz nativa por idioma",
     "lang.t3": "Nombres de voces localizados para cada usuario",
     "games.eyebrow": "Minijuegos",
-    "games.title": "Juega en voz alta.",
-    "games.sub": "16 minijuegos pensados para la voz: una cadena de palabras por turnos en tu idioma (Vozen lee cada palabra en voz alta), adivina el idioma hablado, descifra habla ultrarrápida, concursos de deletreo, duelos de reflejos, además de Wordle, ahorcado, tres en raya y ajedrez en tableros gráficos reales. Cada servidor mantiene su clasificación.",
+    "games.title": "Juega en voz alta",
+    "games.sub": "16 minijuegos pensados para la voz: una cadena de palabras por turnos en tu idioma (Vozen lee cada palabra en voz alta), adivina el idioma hablado, descifra habla ultrarrápida, concursos de deletreo, duelos de reflejos, además de Wordle, ahorcado, tres en raya y ajedrez en tableros gráficos reales. Cada servidor mantiene su clasificación",
     "games.t1": "Juegos de voz y texto, gana quien responde primero",
     "games.t2": "Clasificación del servidor y estadísticas personales",
     "games.t3": "Vozen anuncia al ganador en voz alta",
     "setup.eyebrow": "Empieza ya",
     "setup.title": "Listo en 30 segundos",
     "setup.1.t": "Invita",
-    "setup.1.d": "Añade Vozen a tu servidor con un solo clic.",
+    "setup.1.d": "Añade Vozen a tu servidor con un solo clic",
     "setup.2.t": "/join",
-    "setup.2.d": "Vozen entra en tu canal de voz.",
+    "setup.2.d": "Vozen entra en tu canal de voz",
     "setup.3.t": "Escribe",
-    "setup.3.d": "Escribe un mensaje — y escúchalo en voz alta.",
+    "setup.3.d": "Escribe un mensaje — y escúchalo en voz alta",
     "cmd.eyebrow": "Comandos",
     "cmd.title": "Comandos de barra sencillos",
     "cmd.general": "General",
     "cmd.voice": "Voz",
     "cmd.fun": "Diversión",
     "cmd.admin": "Admin",
-    "cmd.sub": "Usa /cast para asignar un papel temático al azar a todos en tu llamada y escuchar el resultado.",
+    "cmd.sub": "Usa /cast para asignar un papel temático al azar a todos en tu llamada y escuchar el resultado",
     "price.eyebrow": "Precios",
-    "price.title": "Núcleo gratis. Premium justo.",
-    "price.sub": "El núcleo con Piper sigue siendo gratis. Premium desbloquea Kokoro, Google HD y los extras que usan más cómputo.",
-    "price.choose.title": "Elige quién recibe la mejora.",
-    "price.choose.sub": "Mantén lo esencial gratis, mejora tu cuenta o desbloquea Premium para todos en tu servidor.",
-    "price.free.pitch": "Todo lo esencial. Sin tarjeta ni prueba.",
-    "price.plus.pitch": "Tus ventajas de voz premium te acompañan en cualquier servidor.",
-    "price.pro.pitch": "Desbloquea toda la experiencia Vozen para tu comunidad.",
+    "price.title": "Núcleo gratis. Premium justo",
+    "price.sub": "El núcleo con Piper sigue siendo gratis. Premium desbloquea Kokoro, Google HD y los extras que usan más cómputo",
+    "price.choose.title": "Elige quién recibe la mejora",
+    "price.choose.sub": "Mantén lo esencial gratis, mejora tu cuenta o desbloquea Premium para todos en tu servidor",
+    "price.free.pitch": "Todo lo esencial. Sin tarjeta ni prueba",
+    "price.plus.pitch": "Tus ventajas de voz premium te acompañan en cualquier servidor",
+    "price.pro.pitch": "Desbloquea toda la experiencia Vozen para tu comunidad",
     "price.compare.title": "Compara cada detalle",
-    "price.compare.sub": "La comparación completa, sin sorpresas.",
+    "price.compare.sub": "La comparación completa, sin sorpresas",
     "price.checkout": "Los pagos están desactivados temporalmente",
     "price.recommended": "MEJOR PARA SERVIDORES",
     "price.free.name": "Free",
@@ -102,20 +102,20 @@
     "price.pro.badge": "PREMIUM",
     "price.pro.name": "Vozen Premium",
     "price.pro.per": "/ mes · 2 servidores",
-    "price.pro.deal": "🎁 Dos servidores. Una suscripción.",
+    "price.pro.deal": "🎁 Dos servidores. Una suscripción",
     "price.pro.note": "€66.99/año (ahorra ~20 %) · comprar en Ko-fi",
     "faq.eyebrow": "Preguntas frecuentes",
     "faq.title": "Preguntas, respondidas",
-    "finale.title": "Dale voz a tu servidor.",
+    "finale.title": "Dale voz a tu servidor",
     "finale.note": "Núcleo gratis para siempre · 35 idiomas · Configúralo en 30 segundos",
-    "foot.tag": "Escríbelo, escúchalo.",
+    "foot.tag": "Escríbelo, escúchalo",
     "foot.product": "Producto",
     "foot.community": "Comunidad",
     "foot.support": "Servidor de soporte",
     "foot.vote": "Vota en top.gg",
     "foot.privacy": "Privacidad",
     "foot.terms": "Términos",
-    "foot.legal": "No afiliado a Discord.",
+    "foot.legal": "No afiliado a Discord",
     "price.plus.perYear": "/ año · por usuario",
     "price.pro.perYear": "/ año · 2 servidores",
     "price.billMonthly": "Mensual",
@@ -125,25 +125,25 @@
     "panel.loading": "Comprobando tu cuenta…",
     "panel.logout": "Cerrar sesión",
     "account.logoutConfirmTitle": "¿Cerrar sesión en Vozen?",
-    "account.logoutConfirmBody": "Tendrás que volver a iniciar sesión con Discord para ver tu cuenta.",
+    "account.logoutConfirmBody": "Tendrás que volver a iniciar sesión con Discord para ver tu cuenta",
     "account.logoutCancel": "Seguir conectado",
     "account.logoutConfirmAction": "Cerrar sesión",
     "panel.retry": "Reintentar",
-    "panel.error": "No se pudo contactar con el servidor. Inténtalo de nuevo en un momento.",
+    "panel.error": "No se pudo contactar con el servidor. Inténtalo de nuevo en un momento",
     "panel.none": "Sin plan activo",
-    "panel.noneSub": "Inicia sesión y tu Plus o Premium aparecerá aquí.",
-    "panel.soon": "La cuenta y el estado Premium llegan pronto.",
+    "panel.noneSub": "Inicia sesión y tu Plus o Premium aparecerá aquí",
+    "panel.soon": "La cuenta y el estado Premium llegan pronto",
     "panel.activeUntil": "Activo hasta",
     "panel.expiredOn": "Caducó el",
     "panel.seatsUsed": "licencias en uso",
     "panel.servers": "Activo en:",
-    "panel.noServers": "Aún no activado en ningún servidor — usa /premium activate.",
+    "panel.noServers": "Aún no activado en ningún servidor — usa /premium activate",
     "nav.login": "Entrar",
     "price.max.badge": "MAX",
     "price.max.name": "Vozen Premium Max",
     "price.max.per": "/ mes · 5 servidores",
     "price.max.perYear": "/ año · 5 servidores",
-    "price.max.deal": "🎁 Cinco servidores. Una suscripción.",
+    "price.max.deal": "🎁 Cinco servidores. Una suscripción",
     "price.max.note": "133,99 €/año (ahorra ~20 %) · comprar en Ko-fi",
     "price.pro.seats2": "2 servidores",
     "price.pro.seats5": "5 servidores",
@@ -164,95 +164,95 @@
     "price.m.16": "En la llamada 24/7",
     "price.m.17": "Te acompaña a cualquier servidor",
     "price.m.18": "Funciona para todos en el servidor",
-    "price.idNote": "⚠️ Tras comprar en Ko-fi, activa tu plan en vozen.org/account — inicia sesión con Discord.",
+    "price.idNote": "⚠️ Tras comprar en Ko-fi, activa tu plan en vozen.org/account — inicia sesión con Discord",
     "price.idNoteLink": "Copiar mi ID →",
     "price.m.19": "50 pronunciaciones del servidor",
     "price.m.20": "Rachas diarias de charla",
-    "claim.lost": "¿Perdiste el recibo? Ko-fi te lo envió por correo al pagar — busca ese correo y abre tu pedido desde ahí.",
+    "claim.lost": "¿Perdiste el recibo? Ko-fi te lo envió por correo al pagar — busca ese correo y abre tu pedido desde ahí",
     "claim.lostHelp": "¿No lo encuentras? Pide ayuda →",
     "claim.help.title": "Vamos a activar tu pase",
-    "claim.help.step1": "En ese correo de Ko-fi, pulsa «Go to your order». Copia la dirección de la página que se abra y pégala en la caja de arriba — eso activa tu pase al momento.",
-    "claim.help.step2": "¿No funciona? Dinos el correo que usaste en Ko-fi (está en tu recibo) y activaremos tu pase a mano.",
+    "claim.help.step1": "En ese correo de Ko-fi, pulsa «Go to your order». Copia la dirección de la página que se abra y pégala en la caja de arriba — eso activa tu pase al momento",
+    "claim.help.step2": "¿No funciona? Dinos el correo que usaste en Ko-fi (está en tu recibo) y activaremos tu pase a mano",
     "claim.help.emailPlaceholder": "Correo que usaste en Ko-fi",
     "claim.help.send": "Pedir que lo activen",
-    "claim.help.refPasted": "Eso es el Ref de tu recibo — no activa un pase, y no podemos buscarlo. Dinos mejor el correo que usaste en Ko-fi.",
-    "claim.help.notEmail": "Esto no parece un correo. Copia el que usaste en Ko-fi — está en tu recibo.",
-    "claim.help.sent": "¡Recibido! Activaremos tu pase a mano en breve — aparecerá en esta página.",
-    "claim.help.sendError": "No pudimos enviarlo. Copia el mensaje de abajo y mándanoslo en el servidor de soporte.",
+    "claim.help.refPasted": "Eso es el Ref de tu recibo — no activa un pase, y no podemos buscarlo. Dinos mejor el correo que usaste en Ko-fi",
+    "claim.help.notEmail": "Esto no parece un correo. Copia el que usaste en Ko-fi — está en tu recibo",
+    "claim.help.sent": "¡Recibido! Activaremos tu pase a mano en breve — aparecerá en esta página",
+    "claim.help.sendError": "No pudimos enviarlo. Copia el mensaje de abajo y mándanoslo en el servidor de soporte",
     "claim.help.stillStuck": "¿Sigues sin poder? Escríbenos en el servidor de soporte →",
     "claim.help.close": "Cerrar",
-    "claim.consent": "Solicito la activación inmediata de las funciones de pago y reconozco que, una vez iniciada la prestación, pierdo cualquier derecho de desistimiento aplicable; acepto los {terms}.",
+    "claim.consent": "Solicito la activación inmediata de las funciones de pago y reconozco que, una vez iniciada la prestación, pierdo cualquier derecho de desistimiento aplicable; acepto los {terms}",
     "claim.consentTerms": "términos y condiciones",
-    "claim.consentRequired": "Marca la casilla de arriba para activar ahora.",
-    "claim.instantHint": "Usa la activación instantánea si tu cuenta de Ko-fi tiene el mismo correo que esta cuenta de Discord.",
+    "claim.consentRequired": "Marca la casilla de arriba para activar ahora",
+    "claim.instantHint": "Usa la activación instantánea si tu cuenta de Ko-fi tiene el mismo correo que esta cuenta de Discord",
     "claim.instantBtn": "Activación instantánea",
     "claim.instantWorking": "Buscando tu compra…",
-    "claim.giftNote": "¿Es un regalo? Envía el código del recibo a la persona — no pulses la activación instantánea.",
+    "claim.giftNote": "¿Es un regalo? Envía el código del recibo a la persona — no pulses la activación instantánea",
     "claim.orReceipt": "o pega el código del recibo",
-    "claim.activationOk": "¡Listo! Estas compras ya están activas en esta cuenta.",
-    "claim.activationNotFound": "Ninguna compra pendiente coincide con el correo verificado de tu Discord. Usa el código del recibo de abajo.",
+    "claim.activationOk": "¡Listo! Estas compras ya están activas en esta cuenta",
+    "claim.activationNotFound": "Ninguna compra pendiente coincide con el correo verificado de tu Discord. Usa el código del recibo de abajo",
     "claim.downloadConfirmation": "Descargar confirmación",
-    "claim.emailMissing": "Tu cuenta de Discord no proporciona una dirección de correo.",
-    "claim.emailUnverified": "Verifica el correo de tu cuenta de Discord antes de usar la activación instantánea.",
-    "claim.serviceUnavailable": "La activación instantánea no está disponible temporalmente. Inténtalo de nuevo.",
-    "claim.loginAgain": "Vuelve a iniciar sesión con Discord para continuar.",
-    "claim.resumeExpired": "La solicitud de activación caducó o cambiaron los términos. Revisa la casilla e inténtalo de nuevo.",
+    "claim.emailMissing": "Tu cuenta de Discord no proporciona una dirección de correo",
+    "claim.emailUnverified": "Verifica el correo de tu cuenta de Discord antes de usar la activación instantánea",
+    "claim.serviceUnavailable": "La activación instantánea no está disponible temporalmente. Inténtalo de nuevo",
+    "claim.loginAgain": "Vuelve a iniciar sesión con Discord para continuar",
+    "claim.resumeExpired": "La solicitud de activación caducó o cambiaron los términos. Revisa la casilla e inténtalo de nuevo",
     "claim.days": "días",
     "claim.seats": "plazas",
     "dashboard.documentTitle": "Panel del servidor — Vozen",
     "dashboard.eyebrow": "Panel",
     "dashboard.title": "Ajustes del servidor",
-    "dashboard.subtitle": "Configura Vozen en tus servidores — sin comandos slash.",
+    "dashboard.subtitle": "Configura Vozen en tus servidores — sin comandos slash",
     "dashboard.loginTitle": "Inicia sesión para gestionar tus servidores",
-    "dashboard.loginSub": "Te pediremos compartir la lista de servidores que gestionas. Solo tocamos servidores donde eres administrador y Vozen está presente.",
+    "dashboard.loginSub": "Te pediremos compartir la lista de servidores que gestionas. Solo tocamos servidores donde eres administrador y Vozen está presente",
     "dashboard.loginBtn": "Iniciar sesión con Discord",
     "dashboard.loading": "Cargando…",
     "dashboard.pick": "Elige un servidor",
-    "dashboard.pickHint": "Servidores donde eres administrador y Vozen está añadido.",
+    "dashboard.pickHint": "Servidores donde eres administrador y Vozen está añadido",
     "dashboard.none": "No hay servidores que gestionar",
-    "dashboard.noneHint": "Necesitas el permiso Gestionar servidor en un servidor con Vozen. Añade Vozen y recarga.",
-    "dashboard.expired": "Tu sesión ha caducado — inicia sesión de nuevo.",
-    "dashboard.forbidden": "No puedes gestionar ese servidor.",
-    "dashboard.error": "Algo salió mal. Inténtalo de nuevo en un momento.",
+    "dashboard.noneHint": "Necesitas el permiso Gestionar servidor en un servidor con Vozen. Añade Vozen y recarga",
+    "dashboard.expired": "Tu sesión ha caducado — inicia sesión de nuevo",
+    "dashboard.forbidden": "No puedes gestionar ese servidor",
+    "dashboard.error": "Algo salió mal. Inténtalo de nuevo en un momento",
     "dashboard.save": "Guardar cambios",
     "dashboard.save1": "Guardar 1 cambio",
     "dashboard.saveN": "Guardar {n} cambios",
     "dashboard.saving": "Guardando…",
     "dashboard.saved": "Guardado ✓",
-    "dashboard.saveFail": "No se pudo guardar — inténtalo de nuevo.",
+    "dashboard.saveFail": "No se pudo guardar — inténtalo de nuevo",
     "dashboard.back": "← Elegir otro servidor",
     "dashboard.sec_reading": "Lectura",
     "dashboard.sec_voice": "Voz",
     "dashboard.sec_community": "Comunidad",
     "dashboard.sec_limits": "Límites",
     "dashboard.f_autoread": "Leer el canal definido",
-    "dashboard.d_autoread": "Lee en voz alta los mensajes enviados en el canal que definiste.",
+    "dashboard.d_autoread": "Lee en voz alta los mensajes enviados en el canal que definiste",
     "dashboard.f_readBots": "Leer mensajes de otros bots",
-    "dashboard.d_readBots": "También lee los mensajes de otros bots.",
+    "dashboard.d_readBots": "También lee los mensajes de otros bots",
     "dashboard.f_textInVoice": "Leer el chat del canal de voz",
-    "dashboard.d_textInVoice": "Lee el chat de texto integrado en el canal de voz.",
+    "dashboard.d_textInVoice": "Lee el chat de texto integrado en el canal de voz",
     "dashboard.f_antispam": "Filtro anti-spam",
-    "dashboard.d_antispam": "Ignora mensajes de spam o repetidos.",
+    "dashboard.d_antispam": "Ignora mensajes de spam o repetidos",
     "dashboard.f_xsaid": "Anunciar quién habló",
-    "dashboard.d_xsaid": "Antepone a cada mensaje \"{nombre} dijo …\".",
+    "dashboard.d_xsaid": "Antepone a cada mensaje \"{nombre} dijo …\"",
     "dashboard.f_autojoin": "Unirse a la voz automáticamente",
-    "dashboard.d_autojoin": "Vozen entra solo al canal de voz.",
+    "dashboard.d_autojoin": "Vozen entra solo al canal de voz",
     "dashboard.f_greetOnJoin": "Saludar a quien entra",
-    "dashboard.d_greetOnJoin": "Saluda cuando alguien entra a la llamada.",
+    "dashboard.d_greetOnJoin": "Saluda cuando alguien entra a la llamada",
     "dashboard.f_streakAnnounce": "Avisos de racha 🔥 diaria",
-    "dashboard.d_streakAnnounce": "Anuncia las rachas de actividad diaria.",
+    "dashboard.d_streakAnnounce": "Anuncia las rachas de actividad diaria",
     "dashboard.f_soundboard": "Soundboard (/sound)",
-    "dashboard.d_soundboard": "Permite a los miembros reproducir efectos de sonido con /sound.",
+    "dashboard.d_soundboard": "Permite a los miembros reproducir efectos de sonido con /sound",
     "dashboard.f_maxChars": "Máx. de caracteres por mensaje",
-    "dashboard.d_maxChars": "Los mensajes más largos se recortan.",
+    "dashboard.d_maxChars": "Los mensajes más largos se recortan",
     "dashboard.f_ratePerMin": "Mensajes por minuto (por persona)",
-    "dashboard.d_ratePerMin": "Limita la rapidez de lectura de una misma persona.",
+    "dashboard.d_ratePerMin": "Limita la rapidez de lectura de una misma persona",
     "dashboard.f_locale": "Idioma del servidor",
-    "dashboard.d_locale": "Idioma que Vozen usa para este servidor.",
+    "dashboard.d_locale": "Idioma que Vozen usa para este servidor",
     "dashboard.f_ttsChannelId": "Canal para leer automáticamente",
-    "dashboard.d_ttsChannelId": "Elige un canal de texto donde Vozen pueda leer y responder.",
+    "dashboard.d_ttsChannelId": "Elige un canal de texto donde Vozen pueda leer y responder",
     "dashboard.f_defaultVoice": "Voz predeterminada",
-    "dashboard.d_defaultVoice": "Voz usada cuando un miembro no ha elegido la suya.",
+    "dashboard.d_defaultVoice": "Voz usada cuando un miembro no ha elegido la suya",
     "dashboard.channelNone": "Ningún canal",
     "dashboard.voiceGlobal": "Usar el valor global",
     "dashboard.unavailableChannel": "{name} (canal no disponible)",
@@ -268,18 +268,18 @@
     "account.documentTitle": "Tu cuenta — Vozen",
     "account.back": "Volver a Vozen",
     "account.pageTitle": "Tu cuenta de Vozen",
-    "account.pageSubtitle": "Comprueba qué está activo y elige qué quieres hacer ahora.",
+    "account.pageSubtitle": "Comprueba qué está activo y elige qué quieres hacer ahora",
     "account.startHere": "Empieza aquí",
     "account.nextTitle": "¿Qué quieres hacer?",
-    "account.nextSubtitle": "Elige una tarea. Siempre puedes volver a las demás.",
+    "account.nextSubtitle": "Elige una tarea. Siempre puedes volver a las demás",
     "account.tasksLabel": "Tareas de la cuenta",
     "account.manageServer": "Gestionar un servidor",
-    "account.manageServerDescription": "Cambia voces, canales y ajustes del bot.",
+    "account.manageServerDescription": "Cambia voces, canales y ajustes del bot",
     "account.activatePurchase": "Activar una compra",
-    "account.activatePurchaseDescription": "Conecta Plus o Premium comprado en Ko-fi.",
+    "account.activatePurchaseDescription": "Conecta Plus o Premium comprado en Ko-fi",
     "account.comparePlans": "¿No sabes qué plan necesitas? Compara los planes",
-    "account.signInTrustLead": "Discord gestiona tu inicio de sesión.",
-    "account.signInTrustBody": "Vozen nunca ve tu contraseña de Discord.",
+    "account.signInTrustLead": "Discord gestiona tu inicio de sesión",
+    "account.signInTrustBody": "Vozen nunca ve tu contraseña de Discord",
     "account.helpLabel": "Ayuda de la cuenta",
     "account.signedIn": "Sesión iniciada con Discord",
     "account.yourAccount": "Tu cuenta",
@@ -290,7 +290,7 @@
     "account.copied": "¡Copiado!",
     "account.benefits": "Tus ventajas",
     "account.activeTitle": "Qué está activo",
-    "account.benefitsDescription": "Plus acompaña a tu cuenta de Discord. Premium se usa en servidores seleccionados.",
+    "account.benefitsDescription": "Plus acompaña a tu cuenta de Discord. Premium se usa en servidores seleccionados",
     "account.active": "Activo",
     "account.notActive": "Inactivo",
     "account.membershipStatus": "Estado de la suscripción",
@@ -301,92 +301,209 @@
     "account.defaultUser": "Usuario de Discord",
     "account.discordAvatar": "Avatar de {name}",
     "dashboard.retry": "Intentar de nuevo",
-    "dashboard.secureTokenError": "Tu navegador no puede generar un token de inicio de sesión seguro. Actualízalo.",
+    "dashboard.secureTokenError": "Tu navegador no puede generar un token de inicio de sesión seguro. Actualízalo",
     "price.m.21": "Motor neuronal Kokoro",
     "price.m.22": "Voces Google HD",
     "price.m.23": "Transcripción de voz en directo"
   },
   "commands": {
     "general": [
-      ["/help", "Muestra la lista de comandos de Vozen"],
-      ["/join", "Entra en tu canal de voz"],
-      ["/leave", "Sale del canal de voz"],
-      ["/tts", "Lee un texto en voz alta"],
-      ["/tts-file", "Create a private audio file without joining a call"],
-      ["/translate text", "Translate text privately, including as a User App"],
-      ["/skip", "Salta el audio actual"],
-      ["/shut-up", "Silencia a Vozen al instante (vacía la cola)"],
-      ["/setup", "Configuración guiada en un paso"],
-      ["/invite", "Consigue el enlace de invitación"],
-      ["/vote", "Vota por Vozen en top.gg"],
-      ["/uptime", "Cuánto tiempo lleva Vozen en línea"],
-      ["/premium", "Estado Premium de tu servidor y el tuyo"]
+      [
+        "/help",
+        "Muestra la lista de comandos de Vozen"
+      ],
+      [
+        "/join",
+        "Entra en tu canal de voz"
+      ],
+      [
+        "/leave",
+        "Sale del canal de voz"
+      ],
+      [
+        "/tts",
+        "Lee un texto en voz alta"
+      ],
+      [
+        "/tts-file",
+        "Create a private audio file without joining a call"
+      ],
+      [
+        "/translate text",
+        "Translate text privately, including as a User App"
+      ],
+      [
+        "/skip",
+        "Salta el audio actual"
+      ],
+      [
+        "/shut-up",
+        "Silencia a Vozen al instante (vacía la cola)"
+      ],
+      [
+        "/setup",
+        "Configuración guiada en un paso"
+      ],
+      [
+        "/invite",
+        "Consigue el enlace de invitación"
+      ],
+      [
+        "/vote",
+        "Vota por Vozen en top.gg"
+      ],
+      [
+        "/uptime",
+        "Cuánto tiempo lleva Vozen en línea"
+      ],
+      [
+        "/premium",
+        "Estado Premium de tu servidor y el tuyo"
+      ]
     ],
     "voice": [
-      ["/voice set", "Elige tu voz, idioma y motor"],
-      ["/voice list", "Explora todas las voces"],
-      ["/voice favorites", "Open your saved favourite voices"],
-      ["/voice recent", "Open your recently used voices"],
-      ["/voice preview", "Escucha una muestra de voz"],
-      ["/voice effect", "Robot, eco, demonio… efectos de voz"],
-      ["/voice nickname", "Cómo te llama Vozen en voz alta"],
-      ["/voice opt-out", "Deja de que te lean automáticamente"],
-      ["/pronunciation", "Enseña a Vozen a decir una palabra (solo tuya)"]
+      [
+        "/voice set",
+        "Elige tu voz, idioma y motor"
+      ],
+      [
+        "/voice list",
+        "Explora todas las voces"
+      ],
+      [
+        "/voice favorites",
+        "Open your saved favourite voices"
+      ],
+      [
+        "/voice recent",
+        "Open your recently used voices"
+      ],
+      [
+        "/voice preview",
+        "Escucha una muestra de voz"
+      ],
+      [
+        "/voice effect",
+        "Robot, eco, demonio… efectos de voz"
+      ],
+      [
+        "/voice nickname",
+        "Cómo te llama Vozen en voz alta"
+      ],
+      [
+        "/voice opt-out",
+        "Deja de que te lean automáticamente"
+      ],
+      [
+        "/pronunciation",
+        "Enseña a Vozen a decir una palabra (solo tuya)"
+      ]
     ],
     "fun": [
-      ["/game play", "Empieza uno de los 16 minijuegos"],
-      ["/game leaderboard", "Mejores jugadores del servidor"],
-      ["/game stats", "Tus puntos, victorias y rango"],
-      ["/joke", "Un chiste corto en cualquier idioma"],
-      ["/laugh", "Vozen se ríe con tu voz"],
-      ["/8-ball", "Pregunta a la bola 8 mágica, en voz alta"],
-      ["/fact · /fortune · /wyr", "Curiosidades, fortunas y dilemas"],
-      ["/birthday set", "Vozen canta en tu cumpleaños"],
-      ["/top-speakers", "Quién habla más + rachas"],
-      ["/randomizer", "Vozen elige una opción al azar y la dice"],
-      ["/cast", "Asigna un papel temático al azar a todos en tu llamada y escucha los resultados"]
+      [
+        "/game play",
+        "Empieza uno de los 16 minijuegos"
+      ],
+      [
+        "/game leaderboard",
+        "Mejores jugadores del servidor"
+      ],
+      [
+        "/game stats",
+        "Tus puntos, victorias y rango"
+      ],
+      [
+        "/joke",
+        "Un chiste corto en cualquier idioma"
+      ],
+      [
+        "/laugh",
+        "Vozen se ríe con tu voz"
+      ],
+      [
+        "/8-ball",
+        "Pregunta a la bola 8 mágica, en voz alta"
+      ],
+      [
+        "/fact · /fortune · /wyr",
+        "Curiosidades, fortunas y dilemas"
+      ],
+      [
+        "/birthday set",
+        "Vozen canta en tu cumpleaños"
+      ],
+      [
+        "/top-speakers",
+        "Quién habla más + rachas"
+      ],
+      [
+        "/randomizer",
+        "Vozen elige una opción al azar y la dice"
+      ],
+      [
+        "/cast",
+        "Asigna un papel temático al azar a todos en tu llamada y escucha los resultados"
+      ]
     ],
     "admin": [
-      ["/config greet", "Saluda a quien entra en la llamada"],
-      ["/config language", "Define el idioma de la interfaz"],
-      ["/config default-voice", "Define la voz predeterminada del servidor"],
-      ["/config auto-read", "Activa o desactiva la lectura automática"],
-      ["/config block-word", "Gestiona la lista de bloqueo"],
-      ["/server-pronunciation", "Pronunciaciones para todo el servidor (admin, 3 · 50 con Premium)"]
+      [
+        "/config greet",
+        "Saluda a quien entra en la llamada"
+      ],
+      [
+        "/config language",
+        "Define el idioma de la interfaz"
+      ],
+      [
+        "/config default-voice",
+        "Define la voz predeterminada del servidor"
+      ],
+      [
+        "/config auto-read",
+        "Activa o desactiva la lectura automática"
+      ],
+      [
+        "/config block-word",
+        "Gestiona la lista de bloqueo"
+      ],
+      [
+        "/server-pronunciation",
+        "Pronunciaciones para todo el servidor (admin, 3 · 50 con Premium)"
+      ]
     ]
   },
   "faq": [
     [
       "¿Vozen es realmente gratis?",
-      "Sí — el núcleo sigue siendo gratis: 38 voces Piper en 35 idiomas, lectura automática, saludos, la mayoría de los juegos y todos los controles de administración. Kokoro y Google HD son motores Premium; Plus los desbloquea para ti y Premium para el servidor."
+      "Sí — el núcleo sigue siendo gratis: 38 voces Piper en 35 idiomas, lectura automática, saludos, la mayoría de los juegos y todos los controles de administración. Kokoro y Google HD son motores Premium; Plus los desbloquea para ti y Premium para el servidor"
     ],
     [
       "¿Qué incluye Premium?",
-      "Motores Kokoro neuronal y Google HD, los 8 efectos de voz, permanencia 24/7, 50 pronunciaciones personales, /rizz y los juegos Premium. Premium de servidor también incluye transcripción de voz en directo. 6,99 €/mes cubre 2 servidores o 13,99 €/mes cubre 5; Vozen Plus (3,99 €/mes) da las ventajas personales en cualquier servidor."
+      "Motores Kokoro neuronal y Google HD, los 8 efectos de voz, permanencia 24/7, 50 pronunciaciones personales, /rizz y los juegos Premium. Premium de servidor también incluye transcripción de voz en directo. 6,99 €/mes cubre 2 servidores o 13,99 €/mes cubre 5; Vozen Plus (3,99 €/mes) da las ventajas personales en cualquier servidor"
     ],
     [
       "¿Cómo añado Vozen a mi servidor?",
-      "Haz clic en \"Añadir a Discord\", elige tu servidor (necesitas Gestionar servidor) y ejecuta /setup. Así de fácil."
+      "Haz clic en \"Añadir a Discord\", elige tu servidor (necesitas Gestionar servidor) y ejecuta /setup. Así de fácil"
     ],
     [
       "¿Qué idiomas admite?",
-      "35 idiomas con 38 voces neuronales — portugués, inglés, español, francés, alemán, japonés, árabe, ruso y muchos más, cada uno con una voz nativa."
+      "35 idiomas con 38 voces neuronales — portugués, inglés, español, francés, alemán, japonés, árabe, ruso y muchos más, cada uno con una voz nativa"
     ],
     [
       "¿Tengo que configurar algo?",
-      "No. /setup lo hace en un solo paso. Después, todo funciona con valores predeterminados sensatos — puedes ajustarlo más tarde con /config."
+      "No. /setup lo hace en un solo paso. Después, todo funciona con valores predeterminados sensatos — puedes ajustarlo más tarde con /config"
     ],
     [
       "¿Puede cada uno tener una voz distinta?",
-      "Sí. Cada miembro define su voz e idioma con /voice set. Esa voz se usa de forma predeterminada; la detección opcional por mensaje se activa con /voice detection on."
+      "Sí. Cada miembro define su voz e idioma con /voice set. Esa voz se usa de forma predeterminada; la detección opcional por mensaje se activa con /voice detection on"
     ],
     [
       "Piper, Kokoro o Google HD — ¿qué motor de voz?",
-      "Piper es el motor local gratuito. Kokoro neuronal y Google HD requieren Vozen Plus para ti o Vozen Premium en el servidor. Cambia con /voice set; al expirar el acceso, vuelve automáticamente al motor gratuito."
+      "Piper es el motor local gratuito. Kokoro neuronal y Google HD requieren Vozen Plus para ti o Vozen Premium en el servidor. Cambia con /voice set; al expirar el acceso, vuelve automáticamente al motor gratuito"
     ],
     [
       "¿Cómo desactivo funciones?",
-      "Todo se puede activar y desactivar desde /config — el saludo, la lectura automática, los avisos de quién habló, el filtro antispam y más. También hay un botón de apagado total."
+      "Todo se puede activar y desactivar desde /config — el saludo, la lectura automática, los avisos de quién habló, el filtro antispam y más. También hay un botón de apagado total"
     ]
   ]
 }
