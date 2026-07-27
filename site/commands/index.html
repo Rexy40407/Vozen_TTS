@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://cdn.discordapp.com; connect-src 'self' https://api.vozen.org; form-action 'self'"
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07070d" />
+    <title>Commands — Vozen</title>
+    <meta
+      name="description"
+      content="Find every Vozen Discord command, with quick descriptions, options and access labels."
+    />
+    <link rel="canonical" href="https://vozen.org/commands/" />
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+    <link rel="stylesheet" href="../css/main-v42.css" />
+    <link rel="stylesheet" href="../css/commands-v1.css" />
+  </head>
+  <body class="page-commands">
+    <div class="grain" aria-hidden="true"></div>
+    <div class="orbs" aria-hidden="true">
+      <span class="orb orb--blurple"></span>
+      <span class="orb orb--aqua"></span>
+    </div>
+
+    <a class="skip-link" href="#commandFinder">Skip to commands</a>
+
+    <header class="nav" id="nav">
+      <div class="wrap nav__inner">
+        <a class="brand" href="../" aria-label="Vozen home">
+          <span class="brand__mark" aria-hidden="true"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <span class="brand__word">Vozen</span>
+        </a>
+
+        <nav class="nav__links" aria-label="Primary">
+          <a href="../#features" data-i18n="nav.features">Features</a>
+          <a href="../#games" data-i18n="nav.games">Games</a>
+          <a class="is-current" href="./" data-i18n="nav.commands" aria-current="page">Commands</a>
+          <a href="../#languages" data-i18n="nav.languages">Languages</a>
+          <a href="../#premium" data-i18n="nav.premium">Premium</a>
+          <a href="../#faq" data-i18n="nav.faq">FAQ</a>
+        </nav>
+
+        <div class="nav__actions">
+          <a class="nav__gh" href="https://github.com/Rexy40407/vozen" target="_blank" rel="noopener" aria-label="Vozen on GitHub (open source)" title="Open source on GitHub">
+            <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          </a>
+          <div class="lang" id="langMenu">
+            <button class="lang__btn" id="langBtn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Site language">
+              <span class="lang__flag" id="langBtnFlag">🇬🇧</span>
+              <span class="lang__name" id="langBtnName">English</span>
+              <svg class="lang__chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <ul class="lang__panel" id="langPanel" role="listbox" tabindex="-1" aria-label="Choose language"></ul>
+          </div>
+          <button class="btn btn--primary btn--discord-cta btn--sm nav__login" id="navLogin" type="button">
+            <svg viewBox="0 0 24 18" width="18" height="14" fill="currentColor" aria-hidden="true"><path d="M20.3 1.6A19.8 19.8 0 0 0 15.4.1a14 14 0 0 0-.6 1.3 18.3 18.3 0 0 0-5.5 0A13 13 0 0 0 8.6.1 19.7 19.7 0 0 0 3.7 1.6C.6 6.3-.3 10.8.2 15.3a19.9 19.9 0 0 0 6 3 14.7 14.7 0 0 0 1.3-2.1 12.9 12.9 0 0 1-2-1c.2-.1.3-.3.5-.4a14.2 14.2 0 0 0 12 0l.5.4a12.8 12.8 0 0 1-2 1 14.5 14.5 0 0 0 1.3 2.1 19.8 19.8 0 0 0 6-3c.6-5.2-.8-9.7-3.5-13.7ZM8 12.6c-1.2 0-2.1-1.1-2.1-2.4S6.8 7.8 8 7.8s2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm8 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg>
+            <span data-i18n="nav.login">Log in</span>
+          </button>
+          <button class="nav__burger" id="burger" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="commands-hero">
+        <div class="wrap commands-hero__grid">
+          <div>
+            <p class="eyebrow">Quick reference</p>
+            <h1>Commands that make Vozen speak.</h1>
+            <p class="commands-hero__lead">Find the right slash command, see what it does, and check whether it needs Premium or server permissions.</p>
+          </div>
+          <div class="commands-signal" aria-label="Vozen command catalogue summary">
+            <span class="commands-signal__eq eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            <span><strong>40+</strong><small>commands in the Rust catalogue</small></span>
+            <span><strong>35</strong><small>languages for voice</small></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="commands-section" id="commandFinder">
+        <div class="wrap">
+          <div class="command-finder">
+            <div class="command-finder__intro">
+              <p class="command-finder__kicker">Find a command</p>
+              <h2>Start with a word.</h2>
+              <p>Search by command, option or what you want to do. Filter the catalogue when you already know the area.</p>
+            </div>
+            <label class="command-search">
+              <span class="sr-only">Search commands</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"/></svg>
+              <input id="commandSearch" type="search" autocomplete="off" placeholder="Search commands, like setup or voice" />
+              <kbd>/</kbd>
+            </label>
+            <div class="command-filters" role="group" aria-label="Command filters">
+              <button class="is-active" type="button" data-filter="all">All</button>
+              <button type="button" data-filter="start">Start & voice</button>
+              <button type="button" data-filter="fun">Fun & games</button>
+              <button type="button" data-filter="stats">Stats</button>
+              <button type="button" data-filter="settings">Settings</button>
+              <button type="button" data-filter="premium">Premium</button>
+              <button type="button" data-filter="help">Help</button>
+            </div>
+            <p class="command-results" id="commandResults" aria-live="polite">Showing all commands.</p>
+          </div>
+
+          <div class="commands-layout">
+            <div class="command-groups" id="commandGroups"></div>
+            <aside class="commands-aside">
+              <div class="commands-aside__block commands-aside__block--accent">
+                <p class="command-finder__kicker">New here?</p>
+                <h2>Three steps to voice.</h2>
+                <ol class="commands-steps">
+                  <li><code>/setup</code><span>Configure the server once.</span></li>
+                  <li><code>/join</code><span>Join your current voice channel.</span></li>
+                  <li><code>/tts</code><span>Say something out loud.</span></li>
+                </ol>
+                <a class="btn btn--discord-cta btn--sm" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands" target="_blank" rel="noopener noreferrer">Add Vozen to Discord</a>
+              </div>
+              <div class="commands-aside__block">
+                <p class="command-finder__kicker">Reading the labels</p>
+                <ul class="commands-legend">
+                  <li><span class="command-tag command-tag--free">Free</span><span>Available in the free core.</span></li>
+                  <li><span class="command-tag command-tag--premium">Premium</span><span>Needs Vozen Plus or server Premium.</span></li>
+                  <li><span class="command-tag command-tag--admin">Admin</span><span>Requires Manage Server.</span></li>
+                </ul>
+              </div>
+              <div class="commands-aside__note"><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><p>Every command is registered from the Rust contract used by the live bot.</p></div>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot__grid">
+        <div><a class="brand" href="../" aria-label="Vozen home"><span class="brand__mark"><span class="eq"><i></i><i></i><i></i><i></i><i></i></span></span><span class="brand__word">Vozen</span></a><p class="foot__tag" data-i18n="foot.tag">Type it, hear it.</p></div>
+        <div><h4 data-i18n="foot.product">Product</h4><a href="../#features" data-i18n="nav.features">Features</a><a href="../#games" data-i18n="nav.games">Games</a><a href="./" data-i18n="nav.commands">Commands</a><a href="../#premium" data-i18n="nav.premium">Premium</a><a href="../#faq" data-i18n="nav.faq">FAQ</a><a href="../status.html">Status</a></div>
+        <div><h4 data-i18n="foot.community">Community</h4><a href="https://discord.gg/4kYw2WUbNN" class="js-support" data-i18n="foot.support">Support server</a><a href="#" class="js-vote" data-i18n="foot.vote">Vote on top.gg</a><a href="https://github.com/Rexy40407/vozen" target="_blank" rel="noopener">GitHub</a></div>
+      </div>
+      <div class="wrap foot__base"><span>© 2026 Vozen</span><span class="foot__legal"><a href="../privacy.html" data-i18n="foot.privacy">Privacy</a><a href="../terms.html" data-i18n="foot.terms">Terms</a></span><span data-i18n="foot.legal">Not affiliated with Discord.</span></div>
+    </footer>
+
+    <script defer src="../js/i18n-v40.js"></script>
+    <script defer src="../js/main-v43.js"></script>
+    <script defer src="../js/commands-v1.js"></script>
+  </body>
+</html>
