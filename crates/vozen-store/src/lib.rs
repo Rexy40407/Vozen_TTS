@@ -32,6 +32,7 @@ mod optout;
 mod premium;
 mod premium_code;
 mod pronunciation;
+mod stripe;
 mod stt_consent;
 mod talk_stats;
 mod telemetry;
@@ -74,6 +75,7 @@ pub use pronunciation::{
     AddPronunciationResult, SERVER_PRON_LIMIT, SERVER_PRON_LIMIT_PREMIUM, USER_PRON_LIMIT_FREE,
     USER_PRON_LIMIT_PREMIUM,
 };
+pub use stripe::{StripeSubscription, StripeSubscriptionInput};
 pub use stt_consent::SttConsent;
 pub use talk_stats::{GuildTalkStreak, TalkBump, TalkRow};
 pub use telemetry::{

@@ -79,7 +79,8 @@
         <li><b>Aggregate TTS usage</b> — the <code>talk_usage</code> table keeps counters by server, user, detected/selected language, and resolved TTS engine. It stores counts only, never message text. These aggregates let the private operator console show a top talker's dominant language and engine. They are deleted for that user by <code>/privacy erase</code> and for that server by the server-data purge.</li>
         <li><b>Birthday</b> — only the <b>month and day</b> you optionally set, never the year. Used so Vozen can wish you a happy birthday in the voice channel.</li>
         <li><b>Optional Vozen notices</b> — Top.gg reward and support-server cards are off by default and can be enabled by an admin with <code>/config vote-reminders active:true</code>. They alternate in the configured setup channel: at most one card in any rolling 24 hours, and each kind at most once per 48 hours, so both can never appear on the same day. A server ID, timestamp, and last-card kind persist this rotation across restarts; every card explains how to disable it. When you vote, top.gg separately sends your Discord user ID in a signed webhook. An eligible account receives <b>48 hours of Plus once ever</b>. The raw ID is kept only while that entitlement is active and is then deleted. A separate keyed one-way HMAC marker records that the account used its lifetime reward without storing the raw ID.</li>
-        <li><b>Premium status &amp; entitlements</b> — whether a server or user has Premium, when it expires, and the source of the entitlement; for server passes, which servers you activated a licence on. No new payment checkout is currently active.</li>
+        <li><b>Premium status &amp; entitlements</b> — whether a server or user has Premium, when it expires, and the source of the entitlement; for server passes, which servers you activated a licence on.</li>
+        <li><b>Stripe billing records</b> — for a Stripe subscription, Vozen stores the Discord user ID, Stripe customer/subscription identifiers, plan, seat count, payment state and current paid-through date. Vozen does not store card data, payment credentials, shipping addresses or the customer email received by Stripe.</li>
       </ul>
 
       <h2>3. Why we store it (legal bases)</h2>
@@ -96,6 +97,7 @@
         <li>To speed up repeated phrases, recently synthesized audio may be cached on the server. It is keyed by a content hash rather than your user ID, rotates out under a bounded cache policy, and can still reveal the spoken content to someone with server-file access.</li>
         <li>Outside of a transcription session you consented to, the bot stays deafened and does not listen to or store voice-channel audio.</li>
         <li>We do <b>not</b> keep web access logs that tie your IP address to your activity. Our API (<code>api.vozen.org</code>) uses your IP only <b>momentarily</b>, in memory, for rate-limiting and security — it is never written to our logs. (This website is served by GitHub Pages, whose standard host logs are outside our control; see §9.)</li>
+        <li>Stripe may process billing details and payment-method information as an independent payment processor. Vozen receives only the identifiers and subscription state needed to provide the digital service.</li>
       </ul>
 
       <h2>5. Private translation and audio tools</h2>

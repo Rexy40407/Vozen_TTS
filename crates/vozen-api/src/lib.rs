@@ -18,6 +18,7 @@ pub mod dashboard_validation;
 pub mod discord_oauth;
 pub mod kofi_webhook;
 pub mod premium_api;
+pub mod stripe_api;
 pub mod topgg_webhook;
 
 use axum::body::Body;
@@ -119,6 +120,7 @@ pub struct RuntimeRouterConfig {
     pub public_status: Option<PublicStatusProvider>,
     pub account: Option<account_api::AccountApiConfig>,
     pub premium: Option<premium_api::PremiumApiConfig>,
+    pub stripe: Option<stripe_api::StripeApiConfig>,
     pub dashboard: Option<dashboard_api::DashboardApiConfig>,
     pub admin: Option<admin_router::AdminRouterConfig>,
     pub kofi_webhook: Option<kofi_webhook::KofiWebhookConfig>,
@@ -139,6 +141,8 @@ pub enum RuntimeRouterError {
     KofiWebhook(#[from] kofi_webhook::KofiWebhookConfigError),
     #[error("Top.gg webhook configuration: {0}")]
     TopggWebhook(#[from] topgg_webhook::TopggWebhookConfigError),
+    #[error("Stripe configuration: {0}")]
+    Stripe(#[from] stripe_api::StripeApiConfigError),
 }
 
 /// Composes the independently verified API surfaces for the cutover runtime. It avoids merging
@@ -152,6 +156,9 @@ pub fn runtime_router(config: RuntimeRouterConfig) -> Result<Router, RuntimeRout
     }
     if let Some(premium) = config.premium {
         router = router.merge(premium_api::premium_router(premium)?);
+    }
+    if let Some(stripe) = config.stripe {
+        router = router.merge(stripe_api::stripe_router(stripe)?);
     }
     if let Some(dashboard) = config.dashboard {
         router = router.merge(dashboard_api::dashboard_router(dashboard)?);
@@ -262,6 +269,7 @@ mod tests {
             public_status: None,
             account: None,
             premium: None,
+            stripe: None,
             dashboard: None,
             admin: None,
             kofi_webhook: None,

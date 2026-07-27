@@ -94,7 +94,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('class="account-workspace"');
     expect(page).toContain('class="account-membership"');
     expect(page).toContain('class="account-tasklist"');
-    expect(page).toContain('Payments are currently disabled');
+    expect(page).toContain('id="accountBilling"');
     expect(page).not.toContain('id="accountActivateOpen"');
     expect(page).toContain('js/main-v44.js');
     expect(css).toContain('body.page-account');
@@ -349,10 +349,11 @@ describe('operational security configuration', () => {
     const css = source(SITE_CSS);
     expect(css).toMatch(/\.ppanel__claimconsent a\s*\{[^}]*var\(--aqua\)/);
   });
-  it('documents that checkout is disabled until Stripe is ready', () => {
+  it('documents the Stripe digital checkout contract', () => {
     const terms = source('site/terms.html');
     expect(terms).toMatch(/14-day withdrawal right/i);
-    expect(terms).toMatch(/Payments are currently disabled.*Stripe checkout/is);
+    expect(terms).toMatch(/digital subscriptions processed by Stripe/i);
+    expect(terms).toMatch(/does not collect a shipping address/i);
     expect(terms).not.toMatch(/Ko-fi purchase/i);
   });
 });

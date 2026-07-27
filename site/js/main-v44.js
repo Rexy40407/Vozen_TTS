@@ -16,6 +16,7 @@
   const PREMIUM_API_BASE = "https://api.vozen.org";
   const ACTIVATION_TERMS_VERSION = "2026-07-19";
   const ACTIVATION_INTENT_KEY = "vozen.activationIntent";
+  const BILLING_INTENT_KEY = "vozen.billingIntent";
   const ACTIVATION_INTENT_TTL_MS = 5 * 60 * 1000;
   const INVITE_URL =
     CLIENT_ID && CLIENT_ID !== "YOUR_CLIENT_ID"
@@ -295,7 +296,43 @@
      escolhe "anual" vê o preço anual e recebe o link direto para o produto correspondente.
      Os codigos tem de bater certo com o KOFI_SHOP_MAP do bot: e o direct_link_code que diz
      ao webhook o que foi comprado (o Ko-fi nao envia o nome do produto). */
-  // Payments are intentionally offline while the Stripe checkout is being prepared.
+  /* ── Stripe checkout ───────────────────────────────────────────────── */
+  function readBillingIntent() {
+    try {
+      const raw = sessionStorage.getItem(BILLING_INTENT_KEY);
+      sessionStorage.removeItem(BILLING_INTENT_KEY);
+      if (!raw) return null;
+      const value = JSON.parse(raw);
+      return value && ["plus", "premium"].includes(value.plan) && ["monthly", "yearly"].includes(value.interval) ? value : null;
+    } catch { return null; }
+  }
+
+  async function startCheckout(plan, interval, seats = 2) {
+    const token = storedToken();
+    if (!token) {
+      try { sessionStorage.setItem(BILLING_INTENT_KEY, JSON.stringify({ plan, interval, seats, createdAt: Date.now() })); } catch {}
+      window.location.href = "/account";
+      return;
+    }
+    const button = document.activeElement;
+    if (button instanceof HTMLButtonElement) { button.disabled = true; button.dataset.previousText = button.textContent || ""; button.textContent = "Opening secure checkout…"; }
+    try {
+      const res = await fetch(PREMIUM_API_BASE + "/api/billing/checkout", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({ plan: seats === 5 ? "max" : plan, interval }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !payload.url) throw new Error(payload.error || "checkout unavailable");
+      window.location.href = payload.url;
+    } catch {
+      alert("Stripe checkout is temporarily unavailable. Please try again shortly.");
+      if (button instanceof HTMLButtonElement) { button.disabled = false; button.textContent = button.dataset.previousText || "Continue to checkout"; }
+    }
+  }
+
+  const billingInterval = () => pricingGrid?.classList.contains("is-annual") ? "yearly" : "monthly";
+  document.querySelector("[data-billing-plan='plus']")?.addEventListener("click", () => void startCheckout("plus", billingInterval(), 1));
+  document.querySelector("[data-billing-plan='premium']")?.addEventListener("click", () => void startCheckout("premium", billingInterval(), proCard?.classList.contains("is-5") ? 5 : 2));
 
   /* ── Painel Premium (login com Discord + estado da conta) ─────────────
      OAuth2 implicit (scopes identify + email): 100% client-side, sem segredo. O token vem no
@@ -568,6 +605,11 @@
       }
       if (!res.ok) throw new Error("http " + res.status);
       setPanel({ mode: "ok", data: await res.json() });
+      const purchase = IS_ACCOUNT ? readBillingIntent() : null;
+      if (purchase) {
+        window.setTimeout(() => void startCheckout(purchase.plan, purchase.interval, purchase.seats), 0);
+        return;
+      }
       const resume = activationResume;
       activationResume = { kind: "none" };
       if (resume.kind === "resume") {
@@ -648,7 +690,7 @@
   // que chegou sem Discord ID (o checkout de subscrição não tem caixa de mensagem). POST
   // autenticado a /api/link — ver doClaim. Aparece sempre que a pessoa está logada.
   function claimCard() {
-    return `<div class="ppanel__claim ppanel__claim--disabled" role="status"><b>${t("price.checkout")}</b></div>`;
+    return `<div class="ppanel__claim" role="status"><b>Stripe subscriptions are managed from the account panel.</b></div>`;
     /* return (
       `<div class="ppanel__claim ppmodal" id="activate-purchase" role="dialog" aria-modal="true" aria-labelledby="ppClaimTitle" hidden>` +
       `<div class="ppanel__claimbox" tabindex="-1">` +
@@ -1327,6 +1369,24 @@
   document
     .getElementById("accountActivateOpen")
     ?.addEventListener("click", openPurchaseActivation);
+
+  document.getElementById("accountBilling")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const token = storedToken();
+    if (!token) return login();
+    button.disabled = true;
+    try {
+      const response = await fetch(PREMIUM_API_BASE + "/api/billing/portal", {
+        method: "POST", headers: { Authorization: "Bearer " + token },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.url) throw new Error("portal unavailable");
+      window.location.href = payload.url;
+    } catch {
+      button.disabled = false;
+      alert("Billing management is temporarily unavailable. Please try again shortly.");
+    }
+  });
 
   // Botão de login na navbar: leva à página dedicada da conta (account.html). Já na
   // página da conta, faz login OAuth quando o backend está no ar; senão faz scroll ao

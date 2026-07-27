@@ -199,6 +199,9 @@ struct PremiumHttpConfig {
     kofi_webhook_token: Option<String>,
     kofi_shop_map: Option<String>,
     claim_help_webhook_url: Option<String>,
+    stripe_secret_key: Option<String>,
+    stripe_webhook_secret: Option<String>,
+    stripe_prices: Option<vozen_api::stripe_api::StripePriceIds>,
 }
 
 struct TopggWebhookRuntimeConfig {
@@ -1944,9 +1947,12 @@ fn public_status_enabled(raw: Option<&str>) -> bool {
 /// premium API. A typo or a blank value must never expose an authenticated endpoint.
 fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeError> {
     let browser_api_enabled = premium_http_enabled(env::var("PREMIUM_API_ENABLED").ok().as_deref());
-    // Legacy Ko-fi is fail-closed behind the same payment gate. This prevents an old
-    // webhook secret left in an environment from reactivating the retired provider.
-    let kofi_webhook_token = payments_enabled_from_environment()
+    let stripe_secret_key = payments_enabled_from_environment()
+        .then(|| nonempty_env("STRIPE_SECRET_KEY"))
+        .flatten();
+    // Once Stripe is selected, an old Ko-fi secret cannot re-enable the retired checkout path.
+    // Historical Ko-fi entitlements remain in SQLite and continue to work.
+    let kofi_webhook_token = (!stripe_secret_key.is_some() && payments_enabled_from_environment())
         .then(|| nonempty_env("KOFI_WEBHOOK_TOKEN"))
         .flatten();
     let kofi_shop_map = kofi_webhook_token
@@ -1961,6 +1967,43 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
         nonempty_env("CLIENT_ID")
     };
     let origin = nonempty_env("PREMIUM_API_ORIGIN").unwrap_or_else(|| "https://vozen.org".into());
+    let stripe_prices = [
+        (
+            "STRIPE_PRICE_PLUS_MONTHLY",
+            nonempty_env("STRIPE_PRICE_PLUS_MONTHLY"),
+        ),
+        (
+            "STRIPE_PRICE_PLUS_YEARLY",
+            nonempty_env("STRIPE_PRICE_PLUS_YEARLY"),
+        ),
+        (
+            "STRIPE_PRICE_PREMIUM_MONTHLY",
+            nonempty_env("STRIPE_PRICE_PREMIUM_MONTHLY"),
+        ),
+        (
+            "STRIPE_PRICE_PREMIUM_YEARLY",
+            nonempty_env("STRIPE_PRICE_PREMIUM_YEARLY"),
+        ),
+        (
+            "STRIPE_PRICE_MAX_MONTHLY",
+            nonempty_env("STRIPE_PRICE_MAX_MONTHLY"),
+        ),
+        (
+            "STRIPE_PRICE_MAX_YEARLY",
+            nonempty_env("STRIPE_PRICE_MAX_YEARLY"),
+        ),
+    ];
+    let stripe_prices = stripe_prices
+        .iter()
+        .all(|(_, value)| value.is_some())
+        .then(|| vozen_api::stripe_api::StripePriceIds {
+            plus_monthly: stripe_prices[0].1.clone().unwrap_or_default(),
+            plus_yearly: stripe_prices[1].1.clone().unwrap_or_default(),
+            premium_monthly: stripe_prices[2].1.clone().unwrap_or_default(),
+            premium_yearly: stripe_prices[3].1.clone().unwrap_or_default(),
+            max_monthly: stripe_prices[4].1.clone().unwrap_or_default(),
+            max_yearly: stripe_prices[5].1.clone().unwrap_or_default(),
+        });
     Ok(Some(PremiumHttpConfig {
         browser_api_enabled,
         client_id,
@@ -1969,6 +2012,11 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
         kofi_shop_map,
         claim_help_webhook_url: nonempty_env("CLAIM_HELP_WEBHOOK_URL")
             .or_else(|| nonempty_env("ERROR_WEBHOOK_URL")),
+        stripe_secret_key,
+        stripe_webhook_secret: payments_enabled_from_environment()
+            .then(|| nonempty_env("STRIPE_WEBHOOK_SECRET"))
+            .flatten(),
+        stripe_prices,
     }))
 }
 
@@ -2492,6 +2540,7 @@ fn build_http_router(
             public_status,
             account: None,
             premium: None,
+            stripe: None,
             dashboard: None,
             admin: None,
             kofi_webhook: None,
@@ -2626,10 +2675,34 @@ fn build_http_router(
     } else {
         (None, None)
     };
+    let stripe = if config.browser_api_enabled {
+        match (
+            config.stripe_secret_key.clone(),
+            config.stripe_webhook_secret.clone(),
+            config.stripe_prices.clone(),
+            verifier.clone(),
+        ) {
+            (Some(secret_key), Some(webhook_secret), Some(prices), Some(identity_verifier)) => {
+                Some(vozen_api::stripe_api::StripeApiConfig {
+                    origin: config.origin.clone(),
+                    secret_key,
+                    webhook_secret,
+                    prices,
+                    store: store.clone(),
+                    identity_verifier,
+                    now: now.clone(),
+                })
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
     runtime_router(RuntimeRouterConfig {
         public_status,
         account,
         premium,
+        stripe,
         // Only `RUST_DASHBOARD_ENABLED=true` produces this route. Its authorizer rechecks
         // OAuth audience/scope, Manage Guild and current bot presence before the options
         // provider asks Discord for the bot's current authorised channels and roles.
@@ -2934,6 +3007,9 @@ mod tests {
             kofi_webhook_token: None,
             kofi_shop_map: None,
             claim_help_webhook_url: None,
+            stripe_secret_key: None,
+            stripe_webhook_secret: None,
+            stripe_prices: None,
         };
         assert!(browser_api_promoted(Some("true"), Some(&config)));
         assert!(browser_api_promoted(Some(" TRUE "), Some(&config)));
@@ -3560,6 +3636,9 @@ mod tests {
                 kofi_webhook_token: Some("token".into()),
                 kofi_shop_map: None,
                 claim_help_webhook_url: None,
+                stripe_secret_key: None,
+                stripe_webhook_secret: None,
+                stripe_prices: None,
             }),
             None,
             None,
