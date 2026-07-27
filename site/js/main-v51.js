@@ -657,24 +657,52 @@
     u.searchParams.set("scope", "identify email");
     u.searchParams.set("state", state);
     if (options && options.popup === true) {
-      // Use a named link instead of assigning window.location. Some browsers
-      // treat window.open() as a navigation in embedded/webview contexts,
-      // which would close the checkout modal. A named target always leaves
-      // the checkout page open while Discord handles OAuth in another context.
-      let authLink = document.getElementById("vozenBillingAuthLink");
-      if (!authLink) {
-        authLink = document.createElement("a");
-        authLink.id = "vozenBillingAuthLink";
-        authLink.hidden = true;
-        authLink.setAttribute("aria-hidden", "true");
-        document.body.appendChild(authLink);
+      const popupWidth = Math.min(560, Math.max(420, (window.screen?.availWidth || 560) - 32));
+      const popupHeight = Math.min(760, Math.max(620, (window.screen?.availHeight || 760) - 48));
+      const browserWidth = window.outerWidth || document.documentElement.clientWidth || popupWidth;
+      const browserHeight = window.outerHeight || document.documentElement.clientHeight || popupHeight;
+      const browserLeft = Number.isFinite(window.screenX) ? window.screenX : (window.screenLeft || 0);
+      const browserTop = Number.isFinite(window.screenY) ? window.screenY : (window.screenTop || 0);
+      const popupLeft = Math.max(0, Math.round(browserLeft + (browserWidth - popupWidth) / 2));
+      const popupTop = Math.max(0, Math.round(browserTop + (browserHeight - popupHeight) / 2));
+      const popupFeatures = [
+        "popup=yes",
+        "width=" + popupWidth,
+        "height=" + popupHeight,
+        "left=" + popupLeft,
+        "top=" + popupTop,
+        "resizable=yes",
+        "scrollbars=yes",
+        "location=yes",
+        "toolbar=no",
+        "menubar=no",
+        "status=no",
+      ].join(",");
+
+      // Open a real, sized browser window synchronously from the click. Loading
+      // Discord only after the blank popup exists prevents the checkout page
+      // from being replaced and matches familiar Google/Apple OAuth flows.
+      billingAuthPopup = window.open("about:blank", "_blank", popupFeatures);
+      if (!billingAuthPopup || billingAuthPopup === window) {
+        billingAuthPopup = null;
+        try { sessionStorage.removeItem(STATE_KEY); } catch {}
+        const status = document.getElementById("vozenBillingAuthStatus");
+        if (status) status.textContent = "Allow pop-ups for vozen.org to log in with Discord.";
+        return null;
       }
-      authLink.href = u.toString();
-      authLink.target = "vozenDiscordLogin";
-      authLink.rel = "opener";
-      billingAuthPopup = null;
-      authLink.click();
-      return true;
+      try {
+        billingAuthPopup.name = "vozenDiscordLogin";
+        billingAuthPopup.location.replace(u.toString());
+        billingAuthPopup.focus();
+        return billingAuthPopup;
+      } catch {
+        billingAuthPopup.close();
+        billingAuthPopup = null;
+        try { sessionStorage.removeItem(STATE_KEY); } catch {}
+        const status = document.getElementById("vozenBillingAuthStatus");
+        if (status) status.textContent = "Couldn't open Discord sign-in. Please allow pop-ups and try again.";
+        return null;
+      }
     }
     location.href = u.toString();
     return null;

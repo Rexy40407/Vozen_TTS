@@ -130,6 +130,16 @@ describe('operational security configuration', () => {
     expect(script).toContain('"vozenDiscordLogin"');
     expect(script).toContain('vozen:discord-auth');
     expect(script).toContain('login({ popup: true });');
+    const popupSource = script.slice(
+      script.indexOf('if (options && options.popup === true)'),
+      script.indexOf('location.href = u.toString()'),
+    );
+    expect(popupSource).toContain('window.open("about:blank", "_blank", popupFeatures)');
+    expect(popupSource).toContain('"popup=yes"');
+    expect(popupSource).toContain('billingAuthPopup.name = "vozenDiscordLogin"');
+    expect(popupSource).toContain('billingAuthPopup.location.replace(u.toString())');
+    expect(popupSource).toContain('billingAuthPopup.focus()');
+    expect(popupSource).not.toContain('vozenBillingAuthLink');
     const checkoutSource = script.slice(
       script.indexOf('async function startCheckout('),
       script.indexOf('const billingInterval'),
