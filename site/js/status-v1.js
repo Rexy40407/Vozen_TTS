@@ -2,11 +2,14 @@
 
 (function () {
   const endpoint = "https://api.vozen.org/api/public/status";
+  const healthEndpoint = "https://api.vozen.org/health";
   const allowed = new Set(["operational", "degraded", "unavailable"]);
+  const componentStates = new Set(["operational", "degraded", "unavailable", "unknown"]);
   const labels = {
     operational: "Operational",
     degraded: "Degraded",
     unavailable: "Unavailable",
+    unknown: "Not exposed",
   };
   const instance = document.getElementById("statusInstance");
   const overall = document.getElementById("statusOverall");
@@ -24,6 +27,10 @@
     return allowed.has(value) ? value : "unavailable";
   }
 
+  function safeComponentState(value) {
+    return componentStates.has(value) ? value : "unknown";
+  }
+
   function stateLabel(state) {
     return labels[state] || labels.unavailable;
   }
@@ -38,14 +45,13 @@
     const state = safeState(data && data.status);
     const components = (data && data.components) || {};
     const states = Object.keys(fields).map(function (key) {
-      return safeState(components[key]);
+      return safeComponentState(components[key]);
     });
-    const online = states.filter(function (value) { return value === "operational"; }).length;
 
     instance.className = "status-instance is-" + state;
     overall.className = "status-badge is-" + state;
     overall.textContent = stateLabel(state);
-    services.textContent = online + " / " + states.length;
+    services.textContent = stateLabel(state);
     latency.textContent = Number.isFinite(measuredLatency) ? Math.max(0, Math.round(measuredLatency)) + " ms" : "Unavailable";
 
     Object.keys(fields).forEach(function (key, index) {
@@ -63,6 +69,25 @@
   const started = performance.now();
   fetch(endpoint, { method: "GET", cache: "no-store", mode: "cors" })
     .then(function (response) {
+      if (response.status === 404) {
+        return fetch(healthEndpoint, { method: "GET", cache: "no-store", mode: "cors" })
+          .then(function (healthResponse) {
+            if (!healthResponse.ok) throw new Error("health request failed");
+            return healthResponse.json();
+          })
+          .then(function (health) {
+            const online = health && health.status === "ok";
+            return {
+              status: online ? "operational" : "unavailable",
+              components: {
+                bot: online ? "operational" : "unavailable",
+                database: "unknown",
+                providers: "unknown",
+              },
+              incident: online ? "Detailed component checks are not publicly exposed yet" : "Vozen health check is unavailable",
+            };
+          });
+      }
       if (!response.ok) throw new Error("status request failed");
       return response.json();
     })
