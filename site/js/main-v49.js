@@ -1,5 +1,5 @@
 ﻿/* ═══════════════════════════════════════════════════════════
-   Vozen site — main-v48.js
+   Vozen site — main-v49.js
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -314,6 +314,7 @@
   let billingBodyStyle = null;
 
   function lockBillingScroll() {
+    if (billingBodyStyle) return;
     billingScrollY = window.scrollY;
     billingBodyStyle = {
       position: document.body.style.position,
@@ -388,10 +389,7 @@
 
   function closeBillingCheckout() {
     const modal = document.getElementById("vozenBillingModal");
-    if (!modal || modal.hidden) {
-      unlockBillingScroll();
-      return;
-    }
+    if (!modal || modal.hidden) return;
     billingCheckout?.destroy?.();
     billingCheckout = null;
     modal.remove();
@@ -510,6 +508,14 @@
   }
 
   const billingInterval = () => pricingGrid?.classList.contains("is-annual") ? "yearly" : "monthly";
+  $$('[data-billing-plan]').forEach((button) => {
+    const preserveScrollBeforeFocus = (event) => {
+      if (event.type === "keydown" && !["Enter", " "].includes(event.key)) return;
+      lockBillingScroll();
+    };
+    button.addEventListener("pointerdown", preserveScrollBeforeFocus, { capture: true });
+    button.addEventListener("keydown", preserveScrollBeforeFocus, { capture: true });
+  });
   document.querySelector("[data-billing-plan='plus']")?.addEventListener("click", () => void startCheckout("plus", billingInterval(), 1));
   document.querySelector("[data-billing-plan='premium']")?.addEventListener("click", () => void startCheckout("premium", billingInterval(), proCard?.classList.contains("is-5") ? 5 : 2));
 
