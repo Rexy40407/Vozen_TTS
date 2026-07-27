@@ -1,5 +1,5 @@
 ﻿/* ═══════════════════════════════════════════════════════════
-   Vozen site — main-v47.js
+   Vozen site — main-v48.js
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -310,6 +310,39 @@
   let billingCheckout = null;
   let billingCheckoutOpener = null;
   let billingRequest = null;
+  let billingScrollY = 0;
+  let billingBodyStyle = null;
+
+  function lockBillingScroll() {
+    billingScrollY = window.scrollY;
+    billingBodyStyle = {
+      position: document.body.style.position,
+      top: document.body.style.top,
+      left: document.body.style.left,
+      right: document.body.style.right,
+      width: document.body.style.width,
+      overflow: document.body.style.overflow,
+    };
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${billingScrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
+    document.body.style.overflow = "hidden";
+  }
+
+  function unlockBillingScroll() {
+    if (!billingBodyStyle) return;
+    const previous = billingBodyStyle;
+    document.body.style.position = previous.position;
+    document.body.style.top = previous.top;
+    document.body.style.left = previous.left;
+    document.body.style.right = previous.right;
+    document.body.style.width = previous.width;
+    document.body.style.overflow = previous.overflow;
+    billingBodyStyle = null;
+    window.scrollTo(0, billingScrollY);
+  }
 
   function billingCheckoutModal(plan, interval) {
     const planName = plan === "plus" ? t("price.plus.name") : plan === "premium" ? t("price.pro.name") : t("price.max.name");
@@ -355,18 +388,22 @@
 
   function closeBillingCheckout() {
     const modal = document.getElementById("vozenBillingModal");
-    if (!modal || modal.hidden) return;
+    if (!modal || modal.hidden) {
+      unlockBillingScroll();
+      return;
+    }
     billingCheckout?.destroy?.();
     billingCheckout = null;
     modal.remove();
     document.body.classList.remove("is-modal-open");
+    unlockBillingScroll();
     const trigger = billingRequest?.button;
     if (trigger instanceof HTMLButtonElement) {
       trigger.disabled = false;
       trigger.textContent = trigger.dataset.previousText || trigger.textContent;
-      trigger.focus();
+      trigger.focus({ preventScroll: true });
     } else {
-      billingCheckoutOpener?.focus?.();
+      billingCheckoutOpener?.focus?.({ preventScroll: true });
     }
     billingCheckoutOpener = null;
     billingRequest = null;
@@ -376,9 +413,13 @@
     closeBillingCheckout();
     billingCheckoutOpener = document.activeElement;
     billingRequest = { plan, interval, seats, button };
+    lockBillingScroll();
     document.body.insertAdjacentHTML("beforeend", billingCheckoutModal(plan, interval));
     const modal = document.getElementById("vozenBillingModal");
-    if (!modal) return null;
+    if (!modal) {
+      unlockBillingScroll();
+      return null;
+    }
     modal.hidden = false;
     document.body.classList.add("is-modal-open");
     document.getElementById("vozenBillingClose")?.addEventListener("click", closeBillingCheckout);

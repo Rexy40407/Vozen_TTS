@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 'utf8' });
 // The site's assets are cache-busted by FILENAME (never a query string), so every rename churns
 // these tests too. One constant each: the rename is then a one-line edit here, not a hunt.
-const SITE_JS = 'site/js/main-v47.js';
+const SITE_JS = 'site/js/main-v48.js';
 const SITE_I18N = 'site/js/i18n-v41.js';
 const SITE_CSS = 'site/css/main-v43.css';
 const ACCOUNT_CSS = 'site/css/account-v6.css';
@@ -105,7 +105,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('class="account-tasklist"');
     expect(page).toContain('id="accountBilling"');
     expect(page).not.toContain('id="accountActivateOpen"');
-    expect(page).toContain('js/main-v47.js');
+    expect(page).toContain('js/main-v48.js');
     expect(page).toContain('css/billing-v2.css');
     expect(page).toContain('https://js.stripe.com/v3/');
     expect(page).toContain('frame-src https://checkout.stripe.com');
@@ -144,7 +144,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('css/billing-v2.css');
     expect(page).toContain('https://js.stripe.com/v3/');
     expect(page).toContain('frame-src https://checkout.stripe.com');
-    expect(page).toContain('js/main-v47.js');
+    expect(page).toContain('js/main-v48.js');
   });
   it('keeps the embedded checkout error inside the dark blurred modal', () => {
     const css = source(BILLING_CSS);
@@ -153,6 +153,9 @@ describe('operational security configuration', () => {
     expect(css).toContain('background: #0c1220');
     expect(css).not.toContain('background: #fff');
     expect(script).toContain('billing-modal__error-icon');
+    expect(script).toContain('window.scrollY');
+    expect(script).toContain('window.scrollTo(0, billingScrollY)');
+    expect(script).toContain('billingBodyStyle');
   });
   it('cache-busts the checkout layout whenever the billing stylesheet changes', () => {
     for (const pagePath of ['site/index.html', 'site/account.html']) {
