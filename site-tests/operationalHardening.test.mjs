@@ -9,6 +9,7 @@ const SITE_JS = 'site/js/main-v46.js';
 const SITE_I18N = 'site/js/i18n-v41.js';
 const SITE_CSS = 'site/css/main-v43.css';
 const ACCOUNT_CSS = 'site/css/account-v6.css';
+const BILLING_CSS = 'site/css/billing-v2.css';
 /** Body of a top-level function in the site bundle, comments stripped. Comments are dropped
  *  because these assertions are about the markup a function RENDERS — a comment explaining why
  *  some wiring is avoided must not read as using it. */
@@ -105,7 +106,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('id="accountBilling"');
     expect(page).not.toContain('id="accountActivateOpen"');
     expect(page).toContain('js/main-v46.js');
-    expect(page).toContain('css/billing-v1.css');
+    expect(page).toContain('css/billing-v2.css');
     expect(page).toContain('https://js.stripe.com/v3/');
     expect(page).toContain('frame-src https://checkout.stripe.com');
     expect(css).toContain('body.page-account');
@@ -140,18 +141,25 @@ describe('operational security configuration', () => {
   });
   it('keeps homepage checkout inside the current page', () => {
     const page = source('site/index.html');
-    expect(page).toContain('css/billing-v1.css');
+    expect(page).toContain('css/billing-v2.css');
     expect(page).toContain('https://js.stripe.com/v3/');
     expect(page).toContain('frame-src https://checkout.stripe.com');
     expect(page).toContain('js/main-v46.js');
   });
   it('keeps the embedded checkout error inside the dark blurred modal', () => {
-    const css = source('site/css/billing-v1.css');
+    const css = source(BILLING_CSS);
     const script = source(SITE_JS);
-    expect(css).toContain('backdrop-filter: blur(16px) saturate(0.76)');
+    expect(css).toContain('backdrop-filter: blur(12px) saturate(0.72)');
     expect(css).toContain('background: #0c1220');
     expect(css).not.toContain('background: #fff');
     expect(script).toContain('billing-modal__error-icon');
+  });
+  it('cache-busts the checkout layout whenever the billing stylesheet changes', () => {
+    for (const pagePath of ['site/index.html', 'site/account.html']) {
+      const page = source(pagePath);
+      expect(page, pagePath).toContain('css/billing-v2.css');
+      expect(page, pagePath).not.toContain('css/billing-v1.css');
+    }
   });
   it('keeps the Cloudflare CSP aligned with the self-hosted-font privacy promise', () => {
     const script = source('tools/cf-security-headers.mjs');
