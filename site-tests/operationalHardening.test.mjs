@@ -121,6 +121,8 @@ describe('operational security configuration', () => {
     expect(claim).toContain('return "";');
     expect(claim).not.toContain('Stripe subscriptions are managed from the account panel.');
     expect(script).toContain('function billingCheckoutModal(plan, interval)');
+    expect(script).toContain('function ensureStripeJs()');
+    expect(script).toContain('await ensureStripeJs()');
     expect(script).toContain('stripe.initEmbeddedCheckout');
     expect(script).toContain('payload.clientSecret');
     expect(script).not.toContain('vozenDiscordAuth');
@@ -143,6 +145,8 @@ describe('operational security configuration', () => {
     const page = source('site/index.html');
     expect(page).toContain('css/billing-v3.css');
     expect(page).toContain('https://js.stripe.com/v3/');
+    expect(page).toContain('<script src="https://js.stripe.com/v3/"></script>');
+    expect(page).not.toContain('<script defer src="https://js.stripe.com/v3/"></script>');
     expect(page).toContain('frame-src https://checkout.stripe.com');
     expect(page).toContain('js/main-v51.js');
   });

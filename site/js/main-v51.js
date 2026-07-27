@@ -310,6 +310,7 @@
   let billingCheckout = null;
   let billingCheckoutOpener = null;
   let billingRequest = null;
+  let stripeLoadPromise = null;
   let billingScrollY = 0;
   let billingPendingScrollY = null;
   let billingBodyStyle = null;
@@ -388,6 +389,26 @@
     if (!checkout) return;
     checkout.innerHTML = `<div class="billing-modal__error"><span class="billing-modal__error-icon" aria-hidden="true">!</span><strong>${esc(message)}</strong><p>${t("claim.loginAgain")}</p><button type="button" class="btn btn--primary" id="vozenBillingRetry">${t("panel.retry")}</button></div>`;
     document.getElementById("vozenBillingRetry")?.addEventListener("click", () => void continueBillingCheckout());
+  }
+
+  function ensureStripeJs() {
+    if (typeof window.Stripe === "function") return Promise.resolve();
+    if (stripeLoadPromise) return stripeLoadPromise;
+    stripeLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://js.stripe.com/v3/";
+      script.async = true;
+      script.onload = () => {
+        if (typeof window.Stripe === "function") resolve();
+        else reject(new Error("stripe_js_unavailable"));
+      };
+      script.onerror = () => reject(new Error("stripe_js_unavailable"));
+      document.head.appendChild(script);
+    }).catch((error) => {
+      stripeLoadPromise = null;
+      throw error;
+    });
+    return stripeLoadPromise;
   }
 
   function closeBillingCheckout() {
@@ -489,7 +510,9 @@
         if (status) status.textContent = t("claim.loginAgain");
         return;
       }
-      if (!res.ok || !payload.clientSecret || !payload.publishableKey || typeof window.Stripe !== "function") throw new Error(payload.error || "checkout unavailable");
+      if (!res.ok || !payload.clientSecret || !payload.publishableKey) throw new Error(payload.error || "checkout unavailable");
+      await ensureStripeJs();
+      if (typeof window.Stripe !== "function") throw new Error("stripe_js_unavailable");
       const stripe = window.Stripe(payload.publishableKey);
       billingCheckout = await stripe.initEmbeddedCheckout({ clientSecret: payload.clientSecret, onComplete: completeBillingCheckout });
       if (!document.getElementById("vozenBillingModal")) {
