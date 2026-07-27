@@ -24,14 +24,63 @@ jobs:
     steps:
       # This action receives the production SSH key, so it is pinned to a commit.
       - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_PLUS_MONTHLY: price_1TxsU9QFJYeD1Af0C1HtEWWE
+          STRIPE_PRICE_PLUS_YEARLY: price_1TxsXSQFJYeD1Af0B2o7xYKq
+          STRIPE_PRICE_PREMIUM_MONTHLY: price_1TxsdeQFJYeD1Af0ujsKbFde
+          STRIPE_PRICE_PREMIUM_YEARLY: price_1Txsk7QFJYeD1Af0GipTrZTd
+          STRIPE_PRICE_MAX_MONTHLY: price_1Txsp7QFJYeD1Af0LVQvo30q
+          STRIPE_PRICE_MAX_YEARLY: price_1TxspPQFJYeD1Af0EG6lUKIl
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET,STRIPE_PRICE_PLUS_MONTHLY,STRIPE_PRICE_PLUS_YEARLY,STRIPE_PRICE_PREMIUM_MONTHLY,STRIPE_PRICE_PREMIUM_YEARLY,STRIPE_PRICE_MAX_MONTHLY,STRIPE_PRICE_MAX_YEARLY
           command_timeout: 45m
           script: |
             set -euo pipefail
             cd ~/vozen-rust-prod
+            test -n "$STRIPE_SECRET_KEY"
+            test -n "$STRIPE_WEBHOOK_SECRET"
+
+            # Keep payment credentials only in the VPS runtime env. This updates
+            # existing keys in place without printing any secret values to logs.
+            set_env() {
+              key="$1"
+              value="$2"
+              file=".env.rust.prod"
+              tmp="${file}.tmp"
+              if [ -f "$file" ]; then
+                : > "$tmp"
+                while IFS= read -r line || [ -n "$line" ]; do
+                  case "$line" in
+                    "$key="*) printf '%s=%s\n' "$key" "$value" >> "$tmp" ;;
+                    *) printf '%s\n' "$line" >> "$tmp" ;;
+                  esac
+                done < "$file"
+                if ! grep -q "^${key}=" "$file"; then
+                  printf '%s=%s\n' "$key" "$value" >> "$tmp"
+                fi
+              else
+                printf '%s=%s\n' "$key" "$value" > "$tmp"
+              fi
+              chmod 600 "$tmp"
+              mv "$tmp" "$file"
+            }
+
+            set_env RUST_PAYMENTS_ENABLED true
+            set_env PREMIUM_API_ENABLED true
+            set_env STRIPE_SECRET_KEY "$STRIPE_SECRET_KEY"
+            set_env STRIPE_WEBHOOK_SECRET "$STRIPE_WEBHOOK_SECRET"
+            set_env STRIPE_PRICE_PLUS_MONTHLY "$STRIPE_PRICE_PLUS_MONTHLY"
+            set_env STRIPE_PRICE_PLUS_YEARLY "$STRIPE_PRICE_PLUS_YEARLY"
+            set_env STRIPE_PRICE_PREMIUM_MONTHLY "$STRIPE_PRICE_PREMIUM_MONTHLY"
+            set_env STRIPE_PRICE_PREMIUM_YEARLY "$STRIPE_PRICE_PREMIUM_YEARLY"
+            set_env STRIPE_PRICE_MAX_MONTHLY "$STRIPE_PRICE_MAX_MONTHLY"
+            set_env STRIPE_PRICE_MAX_YEARLY "$STRIPE_PRICE_MAX_YEARLY"
+
             # The production clone was originally created as a single-branch
             # checkout, so fetch main explicitly instead of relying on its
             # persisted remote refspec.
@@ -39,7 +88,8 @@ jobs:
             current_commit="$(git rev-parse HEAD)"
             target_commit="$(git rev-parse origin/main)"
             if [ "$current_commit" = "$target_commit" ]; then
-              echo "Production already runs $target_commit"
+              docker compose -p vozen-prod -f docker-compose.rust.prod.yml up -d --no-build vozen
+              echo "Production already runs $target_commit; runtime env refreshed"
               exit 0
             fi
             git reset --hard origin/main
