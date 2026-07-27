@@ -2386,8 +2386,10 @@ async fn run() -> Result<(), RuntimeError> {
         config.dashboard,
         config.admin,
         config.topgg_webhook,
-        config.public_status,
-        bot_token,
+        HttpRouterRuntimeOptions {
+            public_status: config.public_status,
+            bot_token,
+        },
         store,
         gateway_state.clone(),
     )?;
@@ -2439,18 +2441,22 @@ fn write_current_rejoin_marker(gateway_state: &GatewayState) {
     );
 }
 
+struct HttpRouterRuntimeOptions {
+    public_status: Option<PublicStatusConfig>,
+    bot_token: String,
+}
+
 fn build_http_router(
     premium_http: Option<PremiumHttpConfig>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
-    public_status: Option<PublicStatusConfig>,
-    bot_token: String,
+    runtime_options: HttpRouterRuntimeOptions,
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
 ) -> Result<axum::Router, RuntimeError> {
     let runtime_metrics = gateway_state.metrics();
-    let public_status = public_status.map(|config| {
+    let public_status = runtime_options.public_status.map(|config| {
         public_status_provider(store.clone(), gateway_state.clone(), config.incident)
     });
     let Some(config) = premium_http else {
@@ -2486,7 +2492,7 @@ fn build_http_router(
         .client_id
         .clone()
         .map(|client_id| {
-            DiscordOAuthVerifier::production(client_id, Some(bot_token.clone()))
+            DiscordOAuthVerifier::production(client_id, Some(runtime_options.bot_token.clone()))
                 .map(Arc::new)
                 .map_err(|_| RuntimeError::OAuthClient)
         })
@@ -3504,8 +3510,10 @@ mod tests {
                 client_id: Some("123456789012345678".into()),
             }),
             None,
-            None,
-            String::new(),
+            HttpRouterRuntimeOptions {
+                public_status: None,
+                bot_token: String::new(),
+            },
             store,
             GatewayState::default(),
         );
@@ -3530,8 +3538,10 @@ mod tests {
             None,
             None,
             None,
-            None,
-            String::new(),
+            HttpRouterRuntimeOptions {
+                public_status: None,
+                bot_token: String::new(),
+            },
             store,
             GatewayState::default(),
         )
