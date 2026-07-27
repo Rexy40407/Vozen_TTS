@@ -126,7 +126,10 @@ describe('operational security configuration', () => {
     expect(script).toContain('stripe.initEmbeddedCheckout');
     expect(script).toContain('payload.clientSecret');
     expect(script).not.toContain('vozenDiscordAuth');
-    expect(script).not.toContain('window.open(');
+    expect(script).toContain('window.open(');
+    expect(script).toContain('"vozenDiscordLogin"');
+    expect(script).toContain('vozen:discord-auth');
+    expect(script).toContain('login({ popup: true });');
     const checkoutSource = script.slice(
       script.indexOf('async function startCheckout('),
       script.indexOf('const billingInterval'),

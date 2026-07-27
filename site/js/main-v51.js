@@ -454,7 +454,7 @@
   }
 
   function beginBillingAuth() {
-    login();
+    login({ popup: true });
   }
 
   function billingEntitlementActive(data, request) {
@@ -554,8 +554,10 @@
   const STATE_KEY = "vozen.oauthstate";
   const NAV_USER_KEY = "vozen.navuser";
   const OAUTH_REDIRECT = new URL("/account", location.href).href;
+  const IS_BILLING_AUTH_POPUP = window.name === "vozenDiscordLogin" && !!window.opener;
   let panelState = { mode: "hidden" };
   let activationResume = { kind: "none" };
+  let billingAuthPopup = null;
 
   const t = (k) => (DICT[lang] && DICT[lang][k]) || (DICT.en && DICT.en[k]) || k;
   const esc = (s) =>
@@ -654,8 +656,41 @@
     u.searchParams.set("response_type", "token");
     u.searchParams.set("scope", "identify email");
     u.searchParams.set("state", state);
+    if (options && options.popup === true) {
+      billingAuthPopup = window.open(
+        u.toString(),
+        "vozenDiscordLogin",
+        "popup=yes,width=520,height=760,resizable=yes,scrollbars=yes",
+      );
+      if (!billingAuthPopup) {
+        try { sessionStorage.removeItem(STATE_KEY); } catch {}
+        const status = document.getElementById("vozenBillingAuthStatus");
+        if (status) status.textContent = "Allow the Discord sign-in window to continue.";
+      }
+      return billingAuthPopup;
+    }
     location.href = u.toString();
+    return null;
   }
+
+  function receiveBillingAuth(event) {
+    if (event.origin !== location.origin || !event.data || event.data.type !== "vozen:discord-auth") return;
+    const token = typeof event.data.token === "string" ? event.data.token : "";
+    const state = typeof event.data.state === "string" ? event.data.state : "";
+    let expected = null;
+    try { expected = sessionStorage.getItem(STATE_KEY); } catch {}
+    if (!token || !state || !expected || state !== expected) return;
+    try {
+      sessionStorage.removeItem(STATE_KEY);
+      sessionStorage.setItem(TOK_KEY, token);
+    } catch {}
+    billingAuthPopup?.close?.();
+    billingAuthPopup = null;
+    if (!document.getElementById("vozenBillingModal")) return;
+    setBillingPhase("payment");
+    void continueBillingCheckout();
+  }
+  window.addEventListener("message", receiveBillingAuth);
 
   function logout() {
     try {
@@ -692,6 +727,12 @@
     const tok = p.get("access_token");
     if (!tok) return null;
     const st = p.get("state");
+    if (IS_BILLING_AUTH_POPUP) {
+      history.replaceState(null, "", location.pathname + location.search);
+      window.opener.postMessage({ type: "vozen:discord-auth", token: tok, state: st || "" }, location.origin);
+      window.close();
+      return { popup: true };
+    }
     let expected = null;
     try {
       expected = sessionStorage.getItem(STATE_KEY);
@@ -765,6 +806,7 @@
       return;
     }
     const fromHash = readTokenFromHash();
+    if (fromHash?.popup) return;
     if (fromHash) {
       try {
         sessionStorage.setItem(TOK_KEY, fromHash.token);
