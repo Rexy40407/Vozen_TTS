@@ -352,7 +352,7 @@
   function showBillingError(message = t("panel.error")) {
     const checkout = document.getElementById("vozenEmbeddedCheckout");
     if (!checkout) return;
-    checkout.innerHTML = `<div class="billing-modal__error"><strong>${esc(message)}</strong><p>${t("panel.retry")}</p><button type="button" class="btn--ghost" id="vozenBillingRetry">${t("panel.retry")}</button></div>`;
+    checkout.innerHTML = `<div class="billing-modal__error"><span class="billing-modal__error-icon" aria-hidden="true">!</span><strong>${esc(message)}</strong><p>${t("claim.loginAgain")}</p><button type="button" class="btn btn--primary" id="vozenBillingRetry">${t("panel.retry")}</button></div>`;
     document.getElementById("vozenBillingRetry")?.addEventListener("click", () => void continueBillingCheckout());
   }
 

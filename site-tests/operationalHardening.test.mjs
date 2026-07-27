@@ -137,6 +137,14 @@ describe('operational security configuration', () => {
     expect(page).toContain('frame-src https://checkout.stripe.com');
     expect(page).toContain('js/main-v46.js');
   });
+  it('keeps the embedded checkout error inside the dark blurred modal', () => {
+    const css = source('site/css/billing-v1.css');
+    const script = source(SITE_JS);
+    expect(css).toContain('backdrop-filter: blur(16px) saturate(0.76)');
+    expect(css).toContain('background: #0c1220');
+    expect(css).not.toContain('background: #fff');
+    expect(script).toContain('billing-modal__error-icon');
+  });
   it('keeps the Cloudflare CSP aligned with the self-hosted-font privacy promise', () => {
     const script = source('tools/cf-security-headers.mjs');
     expect(script).not.toContain('fonts.googleapis.com');

@@ -15,8 +15,9 @@
 .billing-modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(3, 5, 12, 0.82);
-  backdrop-filter: blur(14px);
+  background: rgba(3, 5, 12, 0.72);
+  backdrop-filter: blur(16px) saturate(0.76);
+  -webkit-backdrop-filter: blur(16px) saturate(0.76);
 }
 
 .billing-modal__dialog {
@@ -196,9 +197,9 @@
   min-height: 360px;
   margin: 0 12px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(138, 174, 255, 0.16);
   border-radius: 16px;
-  background: #fff;
+  background: #0c1220;
 }
 
 .billing-modal__checkout iframe {
@@ -216,13 +217,14 @@
   align-content: center;
   gap: 12px;
   padding: 30px;
-  color: #172033;
+  color: #f7f8ff;
   text-align: center;
 }
 
 .billing-modal__loading p,
 .billing-modal__error p {
   margin: 0;
+  color: #aab6ca;
 }
 
 .billing-modal__spinner {
@@ -236,6 +238,19 @@
 
 .billing-modal__error strong {
   font-size: 1.05rem;
+}
+
+.billing-modal__error-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  justify-self: center;
+  color: #ffc36a;
+  border: 1px solid rgba(255, 195, 106, 0.42);
+  border-radius: 50%;
+  background: rgba(255, 195, 106, 0.11);
+  font-weight: 800;
 }
 
 .billing-modal__trust {
