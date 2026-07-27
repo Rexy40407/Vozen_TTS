@@ -36,6 +36,11 @@ mantidos nos crates Rust.
 
 ## Atualizações e rollback
 
+The production compose file enables `PUBLIC_STATUS_ENABLED=true` automatically.
+Once Caddy points `api.vozen.org` at port 3001, `https://vozen.org/status`
+reads the live bot, database, and voice-provider state. The public endpoint only
+exposes coarse aggregate states; it never exposes tokens, messages, or internals.
+
 1. `git fetch origin && git checkout main && git pull --ff-only`.
 2. Pare o compose, copie `rust-data/tts.db` para um backup datado.
 3. `docker compose -f docker-compose.rust.prod.yml up -d --build`.
