@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 'utf8' });
 // The site's assets are cache-busted by FILENAME (never a query string), so every rename churns
 // these tests too. One constant each: the rename is then a one-line edit here, not a hunt.
-const SITE_JS = 'site/js/main-v45.js';
+const SITE_JS = 'site/js/main-v46.js';
 const SITE_I18N = 'site/js/i18n-v41.js';
 const SITE_CSS = 'site/css/main-v43.css';
 const ACCOUNT_CSS = 'site/css/account-v6.css';
@@ -96,7 +96,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('class="account-tasklist"');
     expect(page).toContain('id="accountBilling"');
     expect(page).not.toContain('id="accountActivateOpen"');
-    expect(page).toContain('js/main-v45.js');
+    expect(page).toContain('js/main-v46.js');
     expect(page).toContain('css/billing-v1.css');
     expect(page).toContain('https://js.stripe.com/v3/');
     expect(page).toContain('frame-src https://checkout.stripe.com');
@@ -114,11 +114,13 @@ describe('operational security configuration', () => {
     expect(script).toContain('function billingCheckoutModal(plan, interval)');
     expect(script).toContain('stripe.initEmbeddedCheckout');
     expect(script).toContain('payload.clientSecret');
+    expect(script).toContain('window.open(');
+    expect(script).toContain('vozen:oauth-complete');
     const checkoutSource = script.slice(
       script.indexOf('async function startCheckout('),
       script.indexOf('const billingInterval'),
     );
-    expect(checkoutSource).not.toContain('window.location.href = payload.url');
+    expect(checkoutSource).not.toContain('window.location.href');
     expect(claim).toContain('id="activate-purchase"');
     expect(claim).toContain('role="dialog"');
     expect(claim).toContain('id="ppClaimClose"');
@@ -127,6 +129,13 @@ describe('operational security configuration', () => {
     expect(script).toContain('class="ppanel__logout-icon"');
     expect(script).toContain('function openPurchaseActivation()');
     expect(script).toContain('function mountPurchaseActivation(el)');
+  });
+  it('keeps homepage checkout inside the current page', () => {
+    const page = source('site/index.html');
+    expect(page).toContain('css/billing-v1.css');
+    expect(page).toContain('https://js.stripe.com/v3/');
+    expect(page).toContain('frame-src https://checkout.stripe.com');
+    expect(page).toContain('js/main-v46.js');
   });
   it('keeps the Cloudflare CSP aligned with the self-hosted-font privacy promise', () => {
     const script = source('tools/cf-security-headers.mjs');
@@ -368,5 +377,14 @@ describe('operational security configuration', () => {
     expect(terms).toMatch(/digital subscriptions processed by Stripe/i);
     expect(terms).toMatch(/does not collect a shipping address/i);
     expect(terms).not.toMatch(/Ko-fi purchase/i);
+  });
+  it('configures Stripe checkout without a browser redirect', () => {
+    const stripe = source('crates/vozen-api/src/stripe_api.rs');
+    const checkout = stripe.slice(stripe.indexOf('async fn checkout('), stripe.indexOf('async fn portal('));
+    expect(checkout).toContain('(\"ui_mode\", \"embedded\".to_owned())');
+    expect(checkout).toContain('(\"redirect_on_completion\", \"never\".to_owned())');
+    expect(checkout).not.toContain('success_url');
+    expect(checkout).not.toContain('cancel_url');
+    expect(checkout).not.toContain('return_url');
   });
 });

@@ -5,7 +5,7 @@ const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 
 const LANGS = ['en', 'pt', 'fr', 'es', 'de', 'tr', 'ar', 'zh', 'ru', 'ko'];
 describe('site UX polish contract', () => {
   it('requires a translated, accessible confirmation before logging out', () => {
-    const script = source('site/js/main-v45.js');
+    const script = source('site/js/main-v46.js');
     expect(script).toContain('function logoutConfirmModal()');
     expect(script).toContain('id="ppLogoutConfirm"');
     expect(script).toContain('role="dialog"');
@@ -19,7 +19,7 @@ describe('site UX polish contract', () => {
     );
   });
   it('shows a specific inline error before submitting an empty Ko-fi receipt', () => {
-    const script = source('site/js/main-v45.js');
+    const script = source('site/js/main-v46.js');
     const emptyGuard = script.indexOf('setMsg(t("claim.receiptRequired"), "err")');
     const linkRequest = script.indexOf('PREMIUM_API_BASE + "/api/link"');
     const instantMessage = script.indexOf('id="ppInstantMsg"');
@@ -37,7 +37,7 @@ describe('site UX polish contract', () => {
     expect(receiptMessage).toBeGreaterThan(receiptBody);
   });
   it('fits translated hero lines without changing the shared visual footprint', () => {
-    const script = source('site/js/main-v45.js');
+    const script = source('site/js/main-v46.js');
     const css = source('site/css/main-v43.css');
     expect(script).toContain('function fitHeroTitle()');
     expect(script).toContain('fitHeroTitle();');

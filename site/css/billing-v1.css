@@ -21,7 +21,7 @@
 
 .billing-modal__dialog {
   position: relative;
-  width: min(100%, 720px);
+  width: min(100%, 540px);
   max-height: min(92vh, 900px);
   overflow: auto;
   border: 1px solid rgba(138, 174, 255, 0.2);
@@ -83,17 +83,37 @@
   color: #fff;
 }
 
-.billing-modal__rule {
+.billing-modal__steps {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
   padding: 0 30px 18px;
   color: #77849c;
   font-size: 0.76rem;
   font-weight: 800;
 }
 
-.billing-modal__rule span {
+.billing-modal__steps span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.55;
+}
+
+.billing-modal__steps span + span::before {
+  width: 60px;
+  height: 1px;
+  margin-right: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  content: "";
+}
+
+.billing-modal__steps span.is-active {
+  opacity: 1;
+  color: #f7f8ff;
+}
+
+.billing-modal__steps i {
   display: grid;
   width: 24px;
   height: 24px;
@@ -102,16 +122,74 @@
   border-radius: 50%;
 }
 
-.billing-modal__rule span.is-active {
+.billing-modal__steps span.is-active i {
   border-color: #84d8c4;
   background: rgba(132, 216, 196, 0.15);
   color: #b9ffed;
 }
 
-.billing-modal__rule i {
-  width: 42px;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.12);
+.billing-modal__body {
+  min-height: 360px;
+}
+
+.billing-modal__auth,
+.billing-modal__done {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+}
+
+.billing-modal__auth[hidden],
+.billing-modal__payment[hidden],
+.billing-modal__done[hidden] {
+  display: none;
+}
+
+.billing-modal__auth p,
+.billing-modal__done p {
+  max-width: 38ch;
+  margin: 0;
+  color: #9aa6bc;
+  line-height: 1.55;
+}
+
+.billing-modal__auth .billing-modal__lead {
+  color: #f7f8ff;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.billing-modal__login {
+  min-height: 46px;
+  margin-top: 8px;
+}
+
+.billing-modal__status {
+  min-height: 1.4em;
+  color: #ffc24b !important;
+  font-size: 0.78rem;
+}
+
+.billing-modal__done-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border: 1px solid rgba(46, 230, 200, 0.45);
+  border-radius: 50%;
+  background: rgba(46, 230, 200, 0.12);
+  color: #7cf5e2;
+  font-size: 2rem;
+}
+
+.billing-modal__done h3 {
+  margin: 0;
+  color: #f7f8ff;
+  font-size: 1.3rem;
 }
 
 .billing-modal__checkout {
@@ -189,7 +267,7 @@
   }
 
   .billing-modal__head,
-  .billing-modal__rule {
+  .billing-modal__steps {
     padding-left: 20px;
     padding-right: 20px;
   }

@@ -190,15 +190,11 @@ async fn checkout(
         ),
         ("subscription_data[metadata][plan]", input.plan.clone()),
         ("subscription_data[metadata][seats]", seats.to_string()),
+        // Keep the complete payment journey inside Stripe's embedded iframe. This deliberately
+        // disables redirect-based payment methods; the browser must remain on the current Vozen
+        // page and the client renders the success step from Checkout's onComplete callback.
         ("ui_mode", "embedded".to_owned()),
-        (
-            "return_url",
-            format!(
-                "{}/account?billing=success&session_id={{CHECKOUT_SESSION_ID}}",
-                state.origin.to_str().unwrap_or("https://vozen.org")
-            ),
-        ),
-        ("redirect_on_completion", "if_required".to_owned()),
+        ("redirect_on_completion", "never".to_owned()),
         ("allow_promotion_codes", "true".to_owned()),
     ];
     let response = state
