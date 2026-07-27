@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Vozen homepage concept 02 — Studio Console</title>
+    <style>
+      :root {
+        --black: #11130f;
+        --panel: #1c2019;
+        --panel-2: #252a21;
+        --well: #0b0d0a;
+        --line: #505747;
+        --line-soft: #373d32;
+        --text: #e8e3cc;
+        --muted: #a09e8d;
+        --amber: #f3b84b;
+        --orange: #e56433;
+        --mint: #80b99a;
+        --mono: "Cascadia Mono", "Courier New", monospace;
+        --sans: "Segoe UI", Arial, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body { margin: 0; color: var(--text); background: var(--black); font-family: var(--mono); line-height: 1.45; }
+      a { color: inherit; }
+      button { font: inherit; }
+      .shell { width: min(1320px, calc(100% - 32px)); margin: 0 auto; }
+      .screw { width: 7px; height: 7px; border-radius: 50%; background: #0a0b09; box-shadow: inset 0 1px 0 #626859, 0 1px 0 #353b30; }
+      .label { font-size: 10px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+      .panel {
+        position: relative;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.05), inset 0 -1px 0 rgba(0,0,0,.5);
+      }
+      .panel::before, .panel::after { content: ""; position: absolute; z-index: 2; width: 7px; height: 7px; border-radius: 50%; background: #090a08; box-shadow: inset 0 1px 0 #596050; }
+      .panel::before { left: 10px; top: 10px; }
+      .panel::after { right: 10px; bottom: 10px; }
+
+      .topbar { border-bottom: 1px solid var(--line); background: #151812; }
+      .topbar__inner { display: grid; grid-template-columns: auto 1fr auto; align-items: stretch; min-height: 76px; }
+      .brand { display: flex; align-items: center; gap: 14px; padding: 0 24px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); text-decoration: none; font: 800 23px/1 var(--sans); letter-spacing: .02em; }
+      .brand__leds { display: flex; align-items: center; gap: 3px; }
+      .brand__leds i { display: block; width: 4px; height: var(--h); background: var(--amber); box-shadow: 0 0 8px rgba(243,184,75,.35); }
+      .system {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 0 24px;
+        font-size: 10px;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .system strong { color: var(--mint); }
+      .system__light { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px rgba(128,185,154,.12); }
+      .topbar__cta { display: grid; place-items: center; padding: 0 25px; color: #1b160c; background: var(--amber); font: 900 12px/1 var(--sans); text-decoration: none; text-transform: uppercase; letter-spacing: .08em; }
+      .topbar__cta:hover { background: #ffd172; }
+
+      .console { padding: 22px 0; }
+      .console__grid { display: grid; grid-template-columns: 205px minmax(0, 1fr); gap: 18px; }
+      .rail { align-self: start; position: sticky; top: 18px; padding: 24px 16px; }
+      .rail__head { display: flex; justify-content: space-between; align-items: center; padding: 0 7px 18px; border-bottom: 1px solid var(--line-soft); }
+      .rail nav { display: grid; margin: 18px -4px 0; }
+      .rail nav a { display: flex; justify-content: space-between; align-items: center; min-height: 45px; padding: 0 12px; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 11px; text-decoration: none; text-transform: uppercase; }
+      .rail nav a::after { content: "CH " attr(data-ch); color: #626a58; font-size: 9px; }
+      .rail nav a:hover { color: var(--amber); background: #161914; }
+      .rail__meter { margin-top: 28px; }
+      .meter { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; height: 10px; margin-top: 10px; }
+      .meter i { background: var(--line-soft); }
+      .meter i:nth-child(-n+6) { background: var(--mint); }
+      .meter i:nth-child(7), .meter i:nth-child(8) { background: var(--amber); }
+      .rail__note { margin: 16px 0 0; color: #777d6b; font-size: 9px; line-height: 1.6; text-transform: uppercase; }
+
+      .stage { min-width: 0; }
+      .hero { display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(330px, .78fr); }
+      .hero__copy { padding: clamp(38px, 6vw, 78px); border-right: 1px solid var(--line); }
+      .hero__status { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 30px; color: var(--mint); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+      .hero__status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px rgba(128,185,154,.12); }
+      h1 { margin: 0; font: 900 clamp(55px, 8vw, 112px)/.84 var(--sans); letter-spacing: -.065em; text-transform: uppercase; }
+      h1 span { display: block; color: var(--amber); }
+      .hero__lede { max-width: 650px; margin: 34px 0 30px; color: #c7c3ad; font: 400 clamp(17px, 1.8vw, 23px)/1.45 var(--sans); }
+      .hero__actions { display: flex; flex-wrap: wrap; gap: 12px; }
+      .button { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; border: 1px solid var(--line); color: var(--text); background: var(--well); font: 800 11px/1 var(--sans); letter-spacing: .07em; text-decoration: none; text-transform: uppercase; }
+      .button--hot { color: #1a160d; background: var(--amber); border-color: var(--amber); }
+      .button:hover { transform: translateY(-1px); border-color: var(--amber); }
+      .hero__deck { display: flex; flex-direction: column; min-height: 620px; background: var(--panel-2); }
+      .deck__head { display: flex; justify-content: space-between; padding: 20px 22px; border-bottom: 1px solid var(--line); }
+      .deck__screen { margin: 24px; padding: 22px; border: 1px solid #42493b; background: var(--well); box-shadow: inset 0 0 24px rgba(0,0,0,.55); }
+      .deck__screen p { margin: 0 0 20px; color: var(--mint); font-size: 12px; }
+      .wave { display: flex; align-items: center; gap: 3px; height: 126px; overflow: hidden; }
+      .wave i { flex: 1; min-width: 3px; height: var(--h); background: var(--amber); box-shadow: 0 0 6px rgba(243,184,75,.18); }
+      .timecode { display: flex; justify-content: space-between; margin-top: 15px; color: #757b6b; font-size: 9px; }
+      .deck__controls { display: grid; grid-template-columns: 84px 1fr; gap: 18px; align-items: center; padding: 0 24px 24px; }
+      .play { width: 84px; height: 84px; border: 1px solid #666d5b; border-radius: 50%; color: #19160f; background: var(--amber); cursor: pointer; font-size: 24px; box-shadow: inset 0 0 0 7px #c58d2d, 0 4px 0 #090a08; }
+      .play:active { transform: translateY(3px); box-shadow: inset 0 0 0 7px #c58d2d, 0 1px 0 #090a08; }
+      .control-copy strong { display: block; font: 800 18px/1.2 var(--sans); }
+      .control-copy span { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+      .faders { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); margin-top: auto; }
+      .fader { padding: 20px 14px; border-right: 1px solid var(--line); text-align: center; }
+      .fader:last-child { border-right: 0; }
+      .fader b { display: block; margin-bottom: 14px; font-size: 9px; color: var(--muted); }
+      .knob { width: 40px; height: 40px; margin: auto; border: 5px solid #0e100d; border-radius: 50%; background: conic-gradient(var(--amber) 0 68%, #3c4236 68% 100%); box-shadow: 0 0 0 1px #636a58; }
+      .fader span { display: block; margin-top: 11px; font-size: 9px; color: var(--mint); }
+
+      .readouts { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 18px; }
+      .readout { min-height: 130px; padding: 22px; border-right: 1px solid var(--line); }
+      .readout:last-child { border-right: 0; }
+      .readout strong { display: block; margin: 14px 0 7px; color: var(--amber); font: 900 42px/1 var(--sans); }
+      .readout p { margin: 0; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+
+      .module { margin-top: 18px; }
+      .module__head { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+      .module__head h2 { margin: 0; font: 800 20px/1 var(--sans); text-transform: uppercase; }
+      .module__head span { color: var(--muted); font-size: 9px; }
+      .channels { display: grid; grid-template-columns: repeat(4, 1fr); }
+      .channel { min-height: 350px; padding: 26px 20px; border-right: 1px solid var(--line); }
+      .channel:last-child { border-right: 0; }
+      .channel__no { display: flex; justify-content: space-between; color: var(--mint); font-size: 9px; }
+      .channel__icon { display: grid; place-items: center; width: 54px; height: 54px; margin: 40px 0 24px; border: 1px solid var(--line); border-radius: 50%; color: var(--amber); background: var(--well); font: 900 18px/1 var(--sans); }
+      .channel h3 { margin: 0 0 12px; font: 800 20px/1.1 var(--sans); }
+      .channel p { margin: 0; color: var(--muted); font: 400 13px/1.55 var(--sans); }
+      .channel__switch { display: flex; align-items: center; gap: 10px; margin-top: 28px; color: var(--mint); font-size: 9px; text-transform: uppercase; }
+      .toggle { position: relative; width: 42px; height: 18px; border: 1px solid var(--line); background: var(--well); }
+      .toggle::after { content: ""; position: absolute; right: 3px; top: 3px; width: 10px; height: 10px; background: var(--mint); }
+
+      .plans { display: grid; grid-template-columns: 1fr 1fr; }
+      .plan { padding: 34px; border-right: 1px solid var(--line); }
+      .plan:last-child { border-right: 0; background: #20251d; }
+      .plan__top { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; }
+      .plan h3 { margin: 30px 0 10px; font: 800 28px/1 var(--sans); }
+      .plan__price { color: var(--amber); font: 900 52px/1 var(--sans); }
+      .plan__price small { font: 700 10px/1.4 var(--mono); color: var(--muted); }
+      .plan ul { padding: 0; margin: 28px 0; list-style: none; }
+      .plan li { padding: 9px 0; border-top: 1px solid var(--line-soft); color: #c4c0ac; font-size: 12px; }
+      .plan li::before { content: "●"; margin-right: 9px; color: var(--mint); font-size: 8px; }
+
+      .final { display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: center; margin: 18px 0; padding: 44px; background: var(--orange); border-color: #f28a60; color: #1d130d; }
+      .final h2 { margin: 0 0 8px; font: 900 clamp(34px, 5vw, 64px)/.95 var(--sans); letter-spacing: -.04em; text-transform: uppercase; }
+      .final p { margin: 0; font: 700 11px/1.5 var(--mono); text-transform: uppercase; }
+      .final .button { border-color: #21150e; background: #21150e; color: #f4d9bf; }
+      footer { padding: 24px 0 38px; color: #767c6c; font-size: 9px; text-transform: uppercase; }
+      .footer__inner { display: flex; justify-content: space-between; gap: 24px; }
+      .footer__inner div { display: flex; gap: 16px; }
+
+      @media (max-width: 980px) {
+        .console__grid { grid-template-columns: 1fr; }
+        .rail { display: none; }
+        .hero { grid-template-columns: 1fr; }
+        .hero__copy { border-right: 0; border-bottom: 1px solid var(--line); }
+        .hero__deck { min-height: 540px; }
+        .channels { grid-template-columns: repeat(2, 1fr); }
+        .channel:nth-child(2) { border-right: 0; }
+        .channel:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      }
+      @media (max-width: 650px) {
+        .shell { width: min(100% - 20px, 1320px); }
+        .topbar__inner { grid-template-columns: 1fr auto; }
+        .system { display: none; }
+        .brand { border-left: 0; padding: 0 16px; }
+        .topbar__cta { padding: 0 15px; font-size: 10px; }
+        .hero__copy { padding: 38px 24px; }
+        .hero__deck { min-height: 0; }
+        .readouts, .channels, .plans { grid-template-columns: 1fr; }
+        .readout, .channel, .channel:nth-child(2), .plan { min-height: 0; border-right: 0; border-bottom: 1px solid var(--line); }
+        .readout:last-child, .channel:last-child, .plan:last-child { border-bottom: 0; }
+        .deck__controls { grid-template-columns: 68px 1fr; }
+        .play { width: 68px; height: 68px; }
+        .faders { grid-template-columns: repeat(2, 1fr); }
+        .fader:nth-child(2) { border-right: 0; }
+        .fader:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+        .final { grid-template-columns: 1fr; padding: 34px 24px; }
+        .footer__inner, .footer__inner div { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="shell topbar__inner">
+        <a class="brand" href="#top">
+          <span class="brand__leds" aria-hidden="true"><i style="--h:11px"></i><i style="--h:22px"></i><i style="--h:30px"></i><i style="--h:22px"></i><i style="--h:11px"></i></span>
+          VOZEN
+        </a>
+        <div class="system"><span class="system__light"></span><strong>All systems live</strong><span>35 languages / 38 voices / 16 games</span></div>
+        <a class="topbar__cta" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">Patch into Discord</a>
+      </div>
+    </header>
+
+    <main class="console" id="top">
+      <div class="shell console__grid">
+        <aside class="rail panel">
+          <div class="rail__head"><span class="label">Signal map</span><span class="screw"></span></div>
+          <nav aria-label="Page sections">
+            <a href="#top" data-ch="01">Voice</a>
+            <a href="#modules" data-ch="02">Modules</a>
+            <a href="#plans" data-ch="03">Plans</a>
+            <a href="../index.html" data-ch="04">Current site</a>
+            <a href="./index.html" data-ch="05">Concepts</a>
+          </nav>
+          <div class="rail__meter"><span class="label">Room level</span><div class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <p class="rail__note">Source: Discord chat<br />Output: shared voice<br />Latency: low<br />Core license: AGPL</p>
+        </aside>
+
+        <div class="stage">
+          <section class="hero panel">
+            <div class="hero__copy">
+              <span class="hero__status">Channel armed · Ready</span>
+              <h1>Type it.<span>Hear it.</span></h1>
+              <p class="hero__lede">Vozen routes Discord chat into natural speech. One command gets 38 voices, 35 languages, minigames and full admin control into your call.</p>
+              <div class="hero__actions">
+                <a class="button button--hot" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">Add to Discord</a>
+                <a class="button" href="https://discord.gg/4kYw2WUbNN">Support channel</a>
+              </div>
+            </div>
+
+            <div class="hero__deck">
+              <div class="deck__head"><span class="label">Monitor / Voice A</span><span class="label">Piper · EN</span></div>
+              <div class="deck__screen">
+                <p>&gt; Hey! Welcome to the server. Type anything and I’ll read it out loud.</p>
+                <div class="wave" aria-hidden="true">
+                  <i style="--h:20%"></i><i style="--h:48%"></i><i style="--h:82%"></i><i style="--h:36%"></i><i style="--h:96%"></i><i style="--h:56%"></i><i style="--h:22%"></i><i style="--h:67%"></i><i style="--h:88%"></i><i style="--h:44%"></i><i style="--h:74%"></i><i style="--h:30%"></i><i style="--h:58%"></i><i style="--h:94%"></i><i style="--h:38%"></i><i style="--h:68%"></i><i style="--h:18%"></i><i style="--h:84%"></i><i style="--h:52%"></i><i style="--h:28%"></i>
+                </div>
+                <div class="timecode"><span>00:00:00</span><span>VOICE ENGINE / FREE</span><span>00:00:04</span></div>
+              </div>
+              <div class="deck__controls">
+                <button class="play" type="button" aria-label="Play English voice sample" data-audio="../assets/samples/en.mp3">▶</button>
+                <div class="control-copy"><strong>English / Sample 01</strong><span>Press monitor to hear the real output</span></div>
+              </div>
+              <div class="faders">
+                <div class="fader"><b>LANG</b><div class="knob"></div><span>EN</span></div>
+                <div class="fader"><b>VOICE</b><div class="knob"></div><span>PIPER</span></div>
+                <div class="fader"><b>SPEED</b><div class="knob"></div><span>1.0×</span></div>
+                <div class="fader"><b>MODE</b><div class="knob"></div><span>AUTO</span></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="readouts panel" aria-label="Product facts">
+            <div class="readout"><span class="label">Languages</span><strong>35</strong><p>Native voices, one server</p></div>
+            <div class="readout"><span class="label">Voice bank</span><strong>38</strong><p>Neural voices in the free core</p></div>
+            <div class="readout"><span class="label">Games</span><strong>16</strong><p>Built for the voice channel</p></div>
+            <div class="readout"><span class="label">Setup time</span><strong>30s</strong><p>Invite, join, type</p></div>
+          </section>
+
+          <section class="module panel" id="modules">
+            <header class="module__head"><h2>Four channels. One clean signal.</h2><span>Module bank / always available</span></header>
+            <div class="channels">
+              <article class="channel"><div class="channel__no"><span>CH 01</span><span>INPUT</span></div><div class="channel__icon">TXT</div><h3>Auto-read</h3><p>Route any text channel straight into the voice room. No copy-paste and no repeated commands.</p><div class="channel__switch"><span class="toggle"></span> Live</div></article>
+              <article class="channel"><div class="channel__no"><span>CH 02</span><span>VOICE</span></div><div class="channel__icon">38</div><h3>Personal voices</h3><p>Every member chooses their voice and language. Detection can switch language message by message.</p><div class="channel__switch"><span class="toggle"></span> Live</div></article>
+              <article class="channel"><div class="channel__no"><span>CH 03</span><span>PLAY</span></div><div class="channel__icon">16</div><h3>Voice games</h3><p>Trivia, Wordle, Chess and more, designed to get quiet calls talking again.</p><div class="channel__switch"><span class="toggle"></span> Live</div></article>
+              <article class="channel"><div class="channel__no"><span>CH 04</span><span>ADMIN</span></div><div class="channel__icon">CTL</div><h3>Room control</h3><p>Anti-spam, pronunciations, channel profiles, permissions and a real kill switch.</p><div class="channel__switch"><span class="toggle"></span> Live</div></article>
+            </div>
+          </section>
+
+          <section class="module panel" id="plans">
+            <header class="module__head"><h2>Choose the output stage.</h2><span>No card for free / annual saves about 20%</span></header>
+            <div class="plans">
+              <article class="plan">
+                <div class="plan__top"><span>STAGE A</span><span>CORE</span></div>
+                <h3>Vozen Free</h3>
+                <div class="plan__price">€0 <small>/ forever</small></div>
+                <ul><li>38 Piper voices</li><li>35 languages</li><li>Auto-read and 13 games</li><li>Full admin controls</li></ul>
+                <a class="button" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">Start free</a>
+              </article>
+              <article class="plan">
+                <div class="plan__top"><span>STAGE B</span><span>SERVER PREMIUM</span></div>
+                <h3>Vozen Premium</h3>
+                <div class="plan__price">€3.99 <small>/ month · 3 servers</small></div>
+                <ul><li>Kokoro and Google HD engines</li><li>Every effect and game</li><li>Live transcription and 24/7</li><li>Available to the whole server</li></ul>
+                <a class="button button--hot" href="https://ko-fi.com/rexy00">See Premium</a>
+              </article>
+            </div>
+          </section>
+
+          <section class="final panel">
+            <div><h2>Open the channel.</h2><p>Core free forever / 35 languages / running in 30 seconds</p></div>
+            <a class="button" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">Patch Vozen into Discord →</a>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="shell footer__inner"><span>Vozen transmission system · Type it, hear it.</span><div><a href="../privacy.html">Privacy</a><a href="../terms.html">Terms</a><a href="https://github.com/Rexy40407/vozen">Source</a></div></div>
+    </footer>
+    <audio id="voiceSample" preload="none"></audio>
+    <script>
+      const player = document.querySelector(".play");
+      const audio = document.querySelector("#voiceSample");
+      player.addEventListener("click", () => {
+        if (!audio.src) audio.src = player.dataset.audio;
+        if (audio.paused) {
+          audio.play();
+          player.textContent = "Ⅱ";
+          player.setAttribute("aria-label", "Pause English voice sample");
+        } else {
+          audio.pause();
+          player.textContent = "▶";
+          player.setAttribute("aria-label", "Play English voice sample");
+        }
+      });
+      audio.addEventListener("ended", () => { player.textContent = "▶"; });
+    </script>
+  </body>
+</html>

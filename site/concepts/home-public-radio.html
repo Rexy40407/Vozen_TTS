@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Vozen homepage concept 01 — Public Radio</title>
+    <style>
+      :root {
+        --paper: #f1eadc;
+        --paper-2: #e6dcc9;
+        --ink: #18221f;
+        --muted: #66706a;
+        --rule: #9b9a8f;
+        --red: #c8442f;
+        --red-dark: #8e2b1e;
+        --green: #174f45;
+        --cream: #fffaf0;
+        --serif: Georgia, "Times New Roman", serif;
+        --sans: "Trebuchet MS", "Segoe UI", sans-serif;
+        --mono: "Courier New", monospace;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          repeating-linear-gradient(0deg, rgba(24, 34, 31, 0.025) 0, rgba(24, 34, 31, 0.025) 1px, transparent 1px, transparent 5px),
+          var(--paper);
+        font-family: var(--sans);
+        line-height: 1.5;
+      }
+      a { color: inherit; }
+      button { font: inherit; }
+      .shell { width: min(1240px, calc(100% - 40px)); margin: 0 auto; }
+      .skip { position: fixed; left: 12px; top: -80px; z-index: 30; padding: 10px 14px; background: var(--ink); color: white; }
+      .skip:focus { top: 12px; }
+
+      .masthead { border-bottom: 1px solid var(--ink); }
+      .masthead__top {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        min-height: 94px;
+        border-left: 1px solid var(--ink);
+        border-right: 1px solid var(--ink);
+      }
+      .date, .edition {
+        padding: 0 24px;
+        font: 700 11px/1.4 var(--mono);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .edition { text-align: right; }
+      .wordmark {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 34px;
+        border-left: 1px solid var(--ink);
+        border-right: 1px solid var(--ink);
+        text-decoration: none;
+        font: 700 clamp(30px, 4vw, 48px)/1 var(--serif);
+        letter-spacing: -0.05em;
+      }
+      .mark {
+        display: grid;
+        grid-template-columns: repeat(5, 3px);
+        align-items: center;
+        gap: 3px;
+        height: 30px;
+      }
+      .mark i { display: block; width: 3px; background: var(--red); }
+      .mark i:nth-child(1), .mark i:nth-child(5) { height: 11px; }
+      .mark i:nth-child(2), .mark i:nth-child(4) { height: 22px; }
+      .mark i:nth-child(3) { height: 30px; }
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 52px;
+        border-left: 1px solid var(--ink);
+        border-right: 1px solid var(--ink);
+      }
+      .nav__links { display: flex; align-items: center; }
+      .nav__links a {
+        display: block;
+        padding: 17px 22px;
+        border-right: 1px solid var(--rule);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-decoration: none;
+        text-transform: uppercase;
+      }
+      .nav__links a:hover { color: var(--red-dark); text-decoration: underline; text-underline-offset: 4px; }
+      .nav__cta {
+        align-self: stretch;
+        display: grid;
+        place-items: center;
+        padding: 0 26px;
+        color: var(--cream);
+        background: var(--red);
+        font-weight: 900;
+        text-decoration: none;
+      }
+      .nav__cta:hover { background: var(--red-dark); }
+
+      .hero { border-bottom: 1px solid var(--ink); }
+      .hero__grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+        border-left: 1px solid var(--ink);
+        border-right: 1px solid var(--ink);
+      }
+      .hero__story { padding: clamp(48px, 7vw, 96px) clamp(28px, 5vw, 70px) 54px; border-right: 1px solid var(--ink); }
+      .kicker {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 26px;
+        font: 700 12px/1.2 var(--mono);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .kicker::before { content: ""; width: 42px; height: 6px; background: var(--red); }
+      h1 {
+        max-width: 880px;
+        margin: 0;
+        font: 700 clamp(64px, 9.5vw, 138px)/0.78 var(--serif);
+        letter-spacing: -0.075em;
+      }
+      h1 span { display: block; color: var(--red); font-style: italic; font-weight: 400; }
+      .dek {
+        max-width: 690px;
+        margin: 42px 0 28px;
+        font: 400 clamp(20px, 2.1vw, 29px)/1.35 var(--serif);
+      }
+      .byline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 28px;
+        padding-top: 18px;
+        border-top: 1px solid var(--rule);
+        font: 700 11px/1.4 var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .hero__side { display: flex; flex-direction: column; }
+      .on-air {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 24px;
+        color: white;
+        background: var(--green);
+        font: 700 11px/1 var(--mono);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .on-air b { display: flex; align-items: center; gap: 8px; }
+      .on-air b::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #ff6c53; box-shadow: 0 0 0 4px rgba(255, 108, 83, 0.2); }
+      .sample { flex: 1; padding: 32px 26px; background: var(--cream); }
+      .sample__label { margin: 0 0 16px; font: 700 11px/1.4 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+      .sample blockquote { margin: 0 0 26px; font: 700 clamp(27px, 3vw, 42px)/1.08 var(--serif); }
+      .player { display: grid; grid-template-columns: 64px 1fr; gap: 16px; align-items: center; }
+      .play {
+        width: 64px;
+        height: 64px;
+        border: 1px solid var(--ink);
+        border-radius: 50%;
+        color: var(--cream);
+        background: var(--red);
+        cursor: pointer;
+        font-size: 22px;
+      }
+      .play:hover { transform: rotate(-5deg); background: var(--red-dark); }
+      .track { height: 46px; display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+      .track i { display: block; flex: 1; height: var(--h); background: var(--green); opacity: 0.85; }
+      .sample__meta { display: flex; justify-content: space-between; margin-top: 12px; font: 700 10px/1.4 var(--mono); text-transform: uppercase; }
+      .proof { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--ink); }
+      .proof div { padding: 24px; border-right: 1px solid var(--ink); }
+      .proof div:nth-child(even) { border-right: 0; }
+      .proof div:nth-child(n+3) { border-top: 1px solid var(--ink); }
+      .proof strong { display: block; font: 700 34px/1 var(--serif); }
+      .proof span { font: 700 10px/1.3 var(--mono); text-transform: uppercase; }
+
+      .section { border-bottom: 1px solid var(--ink); }
+      .section__grid { display: grid; grid-template-columns: 310px 1fr; border-left: 1px solid var(--ink); border-right: 1px solid var(--ink); }
+      .section__intro { padding: 48px 34px; border-right: 1px solid var(--ink); }
+      .section__no { font: 700 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--red-dark); }
+      h2 { margin: 18px 0 16px; font: 700 clamp(38px, 5vw, 68px)/0.95 var(--serif); letter-spacing: -0.045em; }
+      .section__intro p { color: var(--muted); font-size: 15px; }
+      .features { display: grid; grid-template-columns: repeat(2, 1fr); }
+      .feature { min-height: 230px; padding: 34px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+      .feature:nth-child(even) { border-right: 0; }
+      .feature:nth-last-child(-n+2) { border-bottom: 0; }
+      .feature b { display: block; margin-bottom: 22px; color: var(--red); font: 700 12px/1 var(--mono); letter-spacing: 0.08em; }
+      .feature h3 { margin: 0 0 12px; font: 700 26px/1.1 var(--serif); }
+      .feature p { max-width: 42ch; margin: 0; color: var(--muted); }
+
+      .pricing { display: grid; grid-template-columns: 1fr 1fr; }
+      .price { padding: 42px; border-right: 1px solid var(--ink); background: var(--cream); }
+      .price:last-child { border-right: 0; color: var(--cream); background: var(--green); }
+      .price__eyebrow { font: 700 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; }
+      .price h3 { margin: 18px 0 12px; font: 700 40px/1 var(--serif); }
+      .amount { margin: 24px 0; font: 700 62px/1 var(--serif); }
+      .amount small { font: 700 12px/1.4 var(--mono); }
+      .price ul { padding: 0; margin: 22px 0 30px; list-style: none; }
+      .price li { padding: 9px 0; border-top: 1px solid currentColor; font-size: 14px; }
+      .price a { display: inline-block; padding: 13px 18px; border: 1px solid currentColor; font-weight: 900; text-decoration: none; }
+      .price a:hover { color: var(--cream); background: var(--red); border-color: var(--red); }
+      .price:last-child a:hover { color: var(--ink); background: var(--paper); border-color: var(--paper); }
+
+      .closing {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: end;
+        gap: 30px;
+        padding: clamp(60px, 9vw, 120px) 0;
+      }
+      .closing p { max-width: 780px; margin: 0; font: 700 clamp(44px, 7vw, 92px)/0.92 var(--serif); letter-spacing: -0.055em; }
+      .closing a { padding: 18px 24px; color: white; background: var(--red); font-weight: 900; text-decoration: none; }
+      footer { border-top: 1px solid var(--ink); }
+      .footer__inner { display: flex; justify-content: space-between; gap: 24px; padding: 28px 0; font: 700 10px/1.4 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+      .footer__links { display: flex; gap: 18px; }
+
+      @media (max-width: 860px) {
+        .masthead__top { grid-template-columns: 1fr auto; min-height: 72px; }
+        .date { display: none; }
+        .edition { order: -1; text-align: left; }
+        .wordmark { border-right: 0; }
+        .nav__links { display: none; }
+        .nav { justify-content: flex-end; }
+        .hero__grid, .section__grid { grid-template-columns: 1fr; }
+        .hero__story, .section__intro { border-right: 0; border-bottom: 1px solid var(--ink); }
+        h1 { font-size: clamp(66px, 19vw, 120px); }
+        .closing { grid-template-columns: 1fr; align-items: start; }
+      }
+      @media (max-width: 580px) {
+        .shell { width: min(100% - 24px, 1240px); }
+        .edition { display: none; }
+        .masthead__top { grid-template-columns: 1fr; }
+        .wordmark { justify-content: center; border-left: 0; }
+        .hero__story { padding: 44px 20px 34px; }
+        .dek { margin-top: 28px; }
+        .sample { padding: 28px 20px; }
+        .features, .pricing { grid-template-columns: 1fr; }
+        .feature, .feature:nth-child(even), .feature:nth-last-child(-n+2) { min-height: 0; border-right: 0; border-bottom: 1px solid var(--rule); }
+        .feature:last-child { border-bottom: 0; }
+        .price { padding: 34px 24px; border-right: 0; border-bottom: 1px solid var(--ink); }
+        .price:last-child { border-bottom: 0; }
+        .footer__inner, .footer__links { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a>
+    <header class="masthead">
+      <div class="shell">
+        <div class="masthead__top">
+          <span class="date">Issue 01 · Voice on Discord</span>
+          <a class="wordmark" href="#content">
+            <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            Vozen
+          </a>
+          <span class="edition">Open source · Core free forever</span>
+        </div>
+        <nav class="nav" aria-label="Primary">
+          <div class="nav__links">
+            <a href="#listen">Listen</a>
+            <a href="#features">What it does</a>
+            <a href="#pricing">Pricing</a>
+            <a href="../index.html">Current site</a>
+          </div>
+          <a class="nav__cta" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">Add to Discord</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="content">
+      <section class="hero">
+        <div class="shell hero__grid">
+          <article class="hero__story">
+            <div class="kicker">The voice layer Discord forgot</div>
+            <h1>Type it.<span>Hear it.</span></h1>
+            <p class="dek">Vozen turns ordinary chat into a shared voice: 38 natural voices, 35 languages and 16 games, ready in one command.</p>
+            <div class="byline">
+              <span>Setup: 30 seconds</span>
+              <span>No card required</span>
+              <span>AGPL open source</span>
+            </div>
+          </article>
+
+          <aside class="hero__side" id="listen">
+            <div class="on-air"><b>On air</b><span>English · Piper</span></div>
+            <div class="sample">
+              <p class="sample__label">Voice test No. 01</p>
+              <blockquote>“Hey! Welcome to the server. Type anything and I’ll read it out loud.”</blockquote>
+              <div class="player">
+                <button class="play" type="button" aria-label="Play English voice sample" data-audio="../assets/samples/en.mp3">▶</button>
+                <div class="track" aria-hidden="true">
+                  <i style="--h: 16%"></i><i style="--h: 58%"></i><i style="--h: 34%"></i><i style="--h: 82%"></i><i style="--h: 46%"></i><i style="--h: 92%"></i><i style="--h: 65%"></i><i style="--h: 28%"></i><i style="--h: 72%"></i><i style="--h: 44%"></i><i style="--h: 86%"></i><i style="--h: 24%"></i>
+                </div>
+              </div>
+              <div class="sample__meta"><span>Natural neural voice</span><span>00:04</span></div>
+            </div>
+            <div class="proof">
+              <div><strong>35</strong><span>languages</span></div>
+              <div><strong>38</strong><span>voices</span></div>
+              <div><strong>16</strong><span>games</span></div>
+              <div><strong>∞</strong><span>free core</span></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="shell section__grid">
+          <header class="section__intro">
+            <span class="section__no">Section 01</span>
+            <h2>Made for conversation.</h2>
+            <p>Not a dashboard full of settings. Invite the bot, join a call and let the room speak.</p>
+          </header>
+          <div class="features">
+            <article class="feature"><b>01 / AUTO-READ</b><h3>Your chat, out loud</h3><p>Choose a text channel and Vozen reads new messages into the voice call automatically.</p></article>
+            <article class="feature"><b>02 / PERSONAL</b><h3>Everyone gets a voice</h3><p>Each member can choose a language and voice without changing the experience for anyone else.</p></article>
+            <article class="feature"><b>03 / PLAY</b><h3>Games made for ears</h3><p>Trivia, Wordle, Chess and 13 more minigames bring dead voice channels back to life.</p></article>
+            <article class="feature"><b>04 / CONTROL</b><h3>Admins stay in charge</h3><p>Anti-spam, pronunciations, channel profiles and a full kill switch are built in.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="pricing">
+        <div class="shell section__grid">
+          <header class="section__intro">
+            <span class="section__no">Section 02</span>
+            <h2>Start free. Stay free.</h2>
+            <p>Premium is for extra engines and server-wide perks. It does not hold the core product hostage.</p>
+          </header>
+          <div class="pricing">
+            <article class="price">
+              <span class="price__eyebrow">For every server</span>
+              <h3>Vozen Free</h3>
+              <div class="amount">€0 <small>/ forever</small></div>
+              <ul><li>38 Piper voices</li><li>35 languages</li><li>Auto-read and 13 games</li><li>Full admin controls</li></ul>
+              <a href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">Add free</a>
+            </article>
+            <article class="price">
+              <span class="price__eyebrow">For the whole community</span>
+              <h3>Vozen Premium</h3>
+              <div class="amount">€3.99 <small>/ month · 3 servers</small></div>
+              <ul><li>Kokoro and Google HD voices</li><li>All voice effects and games</li><li>Live voice transcription</li><li>Works for everyone in the server</li></ul>
+              <a href="https://ko-fi.com/rexy00">See Premium</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="shell closing">
+        <p>Give the room something worth listening to.</p>
+        <a href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands">Add Vozen to Discord →</a>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell footer__inner">
+        <span>Vozen · Type it, hear it.</span>
+        <div class="footer__links"><a href="../privacy.html">Privacy</a><a href="../terms.html">Terms</a><a href="https://github.com/Rexy40407/vozen">GitHub</a><a href="./index.html">All concepts</a></div>
+      </div>
+    </footer>
+
+    <audio id="voiceSample" preload="none"></audio>
+    <script>
+      const player = document.querySelector(".play");
+      const audio = document.querySelector("#voiceSample");
+      player.addEventListener("click", () => {
+        if (!audio.src) audio.src = player.dataset.audio;
+        if (audio.paused) {
+          audio.play();
+          player.textContent = "Ⅱ";
+          player.setAttribute("aria-label", "Pause English voice sample");
+        } else {
+          audio.pause();
+          player.textContent = "▶";
+          player.setAttribute("aria-label", "Play English voice sample");
+        }
+      });
+      audio.addEventListener("ended", () => {
+        player.textContent = "▶";
+        player.setAttribute("aria-label", "Play English voice sample");
+      });
+    </script>
+  </body>
+</html>
