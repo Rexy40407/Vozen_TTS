@@ -44,6 +44,7 @@ pub struct PronunciationGatewaySink {
     service: PronunciationService,
     localizer: VoiceResponseLocalizer,
     kofi_url: String,
+    payments_enabled: bool,
     pending_forms: Mutex<BTreeMap<String, PendingPronunciationForm>>,
 }
 
@@ -51,12 +52,14 @@ impl PronunciationGatewaySink {
     pub fn new(
         store: Arc<Mutex<SqliteStore>>,
         kofi_url: String,
+        payments_enabled: bool,
     ) -> Result<Self, GatewayEventDispatchError> {
         Ok(Self {
             service: PronunciationService::new(store),
             localizer: VoiceResponseLocalizer::from_generated_contract()
                 .map_err(|_| GatewayEventDispatchError)?,
             kofi_url,
+            payments_enabled,
             pending_forms: Mutex::new(BTreeMap::new()),
         })
     }
@@ -340,7 +343,7 @@ impl PronunciationGatewaySink {
                     guild_locale,
                     &parameters,
                 )?;
-                if scope == PronunciationScope::Personal && limit == 3 {
+                if self.payments_enabled && scope == PronunciationScope::Personal && limit == 3 {
                     let mut upsell = BTreeMap::new();
                     upsell.insert("url", self.kofi_url.clone());
                     content.push('\n');
@@ -493,6 +496,7 @@ mod tests {
         let sink = PronunciationGatewaySink::new(
             Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store"))),
             "https://ko-fi.com/vozen".into(),
+            true,
         )
         .expect("sink");
         let command: serenity::model::application::CommandInteraction = serde_json::from_str(

@@ -274,7 +274,6 @@
       const annual = b.dataset.bill === "year";
       if (pricingGrid) pricingGrid.classList.toggle("is-annual", annual);
       $$(".bill-toggle__btn").forEach((x) => x.classList.toggle("is-active", x === b));
-      syncKofiLinks();
     }),
   );
 
@@ -286,7 +285,6 @@
     b.addEventListener("click", () => {
       if (proCard) proCard.classList.toggle("is-5", b.dataset.seats === "5");
       $$(".seat-toggle__btn").forEach((x) => x.classList.toggle("is-active", x === b));
-      syncKofiLinks();
     }),
   );
 
@@ -297,21 +295,7 @@
      escolhe "anual" vê o preço anual e recebe o link direto para o produto correspondente.
      Os codigos tem de bater certo com o KOFI_SHOP_MAP do bot: e o direct_link_code que diz
      ao webhook o que foi comprado (o Ko-fi nao envia o nome do produto). */
-  const KOFI_PAGE = "https://ko-fi.com/rexy00";
-  const KOFI_ANNUAL_PLUS = "https://ko-fi.com/s/e1a8ba4ca5";
-  const KOFI_ANNUAL_PRO_2 = "https://ko-fi.com/s/64240758ef";
-  const KOFI_ANNUAL_PRO_5 = "https://ko-fi.com/s/8f72543ad0";
-  const plusBuy = $(".price-card__buy.js-kofi:not(.price-card__buy--pro)");
-  const proBuy = $(".price-card__buy--pro");
-  function syncKofiLinks() {
-    const annual = !!pricingGrid && pricingGrid.classList.contains("is-annual");
-    if (plusBuy) plusBuy.href = annual ? KOFI_ANNUAL_PLUS : KOFI_PAGE;
-    if (proBuy) {
-      const five = !!proCard && proCard.classList.contains("is-5");
-      proBuy.href = !annual ? KOFI_PAGE : five ? KOFI_ANNUAL_PRO_5 : KOFI_ANNUAL_PRO_2;
-    }
-  }
-  syncKofiLinks();
+  // Payments are intentionally offline while the Stripe checkout is being prepared.
 
   /* ── Painel Premium (login com Discord + estado da conta) ─────────────
      OAuth2 implicit (scopes identify + email): 100% client-side, sem segredo. O token vem no
@@ -664,7 +648,8 @@
   // que chegou sem Discord ID (o checkout de subscrição não tem caixa de mensagem). POST
   // autenticado a /api/link — ver doClaim. Aparece sempre que a pessoa está logada.
   function claimCard() {
-    return (
+    return `<div class="ppanel__claim ppanel__claim--disabled" role="status"><b>${t("price.checkout")}</b></div>`;
+    /* return (
       `<div class="ppanel__claim ppmodal" id="activate-purchase" role="dialog" aria-modal="true" aria-labelledby="ppClaimTitle" hidden>` +
       `<div class="ppanel__claimbox" tabindex="-1">` +
       `<button type="button" class="ppanel__claimclose" id="ppClaimClose" aria-label="${esc(t("account.closeActivation"))}">&times;</button>` +
@@ -700,7 +685,7 @@
       `</details>` +
       `</div>` +
       `</div>`
-    );
+    ); */
   }
 
   // Modal de ajuda (plano 036). Existe por causa de uma armadilha do recibo do Ko-fi: o email

@@ -1522,6 +1522,9 @@ body.is-modal-open { overflow: hidden; }
 .price-card__buy--pro:hover { box-shadow: 0 8px 22px rgba(255, 194, 75, 0.35); }
 .price-card__buy--max { background: linear-gradient(120deg, #a76aff, #ff6fd8); color: #fff; }
 .price-card__buy--max:hover { box-shadow: 0 8px 22px rgba(167, 106, 255, 0.4); }
+.price-card__buy--disabled,
+.price-card__buy--disabled:hover,
+.price-card__buy--disabled:disabled { background: #3a3d4c; color: #9da3b8; box-shadow: none; cursor: not-allowed; opacity: .82; transform: none; }
 /* Nota-promo do Premium: "paga 1, leva 2 servidores". Destaque âmbar por baixo do preço. */
 .price-card__deal {
   margin: -8px 0 20px; padding: 9px 13px; border-radius: 12px;

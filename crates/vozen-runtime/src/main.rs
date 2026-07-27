@@ -1397,6 +1397,7 @@ fn voice_preference_event_sink(
 fn pronunciation_event_sink(
     enabled: bool,
     store: Arc<Mutex<SqliteStore>>,
+    payments_enabled: bool,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
     if !enabled {
         return Ok(None);
@@ -1404,7 +1405,8 @@ fn pronunciation_event_sink(
     Ok(Some(Arc::new(
         pronunciation_sink::PronunciationGatewaySink::new(
             store,
-            nonempty_env("KOFI_URL").unwrap_or_else(|| "https://ko-fi.com/".to_owned()),
+            nonempty_env("KOFI_URL").unwrap_or_default(),
+            payments_enabled,
         )
         .map_err(|_| RuntimeError::PronunciationGateway)?,
     )))
@@ -1722,6 +1724,7 @@ fn game_scores_event_sink(
 fn premium_event_sink(
     enabled: bool,
     store: Arc<Mutex<SqliteStore>>,
+    payments_enabled: bool,
     client_id: Option<String>,
     redemption_secret: Option<String>,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
@@ -1733,7 +1736,8 @@ fn premium_event_sink(
     Ok(Some(Arc::new(
         premium_sink::PremiumGatewaySink::new(
             store,
-            nonempty_env("KOFI_URL").unwrap_or_else(|| "https://ko-fi.com/".to_owned()),
+            nonempty_env("KOFI_URL").unwrap_or_default(),
+            payments_enabled,
             client_id,
             redemption_secret,
             guild_sku_id,
@@ -1963,6 +1967,12 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
 
 fn premium_http_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+/// Payment providers are fail-closed. Stripe will be enabled explicitly once its checkout and
+/// webhook contracts are ready; an unset flag must never expose a legacy Ko-fi path.
+fn payments_enabled_from_environment() -> bool {
+    premium_http_enabled(env::var("RUST_PAYMENTS_ENABLED").ok().as_deref())
 }
 
 fn browser_api_promoted(raw: Option<&str>, premium_http: Option<&PremiumHttpConfig>) -> bool {
@@ -2252,7 +2262,11 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) = voice_preference_event_sink(config.voice_preferences, store.clone())? {
         event_sinks.push(sink);
     }
-    if let Some(sink) = pronunciation_event_sink(config.pronunciation, store.clone())? {
+    if let Some(sink) = pronunciation_event_sink(
+        config.pronunciation,
+        store.clone(),
+        payments_enabled_from_environment(),
+    )? {
         event_sinks.push(sink);
     }
     if let Some(sink) = config_language_event_sink(config.config_language, store.clone())? {
@@ -2331,6 +2345,7 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) = premium_event_sink(
         config.premium,
         store.clone(),
+        payments_enabled_from_environment(),
         config.vote_client_id.clone(),
         config.vote_redemption_secret.clone(),
     )? {
@@ -2590,11 +2605,15 @@ fn build_http_router(
                 store: store.clone(),
                 identity_verifier: verifier,
                 now: now.clone(),
-                claim_help_notifier: config
-                    .claim_help_webhook_url
-                    .clone()
-                    .map(DiscordClaimHelpNotifier::new)
-                    .map(|notifier| Arc::new(notifier) as Arc<dyn ClaimHelpNotifier>),
+                claim_help_notifier: if config.kofi_webhook_token.is_some() {
+                    config
+                        .claim_help_webhook_url
+                        .clone()
+                        .map(DiscordClaimHelpNotifier::new)
+                        .map(|notifier| Arc::new(notifier) as Arc<dyn ClaimHelpNotifier>)
+                } else {
+                    None
+                },
             }),
         )
     } else {

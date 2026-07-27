@@ -94,7 +94,8 @@ describe('operational security configuration', () => {
     expect(page).toContain('class="account-workspace"');
     expect(page).toContain('class="account-membership"');
     expect(page).toContain('class="account-tasklist"');
-    expect(page).toContain('id="accountActivateOpen"');
+    expect(page).toContain('Payments are currently disabled');
+    expect(page).not.toContain('id="accountActivateOpen"');
     expect(page).toContain('js/main-v44.js');
     expect(css).toContain('body.page-account');
     expect(css).toMatch(/@media\s*\(max-width:\s*760px\)/);
@@ -348,13 +349,10 @@ describe('operational security configuration', () => {
     const css = source(SITE_CSS);
     expect(css).toMatch(/\.ppanel__claimconsent a\s*\{[^}]*var\(--aqua\)/);
   });
-  // The terms accepted by the checkbox must identify both activation methods, the same stable
-  // version sent to the API, and the confirmation the buyer can keep.
-  it('keeps the versioned immediate-delivery acknowledgement in the accepted terms', () => {
+  it('documents that checkout is disabled until Stripe is ready', () => {
     const terms = source('site/terms.html');
     expect(terms).toMatch(/14-day withdrawal right/i);
-    expect(terms).toContain('activation-terms version <code>2026-07-19</code>');
-    expect(terms).toMatch(/activate a Ko-fi purchase by verified Discord email or receipt/i);
-    expect(terms).toMatch(/downloadable confirmation/i);
+    expect(terms).toMatch(/Payments are currently disabled.*Stripe checkout/is);
+    expect(terms).not.toMatch(/Ko-fi purchase/i);
   });
 });

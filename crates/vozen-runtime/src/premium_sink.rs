@@ -30,6 +30,7 @@ const ACTIVATION_TTL_SECONDS: i64 = 30;
 pub struct PremiumGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
     kofi_url: String,
+    payments_enabled: bool,
     client_id: Option<String>,
     redemption_secret: Option<String>,
     guild_sku_id: Option<u64>,
@@ -42,6 +43,7 @@ impl PremiumGatewaySink {
     pub fn new(
         store: Arc<Mutex<SqliteStore>>,
         kofi_url: String,
+        payments_enabled: bool,
         client_id: Option<String>,
         redemption_secret: Option<String>,
         guild_sku_id: Option<u64>,
@@ -50,6 +52,7 @@ impl PremiumGatewaySink {
         Ok(Self {
             store,
             kofi_url,
+            payments_enabled,
             client_id,
             redemption_secret,
             guild_sku_id,
@@ -134,6 +137,8 @@ impl PremiumGatewaySink {
         if any_active {
             lines.push(String::new());
             lines.push(self.message("premium.enginePerks", command, &BTreeMap::new())?);
+        } else if !self.payments_enabled {
+            lines.push("Payments are currently disabled. Stripe checkout is coming soon.".into());
         } else {
             lines.push(self.message("premium.pitch", command, &BTreeMap::new())?);
             lines.push(String::new());
@@ -210,7 +215,7 @@ impl PremiumGatewaySink {
     }
 
     fn spawn_entitlement_sync(&self, context: Context) {
-        if self.guild_sku_id.is_none() && self.user_sku_id.is_none() {
+        if !self.payments_enabled || (self.guild_sku_id.is_none() && self.user_sku_id.is_none()) {
             return;
         }
         let should_start = {
@@ -369,6 +374,11 @@ impl PremiumGatewaySink {
                 .premium_pass(&user_id)
                 .map_err(|_| GatewayEventDispatchError)?
             else {
+                if !self.payments_enabled {
+                    return Ok(CreateInteractionResponseMessage::new()
+                        .content("Payments are currently disabled. Stripe checkout is coming soon.")
+                        .ephemeral(true));
+                }
                 let mut p = BTreeMap::new();
                 p.insert("link", self.kofi_url.clone());
                 return Ok(CreateInteractionResponseMessage::new()
@@ -376,6 +386,11 @@ impl PremiumGatewaySink {
                     .ephemeral(true));
             };
             if pass.expires_at <= now {
+                if !self.payments_enabled {
+                    return Ok(CreateInteractionResponseMessage::new()
+                        .content("Payments are currently disabled. Stripe checkout is coming soon.")
+                        .ephemeral(true));
+                }
                 let mut p = BTreeMap::new();
                 p.insert("link", self.kofi_url.clone());
                 return Ok(CreateInteractionResponseMessage::new()
@@ -588,12 +603,15 @@ impl GatewayEventSink for PremiumGatewaySink {
                     PremiumCommand::Info => {
                         let (content, _active) = self.response(&command)?;
                         let mut buttons = Vec::new();
-                        if let Some(sku) = self.guild_sku_id
+                        if self.payments_enabled
+                            && let Some(sku) = self.guild_sku_id
                             && command.guild_id.is_some()
                         {
                             buttons.push(CreateButton::new_premium(sku));
                         }
-                        if let Some(sku) = self.user_sku_id {
+                        if self.payments_enabled
+                            && let Some(sku) = self.user_sku_id
+                        {
                             buttons.push(CreateButton::new_premium(sku));
                         }
                         let mut response = CreateInteractionResponseMessage::new()
@@ -684,9 +702,14 @@ impl GatewayEventSink for PremiumGatewaySink {
                             self.component_message("premium.noSeats", &component, &p)?
                         }
                         ActivateStatus::NoPass | ActivateStatus::Expired => {
-                            let mut p = BTreeMap::new();
-                            p.insert("link", self.kofi_url.clone());
-                            self.component_message("premium.noPass", &component, &p)?
+                            if !self.payments_enabled {
+                                "Payments are currently disabled. Stripe checkout is coming soon."
+                                    .into()
+                            } else {
+                                let mut p = BTreeMap::new();
+                                p.insert("link", self.kofi_url.clone());
+                                self.component_message("premium.noPass", &component, &p)?
+                            }
                         }
                     }
                 };
