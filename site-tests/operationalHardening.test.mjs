@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 'utf8' });
 // The site's assets are cache-busted by FILENAME (never a query string), so every rename churns
 // these tests too. One constant each: the rename is then a one-line edit here, not a hunt.
-const SITE_JS = 'site/js/main-v44.js';
+const SITE_JS = 'site/js/main-v45.js';
 const SITE_I18N = 'site/js/i18n-v41.js';
 const SITE_CSS = 'site/css/main-v43.css';
 const ACCOUNT_CSS = 'site/css/account-v6.css';
@@ -96,7 +96,10 @@ describe('operational security configuration', () => {
     expect(page).toContain('class="account-tasklist"');
     expect(page).toContain('id="accountBilling"');
     expect(page).not.toContain('id="accountActivateOpen"');
-    expect(page).toContain('js/main-v44.js');
+    expect(page).toContain('js/main-v45.js');
+    expect(page).toContain('css/billing-v1.css');
+    expect(page).toContain('https://js.stripe.com/v3/');
+    expect(page).toContain('frame-src https://checkout.stripe.com');
     expect(css).toContain('body.page-account');
     expect(css).toMatch(/@media\s*\(max-width:\s*760px\)/);
     expect(css).toMatch(/@media\s*\(min-width:\s*1280px\)\s*and\s*\(min-height:\s*800px\)/);
@@ -106,6 +109,16 @@ describe('operational security configuration', () => {
   it('keeps the account journey focused and the session exit visible', () => {
     const script = source(SITE_JS);
     const claim = claimCardSource();
+    expect(claim).toContain('return "";');
+    expect(claim).not.toContain('Stripe subscriptions are managed from the account panel.');
+    expect(script).toContain('function billingCheckoutModal(plan, interval)');
+    expect(script).toContain('stripe.initEmbeddedCheckout');
+    expect(script).toContain('payload.clientSecret');
+    const checkoutSource = script.slice(
+      script.indexOf('async function startCheckout('),
+      script.indexOf('const billingInterval'),
+    );
+    expect(checkoutSource).not.toContain('window.location.href = payload.url');
     expect(claim).toContain('id="activate-purchase"');
     expect(claim).toContain('role="dialog"');
     expect(claim).toContain('id="ppClaimClose"');

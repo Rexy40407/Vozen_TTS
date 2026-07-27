@@ -200,6 +200,7 @@ struct PremiumHttpConfig {
     kofi_shop_map: Option<String>,
     claim_help_webhook_url: Option<String>,
     stripe_secret_key: Option<String>,
+    stripe_publishable_key: Option<String>,
     stripe_webhook_secret: Option<String>,
     stripe_prices: Option<vozen_api::stripe_api::StripePriceIds>,
 }
@@ -1950,6 +1951,9 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
     let stripe_secret_key = payments_enabled_from_environment()
         .then(|| nonempty_env("STRIPE_SECRET_KEY"))
         .flatten();
+    let stripe_publishable_key = payments_enabled_from_environment()
+        .then(|| nonempty_env("STRIPE_PUBLISHABLE_KEY"))
+        .flatten();
     // Once Stripe is selected, an old Ko-fi secret cannot re-enable the retired checkout path.
     // Historical Ko-fi entitlements remain in SQLite and continue to work.
     let kofi_webhook_token = (!stripe_secret_key.is_some() && payments_enabled_from_environment())
@@ -2013,6 +2017,7 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
         claim_help_webhook_url: nonempty_env("CLAIM_HELP_WEBHOOK_URL")
             .or_else(|| nonempty_env("ERROR_WEBHOOK_URL")),
         stripe_secret_key,
+        stripe_publishable_key,
         stripe_webhook_secret: payments_enabled_from_environment()
             .then(|| nonempty_env("STRIPE_WEBHOOK_SECRET"))
             .flatten(),
@@ -2678,21 +2683,27 @@ fn build_http_router(
     let stripe = if config.browser_api_enabled {
         match (
             config.stripe_secret_key.clone(),
+            config.stripe_publishable_key.clone(),
             config.stripe_webhook_secret.clone(),
             config.stripe_prices.clone(),
             verifier.clone(),
         ) {
-            (Some(secret_key), Some(webhook_secret), Some(prices), Some(identity_verifier)) => {
-                Some(vozen_api::stripe_api::StripeApiConfig {
-                    origin: config.origin.clone(),
-                    secret_key,
-                    webhook_secret,
-                    prices,
-                    store: store.clone(),
-                    identity_verifier,
-                    now: now.clone(),
-                })
-            }
+            (
+                Some(secret_key),
+                Some(publishable_key),
+                Some(webhook_secret),
+                Some(prices),
+                Some(identity_verifier),
+            ) => Some(vozen_api::stripe_api::StripeApiConfig {
+                origin: config.origin.clone(),
+                secret_key,
+                publishable_key,
+                webhook_secret,
+                prices,
+                store: store.clone(),
+                identity_verifier,
+                now: now.clone(),
+            }),
             _ => None,
         }
     } else {
@@ -3008,6 +3019,7 @@ mod tests {
             kofi_shop_map: None,
             claim_help_webhook_url: None,
             stripe_secret_key: None,
+            stripe_publishable_key: None,
             stripe_webhook_secret: None,
             stripe_prices: None,
         };
@@ -3637,6 +3649,7 @@ mod tests {
                 kofi_shop_map: None,
                 claim_help_webhook_url: None,
                 stripe_secret_key: None,
+                stripe_publishable_key: None,
                 stripe_webhook_secret: None,
                 stripe_prices: None,
             }),

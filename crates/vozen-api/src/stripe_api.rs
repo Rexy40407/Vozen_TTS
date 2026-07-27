@@ -1,7 +1,8 @@
 //! Stripe Checkout, Billing Portal and webhook integration.
 //!
-//! This module deliberately uses Stripe's hosted UI. Vozen never receives card data or shipping
-//! addresses. The only identity sent to Stripe is the already-authenticated Discord user ID.
+//! This module deliberately uses Stripe's embedded Checkout UI. Vozen never receives card data
+//! or shipping addresses. The only identity sent to Stripe is the already-authenticated Discord
+//! user ID.
 
 use std::{
     sync::{Arc, Mutex},
@@ -57,6 +58,7 @@ impl StripePriceIds {
 pub struct StripeApiConfig {
     pub origin: String,
     pub secret_key: String,
+    pub publishable_key: String,
     pub webhook_secret: String,
     pub prices: StripePriceIds,
     pub store: Arc<Mutex<SqliteStore>>,
@@ -68,6 +70,7 @@ pub struct StripeApiConfig {
 pub enum StripeApiConfigError {
     Origin,
     MissingSecret,
+    MissingPublishableKey,
     MissingWebhookSecret,
     MissingPrice,
 }
@@ -77,6 +80,7 @@ impl std::fmt::Display for StripeApiConfigError {
         f.write_str(match self {
             Self::Origin => "Stripe requires a valid site origin",
             Self::MissingSecret => "Stripe secret key is missing",
+            Self::MissingPublishableKey => "Stripe publishable key is missing",
             Self::MissingWebhookSecret => "Stripe webhook secret is missing",
             Self::MissingPrice => "a Stripe price ID is missing",
         })
@@ -88,6 +92,7 @@ impl std::error::Error for StripeApiConfigError {}
 struct StripeState {
     origin: HeaderValue,
     secret_key: Arc<str>,
+    publishable_key: Arc<str>,
     webhook_secret: Arc<str>,
     prices: Arc<StripePriceIds>,
     store: Arc<Mutex<SqliteStore>>,
@@ -99,6 +104,9 @@ struct StripeState {
 pub fn stripe_router(config: StripeApiConfig) -> Result<Router, StripeApiConfigError> {
     if config.secret_key.trim().is_empty() {
         return Err(StripeApiConfigError::MissingSecret);
+    }
+    if config.publishable_key.trim().is_empty() {
+        return Err(StripeApiConfigError::MissingPublishableKey);
     }
     if config.webhook_secret.trim().is_empty() {
         return Err(StripeApiConfigError::MissingWebhookSecret);
@@ -129,6 +137,7 @@ pub fn stripe_router(config: StripeApiConfig) -> Result<Router, StripeApiConfigE
         .with_state(StripeState {
             origin,
             secret_key: Arc::from(config.secret_key),
+            publishable_key: Arc::from(config.publishable_key),
             webhook_secret: Arc::from(config.webhook_secret),
             prices: Arc::new(config.prices),
             store: config.store,
@@ -181,20 +190,15 @@ async fn checkout(
         ),
         ("subscription_data[metadata][plan]", input.plan.clone()),
         ("subscription_data[metadata][seats]", seats.to_string()),
+        ("ui_mode", "embedded".to_owned()),
         (
-            "success_url",
+            "return_url",
             format!(
-                "{}/account?billing=success",
+                "{}/account?billing=success&session_id={{CHECKOUT_SESSION_ID}}",
                 state.origin.to_str().unwrap_or("https://vozen.org")
             ),
         ),
-        (
-            "cancel_url",
-            format!(
-                "{}/#premium",
-                state.origin.to_str().unwrap_or("https://vozen.org")
-            ),
-        ),
+        ("redirect_on_completion", "if_required".to_owned()),
         ("allow_promotion_codes", "true".to_owned()),
     ];
     let response = state
@@ -205,19 +209,27 @@ async fn checkout(
         .send()
         .await;
     match response {
-        Ok(response) if response.status().is_success() => match response
-            .json::<Value>()
-            .await
-            .ok()
-            .and_then(|v| v.get("url").and_then(Value::as_str).map(str::to_owned))
-        {
-            Some(url) => json_response(StatusCode::OK, json!({"url": url}), &state),
-            None => json_response(
-                StatusCode::BAD_GATEWAY,
-                json!({"error":"stripe_response"}),
-                &state,
-            ),
-        },
+        Ok(response) if response.status().is_success() => {
+            match response.json::<Value>().await.ok().and_then(|v| {
+                v.get("client_secret")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            }) {
+                Some(client_secret) => json_response(
+                    StatusCode::OK,
+                    json!({
+                        "clientSecret": client_secret,
+                        "publishableKey": &*state.publishable_key,
+                    }),
+                    &state,
+                ),
+                None => json_response(
+                    StatusCode::BAD_GATEWAY,
+                    json!({"error":"stripe_response"}),
+                    &state,
+                ),
+            }
+        }
         _ => json_response(
             StatusCode::BAD_GATEWAY,
             json!({"error":"stripe_unavailable"}),
