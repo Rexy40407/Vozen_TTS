@@ -22,6 +22,17 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
+      - name: Validate VPS deploy inputs
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" || { echo "::error title=Missing VPS_HOST::Add the VPS_HOST repository secret."; exit 1; }
+          test -n "$VPS_USER" || { echo "::error title=Missing VPS_USER::Add the VPS_USER repository secret."; exit 1; }
+          test -n "$VPS_SSH_KEY" || { echo "::error title=Missing VPS_SSH_KEY::Add the VPS_SSH_KEY repository secret."; exit 1; }
+
       # This action receives the production SSH key, so it is pinned to a commit.
       - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         env:
@@ -40,6 +51,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           envs: STRIPE_SECRET_KEY,STRIPE_PUBLISHABLE_KEY,STRIPE_WEBHOOK_SECRET,STRIPE_PRICE_PLUS_MONTHLY,STRIPE_PRICE_PLUS_YEARLY,STRIPE_PRICE_PREMIUM_MONTHLY,STRIPE_PRICE_PREMIUM_YEARLY,STRIPE_PRICE_MAX_MONTHLY,STRIPE_PRICE_MAX_YEARLY
           command_timeout: 45m
+          debug: true
           script: |
             set -euo pipefail
             cd ~/vozen-rust-prod

@@ -41,6 +41,14 @@ describe('operational security configuration', () => {
     expect(pages).toMatch(/\n\s+run: npm run check:site\s*\n/);
     expect(pages).not.toMatch(/\n\s+run: npm run build:site\s*\n/);
   });
+  it('diagnoses VPS deployment inputs before opening the SSH action', () => {
+    const deploy = source('.github/workflows/deploy-bot.yml');
+    expect(deploy).toContain('name: Validate VPS deploy inputs');
+    expect(deploy).toContain('Missing VPS_HOST');
+    expect(deploy).toContain('Missing VPS_USER');
+    expect(deploy).toContain('Missing VPS_SSH_KEY');
+    expect(deploy).toContain('debug: true');
+  });
   it('keeps the Night Signal treatment scoped to Discord entry points', () => {
     const css = source(SITE_CSS);
     const index = source('site/index.html');
