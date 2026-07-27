@@ -1,5 +1,5 @@
 ﻿/* ═══════════════════════════════════════════════════════════
-   Vozen site — main-v46.js
+   Vozen site — main-v47.js
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -310,9 +310,6 @@
   let billingCheckout = null;
   let billingCheckoutOpener = null;
   let billingRequest = null;
-  let billingAuthPopup = null;
-  let billingAuthState = null;
-  let billingAuthPoll = null;
 
   function billingCheckoutModal(plan, interval) {
     const planName = plan === "plus" ? t("price.plus.name") : plan === "premium" ? t("price.pro.name") : t("price.max.name");
@@ -361,11 +358,6 @@
     if (!modal || modal.hidden) return;
     billingCheckout?.destroy?.();
     billingCheckout = null;
-    if (billingAuthPoll) window.clearInterval(billingAuthPoll);
-    billingAuthPoll = null;
-    billingAuthPopup?.close?.();
-    billingAuthPopup = null;
-    billingAuthState = null;
     modal.remove();
     document.body.classList.remove("is-modal-open");
     const trigger = billingRequest?.button;
@@ -399,25 +391,7 @@
   }
 
   function beginBillingAuth() {
-    const status = document.getElementById("vozenBillingAuthStatus");
-    const popup = login({ popup: true });
-    if (!popup) {
-      if (status) status.textContent = "Allow popups for vozen.org to continue with Discord.";
-      return;
-    }
-    billingAuthPopup = popup;
-    try { billingAuthState = sessionStorage.getItem(STATE_KEY); } catch { billingAuthState = null; }
-    setBillingPhase("auth");
-    if (status) status.textContent = "Discord opened in a separate window. Finish there to continue here.";
-    if (billingAuthPoll) window.clearInterval(billingAuthPoll);
-    billingAuthPoll = window.setInterval(() => {
-      if (billingAuthPopup && billingAuthPopup.closed) {
-        window.clearInterval(billingAuthPoll);
-        billingAuthPoll = null;
-        billingAuthPopup = null;
-        if (status) status.textContent = "Discord login was closed. You can try again.";
-      }
-    }, 500);
+    login();
   }
 
   function billingEntitlementActive(data, request) {
@@ -491,24 +465,8 @@
     const button = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
     if (button) { button.disabled = true; button.dataset.previousText = button.textContent || ""; }
     if (!openBillingCheckout(plan, interval, seats, button)) return;
-    if (storedToken()) {
-      void continueBillingCheckout();
-    } else {
-      beginBillingAuth();
-    }
+    if (storedToken()) void continueBillingCheckout();
   }
-
-  window.addEventListener("message", (event) => {
-    if (event.origin !== location.origin || event.source !== billingAuthPopup) return;
-    const data = event.data;
-    if (!data || data.type !== "vozen:oauth-complete" || !data.token || data.state !== billingAuthState) return;
-    try { sessionStorage.setItem(TOK_KEY, data.token); } catch {}
-    billingAuthPopup = null;
-    billingAuthState = null;
-    if (billingAuthPoll) window.clearInterval(billingAuthPoll);
-    billingAuthPoll = null;
-    void continueBillingCheckout();
-  });
 
   const billingInterval = () => pricingGrid?.classList.contains("is-annual") ? "yearly" : "monthly";
   document.querySelector("[data-billing-plan='plus']")?.addEventListener("click", () => void startCheckout("plus", billingInterval(), 1));
@@ -623,13 +581,6 @@
     u.searchParams.set("response_type", "token");
     u.searchParams.set("scope", "identify email");
     u.searchParams.set("state", state);
-    if (options && options.popup === true) {
-      return window.open(
-        u.toString(),
-        "vozenDiscordAuth",
-        "popup=yes,width=520,height=760,resizable=yes,scrollbars=yes",
-      );
-    }
     location.href = u.toString();
   }
 
@@ -680,18 +631,6 @@
     return { token: tok, state: st };
   }
 
-  function relayPopupOAuthResult() {
-    if (!window.opener || !location.hash || location.hash.length < 2) return false;
-    const params = new URLSearchParams(location.hash.slice(1));
-    const token = params.get("access_token");
-    const state = params.get("state");
-    if (!token || !state) return false;
-    window.opener.postMessage({ type: "vozen:oauth-complete", token, state }, location.origin);
-    history.replaceState(null, "", location.pathname + location.search);
-    window.close();
-    return true;
-  }
-
   // The activation intent is consumed before any replay. It is tied to the OAuth state, expires
   // quickly, and cannot survive a terms-version change, which makes the replay strictly one-shot.
   function consumeActivationIntent(oauthState) {
@@ -728,7 +667,6 @@
   }
 
   async function loadPanel() {
-    if (IS_ACCOUNT && relayPopupOAuthResult()) return;
     if (IS_ACCOUNT_PREVIEW) {
       setPanel({
         mode: "ok",
