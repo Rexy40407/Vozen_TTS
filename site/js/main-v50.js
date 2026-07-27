@@ -1,5 +1,5 @@
 ﻿/* ═══════════════════════════════════════════════════════════
-   Vozen site — main-v49.js
+   Vozen site — main-v50.js
    ═══════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
@@ -311,11 +311,13 @@
   let billingCheckoutOpener = null;
   let billingRequest = null;
   let billingScrollY = 0;
+  let billingPendingScrollY = null;
   let billingBodyStyle = null;
 
   function lockBillingScroll() {
     if (billingBodyStyle) return;
-    billingScrollY = window.scrollY;
+    billingScrollY = billingPendingScrollY ?? window.scrollY;
+    billingPendingScrollY = null;
     billingBodyStyle = {
       position: document.body.style.position,
       top: document.body.style.top,
@@ -342,6 +344,7 @@
     document.body.style.width = previous.width;
     document.body.style.overflow = previous.overflow;
     billingBodyStyle = null;
+    billingPendingScrollY = null;
     window.scrollTo(0, billingScrollY);
   }
 
@@ -511,7 +514,7 @@
   $$('[data-billing-plan]').forEach((button) => {
     const preserveScrollBeforeFocus = (event) => {
       if (event.type === "keydown" && !["Enter", " "].includes(event.key)) return;
-      lockBillingScroll();
+      billingPendingScrollY = window.scrollY;
     };
     button.addEventListener("pointerdown", preserveScrollBeforeFocus, { capture: true });
     button.addEventListener("keydown", preserveScrollBeforeFocus, { capture: true });
