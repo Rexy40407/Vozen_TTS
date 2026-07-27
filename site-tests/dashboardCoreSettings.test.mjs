@@ -7,7 +7,7 @@ describe('dashboard channel and voice controls', () => {
   it('ships cache-busted assets and removes the immediately replaced versions', () => {
     const page = source('site/dashboard.html');
     expect(page).toContain('js/i18n-v41.js');
-    expect(page).toContain('js/dashboard-v7.js');
+    expect(page).toContain('js/dashboard-v8.js');
     expect(page).not.toContain('js/dashboard-v6.js');
     expect(page).not.toContain('js/i18n-v39.js');
     expect(page).not.toContain('js/i18n-v38.js');
@@ -17,7 +17,7 @@ describe('dashboard channel and voice controls', () => {
     expect(existsSync(resolve(process.cwd(), 'site/js/dashboard-v5.js'))).toBe(false);
   });
   it('only reveals the new controls when the API advertises capabilities and options', () => {
-    const script = source('site/js/dashboard-v7.js');
+    const script = source('site/js/dashboard-v8.js');
     expect(script).toContain('meta.capabilities.ttsChannelId');
     expect(script).toContain('meta.capabilities.defaultVoice');
     expect(script).toContain('Array.isArray(meta.options.channels)');
@@ -25,21 +25,28 @@ describe('dashboard channel and voice controls', () => {
     expect(script).toContain('fields.unshift("ttsChannelId", "defaultVoice")');
   });
   it('uses only server-provided channel, voice and locale options', () => {
-    const script = source('site/js/dashboard-v7.js');
+    const script = source('site/js/dashboard-v8.js');
     expect(script).not.toContain('var LOCALES =');
     expect(script).toContain('meta.options.channels');
     expect(script).toContain('meta.options.voices');
     expect(script).toContain('meta.options.locales');
   });
+  it('reauthorizes dashboard access after an account-only OAuth token', () => {
+    const script = source('site/js/dashboard-v8.js');
+    expect(script).toContain('var DASHBOARD_AUTH_KEY = "vozen.dashboardAuth";');
+    expect(script).toContain('sessionStorage.setItem(DASHBOARD_AUTH_KEY, "1")');
+    expect(script).toContain('if (!hasDashboardAuth())');
+    expect(script).toContain('login();');
+  });
   it('selecting or clearing a channel adjusts Auto-read once while later edits stay respected', () => {
-    const script = source('site/js/dashboard-v7.js');
+    const script = source('site/js/dashboard-v8.js');
     expect(script).toContain('function syncChannelAutoread(event)');
     expect(script).toContain('target.getAttribute("data-k") !== "ttsChannelId"');
     expect(script).toContain('autoread.checked = target.value !== ""');
     expect(script).toContain('syncChannelAutoread(event);');
   });
   it('renders stale choices as disabled and rebuilds from the authoritative save response', () => {
-    const script = source('site/js/dashboard-v7.js');
+    const script = source('site/js/dashboard-v8.js');
     expect(script).toContain('option.unavailable ? " disabled" : ""');
     expect(script).toContain('dashboard.unavailableChannel');
     expect(script).toContain('dashboard.unavailableVoice');
@@ -47,7 +54,7 @@ describe('dashboard channel and voice controls', () => {
     expect(script).toContain('renderForm(guild, data.config, guilds, data, true)');
   });
   it('renders an authorised channel-profile editor and uses scoped API routes', () => {
-    const script = source('site/js/dashboard-v7.js');
+    const script = source('site/js/dashboard-v8.js');
     expect(script).toContain('meta.capabilities.channelProfiles');
     expect(script).toContain('meta.channelProfiles');
     expect(script).toContain('/profile/');

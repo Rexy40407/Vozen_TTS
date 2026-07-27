@@ -13,6 +13,10 @@
   var API = "https://api.vozen.org";
   var REDIRECT = new URL("/account", location.href).href;
   var TOK_KEY = "vozen.dtoken";
+  // The account flow requests `identify email`; the dashboard flow requests `identify guilds`.
+  // Keep an ownership marker so an account-only token triggers dashboard consent instead of
+  // being sent to /api/dashboard and misleadingly displayed as an expired login.
+  var DASHBOARD_AUTH_KEY = "vozen.dashboardAuth";
   var STATE_KEY = "vozen.oauthstate";
   var RETURN_KEY = "vozen.returnTo";
   var LS_LANG = "vozen.lang";
@@ -125,7 +129,15 @@
   function clearToken() {
     try {
       sessionStorage.removeItem(TOK_KEY);
+      sessionStorage.removeItem(DASHBOARD_AUTH_KEY);
     } catch (e) {}
+  }
+  function hasDashboardAuth() {
+    try {
+      return sessionStorage.getItem(DASHBOARD_AUTH_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
   }
   function authHeaders() {
     return { Authorization: "Bearer " + token() };
@@ -154,6 +166,7 @@
     try {
       sessionStorage.setItem(STATE_KEY, state);
       sessionStorage.setItem(RETURN_KEY, "/dashboard");
+      sessionStorage.setItem(DASHBOARD_AUTH_KEY, "1");
     } catch (e) {}
     var u = new URL("https://discord.com/oauth2/authorize");
     u.searchParams.set("client_id", CLIENT_ID);
@@ -856,6 +869,12 @@
     var tok = token();
     if (!tok) {
       renderLogin("");
+      return;
+    }
+    // A token created by /account has `identify email`, not `guilds`. Re-authorize once for the
+    // panel instead of sending it to the dashboard API and misleadingly displaying "expired".
+    if (!hasDashboardAuth()) {
+      login();
       return;
     }
     renderMessage("dashboard.loading", "");

@@ -80,7 +80,7 @@ describe('operational security configuration', () => {
     expect(css).toContain('.btn--discord-cta:active');
     expect(css).toContain('.btn--discord-cta:focus-visible');
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.btn--discord-cta/);
-    const dashboardScript = source('site/js/dashboard-v7.js');
+    const dashboardScript = source('site/js/dashboard-v8.js');
     expect(dashboardScript).toContain('var BTN = "btn btn--primary";');
     expect(dashboardScript).not.toContain('var BTN = "btn btn--primary btn--discord-cta";');
   });

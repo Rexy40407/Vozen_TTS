@@ -83,7 +83,7 @@ describe('site localization contract', () => {
       expect(page, pagePath).not.toContain('js/i18n-v38.js');
       expect(page, pagePath).not.toContain('js/main-v42.js');
     }
-    expect(source('site/dashboard.html')).toContain('js/dashboard-v7.js');
+    expect(source('site/dashboard.html')).toContain('js/dashboard-v8.js');
     expect(source('site/dashboard.html')).not.toContain('js/dashboard-v6.js');
     expect(source('site/dashboard.html')).not.toContain('js/dashboard-v5.js');
     expect(existsSync(resolve(process.cwd(), 'site/js/i18n-v39.js'))).toBe(false);
@@ -118,7 +118,7 @@ describe('site localization contract', () => {
     expect(dashboard).toContain('data-i18n-aria-label="common.skipToContent"');
   });
   it('removes the dashboard dictionary duplicate and preserves dirty fields on language change', () => {
-    const script = source('site/js/dashboard-v7.js');
+    const script = source('site/js/dashboard-v8.js');
     expect(script).not.toContain('var STR =');
     expect(script).not.toContain('new MutationObserver');
     expect(script).toContain('window.VOZEN_I18N');
