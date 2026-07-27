@@ -22,8 +22,8 @@
 
 .billing-modal__dialog {
   position: relative;
-  width: min(100%, 392px);
-  max-height: min(92vh, 900px);
+  width: min(100%, 520px);
+  max-height: min(94vh, 900px);
   overflow: auto;
   border: 1px solid rgba(225, 205, 157, 0.2);
   border-radius: 16px;
@@ -131,13 +131,13 @@
 }
 
 .billing-modal__body {
-  min-height: 360px;
+  min-height: 420px;
 }
 
 .billing-modal__auth,
 .billing-modal__done {
   display: grid;
-  min-height: 360px;
+  min-height: 420px;
   place-items: center;
   align-content: center;
   gap: 12px;
@@ -195,7 +195,7 @@
 }
 
 .billing-modal__checkout {
-  min-height: 360px;
+  min-height: 420px;
   margin: 0 12px;
   overflow: hidden;
   border: 1px solid rgba(138, 174, 255, 0.16);
@@ -213,7 +213,7 @@
 .billing-modal__loading,
 .billing-modal__error {
   display: grid;
-  min-height: 360px;
+  min-height: 420px;
   place-items: center;
   align-content: center;
   gap: 12px;
