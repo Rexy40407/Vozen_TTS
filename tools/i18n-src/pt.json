@@ -325,7 +325,8 @@
     "billing.pending": "O pagamento está a ser processado. O acesso Premium aparecerá aqui em breve.",
     "billing.elementsUnavailable": "O pagamento seguro no site não está disponível agora. Podes continuar na Stripe.",
     "billing.hostedFallback": "Abrir checkout seguro da Stripe",
-    "billing.hostedUnavailable": "O checkout da Stripe está temporariamente indisponível. Tenta novamente daqui a pouco."
+    "billing.hostedUnavailable": "O checkout da Stripe está temporariamente indisponível. Tenta novamente daqui a pouco.",
+    "price.includesFree": "Tudo o que está no Free"
   },
   "commands": {
     "general": [
