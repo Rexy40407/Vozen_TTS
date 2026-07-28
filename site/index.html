@@ -43,6 +43,7 @@
 
     <link rel="stylesheet" href="css/main-v43.css" />
     <link rel="stylesheet" href="css/pricing-cards-v3.css" />
+    <link rel="stylesheet" href="css/pricing-cards-v4.css" />
     <link rel="stylesheet" href="css/billing-v3.css?v=compact-checkout-v1" />
 
     <!-- FAQ structured data (Google rich results). Mantém em sincronia com
@@ -460,17 +461,20 @@
             </div>
           </div>
           <div class="pricing">
-            <article class="free-plan reveal">
-              <div class="free-plan__identity">
-                <span class="free-plan__mark" aria-hidden="true">V</span>
-                <div>
-                  <span class="plan-kicker" data-i18n="price.free.per">forever</span>
-                  <h3 data-i18n="price.free.name">Free</h3>
-                </div>
+            <article class="price-card price-card--free reveal">
+              <div class="price-card__topline">
+                <span class="price-card__badge price-card__badge--free"><span aria-hidden="true">✦</span> <span data-i18n="price.free.per">forever</span></span>
               </div>
-              <div class="free-plan__price" data-i18n="price.free.price">€0</div>
-              <p data-i18n="price.free.pitch">All the essentials. No card, no trial</p>
-              <ul class="free-plan__highlights" aria-label="Free plan highlights">
+              <h3 data-i18n="price.free.name">Free</h3>
+              <p class="price-card__pitch" data-i18n="price.free.pitch">All the essentials. No card, no trial</p>
+              <div class="seat-toggle plan-scope plan-scope--free">
+                <span class="seat-toggle__btn is-active" data-i18n="price.free.per">forever</span>
+              </div>
+              <div class="price-card__price">
+                <span class="price-line"><b><span class="amt" data-i18n="price.free.price">&#8364;0</span></b></span>
+                <span class="per" data-i18n="price.free.per">forever</span>
+              </div>
+              <ul class="ticks price-card__highlights" aria-label="Free plan highlights">
                 <li data-i18n="price.m.1">38 Piper voices</li>
                 <li data-i18n="price.m.2">35 languages</li>
                 <li data-i18n="price.m.3">Auto-read your channel</li>
@@ -478,7 +482,11 @@
                 <li data-i18n="price.m.20">Daily talk streaks</li>
                 <li data-i18n="price.m.8">Full admin kit</li>
               </ul>
-              <a class="free-plan__cta btn btn--ghost btn--sm btn--discord-cta js-invite" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands" target="_blank" rel="noopener" data-i18n="cta.add">Add to Discord</a>
+              <p class="price-card__note" data-i18n="price.free.per">forever</p>
+              <a class="price-card__buy price-card__buy--free btn--discord-cta js-invite" href="https://discord.com/oauth2/authorize?client_id=1523826014935842997&amp;permissions=326420745216&amp;scope=bot%20applications.commands" target="_blank" rel="noopener" data-i18n="cta.add">Add to Discord</a>
+              <p class="price-card__idnote">
+                <span data-i18n="price.free.pitch">All the essentials. No card, no trial</span>
+              </p>
             </article>
 
             <div class="paid-plans">
