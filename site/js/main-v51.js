@@ -454,7 +454,7 @@
   }
 
   function beginBillingAuth() {
-    login({ popup: true });
+    login({ billing: true });
   }
 
   function billingEntitlementActive(data, request) {
@@ -554,10 +554,8 @@
   const STATE_KEY = "vozen.oauthstate";
   const NAV_USER_KEY = "vozen.navuser";
   const OAUTH_REDIRECT = new URL("/account", location.href).href;
-  const IS_BILLING_AUTH_POPUP = window.name === "vozenDiscordLogin" && !!window.opener;
   let panelState = { mode: "hidden" };
   let activationResume = { kind: "none" };
-  let billingAuthPopup = null;
 
   const t = (k) => (DICT[lang] && DICT[lang][k]) || (DICT.en && DICT.en[k]) || k;
   const esc = (s) =>
@@ -635,6 +633,19 @@
     }
     try {
       sessionStorage.setItem(STATE_KEY, state);
+      if (options && options.billing === true) {
+        const request = billingRequest;
+        if (request && ["plus", "premium"].includes(request.plan) && ["monthly", "yearly"].includes(request.interval)) {
+          sessionStorage.setItem(
+            BILLING_INTENT_KEY,
+            JSON.stringify({ plan: request.plan, interval: request.interval, seats: request.seats || 2 }),
+          );
+        } else {
+          sessionStorage.removeItem(BILLING_INTENT_KEY);
+        }
+      } else {
+        sessionStorage.removeItem(BILLING_INTENT_KEY);
+      }
       if (options && options.resumeActivation === true) {
         sessionStorage.setItem(
           ACTIVATION_INTENT_KEY,
@@ -656,76 +667,9 @@
     u.searchParams.set("response_type", "token");
     u.searchParams.set("scope", "identify email");
     u.searchParams.set("state", state);
-    if (options && options.popup === true) {
-      const popupWidth = Math.min(560, Math.max(420, (window.screen?.availWidth || 560) - 32));
-      const popupHeight = Math.min(760, Math.max(620, (window.screen?.availHeight || 760) - 48));
-      const browserWidth = window.outerWidth || document.documentElement.clientWidth || popupWidth;
-      const browserHeight = window.outerHeight || document.documentElement.clientHeight || popupHeight;
-      const browserLeft = Number.isFinite(window.screenX) ? window.screenX : (window.screenLeft || 0);
-      const browserTop = Number.isFinite(window.screenY) ? window.screenY : (window.screenTop || 0);
-      const popupLeft = Math.max(0, Math.round(browserLeft + (browserWidth - popupWidth) / 2));
-      const popupTop = Math.max(0, Math.round(browserTop + (browserHeight - popupHeight) / 2));
-      const popupFeatures = [
-        "popup=yes",
-        "width=" + popupWidth,
-        "height=" + popupHeight,
-        "left=" + popupLeft,
-        "top=" + popupTop,
-        "resizable=yes",
-        "scrollbars=yes",
-        "location=yes",
-        "toolbar=no",
-        "menubar=no",
-        "status=no",
-      ].join(",");
-
-      // Open a real, sized browser window synchronously from the click. Loading
-      // Discord only after the blank popup exists prevents the checkout page
-      // from being replaced and matches familiar Google/Apple OAuth flows.
-      billingAuthPopup = window.open("about:blank", "_blank", popupFeatures);
-      if (!billingAuthPopup || billingAuthPopup === window) {
-        billingAuthPopup = null;
-        try { sessionStorage.removeItem(STATE_KEY); } catch {}
-        const status = document.getElementById("vozenBillingAuthStatus");
-        if (status) status.textContent = "Allow pop-ups for vozen.org to log in with Discord.";
-        return null;
-      }
-      try {
-        billingAuthPopup.name = "vozenDiscordLogin";
-        billingAuthPopup.location.replace(u.toString());
-        billingAuthPopup.focus();
-        return billingAuthPopup;
-      } catch {
-        billingAuthPopup.close();
-        billingAuthPopup = null;
-        try { sessionStorage.removeItem(STATE_KEY); } catch {}
-        const status = document.getElementById("vozenBillingAuthStatus");
-        if (status) status.textContent = "Couldn't open Discord sign-in. Please allow pop-ups and try again.";
-        return null;
-      }
-    }
     location.href = u.toString();
     return null;
   }
-
-  function receiveBillingAuth(event) {
-    if (event.origin !== location.origin || !event.data || event.data.type !== "vozen:discord-auth") return;
-    const token = typeof event.data.token === "string" ? event.data.token : "";
-    const state = typeof event.data.state === "string" ? event.data.state : "";
-    let expected = null;
-    try { expected = sessionStorage.getItem(STATE_KEY); } catch {}
-    if (!token || !state || !expected || state !== expected) return;
-    try {
-      sessionStorage.removeItem(STATE_KEY);
-      sessionStorage.setItem(TOK_KEY, token);
-    } catch {}
-    billingAuthPopup?.close?.();
-    billingAuthPopup = null;
-    if (!document.getElementById("vozenBillingModal")) return;
-    setBillingPhase("payment");
-    void continueBillingCheckout();
-  }
-  window.addEventListener("message", receiveBillingAuth);
 
   function logout() {
     try {
@@ -762,12 +706,6 @@
     const tok = p.get("access_token");
     if (!tok) return null;
     const st = p.get("state");
-    if (IS_BILLING_AUTH_POPUP) {
-      history.replaceState(null, "", location.pathname + location.search);
-      window.opener.postMessage({ type: "vozen:discord-auth", token: tok, state: st || "" }, location.origin);
-      window.close();
-      return { popup: true };
-    }
     let expected = null;
     try {
       expected = sessionStorage.getItem(STATE_KEY);
@@ -841,11 +779,16 @@
       return;
     }
     const fromHash = readTokenFromHash();
-    if (fromHash?.popup) return;
     if (fromHash) {
       try {
         sessionStorage.setItem(TOK_KEY, fromHash.token);
       } catch {}
+      let billingReturn = false;
+      try { billingReturn = !!sessionStorage.getItem(BILLING_INTENT_KEY); } catch {}
+      if (IS_ACCOUNT && billingReturn) {
+        location.replace("/#premium");
+        return;
+      }
       activationResume = consumeActivationIntent(fromHash.state);
       // Bounce de regresso: o /dashboard reutiliza o redirect /account (o único registado no
       // portal) para o OAuth com scope `guilds`. O token fica no sessionStorage (mesmo
@@ -893,7 +836,7 @@
       }
       if (!res.ok) throw new Error("http " + res.status);
       setPanel({ mode: "ok", data: await res.json() });
-      const purchase = IS_ACCOUNT ? readBillingIntent() : null;
+      const purchase = readBillingIntent();
       if (purchase) {
         window.setTimeout(() => void startCheckout(purchase.plan, purchase.interval, purchase.seats), 0);
         return;

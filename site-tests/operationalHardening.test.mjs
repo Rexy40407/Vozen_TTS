@@ -126,20 +126,12 @@ describe('operational security configuration', () => {
     expect(script).toContain('stripe.initEmbeddedCheckout');
     expect(script).toContain('payload.clientSecret');
     expect(script).not.toContain('vozenDiscordAuth');
-    expect(script).toContain('window.open(');
-    expect(script).toContain('"vozenDiscordLogin"');
-    expect(script).toContain('vozen:discord-auth');
-    expect(script).toContain('login({ popup: true });');
-    const popupSource = script.slice(
-      script.indexOf('if (options && options.popup === true)'),
-      script.indexOf('location.href = u.toString()'),
-    );
-    expect(popupSource).toContain('window.open("about:blank", "_blank", popupFeatures)');
-    expect(popupSource).toContain('"popup=yes"');
-    expect(popupSource).toContain('billingAuthPopup.name = "vozenDiscordLogin"');
-    expect(popupSource).toContain('billingAuthPopup.location.replace(u.toString())');
-    expect(popupSource).toContain('billingAuthPopup.focus()');
-    expect(popupSource).not.toContain('vozenBillingAuthLink');
+    expect(script).not.toContain('window.open("about:blank"');
+    expect(script).not.toContain('vozenDiscordLogin');
+    expect(script).not.toContain('vozen:discord-auth');
+    expect(script).toContain('login({ billing: true });');
+    expect(script).toContain('BILLING_INTENT_KEY');
+    expect(script).toContain('location.replace("/#premium")');
     const checkoutSource = script.slice(
       script.indexOf('async function startCheckout('),
       script.indexOf('const billingInterval'),
