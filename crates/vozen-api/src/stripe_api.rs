@@ -95,7 +95,6 @@ impl std::error::Error for StripeApiConfigError {}
 struct StripeState {
     origin: HeaderValue,
     secret_key: Arc<str>,
-    publishable_key: Arc<str>,
     webhook_secret: Arc<str>,
     prices: Arc<StripePriceIds>,
     store: Arc<Mutex<SqliteStore>>,
@@ -140,7 +139,6 @@ pub fn stripe_router(config: StripeApiConfig) -> Result<Router, StripeApiConfigE
         .with_state(StripeState {
             origin,
             secret_key: Arc::from(config.secret_key),
-            publishable_key: Arc::from(config.publishable_key),
             webhook_secret: Arc::from(config.webhook_secret),
             prices: Arc::new(config.prices),
             store: config.store,
@@ -179,6 +177,13 @@ async fn checkout(
     let Some((price, seats)) = state.prices.get(&input.plan, &input.interval) else {
         return cors(StatusCode::BAD_REQUEST, "unsupported plan", &state);
     };
+    let origin = state
+        .origin
+        .to_str()
+        .unwrap_or("https://vozen.org")
+        .trim_end_matches('/');
+    let success_url = format!("{origin}/account?checkout=success");
+    let cancel_url = format!("{origin}/#premium");
     let form = [
         ("mode", "subscription".to_owned()),
         ("line_items[0][price]", price.to_owned()),
@@ -193,11 +198,12 @@ async fn checkout(
         ),
         ("subscription_data[metadata][plan]", input.plan.clone()),
         ("subscription_data[metadata][seats]", seats.to_string()),
-        // Keep the complete payment journey inside Stripe's embedded page. This deliberately
-        // disables redirect-based payment methods; the browser must remain on the current Vozen
-        // page and the client renders the success step from Checkout's onComplete callback.
-        ("ui_mode", "embedded_page".to_owned()),
-        ("redirect_on_completion", "never".to_owned()),
+        // Use Stripe-hosted Checkout so payment remains available even when a CDN security
+        // policy blocks third-party scripts or frames on vozen.org. Stripe returns customers to
+        // the account page after success and to pricing when they cancel.
+        ("ui_mode", "hosted_page".to_owned()),
+        ("success_url", success_url),
+        ("cancel_url", cancel_url),
         ("allow_promotion_codes", "true".to_owned()),
     ];
     let response = state
@@ -210,19 +216,13 @@ async fn checkout(
         .await;
     match response {
         Ok(response) if response.status().is_success() => {
-            match response.json::<Value>().await.ok().and_then(|v| {
-                v.get("client_secret")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            }) {
-                Some(client_secret) => json_response(
-                    StatusCode::OK,
-                    json!({
-                        "clientSecret": client_secret,
-                        "publishableKey": &*state.publishable_key,
-                    }),
-                    &state,
-                ),
+            match response
+                .json::<Value>()
+                .await
+                .ok()
+                .and_then(|v| v.get("url").and_then(Value::as_str).map(str::to_owned))
+            {
+                Some(url) => json_response(StatusCode::OK, json!({ "url": url }), &state),
                 None => json_response(
                     StatusCode::BAD_GATEWAY,
                     json!({"error":"stripe_response"}),

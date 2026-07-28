@@ -307,10 +307,8 @@
     } catch { return null; }
   }
 
-  let billingCheckout = null;
   let billingCheckoutOpener = null;
   let billingRequest = null;
-  let stripeLoadPromise = null;
   let billingScrollY = 0;
   let billingPendingScrollY = null;
   let billingBodyStyle = null;
@@ -391,31 +389,9 @@
     document.getElementById("vozenBillingRetry")?.addEventListener("click", () => void continueBillingCheckout());
   }
 
-  function ensureStripeJs() {
-    if (typeof window.Stripe === "function") return Promise.resolve();
-    if (stripeLoadPromise) return stripeLoadPromise;
-    stripeLoadPromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://js.stripe.com/v3/";
-      script.async = true;
-      script.onload = () => {
-        if (typeof window.Stripe === "function") resolve();
-        else reject(new Error("stripe_js_unavailable"));
-      };
-      script.onerror = () => reject(new Error("stripe_js_unavailable"));
-      document.head.appendChild(script);
-    }).catch((error) => {
-      stripeLoadPromise = null;
-      throw error;
-    });
-    return stripeLoadPromise;
-  }
-
   function closeBillingCheckout() {
     const modal = document.getElementById("vozenBillingModal");
     if (!modal || modal.hidden) return;
-    billingCheckout?.destroy?.();
-    billingCheckout = null;
     modal.remove();
     document.body.classList.remove("is-modal-open");
     unlockBillingScroll();
@@ -457,38 +433,6 @@
     login({ billing: true });
   }
 
-  function billingEntitlementActive(data, request) {
-    if (request.plan === "plus") return !!data?.plus?.active;
-    return !!data?.pass?.active && Number(data.pass.seats || 0) >= (request.seats || 2);
-  }
-
-  async function refreshBillingEntitlement(request) {
-    const token = storedToken();
-    if (!token) return false;
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      try {
-        const response = await fetch(PREMIUM_API_BASE + "/api/me/premium", { headers: { Authorization: "Bearer " + token } });
-        if (response.ok) {
-          const data = await response.json();
-          setPanel({ mode: "ok", data });
-          if (billingEntitlementActive(data, request)) return true;
-        }
-      } catch {}
-      await sleep(1000);
-    }
-    return false;
-  }
-
-  async function completeBillingCheckout() {
-    const request = billingRequest;
-    billingCheckout?.destroy?.();
-    billingCheckout = null;
-    setBillingPhase("done");
-    const doneText = document.getElementById("vozenBillingDoneText");
-    const active = request ? await refreshBillingEntitlement(request) : false;
-    if (doneText) doneText.textContent = active ? t("claim.activationOk") : "Payment received. Your benefits are being activated now.";
-  }
-
   async function continueBillingCheckout() {
     const request = billingRequest;
     const token = storedToken();
@@ -510,17 +454,8 @@
         if (status) status.textContent = t("claim.loginAgain");
         return;
       }
-      if (!res.ok || !payload.clientSecret || !payload.publishableKey) throw new Error(payload.error || "checkout unavailable");
-      await ensureStripeJs();
-      if (typeof window.Stripe !== "function") throw new Error("stripe_js_unavailable");
-      const stripe = window.Stripe(payload.publishableKey);
-      billingCheckout = await stripe.createEmbeddedCheckoutPage({ clientSecret: payload.clientSecret, onComplete: completeBillingCheckout });
-      if (!document.getElementById("vozenBillingModal")) {
-        billingCheckout.destroy?.();
-        billingCheckout = null;
-        return;
-      }
-      billingCheckout.mount("#vozenEmbeddedCheckout");
+      if (!res.ok || !payload.url) throw new Error(payload.error || "checkout unavailable");
+      window.location.assign(payload.url);
     } catch (error) {
       if (document.getElementById("vozenBillingModal")) showBillingError(t("panel.error"));
     }

@@ -121,13 +121,13 @@ describe('operational security configuration', () => {
     expect(claim).toContain('return "";');
     expect(claim).not.toContain('Stripe subscriptions are managed from the account panel.');
     expect(script).toContain('function billingCheckoutModal(plan, interval)');
-    expect(script).toContain('function ensureStripeJs()');
-    expect(script).toContain('await ensureStripeJs()');
-    expect(script).toContain('stripe.createEmbeddedCheckoutPage');
-    expect(script).toContain('payload.clientSecret');
+    expect(script).toContain('window.location.assign(payload.url)');
+    expect(script).not.toContain('function ensureStripeJs()');
+    expect(script).not.toContain('stripe.createEmbeddedCheckoutPage');
+    expect(script).not.toContain('payload.clientSecret');
     const billingErrorSource = script.slice(
       script.indexOf('function showBillingError('),
-      script.indexOf('function ensureStripeJs'),
+      script.indexOf('function closeBillingCheckout'),
     );
     expect(billingErrorSource).not.toContain('claim.loginAgain');
     expect(script).not.toContain('vozenDiscordAuth');
@@ -154,14 +154,12 @@ describe('operational security configuration', () => {
     expect(script).toContain('function openPurchaseActivation()');
     expect(script).toContain('function mountPurchaseActivation(el)');
   });
-  it('keeps homepage checkout inside the current page', () => {
+  it('sends homepage checkout to Stripe-hosted payment without loading Stripe.js', () => {
     const page = source('site/index.html');
     expect(page).toContain('css/billing-v3.css');
-    expect(page).toContain('https://js.stripe.com/v3/');
-    expect(page).toContain('<script src="https://js.stripe.com/v3/"></script>');
+    expect(page).not.toContain('<script src="https://js.stripe.com/v3/"></script>');
     expect(page).not.toContain('<script defer src="https://js.stripe.com/v3/"></script>');
-    expect(page).toContain('frame-src https://checkout.stripe.com');
-    expect(page).toContain('js/main-v51.js?v=a16f4aa');
+    expect(page).toContain('js/main-v51.js?v=hosted-checkout');
   });
   it('keeps the embedded checkout error inside the dark blurred modal', () => {
     const css = source(BILLING_CSS);
@@ -432,15 +430,18 @@ describe('operational security configuration', () => {
     expect(terms).toMatch(/does not collect a shipping address/i);
     expect(terms).not.toMatch(/Ko-fi purchase/i);
   });
-  it('configures Stripe checkout without a browser redirect', () => {
+  it('configures Stripe-hosted checkout with safe return URLs', () => {
     const stripe = source('crates/vozen-api/src/stripe_api.rs');
     const checkout = stripe.slice(stripe.indexOf('async fn checkout('), stripe.indexOf('async fn portal('));
-    expect(checkout).toContain('(\"ui_mode\", \"embedded_page\".to_owned())');
-    expect(checkout).toContain('(\"redirect_on_completion\", \"never\".to_owned())');
+    expect(checkout).toContain('(\"ui_mode\", \"hosted_page\".to_owned())');
+    expect(checkout).toContain('(\"success_url\", success_url)');
+    expect(checkout).toContain('(\"cancel_url\", cancel_url)');
+    expect(checkout).toContain('v.get(\"url\")');
     expect(checkout).toContain('.header(\"Stripe-Version\", STRIPE_API_VERSION)');
     expect(checkout).toContain('stripe_provider_rejected');
-    expect(checkout).not.toContain('success_url');
-    expect(checkout).not.toContain('cancel_url');
+    expect(checkout).not.toContain('redirect_on_completion');
+    expect(checkout).not.toContain('\"clientSecret\"');
+    expect(checkout).not.toContain('\"publishableKey\"');
     expect(checkout).not.toContain('return_url');
   });
 });
