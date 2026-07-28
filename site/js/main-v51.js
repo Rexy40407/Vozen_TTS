@@ -656,7 +656,36 @@
   let panelState = { mode: "hidden" };
   let activationResume = { kind: "none" };
 
-  const t = (k) => (DICT[lang] && DICT[lang][k]) || (DICT.en && DICT.en[k]) || k;
+  // Billing ships independently from the long-lived i18n bundle. Keep a small English fallback
+  // here so a browser holding the previous four-hour i18n cache never renders raw billing keys.
+  const BILLING_COPY_FALLBACKS = {
+    "billing.eyebrow": "Plan & payment",
+    "billing.secure": "Secure payment handled by Stripe",
+    "billing.progress": "Checkout progress",
+    "billing.stepPayment": "Plan & payment",
+    "billing.stepDone": "Done",
+    "billing.loading": "Preparing secure checkout…",
+    "billing.doneTitle": "Payment update",
+    "billing.processing": "Confirming your payment…",
+    "billing.email": "Email",
+    "billing.or": "or pay with a card",
+    "billing.promo": "Promotion code",
+    "billing.promoPlaceholder": "Enter code",
+    "billing.apply": "Apply",
+    "billing.promoApplied": "Promotion code applied",
+    "billing.pay": "Pay and subscribe",
+    "billing.confirmError": "Your payment could not be confirmed. Check the details and try again.",
+    "billing.paymentReceived": "Payment received. Your Premium access is being activated.",
+    "billing.pending": "Your payment is being processed. Premium access will appear here shortly.",
+    "billing.elementsUnavailable": "Secure on-site checkout is unavailable right now. You can continue on Stripe instead.",
+    "billing.hostedFallback": "Open secure Stripe checkout",
+    "billing.hostedUnavailable": "Stripe checkout is temporarily unavailable. Please try again shortly.",
+  };
+  const t = (k) =>
+    (DICT[lang] && DICT[lang][k]) ||
+    (DICT.en && DICT.en[k]) ||
+    BILLING_COPY_FALLBACKS[k] ||
+    k;
   const esc = (s) =>
     String(s).replace(
       /[&<>"']/g,
