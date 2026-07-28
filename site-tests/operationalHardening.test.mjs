@@ -106,7 +106,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('id="accountBilling"');
     expect(page).not.toContain('id="accountActivateOpen"');
     expect(page).toContain('js/main-v51.js');
-    expect(page).toContain('css/billing-v3.css?v=payment-element');
+    expect(page).toContain('css/billing-v3.css?v=compact-checkout-v1');
     expect(page).toContain('https://js.stripe.com/dahlia/stripe.js');
     expect(page).toContain('frame-src https://checkout.stripe.com https://js.stripe.com');
     expect(css).toContain('body.page-account');
@@ -159,7 +159,7 @@ describe('operational security configuration', () => {
   });
   it('loads Stripe.js for the on-site embedded Checkout and cache-busts the runtime', () => {
     const page = source('site/index.html');
-    expect(page).toContain('css/billing-v3.css?v=payment-element');
+    expect(page).toContain('css/billing-v3.css?v=compact-checkout-v1');
     expect(page).toContain('js/i18n-v41.js?v=payment-element');
     expect(page).toContain('<script defer data-vozen-stripe src="https://js.stripe.com/dahlia/stripe.js"></script>');
     expect(page).toContain('js/main-v51.js?v=embedded-checkout-v1');

@@ -323,3 +323,49 @@
 .billing-modal__hosted { margin-top: 2px; }
 .billing-modal__error { min-height: 320px; }
 @media (max-width: 600px) { .billing-elements { padding: 14px; } .billing-elements__pay { position: sticky; bottom: 8px; z-index: 1; box-shadow: 0 10px 30px rgba(0,0,0,.34); } }
+
+/* Compact checkout shell: Stripe remains the owner of every payment field. */
+.billing-modal { padding: 16px; }
+.billing-modal__backdrop { background: rgba(3, 5, 12, 0.72); backdrop-filter: blur(14px) saturate(0.76); -webkit-backdrop-filter: blur(14px) saturate(0.76); }
+.billing-modal__dialog {
+  width: min(100%, 432px);
+  max-height: min(calc(100dvh - 32px), 920px);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  border-color: rgba(132, 216, 196, 0.18);
+  border-radius: 14px;
+  background: #0a0d16;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.62);
+}
+.billing-modal__head { gap: 20px; padding: 20px 22px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.billing-modal__eyebrow { margin-bottom: 6px; font-size: 0.66rem; letter-spacing: 0.12em; }
+.billing-modal__head h2 { font-size: clamp(1.4rem, 5vw, 1.7rem); letter-spacing: -0.035em; line-height: 1.08; }
+.billing-modal__head p { margin-top: 7px; color: #aeb8c9; font-size: 0.78rem; line-height: 1.4; }
+.billing-modal__close { width: 36px; height: 36px; border-radius: 12px; background: rgba(255, 255, 255, 0.035); font-size: 1.25rem; }
+.billing-modal__steps { display: none; }
+.billing-modal__body { min-height: 400px; }
+.billing-modal__checkout { margin: 0; border: 0; border-radius: 0; background: #0b0d0f; }
+.billing-modal__checkout iframe { min-height: 650px; }
+.billing-modal__trust { margin: 14px 24px 20px; color: #929db0; font-size: 0.74rem; }
+
+@media (max-width: 600px) {
+  .billing-modal__dialog {
+    width: 100%;
+    max-height: 98dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 16px 16px 0 0;
+    scrollbar-gutter: auto;
+  }
+  .billing-modal__head { padding: 18px 18px 16px; }
+  .billing-modal__checkout { margin: 0; }
+  .billing-modal__checkout iframe { min-height: 620px; }
+  .billing-modal__trust { margin-right: 18px; margin-left: 18px; }
+}
+
+@media (min-width: 601px) and (max-height: 760px) {
+  .billing-modal { padding: 8px; }
+  .billing-modal__dialog { max-height: calc(100dvh - 16px); }
+  .billing-modal__head { padding-top: 16px; padding-bottom: 14px; }
+}
