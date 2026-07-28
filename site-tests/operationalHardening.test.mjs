@@ -131,7 +131,10 @@ describe('operational security configuration', () => {
     expect(script).not.toContain('vozen:discord-auth');
     expect(script).toContain('login({ billing: true });');
     expect(script).toContain('BILLING_INTENT_KEY');
+    expect(script).toContain('const BILLING_OAUTH_REDIRECT = new URL("/", location.href).href');
+    expect(script).toContain('options && options.billing === true ? BILLING_OAUTH_REDIRECT : OAUTH_REDIRECT');
     expect(script).toContain('location.replace("/#premium")');
+    expect(script).toContain('history.replaceState(null, "", "#premium")');
     const checkoutSource = script.slice(
       script.indexOf('async function startCheckout('),
       script.indexOf('const billingInterval'),

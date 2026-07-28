@@ -554,6 +554,7 @@
   const STATE_KEY = "vozen.oauthstate";
   const NAV_USER_KEY = "vozen.navuser";
   const OAUTH_REDIRECT = new URL("/account", location.href).href;
+  const BILLING_OAUTH_REDIRECT = new URL("/", location.href).href;
   let panelState = { mode: "hidden" };
   let activationResume = { kind: "none" };
 
@@ -663,7 +664,7 @@
     } catch {}
     const u = new URL("https://discord.com/oauth2/authorize");
     u.searchParams.set("client_id", CLIENT_ID);
-    u.searchParams.set("redirect_uri", OAUTH_REDIRECT);
+    u.searchParams.set("redirect_uri", options && options.billing === true ? BILLING_OAUTH_REDIRECT : OAUTH_REDIRECT);
     u.searchParams.set("response_type", "token");
     u.searchParams.set("scope", "identify email");
     u.searchParams.set("state", state);
@@ -838,6 +839,10 @@
       setPanel({ mode: "ok", data: await res.json() });
       const purchase = readBillingIntent();
       if (purchase) {
+        if (!IS_ACCOUNT) {
+          history.replaceState(null, "", "#premium");
+          document.getElementById("premium")?.scrollIntoView({ block: "start" });
+        }
         window.setTimeout(() => void startCheckout(purchase.plan, purchase.interval, purchase.seats), 0);
         return;
       }
