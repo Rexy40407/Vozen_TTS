@@ -312,18 +312,31 @@
   let billingScrollY = 0;
   let billingPendingScrollY = null;
   let billingBodyStyle = null;
+  let billingStripeCheckout = null;
+  let billingActions = null;
+  let billingPaymentElement = null;
+  let billingExpressElement = null;
+  let billingSessionId = null;
+  let billingConfirming = false;
+
+  const billingAppearance = {
+    theme: "night",
+    variables: {
+      colorPrimary: "#2ee6c8", colorBackground: "#0a0c1a", colorText: "#f6f7fe",
+      colorTextSecondary: "#a3a9c4", colorDanger: "#ff6ea9", borderRadius: "12px",
+      fontFamily: "Outfit, system-ui, sans-serif", spacingUnit: "4px",
+    },
+    rules: { ".Input": { border: "1px solid rgba(255,255,255,.13)", boxShadow: "none" } },
+  };
 
   function lockBillingScroll() {
     if (billingBodyStyle) return;
     billingScrollY = billingPendingScrollY ?? window.scrollY;
     billingPendingScrollY = null;
     billingBodyStyle = {
-      position: document.body.style.position,
-      top: document.body.style.top,
-      left: document.body.style.left,
-      right: document.body.style.right,
-      width: document.body.style.width,
-      overflow: document.body.style.overflow,
+      position: document.body.style.position, top: document.body.style.top,
+      left: document.body.style.left, right: document.body.style.right,
+      width: document.body.style.width, overflow: document.body.style.overflow,
     };
     document.body.style.position = "fixed";
     document.body.style.top = `-${billingScrollY}px`;
@@ -354,15 +367,14 @@
       `<div class="billing-modal" id="vozenBillingModal" hidden>` +
       `<div class="billing-modal__backdrop" id="vozenBillingBackdrop"></div>` +
       `<section class="billing-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="vozenBillingTitle" tabindex="-1">` +
-      `<header class="billing-modal__head"><div><span class="billing-modal__eyebrow">Plan &amp; payment</span><h2 id="vozenBillingTitle">${planName}</h2><p>${cadence} · ${t("price.idNote")}</p></div>` +
+      `<header class="billing-modal__head"><div><span class="billing-modal__eyebrow">${t("billing.eyebrow")}</span><h2 id="vozenBillingTitle">${planName}</h2><p>${cadence} · ${t("billing.secure")}</p></div>` +
       `<button class="billing-modal__close" id="vozenBillingClose" type="button" aria-label="${esc(t("claim.help.close"))}">&times;</button></header>` +
-      `<div class="billing-modal__steps" aria-label="Checkout progress"><span class="is-active" id="vozenBillingStepPayment"><i>1</i><b>Plan &amp; payment</b></span><span id="vozenBillingStepDone"><i>2</i><b>Done</b></span></div>` +
+      `<div class="billing-modal__steps" aria-label="${esc(t("billing.progress"))}"><span class="is-active" id="vozenBillingStepPayment"><i>1</i><b>${t("billing.stepPayment")}</b></span><span id="vozenBillingStepDone"><i>2</i><b>${t("billing.stepDone")}</b></span></div>` +
       `<div class="billing-modal__body" id="vozenBillingBody">` +
       `<div class="billing-modal__auth" id="vozenBillingAuth" hidden><p class="billing-modal__lead">${t("panel.login")}</p><p>${t("price.idNote")}</p><button type="button" class="btn btn--primary btn--discord-cta billing-modal__login" id="vozenBillingLogin">${DISCORD_MARK}<span>${t("panel.login")}</span></button><p class="billing-modal__status" id="vozenBillingAuthStatus" role="status" aria-live="polite"></p></div>` +
-      `<div class="billing-modal__payment" id="vozenBillingPayment" hidden><div class="billing-modal__checkout" id="vozenEmbeddedCheckout" aria-live="polite"><div class="billing-modal__loading"><span class="billing-modal__spinner" aria-hidden="true"></span><p>${t("panel.loading")}</p></div></div><p class="billing-modal__trust"><span aria-hidden="true">⌁</span> ${t("price.idNote")}</p></div>` +
-      `<div class="billing-modal__done" id="vozenBillingDone" hidden><div class="billing-modal__done-icon" aria-hidden="true">✓</div><h3>${t("claim.activationOk")}</h3><p id="vozenBillingDoneText" role="status" aria-live="polite">${t("panel.loading")}</p><button type="button" class="btn btn--primary" id="vozenBillingDoneClose">${t("claim.help.close")}</button></div>` +
-      `</div></section>` +
-      `</div>`
+      `<div class="billing-modal__payment" id="vozenBillingPayment" hidden><div class="billing-modal__checkout" id="vozenEmbeddedCheckout" aria-live="polite"><div class="billing-modal__loading"><span class="billing-modal__spinner" aria-hidden="true"></span><p>${t("billing.loading")}</p></div></div><p class="billing-modal__trust"><span aria-hidden="true">⌁</span> ${t("billing.secure")}</p></div>` +
+      `<div class="billing-modal__done" id="vozenBillingDone" hidden><div class="billing-modal__done-icon" aria-hidden="true">✓</div><h3>${t("billing.doneTitle")}</h3><p id="vozenBillingDoneText" role="status" aria-live="polite">${t("billing.processing")}</p><button type="button" class="btn btn--primary" id="vozenBillingDoneClose">${t("claim.help.close")}</button></div>` +
+      `</div></section></div>`
     );
   }
 
@@ -382,16 +394,30 @@
     modal.dataset.phase = phase;
   }
 
-  function showBillingError(message = t("panel.error")) {
+  function showBillingError(message = t("panel.error"), allowHostedFallback = false) {
     const checkout = document.getElementById("vozenEmbeddedCheckout");
     if (!checkout) return;
-    checkout.innerHTML = `<div class="billing-modal__error"><span class="billing-modal__error-icon" aria-hidden="true">!</span><strong>${esc(message)}</strong><button type="button" class="btn btn--primary" id="vozenBillingRetry">${t("panel.retry")}</button></div>`;
+    checkout.innerHTML = `<div class="billing-modal__error"><span class="billing-modal__error-icon" aria-hidden="true">!</span><strong>${esc(message)}</strong><button type="button" class="btn btn--primary" id="vozenBillingRetry">${t("panel.retry")}</button>${allowHostedFallback ? `<button type="button" class="billing-modal__hosted" id="vozenBillingHostedFallback">${t("billing.hostedFallback")}</button>` : ""}</div>`;
     document.getElementById("vozenBillingRetry")?.addEventListener("click", () => void continueBillingCheckout());
+    document.getElementById("vozenBillingHostedFallback")?.addEventListener("click", () => void continueHostedBillingCheckout());
+  }
+
+  function resetBillingStripe() {
+    try { billingPaymentElement?.destroy?.(); } catch {}
+    try { billingExpressElement?.destroy?.(); } catch {}
+    try { billingStripeCheckout?.destroy?.(); } catch {}
+    billingStripeCheckout = null;
+    billingActions = null;
+    billingPaymentElement = null;
+    billingExpressElement = null;
+    billingSessionId = null;
+    billingConfirming = false;
   }
 
   function closeBillingCheckout() {
     const modal = document.getElementById("vozenBillingModal");
-    if (!modal || modal.hidden) return;
+    if (!modal || modal.hidden || billingConfirming) return;
+    resetBillingStripe();
     modal.remove();
     document.body.classList.remove("is-modal-open");
     unlockBillingScroll();
@@ -414,10 +440,7 @@
     lockBillingScroll();
     document.documentElement.insertAdjacentHTML("beforeend", billingCheckoutModal(plan, interval));
     const modal = document.getElementById("vozenBillingModal");
-    if (!modal) {
-      unlockBillingScroll();
-      return null;
-    }
+    if (!modal) { unlockBillingScroll(); return null; }
     modal.hidden = false;
     document.body.classList.add("is-modal-open");
     document.getElementById("vozenBillingClose")?.addEventListener("click", closeBillingCheckout);
@@ -429,36 +452,176 @@
     return modal;
   }
 
-  function beginBillingAuth() {
-    login({ billing: true });
+  function beginBillingAuth() { login({ billing: true }); }
+
+  function ensureStripeJs() {
+    if (typeof window.Stripe === "function") return Promise.resolve(window.Stripe);
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-vozen-stripe]');
+      if (existing) {
+        existing.addEventListener("load", () => typeof window.Stripe === "function" ? resolve(window.Stripe) : reject(new Error("Stripe unavailable")), { once: true });
+        existing.addEventListener("error", () => reject(new Error("Stripe unavailable")), { once: true });
+        window.setTimeout(() => reject(new Error("Stripe unavailable")), 7000);
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://js.stripe.com/dahlia/stripe.js";
+      script.async = true;
+      script.dataset.vozenStripe = "true";
+      script.onload = () => typeof window.Stripe === "function" ? resolve(window.Stripe) : reject(new Error("Stripe unavailable"));
+      script.onerror = () => reject(new Error("Stripe unavailable"));
+      document.head.append(script);
+    });
   }
 
-  async function continueBillingCheckout() {
+  function checkoutRequestBody() {
     const request = billingRequest;
+    return { plan: request.seats === 5 ? "max" : request.plan, interval: request.interval };
+  }
+
+  async function continueHostedBillingCheckout() {
     const token = storedToken();
-    if (!request || !token) {
-      setBillingPhase("auth");
-      return;
-    }
-    setBillingPhase("payment");
+    if (!token || !billingRequest) { setBillingPhase("auth"); return; }
     try {
       const res = await fetch(PREMIUM_API_BASE + "/api/billing/checkout", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-        body: JSON.stringify({ plan: request.seats === 5 ? "max" : request.plan, interval: request.interval }),
+        body: JSON.stringify(checkoutRequestBody()),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (res.status === 401) { try { sessionStorage.removeItem(TOK_KEY); } catch {} setBillingPhase("auth"); return; }
+      if (!res.ok || !payload.url) throw new Error("hosted checkout unavailable");
+      window.location.assign(payload.url);
+    } catch { showBillingError(t("billing.hostedUnavailable")); }
+  }
+
+  async function mountPaymentElement(payload) {
+    const checkoutRoot = document.getElementById("vozenEmbeddedCheckout");
+    if (!checkoutRoot) return;
+    const Stripe = await ensureStripeJs();
+    const stripe = Stripe(payload.publishableKey);
+    if (!stripe?.initCheckout) throw new Error("Stripe custom checkout unavailable");
+    billingStripeCheckout = stripe.initCheckout({ clientSecret: payload.clientSecret, elementsOptions: { appearance: billingAppearance } });
+    const result = await billingStripeCheckout.loadActions();
+    if (result.type === "error" || !result.actions) throw new Error(result.error?.message || "Stripe checkout unavailable");
+    billingActions = result.actions;
+    billingSessionId = payload.sessionId;
+    checkoutRoot.innerHTML = `<div class="billing-elements"><label class="billing-elements__label" for="vozenBillingEmail">${t("billing.email")}</label><input class="billing-elements__email" id="vozenBillingEmail" type="email" autocomplete="email"><div class="billing-elements__express" id="vozenExpressCheckout"><div id="vozenExpressCheckoutMount"></div></div><div class="billing-elements__or"><span>${t("billing.or")}</span></div><div id="vozenPaymentElement"></div><div class="billing-elements__promo"><label class="billing-elements__label" for="vozenPromoCode">${t("billing.promo")}</label><div><input id="vozenPromoCode" autocomplete="off" placeholder="${esc(t("billing.promoPlaceholder"))}"><button type="button" id="vozenPromoApply">${t("billing.apply")}</button></div><p id="vozenPromoStatus" role="status" aria-live="polite"></p></div><p class="billing-elements__status" id="vozenPaymentStatus" role="status" aria-live="polite"></p><button type="button" class="btn btn--primary billing-elements__pay" id="vozenBillingPay">${t("billing.pay")}</button></div>`;
+    const email = document.getElementById("vozenBillingEmail");
+    if (email) {
+      email.value = payload.verifiedEmail || "";
+      if (payload.verifiedEmail) void billingActions.updateEmail?.(payload.verifiedEmail);
+      email.addEventListener("change", () => void billingActions?.updateEmail?.(email.value.trim()));
+    }
+    try {
+      billingExpressElement = billingStripeCheckout.createExpressCheckoutElement({ buttonType: { applePay: "subscribe", googlePay: "subscribe", link: "subscribe" } });
+      billingExpressElement.on?.("ready", (event) => { if (!event.availablePaymentMethods) document.getElementById("vozenExpressCheckout")?.setAttribute("hidden", ""); });
+      billingExpressElement.on?.("confirm", (event) => void confirmBillingPayment({ expressCheckoutConfirmEvent: event }));
+      billingExpressElement.mount("#vozenExpressCheckoutMount");
+    } catch { document.getElementById("vozenExpressCheckout")?.setAttribute("hidden", ""); }
+    billingPaymentElement = billingStripeCheckout.createPaymentElement({ layout: { type: "tabs", defaultCollapsed: false }, wallets: "never" });
+    billingPaymentElement.mount("#vozenPaymentElement");
+    document.getElementById("vozenBillingPay")?.addEventListener("click", () => void confirmBillingPayment());
+    document.getElementById("vozenPromoApply")?.addEventListener("click", async () => {
+      const code = document.getElementById("vozenPromoCode")?.value.trim();
+      const status = document.getElementById("vozenPromoStatus");
+      if (!code || !billingActions?.applyPromotionCode) return;
+      const result = await billingActions.applyPromotionCode(code);
+      if (status) status.textContent = result?.error?.message || t("billing.promoApplied");
+    });
+  }
+
+  async function confirmBillingPayment(options = {}) {
+    if (!billingActions || billingConfirming) return;
+    billingConfirming = true;
+    const button = document.getElementById("vozenBillingPay");
+    if (button) { button.disabled = true; button.textContent = t("billing.processing"); }
+    const status = document.getElementById("vozenPaymentStatus");
+    if (status) status.textContent = "";
+    try {
+      const result = await billingActions.confirm({ ...options, redirect: "if_required" });
+      if (result?.type === "error" || result?.error) {
+        if (status) status.textContent = result.error?.message || t("billing.confirmError");
+        return;
+      }
+      setBillingPhase("done");
+      const done = document.getElementById("vozenBillingDoneText");
+      if (done) done.textContent = t("billing.processing");
+      await refreshBillingAfterPayment(billingSessionId);
+    } catch { if (status) status.textContent = t("billing.confirmError"); }
+    finally {
+      billingConfirming = false;
+      if (button) { button.disabled = false; button.textContent = t("billing.pay"); }
+    }
+  }
+
+  async function paymentSessionStatus(sessionId) {
+    const token = storedToken();
+    if (!token || !sessionId) return null;
+    const res = await fetch(PREMIUM_API_BASE + "/api/billing/checkout/status", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    return res.ok ? res.json().catch(() => null) : null;
+  }
+
+  async function refreshBillingAfterPayment(sessionId) {
+    for (const delay of [0, 900, 1800, 3200, 5000]) {
+      if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+      const result = await paymentSessionStatus(sessionId);
+      if (result?.status === "complete" && result?.paymentStatus === "paid") {
+        const done = document.getElementById("vozenBillingDoneText");
+        if (done) done.textContent = t("billing.paymentReceived");
+        void loadPanel();
+        return;
+      }
+    }
+    const done = document.getElementById("vozenBillingDoneText");
+    if (done) done.textContent = t("billing.pending");
+    void loadPanel();
+  }
+
+  async function continueBillingCheckout() {
+    const token = storedToken();
+    if (!billingRequest || !token) { setBillingPhase("auth"); return; }
+    resetBillingStripe();
+    setBillingPhase("payment");
+    const checkout = document.getElementById("vozenEmbeddedCheckout");
+    if (checkout) checkout.innerHTML = `<div class="billing-modal__loading"><span class="billing-modal__spinner" aria-hidden="true"></span><p>${t("billing.loading")}</p></div>`;
+    try {
+      const res = await fetch(PREMIUM_API_BASE + "/api/billing/checkout/elements", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify(checkoutRequestBody()),
       });
       const payload = await res.json().catch(() => ({}));
       if (res.status === 401) {
         try { sessionStorage.removeItem(TOK_KEY); } catch {}
         setBillingPhase("auth");
-        const status = document.getElementById("vozenBillingAuthStatus");
-        if (status) status.textContent = t("claim.loginAgain");
+        const authStatus = document.getElementById("vozenBillingAuthStatus");
+        if (authStatus) authStatus.textContent = t("claim.loginAgain");
         return;
       }
-      if (!res.ok || !payload.url) throw new Error(payload.error || "checkout unavailable");
-      window.location.assign(payload.url);
-    } catch (error) {
-      if (document.getElementById("vozenBillingModal")) showBillingError(t("panel.error"));
+      if (!res.ok || !payload.clientSecret || !payload.publishableKey || !payload.sessionId) throw new Error(payload.error || "checkout unavailable");
+      await mountPaymentElement(payload);
+    } catch {
+      showBillingError(t("billing.elementsUnavailable"), true);
     }
+  }
+
+  async function resumeBillingReturn() {
+    const url = new URL(window.location.href);
+    const sessionId = url.searchParams.get("session_id");
+    if (url.searchParams.get("checkout") !== "return" || !sessionId) return false;
+    url.searchParams.delete("checkout");
+    url.searchParams.delete("session_id");
+    history.replaceState(null, "", url.pathname + url.search + (url.hash || "#premium"));
+    const result = await paymentSessionStatus(sessionId);
+    if (!result) return false;
+    openBillingCheckout("premium", "monthly", 2, null);
+    setBillingPhase("done");
+    const done = document.getElementById("vozenBillingDoneText");
+    if (done) done.textContent = result.status === "complete" && result.paymentStatus === "paid" ? t("billing.paymentReceived") : t("billing.pending");
+    void loadPanel();
+    return true;
   }
 
   async function startCheckout(plan, interval, seats = 2) {
@@ -772,6 +935,7 @@
       }
       if (!res.ok) throw new Error("http " + res.status);
       setPanel({ mode: "ok", data: await res.json() });
+      if (await resumeBillingReturn()) return;
       const purchase = readBillingIntent();
       if (purchase) {
         if (!IS_ACCOUNT) {

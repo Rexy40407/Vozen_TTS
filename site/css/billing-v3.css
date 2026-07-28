@@ -22,12 +22,12 @@
 
 .billing-modal__dialog {
   position: relative;
-  width: min(100%, 520px);
+  width: min(100%, 600px);
   max-height: min(94vh, 900px);
   overflow: auto;
   border: 1px solid rgba(225, 205, 157, 0.2);
   border-radius: 16px;
-  background: #171613;
+  background: var(--panel, #10121f);
   box-shadow: 0 28px 100px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.025) inset;
   color: #f7f8ff;
   outline: none;
@@ -195,9 +195,9 @@
 }
 
 .billing-modal__checkout {
-  min-height: 420px;
-  margin: 0 12px;
-  overflow: hidden;
+  min-height: 0;
+  margin: 0 18px;
+  overflow: visible;
   border: 1px solid rgba(138, 174, 255, 0.16);
   border-radius: 12px;
   background: #0c1220;
@@ -303,3 +303,23 @@
     animation: none;
   }
 }
+
+
+/* Stripe custom Checkout: Vozen owns the shell; Stripe owns every payment field. */
+.billing-elements { display: grid; gap: 14px; padding: 18px; }
+.billing-elements__label { color: var(--text-1, #a3a9c4); font-size: .78rem; font-weight: 750; letter-spacing: .02em; }
+.billing-elements__email, .billing-elements__promo input { width: 100%; min-height: 46px; box-sizing: border-box; border: 1px solid var(--line-2, rgba(255,255,255,.16)); border-radius: 10px; background: var(--bg-0, #05060f); color: var(--text-0, #f6f7fe); padding: 0 13px; font: inherit; }
+.billing-elements__email:focus, .billing-elements__promo input:focus { outline: 2px solid rgba(46,230,200,.5); outline-offset: 2px; }
+.billing-elements__express { padding: 4px 0; }
+.billing-elements__express[hidden] { display: none; }
+.billing-elements__or { display: flex; align-items: center; gap: 12px; color: var(--text-2, #6b7192); font-size: .74rem; text-transform: uppercase; letter-spacing: .12em; }
+.billing-elements__or::before, .billing-elements__or::after { height: 1px; flex: 1; background: var(--line, rgba(255,255,255,.08)); content: ""; }
+.billing-elements__promo { display: grid; gap: 7px; }
+.billing-elements__promo > div { display: flex; gap: 8px; }
+.billing-elements__promo button, .billing-modal__hosted { min-height: 42px; border: 1px solid var(--line-2, rgba(255,255,255,.16)); border-radius: 10px; background: transparent; color: var(--aqua-2, #7cf5e2); padding: 0 13px; font: inherit; font-weight: 750; cursor: pointer; }
+.billing-elements__promo button { flex: 0 0 auto; }
+.billing-elements__promo p, .billing-elements__status { min-height: 1.25em; margin: 0; color: var(--text-1, #a3a9c4); font-size: .8rem; }
+.billing-elements__pay { width: 100%; min-height: 50px; margin-top: 4px; }
+.billing-modal__hosted { margin-top: 2px; }
+.billing-modal__error { min-height: 320px; }
+@media (max-width: 600px) { .billing-elements { padding: 14px; } .billing-elements__pay { position: sticky; bottom: 8px; z-index: 1; box-shadow: 0 10px 30px rgba(0,0,0,.34); } }

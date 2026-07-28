@@ -1,8 +1,8 @@
 //! Stripe Checkout, Billing Portal and webhook integration.
 //!
-//! This module deliberately uses Stripe's embedded Checkout page. Vozen never receives card data
-//! or shipping addresses. The only identity sent to Stripe is the already-authenticated Discord
-//! user ID.
+//! This module creates Stripe Checkout Sessions for both the Stripe-hosted fallback and the
+//! on-site Payment Element. Vozen never receives card data or shipping addresses. The only
+//! identity sent to Stripe is the already-authenticated Discord user ID.
 
 use std::{
     sync::{Arc, Mutex},
@@ -95,6 +95,7 @@ impl std::error::Error for StripeApiConfigError {}
 struct StripeState {
     origin: HeaderValue,
     secret_key: Arc<str>,
+    publishable_key: Arc<str>,
     webhook_secret: Arc<str>,
     prices: Arc<StripePriceIds>,
     store: Arc<Mutex<SqliteStore>>,
@@ -134,11 +135,14 @@ pub fn stripe_router(config: StripeApiConfig) -> Result<Router, StripeApiConfigE
         .unwrap_or_else(|_| reqwest::Client::new());
     let router = Router::new()
         .route("/api/billing/checkout", any(checkout))
+        .route("/api/billing/checkout/elements", any(checkout_elements))
+        .route("/api/billing/checkout/status", any(checkout_status))
         .route("/api/billing/portal", any(portal))
         .route("/webhook/stripe", any(webhook))
         .with_state(StripeState {
             origin,
             secret_key: Arc::from(config.secret_key),
+            publishable_key: Arc::from(config.publishable_key),
             webhook_secret: Arc::from(config.webhook_secret),
             prices: Arc::new(config.prices),
             store: config.store,
@@ -154,6 +158,11 @@ pub fn stripe_router(config: StripeApiConfig) -> Result<Router, StripeApiConfigE
 struct CheckoutInput {
     plan: String,
     interval: String,
+}
+
+#[derive(Deserialize)]
+struct CheckoutStatusInput {
+    session_id: String,
 }
 
 async fn checkout(
@@ -267,6 +276,229 @@ async fn checkout(
             )
         }
     }
+}
+
+/// Creates a Checkout Session for Stripe's custom Checkout / Payment Element integration.
+/// The client secret is deliberately returned with no-store caching and is never persisted by
+/// the browser. Stripe remains responsible for every payment field and confirmation.
+async fn checkout_elements(
+    State(state): State<StripeState>,
+    method: Method,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if method == Method::OPTIONS {
+        return cors(StatusCode::NO_CONTENT, "", &state);
+    }
+    if method != Method::POST {
+        return cors(StatusCode::METHOD_NOT_ALLOWED, "method not allowed", &state);
+    }
+    let Some(user) = identity(&state, &headers).await else {
+        return cors(StatusCode::UNAUTHORIZED, "unauthorized", &state);
+    };
+    let Ok(input) = serde_json::from_slice::<CheckoutInput>(&body) else {
+        return cors(StatusCode::BAD_REQUEST, "invalid checkout request", &state);
+    };
+    let Some((price, seats)) = state.prices.get(&input.plan, &input.interval) else {
+        return cors(StatusCode::BAD_REQUEST, "unsupported plan", &state);
+    };
+    let origin = state
+        .origin
+        .to_str()
+        .unwrap_or("https://vozen.org")
+        .trim_end_matches('/');
+    let verified_email = verified_email(&state, &headers, &user).await;
+    let mut form = vec![
+        ("mode", "subscription".to_owned()),
+        ("line_items[0][price]", price.to_owned()),
+        ("line_items[0][quantity]", "1".to_owned()),
+        ("client_reference_id", user.id.clone()),
+        ("metadata[discord_user_id]", user.id.clone()),
+        ("metadata[plan]", input.plan.clone()),
+        ("metadata[seats]", seats.to_string()),
+        (
+            "subscription_data[metadata][discord_user_id]",
+            user.id.clone(),
+        ),
+        ("subscription_data[metadata][plan]", input.plan.clone()),
+        ("subscription_data[metadata][seats]", seats.to_string()),
+        ("ui_mode", "custom".to_owned()),
+        (
+            "return_url",
+            format!("{origin}/?checkout=return&session_id={{CHECKOUT_SESSION_ID}}#premium"),
+        ),
+        ("allow_promotion_codes", "true".to_owned()),
+    ];
+    if let Some(email) = verified_email.as_deref() {
+        form.push(("customer_email", email.to_owned()));
+    }
+    match state
+        .client
+        .post(format!("{STRIPE_API}/checkout/sessions"))
+        .header("Stripe-Version", STRIPE_API_VERSION)
+        .basic_auth(&*state.secret_key, Some(""))
+        .form(&form)
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => {
+            let payload = response.json::<Value>().await.ok();
+            let session_id = payload
+                .as_ref()
+                .and_then(|value| value.get("id").and_then(Value::as_str));
+            let client_secret = payload
+                .as_ref()
+                .and_then(|value| value.get("client_secret").and_then(Value::as_str));
+            match (session_id, client_secret) {
+                (Some(session_id), Some(client_secret)) => json_no_store_response(
+                    StatusCode::OK,
+                    json!({
+                        "sessionId": session_id,
+                        "clientSecret": client_secret,
+                        "publishableKey": &*state.publishable_key,
+                        "verifiedEmail": verified_email,
+                    }),
+                    &state,
+                ),
+                _ => json_response(
+                    StatusCode::BAD_GATEWAY,
+                    json!({"error":"stripe_response"}),
+                    &state,
+                ),
+            }
+        }
+        Ok(response) => stripe_checkout_rejected(response, &state).await,
+        Err(error) => stripe_checkout_transport_error(error, &state),
+    }
+}
+
+/// Returns only state needed to resume a redirect payment method. The request is bound to the
+/// Discord identity recorded on the Checkout Session, so a guessed session ID cannot be queried
+/// by another signed-in user.
+async fn checkout_status(
+    State(state): State<StripeState>,
+    method: Method,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if method == Method::OPTIONS {
+        return cors(StatusCode::NO_CONTENT, "", &state);
+    }
+    if method != Method::POST {
+        return cors(StatusCode::METHOD_NOT_ALLOWED, "method not allowed", &state);
+    }
+    let Some(user) = identity(&state, &headers).await else {
+        return cors(StatusCode::UNAUTHORIZED, "unauthorized", &state);
+    };
+    let Ok(input) = serde_json::from_slice::<CheckoutStatusInput>(&body) else {
+        return cors(
+            StatusCode::BAD_REQUEST,
+            "invalid checkout status request",
+            &state,
+        );
+    };
+    if !valid_stripe_session_id(&input.session_id) {
+        return cors(StatusCode::BAD_REQUEST, "invalid checkout session", &state);
+    }
+    match state
+        .client
+        .get(format!(
+            "{STRIPE_API}/checkout/sessions/{}",
+            input.session_id
+        ))
+        .header("Stripe-Version", STRIPE_API_VERSION)
+        .basic_auth(&*state.secret_key, Some(""))
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => match response.json::<Value>().await {
+            Ok(session)
+                if session.get("client_reference_id").and_then(Value::as_str)
+                    == Some(user.id.as_str()) =>
+            {
+                json_no_store_response(
+                    StatusCode::OK,
+                    json!({
+                        "status": session.get("status").and_then(Value::as_str).unwrap_or("unknown"),
+                        "paymentStatus": session.get("payment_status").and_then(Value::as_str).unwrap_or("unknown"),
+                    }),
+                    &state,
+                )
+            }
+            Ok(_) => json_no_store_response(
+                StatusCode::FORBIDDEN,
+                json!({"error":"checkout_identity_mismatch"}),
+                &state,
+            ),
+            Err(_) => json_response(
+                StatusCode::BAD_GATEWAY,
+                json!({"error":"stripe_response"}),
+                &state,
+            ),
+        },
+        Ok(response) => stripe_checkout_rejected(response, &state).await,
+        Err(error) => stripe_checkout_transport_error(error, &state),
+    }
+}
+
+async fn verified_email(
+    state: &StripeState,
+    headers: &HeaderMap,
+    user: &crate::premium_api::DiscordIdentity,
+) -> Option<String> {
+    let bearer = bearer_token(headers)?;
+    let identity = state
+        .verifier
+        .resolve_activation_identity(bearer)
+        .await
+        .ok()?;
+    (identity.id == user.id && !identity.email.trim().is_empty()).then_some(identity.email)
+}
+
+fn valid_stripe_session_id(value: &str) -> bool {
+    value.starts_with("cs_")
+        && value.len() <= 255
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+async fn stripe_checkout_rejected(response: reqwest::Response, state: &StripeState) -> Response {
+    let status = response.status();
+    let request_id = response
+        .headers()
+        .get("request-id")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("unknown")
+        .to_owned();
+    let body = response.text().await.unwrap_or_default();
+    let fields = stripe_error_fields(&body);
+    eprintln!(
+        "[stripe] checkout rejected status={} request_id={} type={} code={} param={}",
+        status.as_u16(),
+        request_id,
+        fields.kind,
+        fields.code,
+        fields.param
+    );
+    json_response(
+        StatusCode::BAD_GATEWAY,
+        json!({"error":"stripe_provider_rejected"}),
+        state,
+    )
+}
+
+fn stripe_checkout_transport_error(error: reqwest::Error, state: &StripeState) -> Response {
+    eprintln!(
+        "[stripe] checkout transport failure timeout={} connect={}",
+        error.is_timeout(),
+        error.is_connect()
+    );
+    json_response(
+        StatusCode::BAD_GATEWAY,
+        json!({"error":"stripe_unavailable"}),
+        state,
+    )
 }
 
 async fn portal(State(state): State<StripeState>, method: Method, headers: HeaderMap) -> Response {
@@ -551,16 +783,21 @@ fn handle_invoice_failed(state: &StripeState, object: &Value) -> Result<(), Stri
         .map_err(|e| e.to_string())
 }
 
+fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+    let raw = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
+    let token = raw.strip_prefix("Bearer ")?.trim();
+    (!token.is_empty()).then_some(token)
+}
+
 async fn identity(
     state: &StripeState,
     headers: &HeaderMap,
 ) -> Option<crate::premium_api::DiscordIdentity> {
-    let raw = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let token = raw.strip_prefix("Bearer ")?.trim();
-    if token.is_empty() {
-        return None;
-    }
-    state.verifier.resolve_identity(token).await.ok()
+    state
+        .verifier
+        .resolve_identity(bearer_token(headers)?)
+        .await
+        .ok()
 }
 
 fn verify_signature(body: &[u8], header: &str, secret: &str, now: i64) -> bool {
@@ -642,6 +879,14 @@ fn json_response(status: StatusCode, value: Value, state: &StripeState) -> Respo
     add_cors(response.headers_mut(), state);
     response
 }
+
+fn json_no_store_response(status: StatusCode, value: Value, state: &StripeState) -> Response {
+    let mut response = json_response(status, value, state);
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
 fn cors(status: StatusCode, message: &str, state: &StripeState) -> Response {
     let mut response = (status, message.to_owned()).into_response();
     add_cors(response.headers_mut(), state);
@@ -703,5 +948,13 @@ mod tests {
             }
         );
         assert_eq!(stripe_error_fields("not json").kind, "unknown");
+    }
+
+    #[test]
+    fn checkout_status_only_accepts_safe_stripe_session_ids() {
+        assert!(valid_stripe_session_id("cs_test_123"));
+        assert!(!valid_stripe_session_id("pi_test_123"));
+        assert!(!valid_stripe_session_id("cs_test/../other"));
+        assert!(!valid_stripe_session_id("cs_test space"));
     }
 }
