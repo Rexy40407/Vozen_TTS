@@ -1,0 +1,43 @@
+/* Cache-safe desktop pricing refinement. */
+@media (min-width: 921px) {
+  .paid-plans .price-card {
+    min-height: 0;
+    padding: 24px 28px;
+  }
+
+  .paid-plans .price-card__topline {
+    min-height: 24px;
+    margin-bottom: 14px;
+  }
+
+  .price-card__pitch {
+    min-height: 44px;
+    margin: 6px 0 14px;
+    line-height: 1.45;
+  }
+
+  .paid-plans .seat-toggle { margin: 14px 0 10px; }
+  .paid-plans .plan-scope { margin-bottom: 5px; }
+  .paid-plans .price-card__price { margin-bottom: 16px; }
+  .paid-plans .price-card__price b { font-size: clamp(42px, 5vw, 54px); }
+
+  .paid-plans .price-card__deal {
+    margin: -3px 0 14px;
+    padding: 7px 11px;
+  }
+
+  .paid-plans .price-card .price-card__highlights {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 18px;
+    margin-top: 4px;
+  }
+
+  .paid-plans .price-card .price-card__highlights li {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .paid-plans .price-card__note { padding-top: 18px; }
+  .paid-plans .price-card__buy { margin-top: 12px; padding: 12px 18px; }
+}
