@@ -162,7 +162,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('css/billing-v3.css?v=payment-element');
     expect(page).toContain('js/i18n-v41.js?v=payment-element');
     expect(page).toContain('<script defer data-vozen-stripe src="https://js.stripe.com/dahlia/stripe.js"></script>');
-    expect(page).toContain('js/main-v51.js?v=payment-element-v2');
+    expect(page).toContain('js/main-v51.js?v=embedded-checkout-v1');
     expect(source(SITE_JS)).toContain('BILLING_COPY_FALLBACKS');
   });
   it('keeps the embedded checkout error inside the dark blurred modal', () => {
