@@ -325,7 +325,8 @@
     "billing.pending": "Your payment is being processed. Premium access will appear here shortly.",
     "billing.elementsUnavailable": "Secure on-site checkout is unavailable right now. You can continue on Stripe instead.",
     "billing.hostedFallback": "Open secure Stripe checkout",
-    "billing.hostedUnavailable": "Stripe checkout is temporarily unavailable. Please try again shortly."
+    "billing.hostedUnavailable": "Stripe checkout is temporarily unavailable. Please try again shortly.",
+    "price.includesFree": "Free'deki her şey"
   },
   "commands": {
     "general": [
