@@ -1,0 +1,35 @@
+/* Free plan now shares the paid-card composition. */
+.price-card--free {
+  border-color: rgba(55, 207, 211, 0.35);
+  background: linear-gradient(180deg, rgba(46, 230, 200, 0.08), transparent 55%), var(--glass);
+  box-shadow: inset 0 1px 0 var(--hi), 0 24px 60px -30px rgba(46, 230, 200, 0.2);
+}
+.price-card__badge--free { color: #062d31; background: linear-gradient(115deg, #32cbd2, #6ee7e0); box-shadow: 0 4px 16px -4px rgba(46, 230, 200, 0.5); }
+.price-card--free .price-card__price b, .price-card--free .price-card__price .amt { color: var(--aqua); }
+.price-card--free .plan-scope { border-color: rgba(46, 230, 200, 0.26); }
+.price-card--free .plan-scope .seat-toggle__btn { color: #dffffb; background: rgba(46, 230, 200, 0.12); box-shadow: 0 6px 16px -10px rgba(46, 230, 200, 0.6); }
+.price-card__buy--free { color: #042528; background: linear-gradient(120deg, #32cbd2, #70e8df); }
+
+@media (min-width: 921px) {
+  .price-card--free { min-height: 0; padding: 24px 28px; overflow: hidden; }
+  .price-card--free .price-card__topline { min-height: 24px; margin-bottom: 14px; }
+  .price-card--free h3 { margin: 0; font-size: clamp(24px, 3vw, 31px); }
+  .price-card--free .price-card__pitch { min-height: 44px; margin: 6px 0 14px; line-height: 1.45; }
+  .price-card--free .seat-toggle { margin: 14px 0 10px; }
+  .price-card--free .plan-scope { margin-bottom: 5px; }
+  .price-card--free .price-card__price { margin-bottom: 16px; }
+  .price-card--free .price-card__price b { font-size: clamp(42px, 5vw, 54px); }
+  .price-card--free .price-card__highlights {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .price-card--free .price-card__highlights li { font-size: 13px; line-height: 1.35; }
+  .price-card--free .price-card__note { padding-top: 18px; }
+  .price-card--free .price-card__buy { margin-top: 12px; padding: 12px 18px; }
+  .price-card--free .price-card__idnote { min-height: 3em; }
+}
+
+@media (max-width: 640px) { .price-card--free { padding: 26px 22px; } }
+@media (max-width: 430px) { .price-card--free { padding: 22px 18px; } }
