@@ -161,7 +161,7 @@ describe('operational security configuration', () => {
     expect(page).toContain('<script src="https://js.stripe.com/v3/"></script>');
     expect(page).not.toContain('<script defer src="https://js.stripe.com/v3/"></script>');
     expect(page).toContain('frame-src https://checkout.stripe.com');
-    expect(page).toContain('js/main-v51.js');
+    expect(page).toContain('js/main-v51.js?v=a16f4aa');
   });
   it('keeps the embedded checkout error inside the dark blurred modal', () => {
     const css = source(BILLING_CSS);
