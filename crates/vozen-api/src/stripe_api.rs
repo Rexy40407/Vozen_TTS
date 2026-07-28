@@ -1,6 +1,6 @@
 //! Stripe Checkout, Billing Portal and webhook integration.
 //!
-//! This module deliberately uses Stripe's embedded Checkout UI. Vozen never receives card data
+//! This module deliberately uses Stripe's embedded Checkout page. Vozen never receives card data
 //! or shipping addresses. The only identity sent to Stripe is the already-authenticated Discord
 //! user ID.
 
@@ -29,6 +29,9 @@ use crate::premium_api::DiscordIdentityVerifier;
 type HmacSha256 = Hmac<Sha256>;
 
 const STRIPE_API: &str = "https://api.stripe.com/v1";
+// Pin the contract used by the server. Stripe's account default moved to this version, where
+// `ui_mode=embedded` was removed in favour of `embedded_page`.
+const STRIPE_API_VERSION: &str = "2026-06-24.dahlia";
 const SIGNATURE_TOLERANCE_SECONDS: i64 = 300;
 
 #[derive(Debug, Clone)]
@@ -190,16 +193,17 @@ async fn checkout(
         ),
         ("subscription_data[metadata][plan]", input.plan.clone()),
         ("subscription_data[metadata][seats]", seats.to_string()),
-        // Keep the complete payment journey inside Stripe's embedded iframe. This deliberately
+        // Keep the complete payment journey inside Stripe's embedded page. This deliberately
         // disables redirect-based payment methods; the browser must remain on the current Vozen
         // page and the client renders the success step from Checkout's onComplete callback.
-        ("ui_mode", "embedded".to_owned()),
+        ("ui_mode", "embedded_page".to_owned()),
         ("redirect_on_completion", "never".to_owned()),
         ("allow_promotion_codes", "true".to_owned()),
     ];
     let response = state
         .client
         .post(format!("{STRIPE_API}/checkout/sessions"))
+        .header("Stripe-Version", STRIPE_API_VERSION)
         .basic_auth(&*state.secret_key, Some(""))
         .form(&form)
         .send()
@@ -226,11 +230,42 @@ async fn checkout(
                 ),
             }
         }
-        _ => json_response(
-            StatusCode::BAD_GATEWAY,
-            json!({"error":"stripe_unavailable"}),
-            &state,
-        ),
+        Ok(response) => {
+            let status = response.status();
+            let request_id = response
+                .headers()
+                .get("request-id")
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("unknown")
+                .to_owned();
+            let body = response.text().await.unwrap_or_default();
+            let fields = stripe_error_fields(&body);
+            eprintln!(
+                "[stripe] checkout rejected status={} request_id={} type={} code={} param={}",
+                status.as_u16(),
+                request_id,
+                fields.kind,
+                fields.code,
+                fields.param
+            );
+            json_response(
+                StatusCode::BAD_GATEWAY,
+                json!({"error":"stripe_provider_rejected"}),
+                &state,
+            )
+        }
+        Err(error) => {
+            eprintln!(
+                "[stripe] checkout transport failure timeout={} connect={}",
+                error.is_timeout(),
+                error.is_connect()
+            );
+            json_response(
+                StatusCode::BAD_GATEWAY,
+                json!({"error":"stripe_unavailable"}),
+                &state,
+            )
+        }
     }
 }
 
@@ -269,6 +304,7 @@ async fn portal(State(state): State<StripeState>, method: Method, headers: Heade
     match state
         .client
         .post(format!("{STRIPE_API}/billing_portal/sessions"))
+        .header("Stripe-Version", STRIPE_API_VERSION)
         .basic_auth(&*state.secret_key, Some(""))
         .form(&form)
         .send()
@@ -572,6 +608,35 @@ fn hex_bytes(value: &str) -> Result<Vec<u8>, ()> {
     Ok(out)
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct StripeErrorFields {
+    kind: String,
+    code: String,
+    param: String,
+}
+
+/// Extract only safe diagnostic fields from a Stripe error. The provider's message is omitted:
+/// it can contain request-specific values, while type/code/param are enough to debug the
+/// integration in server logs without copying payment or identity data into the log stream.
+fn stripe_error_fields(body: &str) -> StripeErrorFields {
+    let error = serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| value.get("error").cloned())
+        .unwrap_or(Value::Null);
+    let field = |name: &str| {
+        error
+            .get(name)
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_owned()
+    };
+    StripeErrorFields {
+        kind: field("type"),
+        code: field("code"),
+        param: field("param"),
+    }
+}
+
 fn json_response(status: StatusCode, value: Value, state: &StripeState) -> Response {
     let mut response = (status, axum::Json(value)).into_response();
     add_cors(response.headers_mut(), state);
@@ -622,5 +687,21 @@ mod tests {
             "whsec_test",
             timestamp + 301
         ));
+    }
+
+    #[test]
+    fn stripe_error_fields_omit_provider_message_and_unknown_shape_is_safe() {
+        let fields = stripe_error_fields(
+            r#"{"error":{"type":"invalid_request_error","code":"parameter_unknown","param":"ui_mode","message":"do not copy this into logs"}}"#,
+        );
+        assert_eq!(
+            fields,
+            StripeErrorFields {
+                kind: "invalid_request_error".into(),
+                code: "parameter_unknown".into(),
+                param: "ui_mode".into(),
+            }
+        );
+        assert_eq!(stripe_error_fields("not json").kind, "unknown");
     }
 }

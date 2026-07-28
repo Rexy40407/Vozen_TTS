@@ -387,7 +387,7 @@
   function showBillingError(message = t("panel.error")) {
     const checkout = document.getElementById("vozenEmbeddedCheckout");
     if (!checkout) return;
-    checkout.innerHTML = `<div class="billing-modal__error"><span class="billing-modal__error-icon" aria-hidden="true">!</span><strong>${esc(message)}</strong><p>${t("claim.loginAgain")}</p><button type="button" class="btn btn--primary" id="vozenBillingRetry">${t("panel.retry")}</button></div>`;
+    checkout.innerHTML = `<div class="billing-modal__error"><span class="billing-modal__error-icon" aria-hidden="true">!</span><strong>${esc(message)}</strong><button type="button" class="btn btn--primary" id="vozenBillingRetry">${t("panel.retry")}</button></div>`;
     document.getElementById("vozenBillingRetry")?.addEventListener("click", () => void continueBillingCheckout());
   }
 
@@ -514,7 +514,7 @@
       await ensureStripeJs();
       if (typeof window.Stripe !== "function") throw new Error("stripe_js_unavailable");
       const stripe = window.Stripe(payload.publishableKey);
-      billingCheckout = await stripe.initEmbeddedCheckout({ clientSecret: payload.clientSecret, onComplete: completeBillingCheckout });
+      billingCheckout = await stripe.createEmbeddedCheckoutPage({ clientSecret: payload.clientSecret, onComplete: completeBillingCheckout });
       if (!document.getElementById("vozenBillingModal")) {
         billingCheckout.destroy?.();
         billingCheckout = null;
@@ -522,7 +522,7 @@
       }
       billingCheckout.mount("#vozenEmbeddedCheckout");
     } catch (error) {
-      if (document.getElementById("vozenBillingModal")) showBillingError(error?.message === "checkout unavailable" ? t("panel.error") : t("panel.error"));
+      if (document.getElementById("vozenBillingModal")) showBillingError(t("panel.error"));
     }
   }
 

@@ -123,8 +123,13 @@ describe('operational security configuration', () => {
     expect(script).toContain('function billingCheckoutModal(plan, interval)');
     expect(script).toContain('function ensureStripeJs()');
     expect(script).toContain('await ensureStripeJs()');
-    expect(script).toContain('stripe.initEmbeddedCheckout');
+    expect(script).toContain('stripe.createEmbeddedCheckoutPage');
     expect(script).toContain('payload.clientSecret');
+    const billingErrorSource = script.slice(
+      script.indexOf('function showBillingError('),
+      script.indexOf('function ensureStripeJs'),
+    );
+    expect(billingErrorSource).not.toContain('claim.loginAgain');
     expect(script).not.toContain('vozenDiscordAuth');
     expect(script).not.toContain('window.open("about:blank"');
     expect(script).not.toContain('vozenDiscordLogin');
@@ -430,8 +435,10 @@ describe('operational security configuration', () => {
   it('configures Stripe checkout without a browser redirect', () => {
     const stripe = source('crates/vozen-api/src/stripe_api.rs');
     const checkout = stripe.slice(stripe.indexOf('async fn checkout('), stripe.indexOf('async fn portal('));
-    expect(checkout).toContain('(\"ui_mode\", \"embedded\".to_owned())');
+    expect(checkout).toContain('(\"ui_mode\", \"embedded_page\".to_owned())');
     expect(checkout).toContain('(\"redirect_on_completion\", \"never\".to_owned())');
+    expect(checkout).toContain('.header(\"Stripe-Version\", STRIPE_API_VERSION)');
+    expect(checkout).toContain('stripe_provider_rejected');
     expect(checkout).not.toContain('success_url');
     expect(checkout).not.toContain('cancel_url');
     expect(checkout).not.toContain('return_url');
