@@ -499,35 +499,24 @@
     if (!checkoutRoot) return;
     const Stripe = await ensureStripeJs();
     const stripe = Stripe(payload.publishableKey);
-    if (!stripe?.initCheckout) throw new Error("Stripe custom checkout unavailable");
-    billingStripeCheckout = stripe.initCheckout({ clientSecret: payload.clientSecret, elementsOptions: { appearance: billingAppearance } });
-    const result = await billingStripeCheckout.loadActions();
-    if (result.type === "error" || !result.actions) throw new Error(result.error?.message || "Stripe checkout unavailable");
-    billingActions = result.actions;
+    if (!stripe?.createEmbeddedCheckoutPage) throw new Error("Stripe embedded checkout unavailable");
     billingSessionId = payload.sessionId;
-    checkoutRoot.innerHTML = `<div class="billing-elements"><label class="billing-elements__label" for="vozenBillingEmail">${t("billing.email")}</label><input class="billing-elements__email" id="vozenBillingEmail" type="email" autocomplete="email"><div class="billing-elements__express" id="vozenExpressCheckout"><div id="vozenExpressCheckoutMount"></div></div><div class="billing-elements__or"><span>${t("billing.or")}</span></div><div id="vozenPaymentElement"></div><div class="billing-elements__promo"><label class="billing-elements__label" for="vozenPromoCode">${t("billing.promo")}</label><div><input id="vozenPromoCode" autocomplete="off" placeholder="${esc(t("billing.promoPlaceholder"))}"><button type="button" id="vozenPromoApply">${t("billing.apply")}</button></div><p id="vozenPromoStatus" role="status" aria-live="polite"></p></div><p class="billing-elements__status" id="vozenPaymentStatus" role="status" aria-live="polite"></p><button type="button" class="btn btn--primary billing-elements__pay" id="vozenBillingPay">${t("billing.pay")}</button></div>`;
-    const email = document.getElementById("vozenBillingEmail");
-    if (email) {
-      email.value = payload.verifiedEmail || "";
-      if (payload.verifiedEmail) void billingActions.updateEmail?.(payload.verifiedEmail);
-      email.addEventListener("change", () => void billingActions?.updateEmail?.(email.value.trim()));
-    }
-    try {
-      billingExpressElement = billingStripeCheckout.createExpressCheckoutElement({ buttonType: { applePay: "subscribe", googlePay: "subscribe", link: "subscribe" } });
-      billingExpressElement.on?.("ready", (event) => { if (!event.availablePaymentMethods) document.getElementById("vozenExpressCheckout")?.setAttribute("hidden", ""); });
-      billingExpressElement.on?.("confirm", (event) => void confirmBillingPayment({ expressCheckoutConfirmEvent: event }));
-      billingExpressElement.mount("#vozenExpressCheckoutMount");
-    } catch { document.getElementById("vozenExpressCheckout")?.setAttribute("hidden", ""); }
-    billingPaymentElement = billingStripeCheckout.createPaymentElement({ layout: { type: "tabs", defaultCollapsed: false }, wallets: "never" });
-    billingPaymentElement.mount("#vozenPaymentElement");
-    document.getElementById("vozenBillingPay")?.addEventListener("click", () => void confirmBillingPayment());
-    document.getElementById("vozenPromoApply")?.addEventListener("click", async () => {
-      const code = document.getElementById("vozenPromoCode")?.value.trim();
-      const status = document.getElementById("vozenPromoStatus");
-      if (!code || !billingActions?.applyPromotionCode) return;
-      const result = await billingActions.applyPromotionCode(code);
-      if (status) status.textContent = result?.error?.message || t("billing.promoApplied");
+    billingStripeCheckout = await stripe.createEmbeddedCheckoutPage({
+      clientSecret: payload.clientSecret,
+      onComplete: async () => {
+        setBillingPhase("done");
+        const done = document.getElementById("vozenBillingDoneText");
+        if (done) done.textContent = t("billing.processing");
+        await refreshBillingAfterPayment(billingSessionId);
+      },
     });
+    if (!document.getElementById("vozenBillingModal")) {
+      billingStripeCheckout.destroy?.();
+      billingStripeCheckout = null;
+      return;
+    }
+    checkoutRoot.innerHTML = "";
+    billingStripeCheckout.mount("#vozenEmbeddedCheckout");
   }
 
   async function confirmBillingPayment(options = {}) {

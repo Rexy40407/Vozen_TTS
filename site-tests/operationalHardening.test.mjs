@@ -122,9 +122,9 @@ describe('operational security configuration', () => {
     expect(claim).not.toContain('Stripe subscriptions are managed from the account panel.');
     expect(script).toContain('function billingCheckoutModal(plan, interval)');
     expect(script).toContain('function ensureStripeJs()');
-    expect(script).toContain('stripe.initCheckout');
-    expect(script).toContain('createPaymentElement');
-    expect(script).toContain('createExpressCheckoutElement');
+    expect(script).toContain('createEmbeddedCheckoutPage');
+    expect(script).not.toContain('stripe.initCheckout');
+    expect(script).not.toContain('createPaymentElement');
     expect(script).toContain('payload.clientSecret');
     expect(script).toContain('window.location.assign(payload.url)');
     expect(script).toContain('function continueHostedBillingCheckout()');
@@ -157,7 +157,7 @@ describe('operational security configuration', () => {
     expect(script).toContain('function openPurchaseActivation()');
     expect(script).toContain('function mountPurchaseActivation(el)');
   });
-  it('loads Stripe.js for the on-site Payment Element and cache-busts the runtime', () => {
+  it('loads Stripe.js for the on-site embedded Checkout and cache-busts the runtime', () => {
     const page = source('site/index.html');
     expect(page).toContain('css/billing-v3.css?v=payment-element');
     expect(page).toContain('js/i18n-v41.js?v=payment-element');
@@ -438,7 +438,7 @@ describe('operational security configuration', () => {
     expect(terms).toMatch(/does not collect a shipping address/i);
     expect(terms).not.toMatch(/Ko-fi purchase/i);
   });
-  it('keeps Stripe-hosted checkout as a safe fallback and configures custom Checkout for Elements', () => {
+  it('keeps Stripe-hosted checkout as a safe fallback and configures embedded Checkout', () => {
     const stripe = source('crates/vozen-api/src/stripe_api.rs');
     const hosted = stripe.slice(stripe.indexOf('async fn checkout('), stripe.indexOf('async fn checkout_elements('));
     const elements = stripe.slice(stripe.indexOf('async fn checkout_elements('), stripe.indexOf('async fn portal('));
@@ -446,8 +446,8 @@ describe('operational security configuration', () => {
     expect(hosted).toContain('("success_url", success_url)');
     expect(hosted).toContain('("cancel_url", cancel_url)');
     expect(hosted).toContain('v.get("url")');
-    expect(elements).toContain('("ui_mode", "custom".to_owned())');
-    expect(elements).toContain('"return_url"');
+    expect(elements).toContain('("ui_mode", "embedded_page".to_owned())');
+    expect(elements).toContain('("redirect_on_completion", "never".to_owned())');
     expect(elements).toContain('"clientSecret"');
     expect(elements).toContain('"publishableKey"');
     expect(elements).toContain('json_no_store_response');
@@ -455,6 +455,6 @@ describe('operational security configuration', () => {
     expect(stripe).toContain('.route("/api/billing/checkout/status", any(checkout_status))');
     expect(stripe).toContain('fn valid_stripe_session_id');
     expect(stripe).toContain('.header("Stripe-Version", STRIPE_API_VERSION)');
-    expect(stripe).not.toContain('redirect_on_completion');
+    expect(elements).not.toContain('"return_url"');
   });
 });

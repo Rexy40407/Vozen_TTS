@@ -302,13 +302,7 @@ async fn checkout_elements(
     let Some((price, seats)) = state.prices.get(&input.plan, &input.interval) else {
         return cors(StatusCode::BAD_REQUEST, "unsupported plan", &state);
     };
-    let origin = state
-        .origin
-        .to_str()
-        .unwrap_or("https://vozen.org")
-        .trim_end_matches('/');
-    let verified_email = verified_email(&state, &headers, &user).await;
-    let mut form = vec![
+    let form = [
         ("mode", "subscription".to_owned()),
         ("line_items[0][price]", price.to_owned()),
         ("line_items[0][quantity]", "1".to_owned()),
@@ -322,16 +316,13 @@ async fn checkout_elements(
         ),
         ("subscription_data[metadata][plan]", input.plan.clone()),
         ("subscription_data[metadata][seats]", seats.to_string()),
-        ("ui_mode", "custom".to_owned()),
-        (
-            "return_url",
-            format!("{origin}/?checkout=return&session_id={{CHECKOUT_SESSION_ID}}#premium"),
-        ),
+        // The production Stripe account rejects Checkout's custom UI mode. Its pinned
+        // API contract accepts the embedded page instead, which still keeps Checkout
+        // inside Vozen and never sends card data through our application.
+        ("ui_mode", "embedded_page".to_owned()),
+        ("redirect_on_completion", "never".to_owned()),
         ("allow_promotion_codes", "true".to_owned()),
     ];
-    if let Some(email) = verified_email.as_deref() {
-        form.push(("customer_email", email.to_owned()));
-    }
     match state
         .client
         .post(format!("{STRIPE_API}/checkout/sessions"))
@@ -356,7 +347,6 @@ async fn checkout_elements(
                         "sessionId": session_id,
                         "clientSecret": client_secret,
                         "publishableKey": &*state.publishable_key,
-                        "verifiedEmail": verified_email,
                     }),
                     &state,
                 ),
@@ -439,20 +429,6 @@ async fn checkout_status(
         Ok(response) => stripe_checkout_rejected(response, &state).await,
         Err(error) => stripe_checkout_transport_error(error, &state),
     }
-}
-
-async fn verified_email(
-    state: &StripeState,
-    headers: &HeaderMap,
-    user: &crate::premium_api::DiscordIdentity,
-) -> Option<String> {
-    let bearer = bearer_token(headers)?;
-    let identity = state
-        .verifier
-        .resolve_activation_identity(bearer)
-        .await
-        .ok()?;
-    (identity.id == user.id && !identity.email.trim().is_empty()).then_some(identity.email)
 }
 
 fn valid_stripe_session_id(value: &str) -> bool {
