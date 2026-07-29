@@ -54,7 +54,7 @@ use vozen_discord::{
     render_game_finish,
 };
 use vozen_store::CommunityPromoKind;
-use vozen_store::{GuildConfigPatch, SqliteStore, utc_day_key};
+use vozen_store::{GuildConfigPatch, RuntimeBatchBuffer, SqliteStore, utc_day_key};
 
 use crate::ui::{color_for_content, danger_embed, message_embed};
 use crate::{
@@ -151,6 +151,7 @@ pub struct CoreVoiceGatewaySink {
     greet_cooldown: Mutex<BTreeMap<String, i64>>,
     rejoin_attempted: AtomicBool,
     game_runtime: Option<Arc<GameRuntime>>,
+    runtime_batch: RuntimeBatchBuffer,
 }
 
 impl GameRuntime {
@@ -1585,6 +1586,16 @@ impl CoreVoiceGatewaySink {
         gateway_state: GatewayState,
         options: CoreVoiceRuntimeOptions,
     ) -> Self {
+        Self::new_with_runtime_batch(store, gateway_state, options, RuntimeBatchBuffer::default())
+    }
+
+    #[must_use]
+    pub fn new_with_runtime_batch(
+        store: Arc<Mutex<SqliteStore>>,
+        gateway_state: GatewayState,
+        options: CoreVoiceRuntimeOptions,
+        runtime_batch: RuntimeBatchBuffer,
+    ) -> Self {
         let game_runtime = options
             .game_play_enabled
             .then(|| {
@@ -1630,6 +1641,7 @@ impl CoreVoiceGatewaySink {
             greet_cooldown: Mutex::new(BTreeMap::new()),
             rejoin_attempted: AtomicBool::new(false),
             game_runtime,
+            runtime_batch,
         }
     }
 
@@ -1766,14 +1778,17 @@ impl CoreVoiceGatewaySink {
             return Ok(service.clone());
         }
         let dependencies = self.dependencies(context)?;
-        let service = Arc::new(MessageVoiceService::new_with_synthesis_coordinator(
-            self.store.clone(),
-            dependencies.synthesizer.clone(),
-            dependencies.playback.clone(),
-            dependencies.synthesis.clone(),
-            self.options.settings.clone(),
-            Arc::new(system_now_ms),
-        ));
+        let service = Arc::new(
+            MessageVoiceService::new_with_synthesis_coordinator_and_runtime_batch(
+                self.store.clone(),
+                dependencies.synthesizer.clone(),
+                dependencies.playback.clone(),
+                dependencies.synthesis.clone(),
+                self.options.settings.clone(),
+                Arc::new(system_now_ms),
+                self.runtime_batch.clone(),
+            ),
+        );
         *current = Some(service.clone());
         Ok(service)
     }

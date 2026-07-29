@@ -109,7 +109,8 @@ use vozen_discord::{
     run_discord_gateway_with_state_and_sink, voice_display_options, write_planned_rejoin_marker,
 };
 use vozen_store::{
-    DEPARTURE_GRACE_MS, ProviderHealth as StoreProviderHealth, SqliteStore, month_key_utc,
+    DEPARTURE_GRACE_MS, ProviderHealth as StoreProviderHealth, RuntimeBatchBuffer, SqliteStore,
+    month_key_utc,
 };
 
 use crate::owner_command_sink::OwnerCommandRuntimeOptions;
@@ -1279,6 +1280,7 @@ fn core_voice_event_sink(
     options: Option<CoreVoiceRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
+    runtime_batch: RuntimeBatchBuffer,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
     let Some(mut options) = options else {
         return Ok(None);
@@ -1290,11 +1292,14 @@ fn core_voice_event_sink(
     )?;
     options.settings.available_models =
         available_models_for_default_provider(piper_models, options.settings.default_engine);
-    Ok(Some(Arc::new(core_voice_sink::CoreVoiceGatewaySink::new(
-        store,
-        gateway_state,
-        options,
-    ))))
+    Ok(Some(Arc::new(
+        core_voice_sink::CoreVoiceGatewaySink::new_with_runtime_batch(
+            store,
+            gateway_state,
+            options,
+            runtime_batch,
+        ),
+    )))
 }
 
 fn tts_file_event_sink(
@@ -1828,6 +1833,7 @@ fn core_voice_event_sink(
     options: Option<CoreVoiceRuntimeOptions>,
     _store: Arc<Mutex<SqliteStore>>,
     _gateway_state: GatewayState,
+    _runtime_batch: RuntimeBatchBuffer,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
     if options.is_some() {
         return Err(RuntimeError::VoiceDriverRequired);
@@ -2283,8 +2289,9 @@ async fn run() -> Result<(), RuntimeError> {
     } else {
         None
     };
+    let runtime_batch_buffer = RuntimeBatchBuffer::default();
     if let Some(postgres) = postgres_shadow.as_ref() {
-        postgres_outbox::spawn(postgres.pool(), store.clone());
+        postgres_outbox::spawn(postgres.pool(), store.clone(), runtime_batch_buffer.clone());
     }
     run_startup_data_hygiene(&config.database_path);
     let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
@@ -2342,9 +2349,12 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) = owner_command_event_sink(config.owner_commands, store.clone())? {
         event_sinks.push(sink);
     }
-    if let Some(sink) =
-        core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?
-    {
+    if let Some(sink) = core_voice_event_sink(
+        config.core_voice,
+        store.clone(),
+        gateway_state.clone(),
+        runtime_batch_buffer.clone(),
+    )? {
         event_sinks.push(sink);
     }
     if let Some(sink) = autocomplete_event_sink(config.autocomplete, store.clone())? {

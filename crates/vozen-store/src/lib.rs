@@ -32,6 +32,7 @@ mod optout;
 mod premium;
 mod premium_code;
 mod pronunciation;
+mod runtime_batch;
 mod runtime_outbox;
 mod stripe;
 mod stt_consent;
@@ -76,6 +77,7 @@ pub use pronunciation::{
     AddPronunciationResult, SERVER_PRON_LIMIT, SERVER_PRON_LIMIT_PREMIUM, USER_PRON_LIMIT_FREE,
     USER_PRON_LIMIT_PREMIUM,
 };
+pub use runtime_batch::{RuntimeBatchBuffer, RuntimeBatchEvent};
 pub use runtime_outbox::{RuntimeOutboxBatch, RuntimeOutboxEnqueue};
 pub use stripe::{StripeSubscription, StripeSubscriptionInput};
 pub use stt_consent::SttConsent;

@@ -9,16 +9,17 @@ use std::{
 };
 
 use sqlx::PgPool;
-use vozen_store::SqliteStore;
+use vozen_store::{RuntimeBatchBuffer, RuntimeOutboxEnqueue, SqliteStore};
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_BATCHES_PER_FLUSH: usize = 100;
 
-pub fn spawn(pool: PgPool, store: Arc<Mutex<SqliteStore>>) {
+pub fn spawn(pool: PgPool, store: Arc<Mutex<SqliteStore>>, buffer: RuntimeBatchBuffer) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(FLUSH_INTERVAL);
         loop {
             interval.tick().await;
+            persist_buffer(&store, &buffer).await;
             if let Err(error) = flush_once(&pool, store.clone()).await {
                 // Do not include payloads or connection details: both may be sensitive. The
                 // batch remains in SQLite and the next interval retries it.
@@ -26,6 +27,32 @@ pub fn spawn(pool: PgPool, store: Arc<Mutex<SqliteStore>>) {
             }
         }
     });
+}
+
+async fn persist_buffer(store: &Arc<Mutex<SqliteStore>>, buffer: &RuntimeBatchBuffer) {
+    let Some(event) = buffer.drain() else {
+        return;
+    };
+    let payload = event.payload().to_owned();
+    let writer = store.clone();
+    let persisted = tokio::task::spawn_blocking(move || {
+        writer
+            .lock()
+            .map_err(|_| ())?
+            .enqueue_runtime_outbox(RuntimeOutboxEnqueue {
+                batch_id: &format!("runtime-{}", uuid::Uuid::new_v4()),
+                created_at: time::OffsetDateTime::now_utc().unix_timestamp(),
+                payload: &payload,
+            })
+            .map_err(|_| ())
+    })
+    .await
+    .ok()
+    .and_then(Result::ok)
+    .is_some();
+    if !persisted {
+        buffer.restore(event);
+    }
 }
 
 async fn flush_once(pool: &PgPool, store: Arc<Mutex<SqliteStore>>) -> Result<(), String> {

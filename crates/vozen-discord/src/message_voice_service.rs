@@ -14,8 +14,8 @@ use vozen_core::{
     QueueEnqueueOptions, QueueSource, SynthesisEngine, is_repetition_spam,
 };
 use vozen_store::{
-    OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore, TalkBump, UserEngine,
-    utc_day_key_from_unix_millis,
+    OperationalMetric, OperationalProvider, ProviderHealth, RuntimeBatchBuffer, SqliteStore,
+    TalkBump, UserEngine, utc_day_key_from_unix_millis,
 };
 
 use crate::{
@@ -57,6 +57,7 @@ pub struct MessageVoiceService<S, P> {
     duplicate_tracker: Mutex<DuplicateTracker>,
     count_gate: Mutex<CountGate>,
     voice_data: VoiceDataCache,
+    runtime_batch: RuntimeBatchBuffer,
     synthesizer: S,
     playback: P,
     synthesis: GuildSynthesisCoordinator,
@@ -90,12 +91,33 @@ impl<S, P> MessageVoiceService<S, P> {
         settings: CoreVoiceSettings,
         now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
     ) -> Self {
+        Self::new_with_synthesis_coordinator_and_runtime_batch(
+            store,
+            synthesizer,
+            playback,
+            synthesis,
+            settings,
+            now_ms,
+            RuntimeBatchBuffer::default(),
+        )
+    }
+
+    pub fn new_with_synthesis_coordinator_and_runtime_batch(
+        store: Arc<Mutex<SqliteStore>>,
+        synthesizer: S,
+        playback: P,
+        synthesis: GuildSynthesisCoordinator,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+        runtime_batch: RuntimeBatchBuffer,
+    ) -> Self {
         Self {
             store,
             pipeline: Mutex::new(MessageSpeechPipeline::default()),
             duplicate_tracker: Mutex::new(DuplicateTracker::default()),
             count_gate: Mutex::new(CountGate::default()),
             voice_data: VoiceDataCache::default(),
+            runtime_batch,
             synthesizer,
             playback,
             synthesis,
@@ -292,13 +314,12 @@ where
     /// best-effort: telemetry can never make an otherwise valid speech request fail.
     fn record_metric(&self, metric: OperationalMetric) {
         let now = (self.now_ms)();
+        let day = utc_day_key_from_unix_millis(now);
+        self.runtime_batch
+            .record_metric(&day, metric, OperationalProvider::Piper, 1);
         if let Ok(store) = self.store.lock() {
-            let _ = store.add_operational_metric(
-                metric,
-                OperationalProvider::Piper,
-                1.0,
-                Some(&utc_day_key_from_unix_millis(now)),
-            );
+            let _ =
+                store.add_operational_metric(metric, OperationalProvider::Piper, 1.0, Some(&day));
         }
     }
 
@@ -324,17 +345,17 @@ where
 
     fn record_synthesis_health(&self, success: bool) {
         let now = (self.now_ms)();
+        let day = utc_day_key_from_unix_millis(now);
+        let metric = if success {
+            OperationalMetric::SynthSuccess
+        } else {
+            OperationalMetric::SynthFailure
+        };
+        self.runtime_batch
+            .record_metric(&day, metric, OperationalProvider::Piper, 1);
         if let Ok(store) = self.store.lock() {
-            let _ = store.add_operational_metric(
-                if success {
-                    OperationalMetric::SynthSuccess
-                } else {
-                    OperationalMetric::SynthFailure
-                },
-                OperationalProvider::Piper,
-                1.0,
-                Some(&utc_day_key_from_unix_millis(now)),
-            );
+            let _ =
+                store.add_operational_metric(metric, OperationalProvider::Piper, 1.0, Some(&day));
             let _ = store.set_provider_health(
                 OperationalProvider::Piper,
                 if success {
@@ -364,6 +385,13 @@ where
             // audio into a failed request. The day key uses the runtime's UTC contract, which is
             // also what the Rust operational metrics use on the production VPS.
             let day = utc_day_key_from_unix_millis(now_ms);
+            self.runtime_batch.record_accepted_speech(
+                &day,
+                guild_id,
+                user_id,
+                model,
+                user_engine(engine),
+            );
             let talk = store.bump_talk(guild_id, user_id, &day).ok();
             let _ = store.bump_guild_talk(guild_id, &day);
             let _ = store.bump_talk_usage(guild_id, user_id, model, user_engine(engine));

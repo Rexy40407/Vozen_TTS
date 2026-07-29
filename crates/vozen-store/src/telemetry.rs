@@ -25,7 +25,7 @@ pub enum OperationalProvider {
 }
 
 impl OperationalProvider {
-    fn as_database(self) -> &'static str {
+    pub(crate) fn as_database(self) -> &'static str {
         match self {
             Self::Internal => "internal",
             Self::Piper => "piper",
@@ -69,7 +69,7 @@ pub enum OperationalMetric {
 }
 
 impl OperationalMetric {
-    fn as_database(self) -> &'static str {
+    pub(crate) fn as_database(self) -> &'static str {
         match self {
             Self::CommandInvoked => "command_invoked",
             Self::GuildJoin => "guild_join",
