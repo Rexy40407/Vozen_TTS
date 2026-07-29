@@ -4,11 +4,12 @@
 name: Deploy bot to VPS
 
 on:
-  # Deployment starts only after the complete CI workflow succeeds on main.
+  # Production is intentionally released from the Rust migration branch. The old
+  # main checkout is not the production source of truth.
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [main]
+    branches: [migration/vozen-rust]
   workflow_dispatch:
 
 concurrency:
@@ -97,15 +98,15 @@ jobs:
             set_env STRIPE_PRICE_MAX_YEARLY "$STRIPE_PRICE_MAX_YEARLY"
 
             # The production clone was originally created as a single-branch
-            # checkout, so fetch main explicitly instead of relying on its
-            # persisted remote refspec.
-            git fetch origin +refs/heads/main:refs/remotes/origin/main
+            # checkout. Fetch the explicit production ref and only advance by
+            # fast-forward; never replace the checkout with an unrelated branch.
+            git fetch origin +refs/heads/migration/vozen-rust:refs/remotes/origin/migration/vozen-rust
             current_commit="$(git rev-parse HEAD)"
-            target_commit="$(git rev-parse origin/main)"
+            target_commit="$(git rev-parse origin/migration/vozen-rust)"
             if [ "$current_commit" = "$target_commit" ]; then
               docker compose -p vozen-prod -f docker-compose.rust.prod.yml up -d --no-build vozen
               echo "Production already runs $target_commit; runtime env refreshed"
               exit 0
             fi
-            git reset --hard origin/main
+            git merge --ff-only origin/migration/vozen-rust
             bash scripts/deploy-rust-vps.sh
