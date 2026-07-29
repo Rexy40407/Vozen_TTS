@@ -137,6 +137,7 @@ struct GameRuntime {
 
 pub struct CoreVoiceGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
+    voice_read_store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
     options: CoreVoiceRuntimeOptions,
     localizer: Option<VoiceResponseLocalizer>,
@@ -1596,6 +1597,23 @@ impl CoreVoiceGatewaySink {
         options: CoreVoiceRuntimeOptions,
         runtime_batch: RuntimeBatchBuffer,
     ) -> Self {
+        Self::new_with_runtime_batch_and_voice_read_store(
+            store.clone(),
+            store,
+            gateway_state,
+            options,
+            runtime_batch,
+        )
+    }
+
+    #[must_use]
+    pub fn new_with_runtime_batch_and_voice_read_store(
+        store: Arc<Mutex<SqliteStore>>,
+        voice_read_store: Arc<Mutex<SqliteStore>>,
+        gateway_state: GatewayState,
+        options: CoreVoiceRuntimeOptions,
+        runtime_batch: RuntimeBatchBuffer,
+    ) -> Self {
         let game_runtime = options
             .game_play_enabled
             .then(|| {
@@ -1627,6 +1645,7 @@ impl CoreVoiceGatewaySink {
             .flatten();
         Self {
             store,
+            voice_read_store,
             gateway_state,
             options,
             localizer: VoiceResponseLocalizer::from_generated_contract().ok(),
@@ -1779,8 +1798,9 @@ impl CoreVoiceGatewaySink {
         }
         let dependencies = self.dependencies(context)?;
         let service = Arc::new(
-            MessageVoiceService::new_with_synthesis_coordinator_and_runtime_batch(
+            MessageVoiceService::new_with_synthesis_coordinator_runtime_batch_and_read_store(
                 self.store.clone(),
+                self.voice_read_store.clone(),
                 dependencies.synthesizer.clone(),
                 dependencies.playback.clone(),
                 dependencies.synthesis.clone(),

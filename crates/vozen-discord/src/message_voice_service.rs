@@ -52,7 +52,12 @@ pub enum MessageVoiceOutcome {
 }
 
 pub struct MessageVoiceService<S, P> {
+    /// Local compatibility writer: counters and fallback state remain available if Postgres is
+    /// temporarily unavailable.
     store: Arc<Mutex<SqliteStore>>,
+    /// Snapshot reader. During staging primary-read validation this is a refreshed in-memory
+    /// replica sourced from Postgres, never a network call from the message handler.
+    read_store: Arc<Mutex<SqliteStore>>,
     pipeline: Mutex<MessageSpeechPipeline>,
     duplicate_tracker: Mutex<DuplicateTracker>,
     count_gate: Mutex<CountGate>,
@@ -111,8 +116,34 @@ impl<S, P> MessageVoiceService<S, P> {
         now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
         runtime_batch: RuntimeBatchBuffer,
     ) -> Self {
+        Self::new_with_synthesis_coordinator_runtime_batch_and_read_store(
+            store.clone(),
+            store,
+            synthesizer,
+            playback,
+            synthesis,
+            settings,
+            now_ms,
+            runtime_batch,
+        )
+    }
+
+    /// Uses a separate, local-only state snapshot for automatic voice reads. The write store is
+    /// retained for compatibility counters and for fallback durability; the supplied read store
+    /// must already be populated by a background task before this service is exposed.
+    pub fn new_with_synthesis_coordinator_runtime_batch_and_read_store(
+        store: Arc<Mutex<SqliteStore>>,
+        read_store: Arc<Mutex<SqliteStore>>,
+        synthesizer: S,
+        playback: P,
+        synthesis: GuildSynthesisCoordinator,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+        runtime_batch: RuntimeBatchBuffer,
+    ) -> Self {
         Self {
             store,
+            read_store,
             pipeline: Mutex::new(MessageSpeechPipeline::default()),
             duplicate_tracker: Mutex::new(DuplicateTracker::default()),
             count_gate: Mutex::new(CountGate::default()),
@@ -135,7 +166,7 @@ where
     pub async fn execute(&self, invocation: MessageVoiceInvocation<'_>) -> MessageVoiceOutcome {
         let now_ms = (self.now_ms)();
         let voice_data = match self.voice_data.snapshot(
-            &self.store,
+            &self.read_store,
             invocation.facts.guild_id,
             invocation.facts.channel_id,
             invocation.facts.author_id,
@@ -837,5 +868,38 @@ mod tests {
         assert_eq!(accepted, 25);
         assert_eq!(service.synthesizer.0.load(Ordering::Relaxed), 25);
         assert_eq!(service.playback.enqueued.load(Ordering::Relaxed), 25);
+    }
+
+    #[tokio::test]
+    async fn automatic_voice_reads_the_separate_local_postgres_snapshot_cache() {
+        let write_store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("writer")));
+        let read_store = configured_store();
+        let service =
+            MessageVoiceService::new_with_synthesis_coordinator_runtime_batch_and_read_store(
+                write_store.clone(),
+                read_store,
+                FakeSynthesizer::default(),
+                FakePlayback {
+                    reserve: true,
+                    enqueued: AtomicUsize::new(0),
+                },
+                GuildSynthesisCoordinator::default(),
+                settings(),
+                Arc::new(|| 0),
+                RuntimeBatchBuffer::default(),
+            );
+        assert!(matches!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Queued { .. }
+        ));
+        assert!(
+            write_store
+                .lock()
+                .expect("writer")
+                .guild_config("guild")
+                .expect("writer config")
+                .tts_channel_id
+                .is_none()
+        );
     }
 }

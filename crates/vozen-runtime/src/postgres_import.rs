@@ -77,6 +77,14 @@ pub async fn import_and_reconcile(
             postgres_rows,
         });
     }
+    sqlx::query(
+        "INSERT INTO vozen.runtime_migration_state (marker, completed_at)
+         VALUES ('sqlite_initial_import_v1', EXTRACT(EPOCH FROM NOW())::bigint * 1000)
+         ON CONFLICT (marker) DO UPDATE SET completed_at = EXCLUDED.completed_at",
+    )
+    .execute(pool)
+    .await
+    .map_err(ImportError::Postgres)?;
     Ok(reports)
 }
 
@@ -209,6 +217,12 @@ mod tests {
             .execute(&pool)
             .await
             .expect("remove staged guild configuration fixture");
+        sqlx::query(
+            "DELETE FROM vozen.runtime_migration_state WHERE marker = 'sqlite_initial_import_v1'",
+        )
+        .execute(&pool)
+        .await
+        .expect("remove fixture import marker");
         remove_database_copy(&path);
         verification.expect("verify staging import");
     }

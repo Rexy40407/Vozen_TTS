@@ -11,7 +11,10 @@ use std::path::Path;
 use std::time::Duration;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use rusqlite::{Connection, types::ValueRef};
+use rusqlite::{
+    Connection, params_from_iter,
+    types::{Value as SqlValue, ValueRef},
+};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -254,6 +257,54 @@ impl SqliteStore {
                 row.get(0)
             })?)
     }
+
+    /// Replaces one contract-owned table from a trusted Postgres cache snapshot. This is used
+    /// only by the staging read-cache process: it accepts JSON scalar values, validates every
+    /// column against SQLite's schema, and performs the replacement atomically.
+    pub fn replace_contract_table_rows(
+        &self,
+        table: &str,
+        rows: &[serde_json::Value],
+    ) -> Result<(), StoreError> {
+        if !self.durable_table_names()?.iter().any(|name| name == table) {
+            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+        }
+        let mut columns_statement = self
+            .connection
+            .prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
+        let columns = columns_statement
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        if columns.is_empty() {
+            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(&format!("DELETE FROM \"{table}\""), [])?;
+        let fields = columns
+            .iter()
+            .map(|column| format!("\"{}\"", column.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let placeholders = (1..=columns.len())
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!("INSERT INTO \"{table}\" ({fields}) VALUES ({placeholders})");
+        let mut statement = transaction.prepare(&sql)?;
+        for row in rows {
+            let object = row
+                .as_object()
+                .ok_or_else(|| StoreError::InvalidSchemaObject(table.to_owned()))?;
+            let values = columns
+                .iter()
+                .map(|column| json_value_to_sql(object.get(column)))
+                .collect::<Result<Vec<_>, _>>()?;
+            statement.execute(params_from_iter(values))?;
+        }
+        drop(statement);
+        transaction.commit()?;
+        Ok(())
+    }
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let connection = Connection::open(path)?;
         Self::from_connection(connection)
@@ -330,6 +381,30 @@ fn verify_connection_integrity(connection: &Connection) -> Result<(), StoreError
         )));
     }
     Ok(())
+}
+
+fn json_value_to_sql(value: Option<&serde_json::Value>) -> Result<SqlValue, StoreError> {
+    match value.unwrap_or(&serde_json::Value::Null) {
+        serde_json::Value::Null => Ok(SqlValue::Null),
+        serde_json::Value::Bool(value) => Ok(SqlValue::Integer(i64::from(*value))),
+        serde_json::Value::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                Ok(SqlValue::Integer(value))
+            } else if let Some(value) = value.as_u64() {
+                i64::try_from(value)
+                    .map(SqlValue::Integer)
+                    .map_err(|_| StoreError::InvalidSchemaObject("JSON integer range".into()))
+            } else if let Some(value) = value.as_f64() {
+                Ok(SqlValue::Real(value))
+            } else {
+                Err(StoreError::InvalidSchemaObject("JSON number".into()))
+            }
+        }
+        serde_json::Value::String(value) => Ok(SqlValue::Text(value.clone())),
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => Err(
+            StoreError::InvalidSchemaObject("JSON non-scalar value".into()),
+        ),
+    }
 }
 
 impl SqliteStore {
@@ -445,6 +520,58 @@ mod tests {
         assert_eq!(rows[0]["guild_id"], "export-guild");
         assert_eq!(rows[0]["default_voice"], "pt_PT-voice");
         assert!(store.export_table_rows("not_a_contract_table").is_err());
+    }
+
+    #[test]
+    fn trusted_postgres_cache_rows_replace_a_contract_table_atomically() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .connection
+            .execute(
+                "INSERT INTO guild_config (guild_id, locale, rate_per_min) VALUES ('old', 'en', 8)",
+                [],
+            )
+            .expect("old row");
+        store
+            .replace_contract_table_rows(
+                "guild_config",
+                &[serde_json::json!({
+                    "guild_id": "fresh",
+                    "tts_channel_id": null,
+                    "autoread": 1,
+                    "default_voice": "pt_PT-google-medium",
+                    "max_chars": 300,
+                    "rate_per_min": 12,
+                    "enabled": 1,
+                    "tts_role_id": null,
+                    "locale": "pt",
+                    "xsaid": 1,
+                    "autojoin": 0,
+                    "read_bots": 0,
+                    "text_in_voice": 0,
+                    "greet_on_join": 1,
+                    "greet_locale": "en",
+                    "antispam": 0,
+                    "stay_in_call": 0,
+                    "streak_announce": 1,
+                    "soundboard": 1,
+                    "vote_promos": 0,
+                    "priority_role_id": null,
+                    "blocked_role_id": null,
+                    "translation_enabled": 0,
+                    "translation_daily_char_limit": 10000,
+                    "translation_per_user_daily_char_limit": 2000
+                })],
+            )
+            .expect("replace");
+        assert_eq!(
+            store
+                .durable_table_row_count("guild_config")
+                .expect("count"),
+            1
+        );
+        assert_eq!(store.guild_config("fresh").expect("fresh").locale, "pt");
+        assert_eq!(store.guild_config("old").expect("old").locale, "en");
     }
 
     #[test]

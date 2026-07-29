@@ -51,6 +51,7 @@ mod piper_adapter;
 mod postgres_import;
 mod postgres_outbox;
 mod postgres_shadow;
+mod postgres_voice_cache;
 mod premium_sink;
 mod privacy_sink;
 mod pronunciation_sink;
@@ -144,6 +145,7 @@ struct RuntimeConfig {
     database_path: PathBuf,
     postgres_shadow: Option<postgres_shadow::PostgresShadowConfig>,
     postgres_replica_outbox: bool,
+    postgres_voice_read_cache: bool,
     health_bind: Option<SocketAddr>,
     public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
@@ -420,6 +422,12 @@ impl RuntimeConfig {
         if postgres_replica_outbox && postgres_shadow.is_none() {
             return Err(RuntimeError::PostgresReplicaRequiresShadow);
         }
+        let postgres_voice_read_cache = postgres_voice_read_cache_enabled(
+            env::var("RUST_POSTGRES_VOICE_READ_CACHE").ok().as_deref(),
+        );
+        if postgres_voice_read_cache && (!postgres_replica_outbox || postgres_shadow.is_none()) {
+            return Err(RuntimeError::PostgresVoiceReadCacheRequiresReplica);
+        }
         let health_host = nonempty_env("HEALTH_HOST").unwrap_or_else(|| "127.0.0.1".to_owned());
         let health_ip = health_host
             .parse::<IpAddr>()
@@ -574,6 +582,7 @@ impl RuntimeConfig {
             database_path,
             postgres_shadow,
             postgres_replica_outbox,
+            postgres_voice_read_cache,
             health_bind,
             public_status,
             premium_http,
@@ -1183,6 +1192,10 @@ fn postgres_replica_outbox_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
+fn postgres_voice_read_cache_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
 fn premium_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
@@ -1292,6 +1305,7 @@ fn parse_positive_number(raw: Option<&str>, fallback: f64, integer: bool) -> Opt
 fn core_voice_event_sink(
     options: Option<CoreVoiceRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
+    voice_read_store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
     runtime_batch: RuntimeBatchBuffer,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
@@ -1306,8 +1320,9 @@ fn core_voice_event_sink(
     options.settings.available_models =
         available_models_for_default_provider(piper_models, options.settings.default_engine);
     Ok(Some(Arc::new(
-        core_voice_sink::CoreVoiceGatewaySink::new_with_runtime_batch(
+        core_voice_sink::CoreVoiceGatewaySink::new_with_runtime_batch_and_voice_read_store(
             store,
+            voice_read_store,
             gateway_state,
             options,
             runtime_batch,
@@ -1845,6 +1860,7 @@ fn automatic_translation_event_sink(
 fn core_voice_event_sink(
     options: Option<CoreVoiceRuntimeOptions>,
     _store: Arc<Mutex<SqliteStore>>,
+    _voice_read_store: Arc<Mutex<SqliteStore>>,
     _gateway_state: GatewayState,
     _runtime_batch: RuntimeBatchBuffer,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
@@ -2131,6 +2147,12 @@ enum RuntimeError {
     PostgresImportRequiresShadow,
     #[error("Postgres staging import failed: {0}")]
     PostgresImport(#[from] postgres_import::ImportError),
+    #[error("Postgres staging voice-read cache failed: {0}")]
+    PostgresVoiceCache(#[from] postgres_voice_cache::PostgresVoiceCacheError),
+    #[error(
+        "RUST_POSTGRES_VOICE_READ_CACHE=true requires RUST_POSTGRES_REPLICA_OUTBOX=true and RUST_POSTGRES_MODE=shadow"
+    )]
+    PostgresVoiceReadCacheRequiresReplica,
     #[error("DISCORD_TOKEN is required to start the Rust gateway")]
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
@@ -2322,6 +2344,17 @@ async fn run() -> Result<(), RuntimeError> {
             reports.len()
         );
     }
+    let postgres_voice_read_store = if config.postgres_voice_read_cache {
+        let postgres = postgres_shadow
+            .as_ref()
+            .ok_or(RuntimeError::PostgresVoiceReadCacheRequiresReplica)?;
+        let cache = postgres_voice_cache::load(&postgres.pool()).await?;
+        postgres_voice_cache::spawn(postgres.pool(), cache.clone());
+        eprintln!("[postgres] staging voice reads use the refreshed local Postgres cache");
+        Some(cache)
+    } else {
+        None
+    };
     let runtime_batch_buffer = RuntimeBatchBuffer::default();
     if config.postgres_replica_outbox
         && let Some(postgres) = postgres_shadow.as_ref()
@@ -2392,6 +2425,7 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) = core_voice_event_sink(
         config.core_voice,
         store.clone(),
+        postgres_voice_read_store.unwrap_or_else(|| store.clone()),
         gateway_state.clone(),
         runtime_batch_buffer.clone(),
     )? {
