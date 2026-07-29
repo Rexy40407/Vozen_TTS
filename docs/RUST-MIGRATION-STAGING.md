@@ -88,6 +88,13 @@ refreshed in the background, so message handling does not wait for Supabase. If 
 refresh fails, it continues serving the last known-good cache; disable the two canary flags to
 return immediately to SQLite-only reads.
 
+For a production mirror soak, use `RUST_POSTGRES_MODE=mirror` with the same two flags. Mirror mode
+is allowed with `RUST_RUNTIME_MODE=full`, but SQLite remains the local compatibility fallback and
+the Discord hot path never waits on Supabase. Do not use `mirror` until the production database
+URL is stored as a VPS secret and the import marker has been verified. A future `primary` mode is
+not enabled by this change: promoting Postgres to the sole write authority requires a separate
+dual-write reconciliation gate.
+
 With the staging bot online, verify in the test guild:
 
 1. The slash-command list appears in the staging guild and no production guild receives a command

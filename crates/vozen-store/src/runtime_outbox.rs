@@ -58,7 +58,7 @@ pub(crate) fn install_runtime_outbox_schema(connection: &Connection) -> Result<(
     Ok(())
 }
 
-/// Enables durable change capture only for an explicitly configured staging Postgres mirror.
+/// Enables durable change capture only for an explicitly configured Postgres mirror.
 ///
 /// The Node-compatible store stays synchronous and local. These triggers simply append a compact
 /// row image to the Rust-owned outbox in the same SQLite transaction, so a later background

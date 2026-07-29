@@ -420,7 +420,7 @@ impl RuntimeConfig {
             env::var("RUST_POSTGRES_REPLICA_OUTBOX").ok().as_deref(),
         );
         if postgres_replica_outbox && postgres_shadow.is_none() {
-            return Err(RuntimeError::PostgresReplicaRequiresShadow);
+            return Err(RuntimeError::PostgresReplicaRequiresPostgres);
         }
         let postgres_voice_read_cache = postgres_voice_read_cache_enabled(
             env::var("RUST_POSTGRES_VOICE_READ_CACHE").ok().as_deref(),
@@ -2162,16 +2162,16 @@ fn http_listener_required(
 enum RuntimeError {
     #[error("invalid or incomplete Rust runtime mode: {0}")]
     RuntimeMode(#[from] runtime_mode::RuntimeModeError),
-    #[error("Postgres staging configuration failed: {0}")]
+    #[error("Postgres configuration failed: {0}")]
     PostgresShadow(#[from] postgres_shadow::PostgresShadowError),
-    #[error("RUST_POSTGRES_IMPORT_SQLITE=true requires RUST_POSTGRES_MODE=shadow")]
-    PostgresImportRequiresShadow,
-    #[error("Postgres staging import failed: {0}")]
+    #[error("RUST_POSTGRES_IMPORT_SQLITE=true requires RUST_POSTGRES_MODE=shadow or mirror")]
+    PostgresImportRequiresPostgres,
+    #[error("Postgres import failed: {0}")]
     PostgresImport(#[from] postgres_import::ImportError),
-    #[error("Postgres staging voice-read cache failed: {0}")]
+    #[error("Postgres voice-read cache failed: {0}")]
     PostgresVoiceCache(#[from] postgres_voice_cache::PostgresVoiceCacheError),
     #[error(
-        "RUST_POSTGRES_VOICE_READ_CACHE=true requires RUST_POSTGRES_REPLICA_OUTBOX=true and RUST_POSTGRES_MODE=shadow"
+        "RUST_POSTGRES_VOICE_READ_CACHE=true requires RUST_POSTGRES_REPLICA_OUTBOX=true and RUST_POSTGRES_MODE=shadow or mirror"
     )]
     PostgresVoiceReadCacheRequiresReplica,
     #[error("DISCORD_TOKEN is required to start the Rust gateway")]
@@ -2304,8 +2304,8 @@ enum RuntimeError {
     AdminRequiresPremiumHttp,
     #[error("RUST_DASHBOARD_ENABLED/RUST_ADMIN_API_ENABLED require PREMIUM_API_ENABLED=true")]
     DashboardOrAdminRequiresPremiumApi,
-    #[error("RUST_POSTGRES_REPLICA_OUTBOX=true requires RUST_POSTGRES_MODE=shadow")]
-    PostgresReplicaRequiresShadow,
+    #[error("RUST_POSTGRES_REPLICA_OUTBOX=true requires RUST_POSTGRES_MODE=shadow or mirror")]
+    PostgresReplicaRequiresPostgres,
     #[error("SQLite startup failed: {0}")]
     Store(#[from] vozen_store::StoreError),
     #[error("SQLite store lock was poisoned")]
@@ -2341,12 +2341,16 @@ async fn run() -> Result<(), RuntimeError> {
         .lock()
         .map_err(|_| RuntimeError::StoreLock)?
         .verify_integrity()?;
-    // Postgres is deliberately a staging-only shadow dependency for now. SQLite remains the
-    // compatibility store and local fallback until async store adapters have completed their
-    // staged dual-read/dual-write verification.
+    // The local SQLite store remains the compatibility fallback. In `shadow` it is authoritative;
+    // in `mirror` the same handlers stay local while configuration reads are refreshed from the
+    // private Postgres snapshot and durable changes are delivered asynchronously.
     let postgres_shadow = if let Some(postgres) = config.postgres_shadow.as_ref() {
         let runtime = postgres_shadow::PostgresShadowRuntime::connect(postgres).await?;
-        eprintln!("[postgres] staging shadow preflight passed; SQLite remains authoritative");
+        let mode = match postgres.mode() {
+            postgres_shadow::PostgresMode::Shadow => "shadow",
+            postgres_shadow::PostgresMode::Mirror => "mirror",
+        };
+        eprintln!("[postgres] {mode} preflight passed; local SQLite fallback remains available");
         Some(runtime)
     } else {
         None
@@ -2357,11 +2361,11 @@ async fn run() -> Result<(), RuntimeError> {
     {
         let postgres = postgres_shadow
             .as_ref()
-            .ok_or(RuntimeError::PostgresImportRequiresShadow)?;
+            .ok_or(RuntimeError::PostgresImportRequiresPostgres)?;
         let reports =
             postgres_import::import_and_reconcile(&postgres.pool(), &config.database_path).await?;
         eprintln!(
-            "[postgres] SQLite staging import reconciled {} tables",
+            "[postgres] SQLite import reconciled {} tables",
             reports.len()
         );
     }
@@ -2371,7 +2375,7 @@ async fn run() -> Result<(), RuntimeError> {
             .ok_or(RuntimeError::PostgresVoiceReadCacheRequiresReplica)?;
         let cache = postgres_voice_cache::load(&postgres.pool()).await?;
         postgres_voice_cache::spawn(postgres.pool(), cache.clone());
-        eprintln!("[postgres] staging voice reads use the refreshed local Postgres cache");
+        eprintln!("[postgres] voice reads use the refreshed local Postgres cache");
         Some(cache)
     } else {
         None
@@ -2384,7 +2388,7 @@ async fn run() -> Result<(), RuntimeError> {
             .lock()
             .map_err(|_| RuntimeError::StoreLock)?
             .enable_postgres_replica_outbox()?;
-        eprintln!("[postgres] durable SQLite change capture enabled for staging mirror");
+        eprintln!("[postgres] durable SQLite change capture enabled for mirror");
         postgres_outbox::spawn(postgres.pool(), store.clone(), runtime_batch_buffer.clone());
     }
     run_startup_data_hygiene(&config.database_path);

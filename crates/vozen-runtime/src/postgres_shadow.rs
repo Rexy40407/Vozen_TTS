@@ -1,9 +1,9 @@
-//! Safe, staging-only Supabase/Postgres connectivity boundary.
+//! Safe Supabase/Postgres connectivity boundary.
 //!
 //! This module intentionally does not move any Discord request onto Postgres. Its pool is a
 //! preflight gate for the private `vozen` schema, while SQLite remains the durable compatibility
-//! store and local fallback. That separation lets us validate network, TLS and credentials in a
-//! disposable environment before introducing asynchronous store adapters.
+//! store and local fallback. `shadow` is staging-only; `mirror` is the production dual-write and
+//! read-cache rollout and still fails closed unless its local fallback remains ready.
 
 use std::{env, time::Duration};
 
@@ -20,11 +20,18 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 pub struct PostgresShadowConfig {
     database_url: String,
     max_connections: u32,
+    mode: PostgresMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PostgresMode {
+    Shadow,
+    Mirror,
 }
 
 #[derive(Debug, Error)]
 pub enum PostgresShadowError {
-    #[error("RUST_POSTGRES_MODE must be `off` or `shadow`")]
+    #[error("RUST_POSTGRES_MODE must be `off`, `shadow`, or `mirror`")]
     InvalidMode,
     #[error("RUST_POSTGRES_MODE=shadow is staging-only and cannot run with RUST_RUNTIME_MODE=full")]
     FullRuntimeForbidden,
@@ -62,8 +69,15 @@ impl PostgresShadowConfig {
     ) -> Result<Option<Self>, PostgresShadowError> {
         match mode.map(str::trim).filter(|value| !value.is_empty()) {
             None | Some("off") => Ok(None),
-            Some(value) if value.eq_ignore_ascii_case("shadow") => {
-                if runtime_mode.is_full() {
+            Some(value)
+                if value.eq_ignore_ascii_case("shadow") || value.eq_ignore_ascii_case("mirror") =>
+            {
+                let mode = if value.eq_ignore_ascii_case("mirror") {
+                    PostgresMode::Mirror
+                } else {
+                    PostgresMode::Shadow
+                };
+                if matches!(mode, PostgresMode::Shadow) && runtime_mode.is_full() {
                     return Err(PostgresShadowError::FullRuntimeForbidden);
                 }
                 let database_url = database_url
@@ -89,15 +103,21 @@ impl PostgresShadowConfig {
                 Ok(Some(Self {
                     database_url: database_url.to_owned(),
                     max_connections,
+                    mode,
                 }))
             }
             Some(_) => Err(PostgresShadowError::InvalidMode),
         }
     }
+
+    #[must_use]
+    pub fn mode(&self) -> PostgresMode {
+        self.mode
+    }
 }
 
-/// Keeps the pool alive for the whole staging process. It deliberately exposes no application
-/// queries yet: introducing one requires an explicit asynchronous adapter and cache contract.
+/// Keeps the pool alive for the process. Application queries are isolated to background adapters;
+/// no Discord request receives this pool directly.
 pub struct PostgresShadowRuntime {
     _pool: PgPool,
 }
@@ -186,6 +206,19 @@ mod tests {
             ),
             Err(PostgresShadowError::FullRuntimeForbidden)
         ));
+    }
+
+    #[test]
+    fn mirror_is_allowed_with_full_runtime() {
+        let config = PostgresShadowConfig::parse(
+            Some("mirror"),
+            Some("postgresql://user:password@host/database"),
+            None,
+            RuntimeMode::Full,
+        )
+        .expect("mirror must be accepted for a full runtime")
+        .expect("mirror mode must create a Postgres config");
+        assert_eq!(config.mode(), PostgresMode::Mirror);
     }
 
     /// This is deliberately opt-in so normal unit tests never need a network connection or a
