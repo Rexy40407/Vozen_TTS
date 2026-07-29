@@ -32,6 +32,7 @@ mod optout;
 mod premium;
 mod premium_code;
 mod pronunciation;
+mod runtime_outbox;
 mod stripe;
 mod stt_consent;
 mod talk_stats;
@@ -75,6 +76,7 @@ pub use pronunciation::{
     AddPronunciationResult, SERVER_PRON_LIMIT, SERVER_PRON_LIMIT_PREMIUM, USER_PRON_LIMIT_FREE,
     USER_PRON_LIMIT_PREMIUM,
 };
+pub use runtime_outbox::{RuntimeOutboxBatch, RuntimeOutboxEnqueue};
 pub use stripe::{StripeSubscription, StripeSubscriptionInput};
 pub use stt_consent::SttConsent;
 pub use talk_stats::{GuildTalkStreak, TalkBump, TalkRow};
@@ -171,6 +173,10 @@ pub enum StoreError {
     VoteRedemptionSecretMismatch,
     #[error("invalid Discord user id for vote reward")]
     InvalidVoteUserId,
+    #[error("runtime outbox batch id must be non-empty and at most 128 characters")]
+    InvalidRuntimeOutboxBatchId,
+    #[error("runtime outbox payload must be non-empty and at most 262144 bytes")]
+    InvalidRuntimeOutboxPayload,
     #[error("invalid Top.gg webhook event id")]
     InvalidTopggEventId,
     #[error("SQLite error: {0}")]
@@ -212,6 +218,7 @@ impl SqliteStore {
         let transaction = connection.transaction()?;
         install_current_schema(&transaction)?;
         migration::migrate_legacy_schema(&transaction)?;
+        runtime_outbox::install_runtime_outbox_schema(&transaction)?;
         verify_connection_integrity(&transaction)?;
         transaction.commit()?;
         Ok(Self { connection })
