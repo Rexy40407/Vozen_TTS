@@ -13,7 +13,8 @@ use vozen_store::{SqliteStore, StoreError};
 
 use crate::{
     MessagePreparationInput, MessagePreparationOutcome, PreparedMessageSpeech,
-    begin_message_speech, finish_message_speech,
+    VoicePreparationData, begin_message_speech, begin_message_speech_with_data,
+    finish_message_speech, finish_message_speech_with_data,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -90,6 +91,40 @@ impl MessageSpeechPipeline {
             }),
             MessagePreparationOutcome::Empty => unreachable!("a checked draft cannot become empty"),
             MessagePreparationOutcome::FullyBlocked => Ok(MessagePipelineOutcome::FullyBlocked),
+        }
+    }
+
+    /// Hot-path variant backed by an immutable, short-lived durable-data snapshot.  The caller
+    /// is responsible for refreshing the snapshot on expiry; this method performs no I/O.
+    pub(crate) fn prepare_after_admission_with_data(
+        &mut self,
+        data: &VoicePreparationData,
+        lane: QueueLane,
+        input: MessagePreparationInput<'_>,
+        now_ms: i64,
+    ) -> MessagePipelineOutcome {
+        let draft = match begin_message_speech_with_data(data, &input) {
+            Ok(draft) => draft,
+            Err(MessagePreparationOutcome::Empty) => return MessagePipelineOutcome::Empty,
+            Err(_) => unreachable!("only the initial cleaner can reject as empty"),
+        };
+        let cleaned_text = draft.cleaned_text().to_owned();
+        let antispam = draft.antispam();
+        if !self
+            .rate_limiters
+            .allow(input.guild_id, input.user_id, draft.rate_per_min(), now_ms)
+        {
+            return MessagePipelineOutcome::RateLimited;
+        }
+        match finish_message_speech_with_data(data, input, draft) {
+            MessagePreparationOutcome::Ready(speech) => MessagePipelineOutcome::Ready {
+                lane,
+                speech,
+                cleaned_text,
+                antispam,
+            },
+            MessagePreparationOutcome::Empty => unreachable!("a checked draft cannot become empty"),
+            MessagePreparationOutcome::FullyBlocked => MessagePipelineOutcome::FullyBlocked,
         }
     }
 

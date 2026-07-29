@@ -5,7 +5,7 @@
 //! synthesize, enqueue, log, or retain message text.
 
 use vozen_core::{MessageSpeechDecision, MessageSpeechInput, RolePolicy, admit_message_speech};
-use vozen_store::{SqliteStore, StoreError};
+use vozen_store::{ChannelProfile, GuildConfig, SqliteStore, StoreError};
 
 /// Facts obtained from a single Discord message and the current gateway cache.
 #[derive(Clone, Copy)]
@@ -25,14 +25,39 @@ pub struct DiscordMessageFacts<'a> {
     pub autojoined_for_author: bool,
 }
 
+/// Durable values needed for a message admission decision.  Keeping this data separate from
+/// [`SqliteStore`] lets the voice runtime use a short-lived in-memory cache without weakening
+/// any of the Discord-derived permission checks in [`DiscordMessageFacts`].
+#[derive(Debug, Clone)]
+pub(crate) struct MessageAdmissionData {
+    pub guild: GuildConfig,
+    pub profile: Option<ChannelProfile>,
+    pub opted_out: bool,
+}
+
 /// Builds the effective auto-read/read-bots/profile values with the same inheritance rules as
 /// Node's `resolveChannelPolicy`, then delegates every security decision to `vozen-core`.
 pub fn admit_discord_message(
     store: &SqliteStore,
     facts: DiscordMessageFacts<'_>,
 ) -> Result<MessageSpeechDecision, StoreError> {
-    let config = store.guild_config(facts.guild_id)?;
-    let profile = store.channel_profile(facts.guild_id, facts.channel_id)?;
+    let data = MessageAdmissionData {
+        guild: store.guild_config(facts.guild_id)?,
+        profile: store.channel_profile(facts.guild_id, facts.channel_id)?,
+        opted_out: store.is_opted_out(facts.guild_id, facts.author_id)?,
+    };
+    Ok(admit_discord_message_with_data(&data, facts))
+}
+
+/// Cache-friendly variant of [`admit_discord_message`].  It is deliberately pure: cache entries
+/// contain only durable settings, while live Discord role and call state still comes from the
+/// current event.
+pub(crate) fn admit_discord_message_with_data(
+    data: &MessageAdmissionData,
+    facts: DiscordMessageFacts<'_>,
+) -> MessageSpeechDecision {
+    let config = &data.guild;
+    let profile = &data.profile;
     let auto_read = profile
         .as_ref()
         .and_then(|profile| profile.auto_read)
@@ -49,7 +74,7 @@ pub fn admit_discord_message(
         .member_role_ids
         .map(|roles| roles.iter().map(String::as_str).collect::<Vec<_>>());
 
-    Ok(admit_message_speech(MessageSpeechInput {
+    admit_message_speech(MessageSpeechInput {
         enabled: config.enabled,
         author_is_bot: facts.author_is_bot,
         read_bots,
@@ -57,7 +82,7 @@ pub fn admit_discord_message(
         mentioned_bot: facts.mentioned_bot,
         replied_to_bot: facts.replied_to_bot,
         text_in_voice: config.text_in_voice && facts.bot_voice_channel_id == Some(facts.channel_id),
-        opted_out: store.is_opted_out(facts.guild_id, facts.author_id)?,
+        opted_out: data.opted_out,
         required_tts_role_id: config.tts_role_id.as_deref(),
         profile_voice_channel_id: profile
             .as_ref()
@@ -70,7 +95,7 @@ pub fn admit_discord_message(
             priority_role_id: config.priority_role_id.as_deref(),
             blocked_role_id: config.blocked_role_id.as_deref(),
         },
-    }))
+    })
 }
 
 /// Decides whether the gateway may attempt the Node-compatible auto-join before the normal

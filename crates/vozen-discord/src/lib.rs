@@ -134,6 +134,7 @@ mod translation_preference_command;
 mod translation_reaction;
 mod uptime_command;
 mod utterance_collector;
+mod voice_data_cache;
 mod voice_display;
 mod voice_i18n;
 mod voice_playback;
@@ -317,6 +318,7 @@ pub use invite_command::{InviteCommand, InviteCommandError, parse_invite_command
 pub use joke_text::{JOKE_LANGUAGES, JokeLanguage, joke_lang_by_key, pick_joke};
 pub use laugh_text::{laughter_for_model, laughter_for_prefix};
 pub use message_admission::{DiscordMessageFacts, admit_discord_message, should_attempt_autojoin};
+pub(crate) use message_admission::{MessageAdmissionData, admit_discord_message_with_data};
 pub use message_interaction::DiscordMessageFactsOwned;
 pub use message_media::collect_message_media;
 pub use message_pipeline::{MessagePipelineOutcome, MessageSpeechPipeline};
@@ -370,6 +372,9 @@ pub use speech_preparation::{
     MessagePreparationInput, MessagePreparationOutcome, MessageSpeechDraft, PreparedMessageSpeech,
     begin_message_speech, finish_message_speech, gcloud_budget_for, prepare_message_speech,
 };
+pub(crate) use speech_preparation::{
+    VoicePreparationData, begin_message_speech_with_data, finish_message_speech_with_data,
+};
 pub use stats_command::{StatsCommand, StatsCommandError, parse_stats_command};
 pub use text_quiz_driver::{
     TextQuizDriver, TextQuizDriverAction, TextQuizGameDriver, TextQuizMode,
@@ -402,6 +407,7 @@ pub use translation_preference_command::{
 pub use translation_reaction::reaction_target_locale;
 pub use uptime_command::{UptimeCommand, UptimeCommandError, parse_uptime_command};
 pub use utterance_collector::{Utterance, UtteranceCollector};
+pub(crate) use voice_data_cache::VoiceDataCache;
 pub use voice_display::{VoiceDisplayCatalog, VoiceDisplayError};
 pub use voice_i18n::{VoiceResponseLocalizer, VoiceResponseLocalizerError};
 pub use voice_playback::{

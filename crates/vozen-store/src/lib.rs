@@ -117,6 +117,8 @@ struct SqliteSchemaObject {
 
 #[derive(Debug, Error)]
 pub enum StoreError {
+    #[error("store cache is unavailable")]
+    CacheUnavailable,
     #[error("invalid SQLite schema contract: {0}")]
     InvalidContract(#[from] serde_json::Error),
     #[error("unsupported SQLite schema contract version {0}")]

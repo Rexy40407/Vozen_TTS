@@ -21,7 +21,7 @@ use vozen_store::{
 use crate::{
     CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceSettings, DiscordMessageFacts,
     GuildSynthesisCoordinator, MessagePipelineOutcome, MessagePreparationInput,
-    MessageSpeechPipeline, admit_discord_message,
+    MessageSpeechPipeline, VoiceDataCache, admit_discord_message_with_data,
 };
 
 /// Per-message values which are never persisted. `facts` must come from the same Discord event
@@ -56,6 +56,7 @@ pub struct MessageVoiceService<S, P> {
     pipeline: Mutex<MessageSpeechPipeline>,
     duplicate_tracker: Mutex<DuplicateTracker>,
     count_gate: Mutex<CountGate>,
+    voice_data: VoiceDataCache,
     synthesizer: S,
     playback: P,
     synthesis: GuildSynthesisCoordinator,
@@ -94,6 +95,7 @@ impl<S, P> MessageVoiceService<S, P> {
             pipeline: Mutex::new(MessageSpeechPipeline::default()),
             duplicate_tracker: Mutex::new(DuplicateTracker::default()),
             count_gate: Mutex::new(CountGate::default()),
+            voice_data: VoiceDataCache::default(),
             synthesizer,
             playback,
             synthesis,
@@ -110,31 +112,32 @@ where
 {
     pub async fn execute(&self, invocation: MessageVoiceInvocation<'_>) -> MessageVoiceOutcome {
         let now_ms = (self.now_ms)();
+        let voice_data = match self.voice_data.snapshot(
+            &self.store,
+            invocation.facts.guild_id,
+            invocation.facts.channel_id,
+            invocation.facts.author_id,
+            now_ms,
+        ) {
+            Ok(data) => data,
+            Err(_) => return MessageVoiceOutcome::StoreUnavailable,
+        };
         let lane = {
-            let store = match self.store.lock() {
-                Ok(store) => store,
-                Err(_) => return MessageVoiceOutcome::StoreUnavailable,
-            };
-            match admit_discord_message(&store, invocation.facts) {
-                Ok(MessageSpeechDecision::Allowed { lane }) => lane,
-                Ok(MessageSpeechDecision::Denied { reason }) => {
+            match admit_discord_message_with_data(&voice_data.admission, invocation.facts) {
+                MessageSpeechDecision::Allowed { lane } => lane,
+                MessageSpeechDecision::Denied { reason } => {
                     return MessageVoiceOutcome::Denied(reason);
                 }
-                Err(_) => return MessageVoiceOutcome::StoreUnavailable,
             }
         };
 
         let prepared = {
-            let store = match self.store.lock() {
-                Ok(store) => store,
-                Err(_) => return MessageVoiceOutcome::StoreUnavailable,
-            };
             let mut pipeline = match self.pipeline.lock() {
                 Ok(pipeline) => pipeline,
                 Err(_) => return MessageVoiceOutcome::StoreUnavailable,
             };
-            pipeline.prepare_after_admission(
-                &store,
+            pipeline.prepare_after_admission_with_data(
+                &voice_data.preparation,
                 lane,
                 MessagePreparationInput {
                     guild_id: invocation.facts.guild_id,
@@ -159,21 +162,20 @@ where
         };
 
         let (request, cleaned_text, antispam) = match prepared {
-            Ok(MessagePipelineOutcome::Ready {
+            MessagePipelineOutcome::Ready {
                 lane: prepared_lane,
                 speech,
                 cleaned_text,
                 antispam,
-            }) if prepared_lane == lane => (speech.request, cleaned_text, antispam),
+            } if prepared_lane == lane => (speech.request, cleaned_text, antispam),
             // The lane was determined by the same admission above. Treat a discrepancy as a
             // store/process fault rather than accidentally granting a different priority.
-            Ok(MessagePipelineOutcome::Ready { .. }) | Ok(MessagePipelineOutcome::Denied(_)) => {
+            MessagePipelineOutcome::Ready { .. } | MessagePipelineOutcome::Denied(_) => {
                 return MessageVoiceOutcome::StoreUnavailable;
             }
-            Ok(MessagePipelineOutcome::Empty) => return MessageVoiceOutcome::Empty,
-            Ok(MessagePipelineOutcome::RateLimited) => return MessageVoiceOutcome::RateLimited,
-            Ok(MessagePipelineOutcome::FullyBlocked) => return MessageVoiceOutcome::FullyBlocked,
-            Err(_) => return MessageVoiceOutcome::StoreUnavailable,
+            MessagePipelineOutcome::Empty => return MessageVoiceOutcome::Empty,
+            MessagePipelineOutcome::RateLimited => return MessageVoiceOutcome::RateLimited,
+            MessagePipelineOutcome::FullyBlocked => return MessageVoiceOutcome::FullyBlocked,
         };
 
         if antispam
@@ -283,6 +285,7 @@ where
             pipeline.forget_guild(guild_id);
         }
         self.synthesis.forget_guild(guild_id);
+        self.voice_data.forget_guild(guild_id);
     }
 
     /// Writes only fixed, identity-free operational counters. Metric persistence is strictly
