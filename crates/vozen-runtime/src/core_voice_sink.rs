@@ -1582,6 +1582,7 @@ fn game_card_body(content: &str) -> Result<Vec<u8>, serde_json::Error> {
 
 impl CoreVoiceGatewaySink {
     #[must_use]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new(
         store: Arc<Mutex<SqliteStore>>,
         gateway_state: GatewayState,
@@ -1591,6 +1592,7 @@ impl CoreVoiceGatewaySink {
     }
 
     #[must_use]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn new_with_runtime_batch(
         store: Arc<Mutex<SqliteStore>>,
         gateway_state: GatewayState,

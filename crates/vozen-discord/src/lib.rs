@@ -1117,6 +1117,10 @@ fn log_event_sink_failure(event: &str) {
     eprintln!("[gateway] promoted event sink failed during {event}; event ignored");
 }
 
+fn should_deliver_guild_create_details(is_new: Option<bool>) -> bool {
+    is_new == Some(true)
+}
+
 #[async_trait]
 impl EventHandler for VozenGatewayHandler {
     async fn ready(&self, context: Context, ready: Ready) {
@@ -1182,24 +1186,27 @@ impl EventHandler for VozenGatewayHandler {
         &self,
         context: Context,
         guild: serenity::model::guild::Guild,
-        _is_new: Option<bool>,
+        is_new: Option<bool>,
     ) {
+        let guild_id = guild.id.get().to_string();
         self.gateway_state
             .remember_guild_snapshot(GatewayGuildSnapshot {
-                id: guild.id.get().to_string(),
+                id: guild_id.clone(),
                 name: guild.name.clone(),
                 icon: guild.icon_url(),
                 member_count: guild.member_count,
                 joined_timestamp: guild.joined_at.unix_timestamp(),
             });
         self.gateway_state.replace_guild_voice_states(&guild);
-        if let Some(event_sink) = &self.event_sink
-            && event_sink
-                .on_guild_create_details(context, guild)
-                .await
-                .is_err()
-        {
-            log_event_sink_failure("guild_create");
+        if let Some(event_sink) = &self.event_sink {
+            let result = if should_deliver_guild_create_details(is_new) {
+                event_sink.on_guild_create_details(context, guild).await
+            } else {
+                event_sink.on_guild_create(&guild_id).await
+            };
+            if result.is_err() {
+                log_event_sink_failure("guild_create");
+            }
         }
     }
 
@@ -1436,6 +1443,13 @@ mod tests {
         state.update_voice_state_with_bot("guild", "other-bot", Some("voice".into()), true);
         state.update_voice_state("guild", "vozen", Some("voice".into()));
         assert_eq!(state.human_voice_member_count("guild", "voice"), 1);
+    }
+
+    #[test]
+    fn guild_welcome_runs_only_for_a_confirmed_new_guild() {
+        assert!(should_deliver_guild_create_details(Some(true)));
+        assert!(!should_deliver_guild_create_details(Some(false)));
+        assert!(!should_deliver_guild_create_details(None));
     }
 
     #[test]

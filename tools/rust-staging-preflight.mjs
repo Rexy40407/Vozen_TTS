@@ -1,13 +1,9 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { auditCommandOwnership } from './rust-command-ownership.mjs';
 
-const DISCORD_API = "https://discord.com/api/v10";
-const REQUIRED = [
-  "DISCORD_TOKEN",
-  "CLIENT_ID",
-  "RUST_COMMANDS_GUILD_ID",
-  "OWNER_GUILD_ID",
-];
+const DISCORD_API = 'https://discord.com/api/v10';
+const REQUIRED = ['DISCORD_TOKEN', 'CLIENT_ID', 'RUST_COMMANDS_GUILD_ID', 'OWNER_GUILD_ID'];
 
 function fail(message) {
   console.error(`Staging preflight failed: ${message}`);
@@ -18,7 +14,7 @@ function parseDotenv(source) {
   const values = new Map();
   for (const rawLine of source.split(/\r?\n/u)) {
     const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
+    if (!line || line.startsWith('#')) continue;
     const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/u.exec(line);
     if (!match) continue;
     let [, key, value] = match;
@@ -38,7 +34,7 @@ function parseDotenv(source) {
 async function loadStagingEnv() {
   const envFile = process.env.RUST_ENV_FILE;
   if (!envFile) return;
-  const parsed = parseDotenv(await readFile(resolve(envFile), "utf8"));
+  const parsed = parseDotenv(await readFile(resolve(envFile), 'utf8'));
   for (const [key, value] of parsed) {
     if (process.env[key] === undefined) process.env[key] = value;
   }
@@ -55,7 +51,7 @@ function snowflake(name) {
 
 async function discordGet(path, token) {
   const response = await fetch(`${DISCORD_API}${path}`, {
-    headers: { Authorization: `Bot ${token}`, "User-Agent": "Vozen-Staging-Preflight/1.0" },
+    headers: { Authorization: `Bot ${token}`, 'User-Agent': 'Vozen-Staging-Preflight/1.0' },
   });
   if (!response.ok) {
     throw new Error(`Discord returned HTTP ${response.status} for ${path}.`);
@@ -81,7 +77,9 @@ async function verifyGuild(guildId, clientId, token, expected, label) {
   const missing = [...expected].filter((key) => !present.has(key));
   console.log(`${label}: bot is present; ${commands.length} guild commands currently registered.`);
   if (missing.length) {
-    console.log(`${label}: ${missing.length} expected command(s) are not registered yet (expected before first staging start).`);
+    console.log(
+      `${label}: ${missing.length} expected command(s) are not registered yet (expected before first staging start).`,
+    );
   } else {
     console.log(`${label}: registered command set matches the Rust contract.`);
   }
@@ -94,19 +92,34 @@ try {
   }
   if (process.exitCode) process.exit();
 
-  const clientId = snowflake("CLIENT_ID");
-  const stagingGuildId = snowflake("RUST_COMMANDS_GUILD_ID");
-  const ownerGuildId = snowflake("OWNER_GUILD_ID");
+  const clientId = snowflake('CLIENT_ID');
+  const stagingGuildId = snowflake('RUST_COMMANDS_GUILD_ID');
+  const ownerGuildId = snowflake('OWNER_GUILD_ID');
   const token = process.env.DISCORD_TOKEN.trim();
   if (process.exitCode || !clientId || !stagingGuildId || !ownerGuildId) process.exit();
 
-  const contract = JSON.parse(await readFile(resolve("contracts/discord-commands.json"), "utf8"));
-  const bot = await discordGet("/users/@me", token);
-  if (bot.id !== clientId) {
-    fail("CLIENT_ID does not match the staging bot token. Check that both belong to Vozen Staging.");
+  const contract = JSON.parse(await readFile(resolve('contracts/discord-commands.json'), 'utf8'));
+  const ownership = auditCommandOwnership(contract, process.env, ownerGuildId === stagingGuildId);
+  if (ownership.unknown.length > 0) {
+    fail(`command ownership map is incomplete: ${ownership.unknown.join(', ')}.`);
     process.exit();
   }
-  console.log("Bot token and staging application identity verified.");
+  if (ownership.disabled.length > 0) {
+    fail(
+      `${ownership.disabled.length} registered command leaves have no enabled Rust handler: ` +
+        `${ownership.disabled.map(({ path }) => path).join(', ')}.`,
+    );
+    process.exit();
+  }
+  console.log(`Rust ownership verified for ${ownership.paths.length} registered command leaves.`);
+  const bot = await discordGet('/users/@me', token);
+  if (bot.id !== clientId) {
+    fail(
+      'CLIENT_ID does not match the staging bot token. Check that both belong to Vozen Staging.',
+    );
+    process.exit();
+  }
+  console.log('Bot token and staging application identity verified.');
 
   const globalCommands = await discordGet(`/applications/${clientId}/commands`, token);
   console.log(`Global commands currently registered: ${globalCommands.length}.`);
@@ -115,12 +128,18 @@ try {
     clientId,
     token,
     expectedCommandKeys(contract, ownerGuildId === stagingGuildId),
-    "Staging guild",
+    'Staging guild',
   );
   if (ownerGuildId !== stagingGuildId) {
-    await verifyGuild(ownerGuildId, clientId, token, expectedCommandKeys(contract, true), "Owner guild");
+    await verifyGuild(
+      ownerGuildId,
+      clientId,
+      token,
+      expectedCommandKeys(contract, true),
+      'Owner guild',
+    );
   }
-  console.log("Staging preflight passed. No Discord commands were changed.");
+  console.log('Staging preflight passed. No Discord commands were changed.');
 } catch (error) {
-  fail(error instanceof Error ? error.message : "Unexpected preflight error.");
+  fail(error instanceof Error ? error.message : 'Unexpected preflight error.');
 }
