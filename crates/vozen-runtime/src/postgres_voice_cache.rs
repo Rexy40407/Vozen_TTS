@@ -124,6 +124,15 @@ mod tests {
             return;
         };
         let pool = PgPool::connect(&database_url).await.expect("staging pool");
+        let guild_id = format!("staging-cache-guild-{}", uuid::Uuid::new_v4());
+        sqlx::query(
+            "INSERT INTO vozen.guild_config (guild_id, locale, rate_per_min)
+             VALUES ($1, 'pt', 11)",
+        )
+        .bind(&guild_id)
+        .execute(&pool)
+        .await
+        .expect("stage cache fixture");
         sqlx::query(
             "INSERT INTO vozen.runtime_migration_state (marker, completed_at)
              VALUES ('sqlite_initial_import_v1', 1)
@@ -132,15 +141,54 @@ mod tests {
         .execute(&pool)
         .await
         .expect("stage marker");
-        let cache = load(&pool).await.expect("imported staging cache");
-        let cache = cache.lock().expect("cache");
-        assert!(cache.has_schema_object("guild_config").expect("schema"));
-        assert!(cache.has_schema_object("premium_user").expect("schema"));
+        let verification = async {
+            let cache = load(&pool).await.map_err(|error| error.to_string())?;
+            {
+                let cache = cache.lock().map_err(|_| "cache lock".to_owned())?;
+                let config = cache
+                    .guild_config(&guild_id)
+                    .map_err(|error| error.to_string())?;
+                if config.locale != "pt" || config.rate_per_min != 11 {
+                    return Err("initial Postgres voice-cache value did not match".to_owned());
+                }
+                if !cache
+                    .has_schema_object("premium_user")
+                    .map_err(|error| error.to_string())?
+                {
+                    return Err("voice-cache schema missing premium_user".to_owned());
+                }
+            }
+            sqlx::query("UPDATE vozen.guild_config SET rate_per_min = 12 WHERE guild_id = $1")
+                .bind(&guild_id)
+                .execute(&pool)
+                .await
+                .map_err(|error| error.to_string())?;
+            refresh_once(&pool, &cache)
+                .await
+                .map_err(|error| error.to_string())?;
+            let cache = cache.lock().map_err(|_| "cache lock".to_owned())?;
+            if cache
+                .guild_config(&guild_id)
+                .map_err(|error| error.to_string())?
+                .rate_per_min
+                != 12
+            {
+                return Err("refreshed Postgres voice-cache value did not match".to_owned());
+            }
+            Ok::<(), String>(())
+        }
+        .await;
+        sqlx::query("DELETE FROM vozen.guild_config WHERE guild_id = $1")
+            .bind(&guild_id)
+            .execute(&pool)
+            .await
+            .expect("remove cache fixture");
         sqlx::query(
             "DELETE FROM vozen.runtime_migration_state WHERE marker = 'sqlite_initial_import_v1'",
         )
         .execute(&pool)
         .await
         .expect("remove fixture marker");
+        verification.expect("verify Postgres voice-cache refresh");
     }
 }
