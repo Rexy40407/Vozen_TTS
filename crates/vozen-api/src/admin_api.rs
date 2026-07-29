@@ -132,6 +132,22 @@ pub struct AdminTopTalker {
     pub usage_source: String,
 }
 
+/// Coarse owner-only operational readings. These values are intentionally aggregate-only: no
+/// database paths, query contents, Discord identifiers, or individual session data are exposed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct AdminSystemMetrics {
+    #[serde(rename = "databaseBytes")]
+    pub database_bytes: u64,
+    #[serde(rename = "volumeTotalBytes")]
+    pub volume_total_bytes: Option<u64>,
+    #[serde(rename = "volumeUsedBytes")]
+    pub volume_used_bytes: Option<u64>,
+    #[serde(rename = "volumeAvailableBytes")]
+    pub volume_available_bytes: Option<u64>,
+    #[serde(rename = "activeVoiceSessions")]
+    pub active_voice_sessions: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdminGrant {
     Plus { id: String, days: i64 },
@@ -164,6 +180,7 @@ pub struct AdminApi {
     log: Arc<dyn Fn(&str) + Send + Sync>,
     resolve_guilds: Option<Arc<dyn Fn() -> Vec<AdminGuildBrief> + Send + Sync>>,
     local_day: Arc<dyn Fn() -> String + Send + Sync>,
+    system_metrics: Option<Arc<dyn Fn() -> AdminSystemMetrics + Send + Sync>>,
 }
 
 pub struct AdminApiConfig {
@@ -177,6 +194,7 @@ pub struct AdminApiConfig {
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
     pub resolve_guilds: Option<Arc<dyn Fn() -> Vec<AdminGuildBrief> + Send + Sync>>,
     pub local_day: Arc<dyn Fn() -> String + Send + Sync>,
+    pub system_metrics: Option<Arc<dyn Fn() -> AdminSystemMetrics + Send + Sync>>,
 }
 
 impl AdminApi {
@@ -208,6 +226,7 @@ impl AdminApi {
             log: config.log,
             resolve_guilds: config.resolve_guilds,
             local_day: config.local_day,
+            system_metrics: config.system_metrics,
         }
     }
 
@@ -338,6 +357,14 @@ impl AdminApi {
                 }
             })
             .collect())
+    }
+
+    #[must_use]
+    pub fn system_metrics(&self) -> AdminSystemMetrics {
+        self.system_metrics
+            .as_ref()
+            .map(|provider| provider())
+            .unwrap_or_default()
     }
 
     pub fn grant(&self, grant: AdminGrant) -> Result<i64, AdminGrantError> {
@@ -489,6 +516,7 @@ mod tests {
             log: Arc::new(|_| {}),
             resolve_guilds: None,
             local_day: Arc::new(|| "2026-07-23".into()),
+            system_metrics: None,
         })
     }
 
@@ -570,6 +598,7 @@ mod tests {
                 }]
             })),
             local_day: Arc::new(|| "2026-07-23".into()),
+            system_metrics: None,
         });
         assert_eq!(api.list_guilds().expect("guilds")[0].messages, 2);
         assert_eq!(api.list_top_talkers().expect("talkers")[0].total, 2);
