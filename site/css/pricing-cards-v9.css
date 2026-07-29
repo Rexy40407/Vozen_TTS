@@ -73,5 +73,6 @@
 /* Continue the Free card rhythm after the aligned header. */
 @media (min-width: 921px) {
   .price-card--free .seat-toggle { margin-top: 40px; }
+  /* Keep the Free CTA rhythm without offsetting its content from the paid cards. */
   .price-card--free .price-card__price { margin-bottom: 25px; }
 }
