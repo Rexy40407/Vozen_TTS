@@ -66,6 +66,7 @@ pub fn admin_router(config: AdminRouterConfig) -> Result<Router, AdminRouterConf
         .route("/api/admin/passes", any(admin_request))
         .route("/api/admin/guilds", any(admin_request))
         .route("/api/admin/toptalkers", any(admin_request))
+        .route("/api/admin/metrics", any(admin_request))
         .route("/api/admin/grant", any(admin_request))
         .route("/api/admin/revoke", any(admin_request))
         .layer(DefaultBodyLimit::max(BODY_MAX_BYTES))
@@ -164,12 +165,19 @@ async fn admin_request(
                 &state,
             ),
         },
+        ("/api/admin/metrics", Method::GET) => response(
+            StatusCode::OK,
+            serde_json::to_value(state.api.system_metrics())
+                .unwrap_or_else(|_| json!({"error":"internal"})),
+            &state,
+        ),
         ("/api/admin/grant", Method::POST) => grant(body, &state),
         ("/api/admin/revoke", Method::POST) => revoke(body, &state),
         (
             "/api/admin/passes"
             | "/api/admin/guilds"
             | "/api/admin/toptalkers"
+            | "/api/admin/metrics"
             | "/api/admin/grant"
             | "/api/admin/revoke",
             _,
@@ -369,7 +377,9 @@ fn common_headers(headers: &mut HeaderMap, state: &AdminState) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::admin_api::{AdminApiConfig, AdminAuthorization, AdminAuthorizationResolver};
+    use crate::admin_api::{
+        AdminApiConfig, AdminAuthorization, AdminAuthorizationResolver, AdminSystemMetrics,
+    };
     use async_trait::async_trait;
     use axum::{body::Body, body::to_bytes, http::Request};
     use tower::ServiceExt;
@@ -403,6 +413,13 @@ mod tests {
             log: Arc::new(|_| {}),
             resolve_guilds: None,
             local_day: Arc::new(|| "2026-07-23".into()),
+            system_metrics: Some(Arc::new(|| AdminSystemMetrics {
+                database_bytes: 12_345,
+                volume_total_bytes: Some(100_000),
+                volume_used_bytes: Some(25_000),
+                volume_available_bytes: Some(75_000),
+                active_voice_sessions: 3,
+            })),
         }));
         admin_router(AdminRouterConfig {
             origin: "https://panel.vozen.org".into(),
@@ -447,6 +464,7 @@ mod tests {
         assert_eq!(bare.status(), StatusCode::FORBIDDEN);
 
         let passes = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/admin/passes")
@@ -461,6 +479,31 @@ mod tests {
             serde_json::from_slice(&to_bytes(passes.into_body(), BODY_MAX_BYTES).await.unwrap())
                 .unwrap();
         assert_eq!(body, json!({"plus":[],"passes":[],"pending":[]}));
+
+        let metrics = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/admin/metrics")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("metrics");
+        assert_eq!(metrics.status(), StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(metrics.into_body(), BODY_MAX_BYTES).await.unwrap())
+                .unwrap();
+        assert_eq!(
+            body,
+            json!({
+                "databaseBytes": 12_345,
+                "volumeTotalBytes": 100_000,
+                "volumeUsedBytes": 25_000,
+                "volumeAvailableBytes": 75_000,
+                "activeVoiceSessions": 3
+            })
+        );
     }
 
     #[tokio::test]

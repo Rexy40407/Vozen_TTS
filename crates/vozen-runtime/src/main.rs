@@ -8,6 +8,7 @@
 
 #[cfg(feature = "voice-driver")]
 mod activity_poster;
+mod admin_metrics;
 mod autocomplete_sink;
 mod automatic_translation_sink;
 mod birthday_sink;
@@ -2457,6 +2458,7 @@ async fn run() -> Result<(), RuntimeError> {
         return gateway.await.map_err(RuntimeError::from);
     };
     let app = build_http_router(
+        config.database_path.clone(),
         config.premium_http,
         config.dashboard,
         config.admin,
@@ -2522,6 +2524,7 @@ struct HttpRouterRuntimeOptions {
 }
 
 fn build_http_router(
+    database_path: PathBuf,
     premium_http: Option<PremiumHttpConfig>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
@@ -2614,6 +2617,7 @@ fn build_http_router(
                 .clone()
                 .ok_or(RuntimeError::DashboardOrAdminRequiresPremiumApi)?;
             let gateway_state = gateway_state.clone();
+            let metrics_gateway_state = gateway_state.clone();
             let api = vozen_api::admin_api::AdminApi::new(AdminApiConfig {
                 store: store.clone(),
                 resolver: verifier,
@@ -2637,6 +2641,16 @@ fn build_http_router(
                         .collect()
                 })),
                 local_day: Arc::new(system_local_day),
+                system_metrics: Some(Arc::new({
+                    let database_path = database_path.clone();
+                    let gateway_state = metrics_gateway_state;
+                    move || {
+                        admin_metrics::snapshot(
+                            &database_path,
+                            gateway_state.bot_voice_sessions().len(),
+                        )
+                    }
+                })),
             });
             Ok::<AdminRouterConfig, RuntimeError>(AdminRouterConfig {
                 origin: admin.panel_origin,
@@ -3615,6 +3629,7 @@ mod tests {
     fn admin_promotion_fails_closed_without_the_premium_http_listener() {
         let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
         let result = build_http_router(
+            PathBuf::from("/tmp/vozen-test.sqlite"),
             None,
             None,
             Some(AdminRuntimeOptions {
@@ -3641,6 +3656,7 @@ mod tests {
     async fn kofi_webhook_can_run_without_the_browser_premium_api() {
         let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
         let app = build_http_router(
+            PathBuf::from("/tmp/vozen-test.sqlite"),
             Some(PremiumHttpConfig {
                 browser_api_enabled: false,
                 client_id: None,
