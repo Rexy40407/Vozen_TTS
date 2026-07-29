@@ -48,6 +48,7 @@ mod loop_lag;
 mod neural_adapter;
 mod owner_command_sink;
 mod piper_adapter;
+mod postgres_import;
 mod postgres_outbox;
 mod postgres_shadow;
 mod premium_sink;
@@ -2114,6 +2115,10 @@ enum RuntimeError {
     RuntimeMode(#[from] runtime_mode::RuntimeModeError),
     #[error("Postgres staging configuration failed: {0}")]
     PostgresShadow(#[from] postgres_shadow::PostgresShadowError),
+    #[error("RUST_POSTGRES_IMPORT_SQLITE=true requires RUST_POSTGRES_MODE=shadow")]
+    PostgresImportRequiresShadow,
+    #[error("Postgres staging import failed: {0}")]
+    PostgresImport(#[from] postgres_import::ImportError),
     #[error("DISCORD_TOKEN is required to start the Rust gateway")]
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
@@ -2289,6 +2294,20 @@ async fn run() -> Result<(), RuntimeError> {
     } else {
         None
     };
+    if env::var("RUST_POSTGRES_IMPORT_SQLITE")
+        .ok()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+    {
+        let postgres = postgres_shadow
+            .as_ref()
+            .ok_or(RuntimeError::PostgresImportRequiresShadow)?;
+        let reports =
+            postgres_import::import_and_reconcile(&postgres.pool(), &config.database_path).await?;
+        eprintln!(
+            "[postgres] SQLite staging import reconciled {} tables",
+            reports.len()
+        );
+    }
     let runtime_batch_buffer = RuntimeBatchBuffer::default();
     if let Some(postgres) = postgres_shadow.as_ref() {
         postgres_outbox::spawn(postgres.pool(), store.clone(), runtime_batch_buffer.clone());

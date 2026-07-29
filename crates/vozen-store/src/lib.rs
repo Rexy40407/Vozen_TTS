@@ -10,7 +10,8 @@
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::Connection;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use rusqlite::{Connection, types::ValueRef};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -195,6 +196,64 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
+    /// Lists only tables from Vozen's generated schema contract. This is deliberately not a
+    /// general SQL interface: callers can safely use the names for a verified migration.
+    pub fn durable_table_names(&self) -> Result<Vec<String>, StoreError> {
+        let contract: SqliteSchemaContract = serde_json::from_str(SQLITE_SCHEMA)?;
+        Ok(contract
+            .objects
+            .into_iter()
+            .filter(|object| object.kind == "table")
+            .map(|object| object.name)
+            .collect())
+    }
+
+    /// Exports rows in a contract-owned table as JSON objects for the explicit Postgres importer.
+    /// Blob values are base64 objects; no current durable table relies on them, but the encoding
+    /// avoids silent loss if a future migration adds one.
+    pub fn export_table_rows(&self, table: &str) -> Result<Vec<serde_json::Value>, StoreError> {
+        if !self.durable_table_names()?.iter().any(|name| name == table) {
+            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+        }
+        let mut statement = self
+            .connection
+            .prepare(&format!("SELECT * FROM \"{table}\""))?;
+        let column_names = statement
+            .column_names()
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<Vec<_>>();
+        let mut rows = statement.query([])?;
+        let mut result = Vec::new();
+        while let Some(row) = rows.next()? {
+            let mut object = serde_json::Map::with_capacity(column_names.len());
+            for (index, name) in column_names.iter().enumerate() {
+                let value = match row.get_ref(index)? {
+                    ValueRef::Null => serde_json::Value::Null,
+                    ValueRef::Integer(value) => serde_json::Value::from(value),
+                    ValueRef::Real(value) => serde_json::Value::from(value),
+                    ValueRef::Text(value) => {
+                        serde_json::Value::from(String::from_utf8_lossy(value).into_owned())
+                    }
+                    ValueRef::Blob(value) => serde_json::json!({"base64": BASE64.encode(value)}),
+                };
+                object.insert(name.clone(), value);
+            }
+            result.push(serde_json::Value::Object(object));
+        }
+        Ok(result)
+    }
+
+    pub fn durable_table_row_count(&self, table: &str) -> Result<i64, StoreError> {
+        if !self.durable_table_names()?.iter().any(|name| name == table) {
+            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+        }
+        Ok(self
+            .connection
+            .query_row(&format!("SELECT COUNT(*) FROM \"{table}\""), [], |row| {
+                row.get(0)
+            })?)
+    }
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let connection = Connection::open(path)?;
         Self::from_connection(connection)
@@ -356,6 +415,29 @@ mod tests {
                 .has_schema_object("idx_pass_activation_guild")
                 .expect("query index")
         );
+    }
+
+    #[test]
+    fn contract_table_export_keeps_column_names_and_values() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .connection
+            .execute(
+                "INSERT INTO guild_config (guild_id, default_voice, locale) VALUES (?1, ?2, ?3)",
+                ("export-guild", "pt_PT-voice", "pt"),
+            )
+            .expect("seed");
+        assert!(
+            store
+                .durable_table_names()
+                .expect("tables")
+                .contains(&"guild_config".to_owned())
+        );
+        let rows = store.export_table_rows("guild_config").expect("export");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["guild_id"], "export-guild");
+        assert_eq!(rows[0]["default_voice"], "pt_PT-voice");
+        assert!(store.export_table_rows("not_a_contract_table").is_err());
     }
 
     #[test]

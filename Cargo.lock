@@ -4711,6 +4711,7 @@ dependencies = [
 name = "vozen-store"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "hmac",
  "rusqlite",
  "serde",
