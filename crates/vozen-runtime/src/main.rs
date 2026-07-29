@@ -49,6 +49,7 @@ mod neural_adapter;
 mod owner_command_sink;
 mod piper_adapter;
 mod postgres_import;
+mod postgres_metrics;
 mod postgres_outbox;
 mod postgres_shadow;
 mod postgres_voice_cache;
@@ -2355,6 +2356,15 @@ async fn run() -> Result<(), RuntimeError> {
     } else {
         None
     };
+    let supabase_metrics = postgres_shadow.as_ref().map(|postgres| {
+        let cache = postgres_metrics::new_cache();
+        postgres_metrics::spawn(
+            postgres.pool(),
+            cache.clone(),
+            postgres_metrics::database_capacity_from_environment(),
+        );
+        cache
+    });
     if env::var("RUST_POSTGRES_IMPORT_SQLITE")
         .ok()
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
@@ -2639,6 +2649,7 @@ async fn run() -> Result<(), RuntimeError> {
         },
         store,
         gateway_state.clone(),
+        supabase_metrics.clone(),
     )?;
     let listener = tokio::net::TcpListener::bind(health_bind).await?;
     if write_rejoin_marker_on_shutdown {
@@ -2703,6 +2714,7 @@ fn build_http_router(
     runtime_options: HttpRouterRuntimeOptions,
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
+    supabase_metrics: Option<postgres_metrics::SharedSupabaseMetrics>,
 ) -> Result<axum::Router, RuntimeError> {
     let runtime_metrics = gateway_state.metrics();
     let public_status = runtime_options.public_status.map(|config| {
@@ -2819,10 +2831,15 @@ fn build_http_router(
                 system_metrics: Some(Arc::new({
                     let database_path = database_path.clone();
                     let gateway_state = metrics_gateway_state;
+                    let supabase_metrics = supabase_metrics.clone();
                     move || {
-                        admin_metrics::snapshot(
+                        let supabase = supabase_metrics
+                            .as_ref()
+                            .and_then(|cache| cache.read().ok().and_then(|value| value.clone()));
+                        admin_metrics::snapshot_with_supabase(
                             &database_path,
                             gateway_state.bot_voice_sessions().len(),
+                            supabase,
                         )
                     }
                 })),
@@ -3857,6 +3874,7 @@ mod tests {
             },
             store,
             GatewayState::default(),
+            None,
         );
         assert!(matches!(
             result,
@@ -3890,6 +3908,7 @@ mod tests {
             },
             store,
             GatewayState::default(),
+            None,
         )
         .expect("kofi-only router");
         let response = app

@@ -427,6 +427,7 @@ mod tests {
                     volume_total_bytes: Some(100_000),
                     volume_used_bytes: Some(25_000),
                 }],
+                supabase: None,
             })),
         }));
         admin_router(AdminRouterConfig {

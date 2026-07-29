@@ -9,11 +9,15 @@ use std::{
     process::Command,
 };
 
-use vozen_api::admin_api::{AdminDatabaseUsageSample, AdminSystemMetrics};
+use vozen_api::admin_api::{AdminDatabaseUsageSample, AdminSupabaseMetrics, AdminSystemMetrics};
 
 const HISTORY_DAYS: usize = 7;
 
-pub fn snapshot(database_path: &Path, active_voice_sessions: usize) -> AdminSystemMetrics {
+pub fn snapshot_with_supabase(
+    database_path: &Path,
+    active_voice_sessions: usize,
+    supabase: Option<AdminSupabaseMetrics>,
+) -> AdminSystemMetrics {
     let database_bytes = database_bytes(database_path);
     let volume = volume_usage(database_path.parent().unwrap_or_else(|| Path::new(".")));
     let database_history = record_database_history(database_path, database_bytes, volume);
@@ -24,6 +28,7 @@ pub fn snapshot(database_path: &Path, active_voice_sessions: usize) -> AdminSyst
         volume_available_bytes: volume.map(|value| value.available_bytes),
         active_voice_sessions: u64::try_from(active_voice_sessions).unwrap_or(u64::MAX),
         database_history,
+        supabase,
     }
 }
 

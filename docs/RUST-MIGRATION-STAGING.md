@@ -95,6 +95,18 @@ URL is stored as a VPS secret and the import marker has been verified. A future 
 not enabled by this change: promoting Postgres to the sole write authority requires a separate
 dual-write reconciliation gate.
 
+The owner panel now shows two independent storage bars. The VPS bar measures the local SQLite
+volume (including its WAL/SHM files); the Supabase bar reads `pg_database_size` in a background
+task and never blocks the Discord path. Supabase project quotas are not exposed by PostgreSQL, so
+the runtime uses a 500 MiB Free-plan default. Override it for another plan with:
+
+```env
+SUPABASE_DATABASE_CAPACITY_BYTES=8589934592
+```
+
+Without an active `SUPABASE_DATABASE_URL`/Postgres mirror, the Supabase bar deliberately stays in
+the `Sem leitura` state instead of showing a guessed value.
+
 With the staging bot online, verify in the test guild:
 
 1. The slash-command list appears in the staging guild and no production guild receives a command

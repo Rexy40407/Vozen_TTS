@@ -165,6 +165,18 @@ pub struct AdminDatabaseUsageSample {
     pub volume_used_bytes: Option<u64>,
 }
 
+/// Aggregate usage reported by the optional Supabase/PostgreSQL mirror.
+///
+/// The capacity is configured by the runtime because PostgreSQL can report its current
+/// database size, but it cannot report the project's plan quota through the database connection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminSupabaseMetrics {
+    #[serde(rename = "databaseBytes")]
+    pub database_bytes: u64,
+    #[serde(rename = "capacityBytes")]
+    pub capacity_bytes: u64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct AdminSystemMetrics {
     #[serde(rename = "databaseBytes")]
@@ -181,6 +193,8 @@ pub struct AdminSystemMetrics {
     /// the API never invents measurements that were not actually collected.
     #[serde(rename = "databaseHistory")]
     pub database_history: Vec<AdminDatabaseUsageSample>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supabase: Option<AdminSupabaseMetrics>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
