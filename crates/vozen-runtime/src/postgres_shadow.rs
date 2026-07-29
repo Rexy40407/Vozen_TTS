@@ -130,6 +130,11 @@ impl PostgresShadowRuntime {
         }
         Ok(Self { _pool: pool })
     }
+
+    #[must_use]
+    pub fn pool(&self) -> PgPool {
+        self._pool.clone()
+    }
 }
 
 #[cfg(test)]

@@ -88,6 +88,9 @@ fn validate_batch(batch: &RuntimeOutboxEnqueue<'_>) -> Result<(), StoreError> {
     if batch.payload.trim().is_empty() || batch.payload.len() > MAX_PAYLOAD_BYTES {
         return Err(StoreError::InvalidRuntimeOutboxPayload);
     }
+    if serde_json::from_str::<serde_json::Value>(batch.payload).is_err() {
+        return Err(StoreError::InvalidRuntimeOutboxPayload);
+    }
     Ok(())
 }
 
@@ -109,21 +112,21 @@ mod tests {
             .enqueue_runtime_outbox(RuntimeOutboxEnqueue {
                 batch_id: "later",
                 created_at: 20,
-                payload: r#"{\"kind\":\"telemetry\"}"#,
+                payload: r#"{"kind":"telemetry"}"#,
             })
             .expect("later batch");
         store
             .enqueue_runtime_outbox(RuntimeOutboxEnqueue {
                 batch_id: "first",
                 created_at: 10,
-                payload: r#"{\"kind\":\"talk-stats\"}"#,
+                payload: r#"{"kind":"talk-stats"}"#,
             })
             .expect("first batch");
         store
             .enqueue_runtime_outbox(RuntimeOutboxEnqueue {
                 batch_id: "first",
                 created_at: 1,
-                payload: r#"{\"kind\":\"must-not-replace\"}"#,
+                payload: r#"{"kind":"must-not-replace"}"#,
             })
             .expect("duplicate batch");
 
@@ -160,6 +163,14 @@ mod tests {
                 batch_id: "valid",
                 created_at: 0,
                 payload: " ",
+            }),
+            Err(StoreError::InvalidRuntimeOutboxPayload)
+        ));
+        assert!(matches!(
+            store.enqueue_runtime_outbox(RuntimeOutboxEnqueue {
+                batch_id: "valid-json",
+                created_at: 0,
+                payload: "not json",
             }),
             Err(StoreError::InvalidRuntimeOutboxPayload)
         ));
