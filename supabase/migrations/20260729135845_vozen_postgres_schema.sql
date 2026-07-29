@@ -11,13 +11,13 @@ CREATE TABLE blocklist (
 CREATE TABLE channel_profile (
         guild_id TEXT NOT NULL,
         channel_id TEXT NOT NULL,
-        auto_read INTEGER CHECK (auto_read IN (0, 1)),
-        translation_enabled INTEGER CHECK (translation_enabled IN (0, 1)),
+        auto_read BIGINT CHECK (auto_read IN (0, 1)),
+        translation_enabled BIGINT CHECK (translation_enabled IN (0, 1)),
         default_voice TEXT,
         engine TEXT,
         speed REAL,
-        max_chars INTEGER,
-        read_bots INTEGER CHECK (read_bots IN (0, 1)),
+        max_chars BIGINT,
+        read_bots BIGINT CHECK (read_bots IN (0, 1)),
         voice_channel_id TEXT,
         locale TEXT,
         effect TEXT,
@@ -26,69 +26,69 @@ CREATE TABLE channel_profile (
 CREATE TABLE discord_premium_entitlement (
         kind       TEXT NOT NULL CHECK (kind IN ('guild', 'user')),
         target_id  TEXT NOT NULL,
-        expires_at INTEGER NOT NULL,
+        expires_at BIGINT NOT NULL,
         PRIMARY KEY (kind, target_id)
       );
 CREATE TABLE game_score (
         guild_id TEXT NOT NULL,
         user_id  TEXT NOT NULL,
-        points   INTEGER NOT NULL DEFAULT 0,
-        wins     INTEGER NOT NULL DEFAULT 0,
+        points   BIGINT NOT NULL DEFAULT 0,
+        wins     BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (guild_id, user_id)
       );
 CREATE TABLE gcloud_daily_usage (
         day   TEXT PRIMARY KEY,
-        chars INTEGER NOT NULL DEFAULT 0
+        chars BIGINT NOT NULL DEFAULT 0
       );
 CREATE TABLE gcloud_usage (
         scope TEXT NOT NULL,
         key   TEXT NOT NULL,
         month TEXT NOT NULL,
-        chars INTEGER NOT NULL DEFAULT 0,
+        chars BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (scope, key, month)
       );
 CREATE TABLE guild_config (
         guild_id       TEXT PRIMARY KEY,
         tts_channel_id TEXT,
-        autoread       INTEGER NOT NULL DEFAULT 0,
+        autoread       BIGINT NOT NULL DEFAULT 0,
         default_voice  TEXT NOT NULL DEFAULT 'en_US-amy-medium',
-        max_chars      INTEGER NOT NULL DEFAULT 300,
-        rate_per_min   INTEGER NOT NULL DEFAULT 8,
-        enabled        INTEGER NOT NULL DEFAULT 1,
+        max_chars      BIGINT NOT NULL DEFAULT 300,
+        rate_per_min   BIGINT NOT NULL DEFAULT 8,
+        enabled        BIGINT NOT NULL DEFAULT 1,
         tts_role_id    TEXT,
         locale         TEXT NOT NULL DEFAULT 'en',
-        xsaid          INTEGER NOT NULL DEFAULT 1,
-        autojoin       INTEGER NOT NULL DEFAULT 0,
-        read_bots      INTEGER NOT NULL DEFAULT 0,
-        text_in_voice  INTEGER NOT NULL DEFAULT 0,
-        greet_on_join  INTEGER NOT NULL DEFAULT 1,
+        xsaid          BIGINT NOT NULL DEFAULT 1,
+        autojoin       BIGINT NOT NULL DEFAULT 0,
+        read_bots      BIGINT NOT NULL DEFAULT 0,
+        text_in_voice  BIGINT NOT NULL DEFAULT 0,
+        greet_on_join  BIGINT NOT NULL DEFAULT 1,
         greet_locale   TEXT NOT NULL DEFAULT 'en',
-        antispam       INTEGER NOT NULL DEFAULT 0,
-        stay_in_call   INTEGER NOT NULL DEFAULT 0,
-        streak_announce INTEGER NOT NULL DEFAULT 1,
-        soundboard     INTEGER NOT NULL DEFAULT 1,
-        vote_promos    INTEGER NOT NULL DEFAULT 0,
+        antispam       BIGINT NOT NULL DEFAULT 0,
+        stay_in_call   BIGINT NOT NULL DEFAULT 0,
+        streak_announce BIGINT NOT NULL DEFAULT 1,
+        soundboard     BIGINT NOT NULL DEFAULT 1,
+        vote_promos    BIGINT NOT NULL DEFAULT 0,
         priority_role_id TEXT,
         blocked_role_id  TEXT,
-        translation_enabled INTEGER NOT NULL DEFAULT 0,
-        translation_daily_char_limit INTEGER NOT NULL DEFAULT 10000,
-        translation_per_user_daily_char_limit INTEGER NOT NULL DEFAULT 2000
+        translation_enabled BIGINT NOT NULL DEFAULT 0,
+        translation_daily_char_limit BIGINT NOT NULL DEFAULT 10000,
+        translation_per_user_daily_char_limit BIGINT NOT NULL DEFAULT 2000
       );
 CREATE TABLE guild_departed (
         guild_id TEXT PRIMARY KEY,
-        left_at  INTEGER NOT NULL
+        left_at  BIGINT NOT NULL
       );
 CREATE TABLE guild_talk_streak (
         guild_id    TEXT PRIMARY KEY,
-        streak      INTEGER NOT NULL DEFAULT 0,
-        best_streak INTEGER NOT NULL DEFAULT 0,
+        streak      BIGINT NOT NULL DEFAULT 0,
+        best_streak BIGINT NOT NULL DEFAULT 0,
         last_date   TEXT NOT NULL DEFAULT ''
       );
 CREATE TABLE kofi_activation_consent (
         transaction_id TEXT PRIMARY KEY,
         confirmation_id TEXT NOT NULL,
         discord_id      TEXT NOT NULL,
-        accepted_at     INTEGER NOT NULL,
+        accepted_at     BIGINT NOT NULL,
         terms_version   TEXT NOT NULL,
         method          TEXT NOT NULL CHECK (method IN ('discord_email', 'receipt'))
       );
@@ -96,78 +96,78 @@ CREATE TABLE kofi_pending (
         transaction_id  TEXT PRIMARY KEY,
         email_hash      TEXT,
         plan            TEXT NOT NULL,
-        days            INTEGER NOT NULL,
-        seats           INTEGER NOT NULL,
-        created_at      INTEGER NOT NULL,
-        claimed_at      INTEGER,
+        days            BIGINT NOT NULL,
+        seats           BIGINT NOT NULL,
+        created_at      BIGINT NOT NULL,
+        claimed_at      BIGINT,
         -- Plan 035. Decides two things at claim time: which OTHER pending rows on the same
         -- email get applied along with this one, and whether claiming it may rebind
         -- email->Discord (which is what routes renewals). Only subscriptions travel together
         -- and only they may move the binding, so a gift bought on the buyer's own email
         -- cannot hand the buyer's renewals to the recipient.
-        is_subscription INTEGER NOT NULL DEFAULT 0
+        is_subscription BIGINT NOT NULL DEFAULT 0
       );
 CREATE TABLE kofi_supporter (
         email_hash TEXT PRIMARY KEY,
         discord_id TEXT NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at BIGINT NOT NULL
       );
 CREATE TABLE kofi_transaction (
         transaction_id TEXT PRIMARY KEY,
-        processed_at   INTEGER NOT NULL
+        processed_at   BIGINT NOT NULL
       );
 CREATE TABLE stripe_event (
         event_id     TEXT PRIMARY KEY,
-        processed_at INTEGER NOT NULL
+        processed_at BIGINT NOT NULL
       );
 CREATE TABLE stripe_subscription (
         subscription_id    TEXT PRIMARY KEY,
         customer_id        TEXT NOT NULL,
         user_id            TEXT NOT NULL,
         plan               TEXT NOT NULL,
-        seats              INTEGER NOT NULL,
-        current_period_end INTEGER NOT NULL,
+        seats              BIGINT NOT NULL,
+        current_period_end BIGINT NOT NULL,
         status             TEXT NOT NULL,
-        updated_at         INTEGER NOT NULL
+        updated_at         BIGINT NOT NULL
       );
 CREATE TABLE operational_daily_metric (
         day      TEXT NOT NULL,
         metric   TEXT NOT NULL,
         provider TEXT NOT NULL,
-        value    INTEGER NOT NULL DEFAULT 0,
+        value    BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (day, metric, provider)
       );
 CREATE TABLE premium_code (
         code        TEXT PRIMARY KEY,
         plan        TEXT NOT NULL,
-        days        INTEGER NOT NULL,
-        seats       INTEGER NOT NULL,
+        days        BIGINT NOT NULL,
+        seats       BIGINT NOT NULL,
         created_by  TEXT NOT NULL,
-        created_at  INTEGER NOT NULL,
-        expires_at  INTEGER,
+        created_at  BIGINT NOT NULL,
+        expires_at  BIGINT,
         redeemed_by TEXT,
-        redeemed_at INTEGER
+        redeemed_at BIGINT
       );
 CREATE TABLE premium_guild (
         guild_id   TEXT PRIMARY KEY,
-        expires_at INTEGER NOT NULL,
+        expires_at BIGINT NOT NULL,
         source     TEXT NOT NULL DEFAULT ''
       );
 CREATE TABLE premium_pass (
         user_id    TEXT PRIMARY KEY,
-        seats      INTEGER NOT NULL,
-        expires_at INTEGER NOT NULL,
+        seats      BIGINT NOT NULL,
+        expires_at BIGINT NOT NULL,
         source     TEXT NOT NULL DEFAULT ''
       );
 CREATE TABLE premium_pass_activation (
         user_id      TEXT NOT NULL,
         guild_id     TEXT NOT NULL,
-        activated_at INTEGER NOT NULL,
+        activated_at BIGINT NOT NULL,
         PRIMARY KEY (user_id, guild_id)
       );
 CREATE TABLE premium_user (
         user_id    TEXT PRIMARY KEY,
-        expires_at INTEGER NOT NULL,
+        expires_at BIGINT NOT NULL,
         source     TEXT NOT NULL DEFAULT ''
       );
 CREATE TABLE pronunciation (
@@ -185,22 +185,22 @@ CREATE TABLE pronunciation_user (
 CREATE TABLE provider_health_state (
         provider          TEXT PRIMARY KEY,
         health            TEXT NOT NULL CHECK (health IN ('healthy', 'degraded')),
-        changed_at        INTEGER NOT NULL,
-        last_healthy_at   INTEGER,
-        last_degraded_at  INTEGER
+        changed_at        BIGINT NOT NULL,
+        last_healthy_at   BIGINT,
+        last_degraded_at  BIGINT
       );
 CREATE TABLE stt_consent (
         user_id    TEXT NOT NULL,
         guild_id   TEXT NOT NULL,
-        consent_at INTEGER NOT NULL,
+        consent_at BIGINT NOT NULL,
         PRIMARY KEY (user_id, guild_id)
       );
 CREATE TABLE talk_stats (
         guild_id     TEXT NOT NULL,
         user_id      TEXT NOT NULL,
-        spoken_count INTEGER NOT NULL DEFAULT 0,
-        streak       INTEGER NOT NULL DEFAULT 0,
-        best_streak  INTEGER NOT NULL DEFAULT 0,
+        spoken_count BIGINT NOT NULL DEFAULT 0,
+        streak       BIGINT NOT NULL DEFAULT 0,
+        best_streak  BIGINT NOT NULL DEFAULT 0,
         last_date    TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (guild_id, user_id)
       );
@@ -209,17 +209,17 @@ CREATE TABLE talk_usage (
         user_id      TEXT NOT NULL,
         language     TEXT NOT NULL,
         engine       TEXT NOT NULL,
-        spoken_count INTEGER NOT NULL DEFAULT 0,
+        spoken_count BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (guild_id, user_id, language, engine)
       );
 CREATE TABLE topgg_webhook_event (
         event_id     TEXT PRIMARY KEY,
-        processed_at INTEGER NOT NULL
+        processed_at BIGINT NOT NULL
       );
 CREATE TABLE translation_daily_usage (
         day TEXT NOT NULL,
         guild_id TEXT NOT NULL,
-        chars INTEGER NOT NULL DEFAULT 0,
+        chars BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (day, guild_id)
       );
 CREATE TABLE translation_mapping (
@@ -235,14 +235,14 @@ CREATE TABLE translation_preference (
         user_id TEXT NOT NULL,
         locale TEXT,
         speak_locale TEXT,
-        opted_out INTEGER NOT NULL DEFAULT 0,
+        opted_out BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (guild_id, user_id)
       );
 CREATE TABLE translation_user_daily_usage (
         day TEXT NOT NULL,
         guild_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
-        chars INTEGER NOT NULL DEFAULT 0,
+        chars BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (day, guild_id, user_id)
       );
 CREATE TABLE tts_lang_detect_on (
@@ -264,8 +264,8 @@ CREATE TABLE user_abbreviation (
 CREATE TABLE user_birthday (
         guild_id TEXT NOT NULL,
         user_id  TEXT NOT NULL,
-        month    INTEGER NOT NULL,
-        day      INTEGER NOT NULL,
+        month    BIGINT NOT NULL,
+        day      BIGINT NOT NULL,
         PRIMARY KEY (guild_id, user_id)
       );
 CREATE TABLE user_effect (
@@ -291,36 +291,36 @@ CREATE TABLE user_voice (
 CREATE TABLE user_voice_favorite (
         user_id    TEXT NOT NULL,
         voice_model TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
+        created_at BIGINT NOT NULL,
         PRIMARY KEY (user_id, voice_model)
       );
 CREATE TABLE user_voice_recent (
         user_id    TEXT NOT NULL,
         voice_model TEXT NOT NULL,
-        used_at    INTEGER NOT NULL,
+        used_at    BIGINT NOT NULL,
         PRIMARY KEY (user_id, voice_model)
       );
 CREATE TABLE voice_presence (
         guild_id   TEXT PRIMARY KEY,
         channel_id TEXT NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at BIGINT NOT NULL
       );
 CREATE TABLE vote_promo_state (
         guild_id     TEXT PRIMARY KEY,
-        last_post_at INTEGER NOT NULL,
+        last_post_at BIGINT NOT NULL,
         last_kind    TEXT NOT NULL DEFAULT 'vote' CHECK (last_kind IN ('vote', 'support'))
       );
 CREATE TABLE vote_redemption (
         user_hash   TEXT PRIMARY KEY,
-        redeemed_at INTEGER NOT NULL
+        redeemed_at BIGINT NOT NULL
       );
 CREATE TABLE vote_redemption_meta (
-        singleton          INTEGER PRIMARY KEY CHECK (singleton = 1),
+        singleton          BIGINT PRIMARY KEY CHECK (singleton = 1),
         secret_fingerprint TEXT NOT NULL
       );
 CREATE TABLE vote_reward (
         user_id     TEXT PRIMARY KEY,
-        rewarded_at INTEGER NOT NULL
+        rewarded_at BIGINT NOT NULL
       );
 CREATE INDEX idx_discord_premium_entitlement_target
         ON discord_premium_entitlement (target_id);

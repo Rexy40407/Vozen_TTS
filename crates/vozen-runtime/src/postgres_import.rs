@@ -15,7 +15,7 @@ const CHUNK_SIZE: usize = 250;
 pub enum ImportError {
     #[error("SQLite import source failed: {0}")]
     Store(#[from] vozen_store::StoreError),
-    #[error("Postgres import failed")]
+    #[error("Postgres import failed: {0}")]
     Postgres(#[source] sqlx::Error),
     #[error(
         "row-count reconciliation failed for table {table}: SQLite={sqlite_rows}, Postgres={postgres_rows}"
