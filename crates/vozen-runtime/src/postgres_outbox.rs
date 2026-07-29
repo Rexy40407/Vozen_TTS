@@ -67,3 +67,55 @@ async fn flush_once(pool: &PgPool, store: Arc<Mutex<SqliteStore>>) -> Result<(),
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vozen_store::RuntimeOutboxEnqueue;
+
+    #[tokio::test]
+    async fn staging_delivery_when_explicitly_requested() {
+        let Ok(database_url) = std::env::var("VOZEN_POSTGRES_INTEGRATION_URL") else {
+            return;
+        };
+        let pool = PgPool::connect(&database_url)
+            .await
+            .expect("staging pool must connect");
+        let batch_id = format!("staging-outbox-{}", uuid::Uuid::new_v4());
+        let store = Arc::new(Mutex::new(
+            SqliteStore::open_in_memory().expect("local outbox"),
+        ));
+        store
+            .lock()
+            .expect("store")
+            .enqueue_runtime_outbox(RuntimeOutboxEnqueue {
+                batch_id: &batch_id,
+                created_at: 1,
+                payload: r#"{"kind":"staging-verification"}"#,
+            })
+            .expect("enqueue");
+
+        flush_once(&pool, store.clone()).await.expect("flush");
+        assert!(
+            store
+                .lock()
+                .expect("store")
+                .list_runtime_outbox(1)
+                .expect("outbox")
+                .is_empty()
+        );
+        let found: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM vozen.runtime_outbox_batch WHERE batch_id = $1)",
+        )
+        .bind(&batch_id)
+        .fetch_one(&pool)
+        .await
+        .expect("remote batch");
+        assert!(found);
+        sqlx::query("DELETE FROM vozen.runtime_outbox_batch WHERE batch_id = $1")
+            .bind(&batch_id)
+            .execute(&pool)
+            .await
+            .expect("cleanup staging batch");
+    }
+}
