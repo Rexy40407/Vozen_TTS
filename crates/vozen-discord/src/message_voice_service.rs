@@ -766,4 +766,76 @@ mod tests {
             .expect("usage");
         assert_eq!(usage.get("user").map(|usage| usage.samples), Some(1));
     }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn accepts_twenty_five_concurrent_voice_requests_across_independent_servers() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        for index in 0..25 {
+            store
+                .lock()
+                .expect("store")
+                .update_guild_config(
+                    &format!("guild-{index}"),
+                    GuildConfigPatch {
+                        autoread: Some(true),
+                        tts_channel_id: Some(Some("text".into())),
+                        ..GuildConfigPatch::default()
+                    },
+                )
+                .expect("configure guild");
+        }
+        let service = Arc::new(MessageVoiceService::new(
+            store,
+            FakeSynthesizer::default(),
+            FakePlayback {
+                reserve: true,
+                enqueued: AtomicUsize::new(0),
+            },
+            settings(),
+            Arc::new(|| 0),
+        ));
+        let mut tasks = tokio::task::JoinSet::new();
+        for index in 0..25 {
+            let service = service.clone();
+            tasks.spawn(async move {
+                let guild_id = format!("guild-{index}");
+                let user_id = format!("user-{index}");
+                let resolve_user = |_: &str| "user".to_owned();
+                let resolve_channel = |_: &str| "channel".to_owned();
+                service
+                    .execute(MessageVoiceInvocation {
+                        facts: DiscordMessageFacts {
+                            guild_id: &guild_id,
+                            channel_id: "text",
+                            author_id: &user_id,
+                            author_is_bot: false,
+                            mentioned_bot: false,
+                            replied_to_bot: false,
+                            author_voice_channel_id: Some("voice"),
+                            bot_voice_channel_id: Some("voice"),
+                            member_role_ids: Some(&[]),
+                            autojoined_for_author: false,
+                        },
+                        raw: "parallel hello",
+                        media: &[],
+                        detected_language: None,
+                        announce_speaker: None,
+                        resolve_user: &resolve_user,
+                        resolve_channel: &resolve_channel,
+                    })
+                    .await
+            });
+        }
+        let mut accepted = 0;
+        while let Some(result) = tasks.join_next().await {
+            assert!(matches!(
+                result.expect("voice task"),
+                MessageVoiceOutcome::Queued { .. }
+            ));
+            accepted += 1;
+        }
+        assert_eq!(accepted, 25);
+        assert_eq!(service.synthesizer.0.load(Ordering::Relaxed), 25);
+        assert_eq!(service.playback.enqueued.load(Ordering::Relaxed), 25);
+    }
 }
