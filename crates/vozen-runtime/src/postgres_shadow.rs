@@ -182,4 +182,24 @@ mod tests {
             Err(PostgresShadowError::FullRuntimeForbidden)
         ));
     }
+
+    /// This is deliberately opt-in so normal unit tests never need a network connection or a
+    /// secret. Operators can pass the URL through a short-lived process environment variable.
+    #[tokio::test]
+    async fn staging_connection_preflight_when_explicitly_requested() {
+        let Ok(database_url) = env::var("VOZEN_POSTGRES_INTEGRATION_URL") else {
+            return;
+        };
+        let config = PostgresShadowConfig::parse(
+            Some("shadow"),
+            Some(&database_url),
+            Some("5"),
+            RuntimeMode::Shadow,
+        )
+        .expect("explicit staging URL must be valid")
+        .expect("shadow mode must create a Postgres config");
+        PostgresShadowRuntime::connect(&config)
+            .await
+            .expect("staging schema and pool must be reachable");
+    }
 }
