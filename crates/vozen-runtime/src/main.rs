@@ -1312,7 +1312,8 @@ fn core_voice_event_sink(
     let Some(mut options) = options else {
         return Ok(None);
     };
-    let piper_models = validate_piper_runtime(
+    let piper_models = piper_models_for_core_voice(
+        options.settings.default_engine,
         &options.piper_path,
         &options.models_dir,
         &options.settings.default_voice,
@@ -1328,6 +1329,26 @@ fn core_voice_event_sink(
             runtime_batch,
         ),
     )))
+}
+
+/// Piper is mandatory only when it is the selected default engine.  A staging
+/// run using the Google fallback must remain able to exercise Discord voice
+/// transport without first installing an unrelated local Piper model.
+#[cfg(feature = "voice-driver")]
+fn piper_models_for_core_voice(
+    default_engine: SynthesisEngine,
+    piper_path: &Path,
+    models_dir: &Path,
+    default_voice: &str,
+) -> Result<Vec<String>, RuntimeError> {
+    if default_engine == SynthesisEngine::Piper {
+        return validate_piper_runtime(piper_path, models_dir, default_voice);
+    }
+    match discover_piper_models(models_dir) {
+        Ok(models) => Ok(models),
+        Err(RuntimeError::ModelsUnavailable) => Ok(Vec::new()),
+        Err(error) => Err(error),
+    }
 }
 
 fn tts_file_event_sink(
@@ -3449,6 +3470,22 @@ mod tests {
                 SynthesisEngine::Neural
             ),
             vec!["en_US-amy-medium"]
+        );
+    }
+
+    #[cfg(feature = "voice-driver")]
+    #[test]
+    fn google_voice_canary_does_not_require_a_piper_installation() {
+        let missing = std::path::Path::new("__vozen_missing_staging_piper__");
+        assert_eq!(
+            piper_models_for_core_voice(
+                SynthesisEngine::Default,
+                missing,
+                missing,
+                "en_US-google-medium",
+            )
+            .expect("Google voice must run without Piper"),
+            Vec::<String>::new()
         );
     }
 
