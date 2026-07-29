@@ -66,12 +66,7 @@
     padding: 12px 18px;
   }
 }
-/* Optical alignment: keep the Free CTA anchored while lowering its content to the paid cards. */
+/* Keep the Free CTA rhythm without offsetting its content from the paid cards. */
 @media (min-width: 921px) {
-  .price-card--free { padding-top: 34px; }
-}
-/* Continue the Free card rhythm after the aligned header. */
-@media (min-width: 921px) {
-  .price-card--free .seat-toggle { margin-top: 40px; }
   .price-card--free .price-card__price { margin-bottom: 25px; }
 }
