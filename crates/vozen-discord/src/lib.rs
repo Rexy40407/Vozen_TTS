@@ -705,7 +705,9 @@ impl GatewayState {
             .count()
     }
 
-    pub(crate) fn discord_http(&self) -> Option<Arc<serenity::http::Http>> {
+    /// Gives owner-only adapters access to Discord's authenticated HTTP client for a bounded,
+    /// low-frequency profile lookup. This does not expose the client on a public HTTP route.
+    pub fn discord_http(&self) -> Option<Arc<serenity::http::Http>> {
         self.http.read().ok()?.clone()
     }
 

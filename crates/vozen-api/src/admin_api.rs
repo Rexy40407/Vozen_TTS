@@ -4,7 +4,10 @@
 //! separate so the authentication and money-surface decisions can be tested without opening a
 //! listener. A caller must still install this service behind an owner-only route.
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -29,6 +32,22 @@ pub struct AdminAuthorization {
 #[async_trait]
 pub trait AdminAuthorizationResolver: Send + Sync {
     async fn resolve_authorization(&self, bearer: &str) -> Option<AdminAuthorization>;
+}
+
+/// Resolves the small amount of Discord profile data that the owner-only Top 10 view needs.
+/// Implementations must not persist the result or expose it through a public route.
+#[async_trait]
+pub trait AdminTalkerProfileResolver: Send + Sync {
+    async fn resolve_talker_profiles(
+        &self,
+        user_ids: &[String],
+    ) -> HashMap<String, AdminTalkerProfile>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdminTalkerProfile {
+    pub username: String,
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -195,6 +214,7 @@ pub struct AdminApi {
     ttl_seconds: i64,
     log: Arc<dyn Fn(&str) + Send + Sync>,
     resolve_guilds: Option<Arc<dyn Fn() -> Vec<AdminGuildBrief> + Send + Sync>>,
+    resolve_talker_profiles: Option<Arc<dyn AdminTalkerProfileResolver>>,
     local_day: Arc<dyn Fn() -> String + Send + Sync>,
     system_metrics: Option<Arc<dyn Fn() -> AdminSystemMetrics + Send + Sync>>,
 }
@@ -209,6 +229,7 @@ pub struct AdminApiConfig {
     pub session_ttl_seconds: Option<i64>,
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
     pub resolve_guilds: Option<Arc<dyn Fn() -> Vec<AdminGuildBrief> + Send + Sync>>,
+    pub resolve_talker_profiles: Option<Arc<dyn AdminTalkerProfileResolver>>,
     pub local_day: Arc<dyn Fn() -> String + Send + Sync>,
     pub system_metrics: Option<Arc<dyn Fn() -> AdminSystemMetrics + Send + Sync>>,
 }
@@ -241,6 +262,7 @@ impl AdminApi {
                 .unwrap_or(DEFAULT_ADMIN_SESSION_TTL_SECONDS),
             log: config.log,
             resolve_guilds: config.resolve_guilds,
+            resolve_talker_profiles: config.resolve_talker_profiles,
             local_day: config.local_day,
             system_metrics: config.system_metrics,
         }
@@ -338,27 +360,39 @@ impl AdminApi {
         Ok(rows)
     }
 
-    pub fn list_top_talkers(&self) -> Result<Vec<AdminTopTalker>, AdminGrantError> {
-        let store = self.store.lock().map_err(|_| AdminGrantError::Store)?;
-        let rows = store
-            .admin_top_talkers(10)
-            .map_err(|_| AdminGrantError::Store)?;
+    pub async fn list_top_talkers(&self) -> Result<Vec<AdminTopTalker>, AdminGrantError> {
+        let (rows, usage) = {
+            let store = self.store.lock().map_err(|_| AdminGrantError::Store)?;
+            let rows = store
+                .admin_top_talkers(10)
+                .map_err(|_| AdminGrantError::Store)?;
+            let ids = rows
+                .iter()
+                .map(|row| row.user_id.clone())
+                .collect::<Vec<_>>();
+            let usage = store
+                .dominant_talk_usage(&ids, DominantTalkUsageOptions::default())
+                .map_err(|_| AdminGrantError::Store)?;
+            (rows, usage)
+        };
         let ids = rows
             .iter()
             .map(|row| row.user_id.clone())
             .collect::<Vec<_>>();
-        let usage = store
-            .dominant_talk_usage(&ids, DominantTalkUsageOptions::default())
-            .map_err(|_| AdminGrantError::Store)?;
+        let profiles = match &self.resolve_talker_profiles {
+            Some(resolver) => resolver.resolve_talker_profiles(&ids).await,
+            None => HashMap::new(),
+        };
         Ok(rows
             .into_iter()
             .map(|row| {
                 let dominant = usage.get(&row.user_id);
+                let profile = profiles.get(&row.user_id);
                 AdminTopTalker {
                     id: row.user_id,
                     total: row.total,
-                    username: None,
-                    avatar: None,
+                    username: profile.map(|value| value.username.clone()),
+                    avatar: profile.and_then(|value| value.avatar.clone()),
                     language: dominant.and_then(|value| value.language.clone()),
                     engine: dominant
                         .and_then(|value| value.engine.map(|engine| engine_key(engine).to_owned())),
@@ -520,6 +554,29 @@ mod tests {
         }
     }
 
+    struct TalkerProfiles;
+    #[async_trait]
+    impl AdminTalkerProfileResolver for TalkerProfiles {
+        async fn resolve_talker_profiles(
+            &self,
+            user_ids: &[String],
+        ) -> HashMap<String, AdminTalkerProfile> {
+            user_ids
+                .iter()
+                .filter(|user_id| user_id.as_str() == "user")
+                .map(|user_id| {
+                    (
+                        user_id.clone(),
+                        AdminTalkerProfile {
+                            username: "Ana".into(),
+                            avatar: Some("https://cdn.discordapp.com/avatars/user/hash.png".into()),
+                        },
+                    )
+                })
+                .collect()
+        }
+    }
+
     fn api() -> AdminApi {
         AdminApi::new(AdminApiConfig {
             store: Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store"))),
@@ -531,6 +588,7 @@ mod tests {
             session_ttl_seconds: None,
             log: Arc::new(|_| {}),
             resolve_guilds: None,
+            resolve_talker_profiles: None,
             local_day: Arc::new(|| "2026-07-23".into()),
             system_metrics: None,
         })
@@ -583,8 +641,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn guilds_and_top_talkers_use_only_stored_aggregates() {
+    #[tokio::test]
+    async fn guilds_and_top_talkers_use_only_stored_aggregates() {
         let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
         {
             let guard = store.lock().unwrap();
@@ -613,10 +671,17 @@ mod tests {
                     joined_timestamp: None,
                 }]
             })),
+            resolve_talker_profiles: Some(Arc::new(TalkerProfiles)),
             local_day: Arc::new(|| "2026-07-23".into()),
             system_metrics: None,
         });
         assert_eq!(api.list_guilds().expect("guilds")[0].messages, 2);
-        assert_eq!(api.list_top_talkers().expect("talkers")[0].total, 2);
+        let talker = api.list_top_talkers().await.expect("talkers").remove(0);
+        assert_eq!(talker.total, 2);
+        assert_eq!(talker.username.as_deref(), Some("Ana"));
+        assert_eq!(
+            talker.avatar.as_deref(),
+            Some("https://cdn.discordapp.com/avatars/user/hash.png")
+        );
     }
 }

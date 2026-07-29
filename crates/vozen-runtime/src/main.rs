@@ -69,6 +69,7 @@ mod voice_preference_sink;
 mod vote_sink;
 
 use std::{
+    collections::HashMap,
     env,
     net::{IpAddr, SocketAddr, TcpListener},
     path::{Path, PathBuf},
@@ -83,7 +84,7 @@ use vozen_api::{
     ProviderHealth as PublicProviderHealth, PublicStatusInput, PublicStatusProvider,
     RuntimeRouterConfig,
     account_api::AccountApiConfig,
-    admin_api::AdminApiConfig,
+    admin_api::{AdminApiConfig, AdminTalkerProfile, AdminTalkerProfileResolver},
     admin_router::AdminRouterConfig,
     dashboard_api::{
         DashboardApiConfig, DashboardOption, DashboardOptions, DashboardOptionsError,
@@ -279,6 +280,42 @@ fn dashboard_options(options: Vec<vozen_discord::DiscordDashboardOption>) -> Vec
             unavailable: false,
         })
         .collect()
+}
+
+/// Resolves the small profile card shown in the private owner console. The browser never receives
+/// the bot credential; the existing gateway HTTP client performs at most ten lookups per request.
+struct RuntimeAdminTalkerProfileResolver {
+    gateway_state: GatewayState,
+}
+
+#[async_trait::async_trait]
+impl AdminTalkerProfileResolver for RuntimeAdminTalkerProfileResolver {
+    async fn resolve_talker_profiles(
+        &self,
+        user_ids: &[String],
+    ) -> HashMap<String, AdminTalkerProfile> {
+        let Some(http) = self.gateway_state.discord_http() else {
+            return HashMap::new();
+        };
+        let mut profiles = HashMap::with_capacity(user_ids.len());
+        for user_id in user_ids {
+            let Ok(id) = user_id.parse::<u64>() else {
+                continue;
+            };
+            let Ok(user) = serenity::model::id::UserId::new(id).to_user(&http).await else {
+                continue;
+            };
+            let avatar = user.face();
+            profiles.insert(
+                user_id.clone(),
+                AdminTalkerProfile {
+                    username: user.global_name.unwrap_or(user.name),
+                    avatar: Some(avatar),
+                },
+            );
+        }
+        profiles
+    }
 }
 
 /// Explicit opt-in configuration for the first Rust-owned Discord voice commands.
@@ -2621,6 +2658,7 @@ fn build_http_router(
                 .ok_or(RuntimeError::DashboardOrAdminRequiresPremiumApi)?;
             let gateway_state = gateway_state.clone();
             let metrics_gateway_state = gateway_state.clone();
+            let profile_gateway_state = gateway_state.clone();
             let api = vozen_api::admin_api::AdminApi::new(AdminApiConfig {
                 store: store.clone(),
                 resolver: verifier,
@@ -2642,6 +2680,9 @@ fn build_http_router(
                             joined_timestamp: Some(guild.joined_timestamp.saturating_mul(1_000)),
                         })
                         .collect()
+                })),
+                resolve_talker_profiles: Some(Arc::new(RuntimeAdminTalkerProfileResolver {
+                    gateway_state: profile_gateway_state,
                 })),
                 local_day: Arc::new(system_local_day),
                 system_metrics: Some(Arc::new({

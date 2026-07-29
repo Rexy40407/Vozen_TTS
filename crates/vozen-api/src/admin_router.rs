@@ -157,7 +157,7 @@ async fn admin_request(
                 &state,
             ),
         },
-        ("/api/admin/toptalkers", Method::GET) => match state.api.list_top_talkers() {
+        ("/api/admin/toptalkers", Method::GET) => match state.api.list_top_talkers().await {
             Ok(talkers) => response(StatusCode::OK, json!({"talkers":talkers}), &state),
             Err(_) => response(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -413,6 +413,7 @@ mod tests {
             session_ttl_seconds: None,
             log: Arc::new(|_| {}),
             resolve_guilds: None,
+            resolve_talker_profiles: None,
             local_day: Arc::new(|| "2026-07-23".into()),
             system_metrics: Some(Arc::new(|| AdminSystemMetrics {
                 database_bytes: 12_345,
