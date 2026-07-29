@@ -143,6 +143,7 @@ struct RuntimeConfig {
     discord_token: String,
     database_path: PathBuf,
     postgres_shadow: Option<postgres_shadow::PostgresShadowConfig>,
+    postgres_replica_outbox: bool,
     health_bind: Option<SocketAddr>,
     public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
@@ -413,6 +414,12 @@ impl RuntimeConfig {
             .unwrap_or_else(|| PathBuf::from("./tts.db"));
         let postgres_shadow =
             postgres_shadow::PostgresShadowConfig::from_environment(runtime_mode)?;
+        let postgres_replica_outbox = postgres_replica_outbox_enabled(
+            env::var("RUST_POSTGRES_REPLICA_OUTBOX").ok().as_deref(),
+        );
+        if postgres_replica_outbox && postgres_shadow.is_none() {
+            return Err(RuntimeError::PostgresReplicaRequiresShadow);
+        }
         let health_host = nonempty_env("HEALTH_HOST").unwrap_or_else(|| "127.0.0.1".to_owned());
         let health_ip = health_host
             .parse::<IpAddr>()
@@ -566,6 +573,7 @@ impl RuntimeConfig {
             discord_token,
             database_path,
             postgres_shadow,
+            postgres_replica_outbox,
             health_bind,
             public_status,
             premium_http,
@@ -1168,6 +1176,10 @@ fn server_stats_enabled(raw: Option<&str>) -> bool {
 }
 
 fn stats_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn postgres_replica_outbox_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
@@ -2249,6 +2261,8 @@ enum RuntimeError {
     AdminRequiresPremiumHttp,
     #[error("RUST_DASHBOARD_ENABLED/RUST_ADMIN_API_ENABLED require PREMIUM_API_ENABLED=true")]
     DashboardOrAdminRequiresPremiumApi,
+    #[error("RUST_POSTGRES_REPLICA_OUTBOX=true requires RUST_POSTGRES_MODE=shadow")]
+    PostgresReplicaRequiresShadow,
     #[error("SQLite startup failed: {0}")]
     Store(#[from] vozen_store::StoreError),
     #[error("SQLite store lock was poisoned")]
@@ -2309,7 +2323,9 @@ async fn run() -> Result<(), RuntimeError> {
         );
     }
     let runtime_batch_buffer = RuntimeBatchBuffer::default();
-    if let Some(postgres) = postgres_shadow.as_ref() {
+    if config.postgres_replica_outbox
+        && let Some(postgres) = postgres_shadow.as_ref()
+    {
         store
             .lock()
             .map_err(|_| RuntimeError::StoreLock)?
@@ -3132,6 +3148,15 @@ mod tests {
         assert!(!premium_http_enabled(Some("1")));
         assert!(!premium_http_enabled(Some("yes")));
         assert!(!premium_http_enabled(None));
+    }
+
+    #[test]
+    fn postgres_replica_outbox_is_exactly_opt_in() {
+        assert!(postgres_replica_outbox_enabled(Some("true")));
+        assert!(postgres_replica_outbox_enabled(Some(" TRUE ")));
+        assert!(!postgres_replica_outbox_enabled(Some("1")));
+        assert!(!postgres_replica_outbox_enabled(Some("yes")));
+        assert!(!postgres_replica_outbox_enabled(None));
     }
 
     #[test]
