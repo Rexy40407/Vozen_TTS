@@ -9,6 +9,25 @@ use crate::{SqliteStore, StoreError};
 
 const MAX_BATCH_ID_LEN: usize = 128;
 const MAX_PAYLOAD_BYTES: usize = 256 * 1024;
+// These values feed the in-memory voice cache and are changed comparatively rarely. Hot counters
+// deliberately stay out of trigger capture: they are aggregated by `RuntimeBatchBuffer` and sent
+// in five-second batches instead of adding one durable outbox row per spoken message.
+const POSTGRES_REPLICA_TABLES: &[&str] = &[
+    "blocklist",
+    "channel_profile",
+    "discord_premium_entitlement",
+    "guild_config",
+    "premium_guild",
+    "premium_pass",
+    "premium_pass_activation",
+    "premium_user",
+    "pronunciation",
+    "pronunciation_user",
+    "tts_lang_detect_on",
+    "tts_optout",
+    "user_effect",
+    "user_voice",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOutboxEnqueue<'a> {
@@ -37,6 +56,83 @@ pub(crate) fn install_runtime_outbox_schema(connection: &Connection) -> Result<(
            ON runtime_outbox_batch (created_at, batch_id);",
     )?;
     Ok(())
+}
+
+/// Enables durable change capture only for an explicitly configured staging Postgres mirror.
+///
+/// The Node-compatible store stays synchronous and local. These triggers simply append a compact
+/// row image to the Rust-owned outbox in the same SQLite transaction, so a later background
+/// worker can mirror it without ever making a Discord handler wait for the network.
+pub(crate) fn install_replica_triggers(
+    connection: &Connection,
+    tables: &[String],
+) -> Result<(), StoreError> {
+    for table in tables {
+        if !POSTGRES_REPLICA_TABLES.contains(&table.as_str()) {
+            for suffix in ["ai", "au", "ad"] {
+                connection.execute_batch(&format!(
+                    "DROP TRIGGER IF EXISTS {}",
+                    quote_identifier(&format!("runtime_replica_{table}_{suffix}")),
+                ))?;
+            }
+            continue;
+        }
+        let mut statement =
+            connection.prepare(&format!("PRAGMA table_info({})", quote_identifier(table)))?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        if columns.is_empty() {
+            return Err(StoreError::InvalidSchemaObject(table.clone()));
+        }
+        let trigger_prefix = format!("runtime_replica_{table}");
+        for (suffix, timing, row_ref, operation) in [
+            ("ai", "AFTER INSERT", "NEW", "upsert"),
+            ("au", "AFTER UPDATE", "NEW", "upsert"),
+            ("ad", "AFTER DELETE", "OLD", "delete"),
+        ] {
+            let payload = replica_payload(table, &columns, row_ref, operation);
+            connection.execute_batch(&format!(
+                "CREATE TRIGGER IF NOT EXISTS {trigger}
+                   {timing} ON {table_name}
+                   BEGIN
+                     INSERT INTO runtime_outbox_batch (batch_id, created_at, payload)
+                     VALUES ('replica-' || lower(hex(randomblob(16))),
+                             CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+                             {payload});
+                   END",
+                trigger = quote_identifier(&format!("{trigger_prefix}_{suffix}")),
+                table_name = quote_identifier(table),
+            ))?;
+        }
+    }
+    Ok(())
+}
+
+fn replica_payload(table: &str, columns: &[String], row_ref: &str, operation: &str) -> String {
+    let pairs = columns
+        .iter()
+        .flat_map(|column| {
+            [
+                quote_sql_literal(column),
+                format!("{row_ref}.{}", quote_identifier(column)),
+            ]
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "json_object('version', 1, 'replica', json_object('table', {}, 'operation', {}, 'row', json_object({pairs})))",
+        quote_sql_literal(table),
+        quote_sql_literal(operation),
+    )
+}
+
+fn quote_identifier(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+
+fn quote_sql_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 impl SqliteStore {
@@ -174,5 +270,59 @@ mod tests {
             }),
             Err(StoreError::InvalidRuntimeOutboxPayload)
         ));
+    }
+
+    #[test]
+    fn staging_replica_triggers_capture_insert_update_and_delete_locally() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        let tables = store.durable_table_names().expect("contract tables");
+        install_replica_triggers(store.connection(), &tables).expect("install triggers");
+
+        store
+            .connection()
+            .execute(
+                "INSERT INTO guild_config (guild_id, locale) VALUES ('replica-guild', 'pt')",
+                [],
+            )
+            .expect("insert");
+        store
+            .connection()
+            .execute(
+                "UPDATE guild_config SET locale = 'en' WHERE guild_id = 'replica-guild'",
+                [],
+            )
+            .expect("update");
+        store
+            .connection()
+            .execute(
+                "DELETE FROM guild_config WHERE guild_id = 'replica-guild'",
+                [],
+            )
+            .expect("delete");
+
+        let events = store.list_runtime_outbox(10).expect("outbox");
+        assert_eq!(events.len(), 3);
+        let mut operations = events
+            .iter()
+            .map(|event| {
+                serde_json::from_str::<serde_json::Value>(&event.payload)
+                    .expect("payload")
+                    ["replica"]["operation"]
+                    .as_str()
+                    .expect("operation")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        operations.sort();
+        assert_eq!(operations, ["delete", "upsert", "upsert"]);
+
+        store
+            .connection()
+            .execute(
+                "INSERT INTO talk_stats (guild_id, user_id, spoken_count) VALUES ('replica-guild', 'user', 1)",
+                [],
+            )
+            .expect("hot counter write");
+        assert_eq!(store.list_runtime_outbox(10).expect("outbox").len(), 3);
     }
 }

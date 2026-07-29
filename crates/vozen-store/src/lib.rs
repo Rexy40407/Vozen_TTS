@@ -303,6 +303,13 @@ impl SqliteStore {
     pub fn verify_integrity(&self) -> Result<(), StoreError> {
         verify_connection_integrity(&self.connection)
     }
+
+    /// Opt-in staging hook for asynchronously mirroring durable mutations to Postgres.
+    /// It is never enabled by a normal SQLite runtime and performs no network I/O itself.
+    pub fn enable_postgres_replica_outbox(&self) -> Result<(), StoreError> {
+        let tables = self.durable_table_names()?;
+        runtime_outbox::install_replica_triggers(&self.connection, &tables)
+    }
 }
 
 fn verify_connection_integrity(connection: &Connection) -> Result<(), StoreError> {

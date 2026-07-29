@@ -133,6 +133,16 @@ async fn materialize_aggregates(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     payload: &str,
 ) -> Result<(), String> {
+    let document: serde_json::Value = serde_json::from_str(payload)
+        .map_err(|_| "SQLite outbox contains invalid JSON".to_owned())?;
+    if document.get("replica").is_some() {
+        sqlx::query("SELECT vozen.apply_replica_event(($1::jsonb)->'replica')")
+            .bind(payload)
+            .execute(&mut **transaction)
+            .await
+            .map_err(|_| "Supabase durable replica write failed".to_owned())?;
+        return Ok(());
+    }
     sqlx::query(
         "INSERT INTO vozen.operational_daily_metric (day, metric, provider, value)
          SELECT day, metric, provider, value
@@ -277,5 +287,106 @@ mod tests {
             .execute(&pool)
             .await
             .expect("cleanup idempotency marker");
+    }
+
+    #[tokio::test]
+    async fn staging_replica_events_apply_insert_update_and_delete_when_explicitly_requested() {
+        let Ok(database_url) = std::env::var("VOZEN_POSTGRES_INTEGRATION_URL") else {
+            return;
+        };
+        let pool = PgPool::connect(&database_url)
+            .await
+            .expect("staging pool must connect");
+        let guild_id = format!("staging-replica-guild-{}", uuid::Uuid::new_v4());
+        let store = Arc::new(Mutex::new(
+            SqliteStore::open_in_memory().expect("local replica store"),
+        ));
+        store
+            .lock()
+            .expect("store")
+            .enable_postgres_replica_outbox()
+            .expect("enable local replica triggers");
+
+        store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                &guild_id,
+                vozen_store::GuildConfigPatch {
+                    locale: Some("pt".into()),
+                    rate_per_min: Some(11),
+                    ..vozen_store::GuildConfigPatch::default()
+                },
+            )
+            .expect("insert fixture");
+        flush_once(&pool, store.clone())
+            .await
+            .expect("flush insert");
+        let locale: String =
+            sqlx::query_scalar("SELECT locale FROM vozen.guild_config WHERE guild_id = $1")
+                .bind(&guild_id)
+                .fetch_one(&pool)
+                .await
+                .expect("replicated insert");
+        assert_eq!(locale, "pt");
+
+        store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                &guild_id,
+                vozen_store::GuildConfigPatch {
+                    rate_per_min: Some(12),
+                    ..vozen_store::GuildConfigPatch::default()
+                },
+            )
+            .expect("update fixture");
+        flush_once(&pool, store.clone())
+            .await
+            .expect("flush update");
+        let rate_per_min: i32 =
+            sqlx::query_scalar("SELECT rate_per_min FROM vozen.guild_config WHERE guild_id = $1")
+                .bind(&guild_id)
+                .fetch_one(&pool)
+                .await
+                .expect("replicated update");
+        assert_eq!(rate_per_min, 12);
+
+        store
+            .lock()
+            .expect("store")
+            .reset_guild_config(&guild_id)
+            .expect("delete fixture");
+        flush_once(&pool, store.clone())
+            .await
+            .expect("flush delete");
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM vozen.guild_config WHERE guild_id = $1)",
+        )
+        .bind(&guild_id)
+        .fetch_one(&pool)
+        .await
+        .expect("replicated delete");
+        assert!(!exists);
+
+        sqlx::query(
+            "DELETE FROM vozen.runtime_applied_batch
+             WHERE batch_id IN (
+               SELECT batch_id FROM vozen.runtime_outbox_batch
+               WHERE payload #>> '{replica,row,guild_id}' = $1
+             )",
+        )
+        .bind(&guild_id)
+        .execute(&pool)
+        .await
+        .expect("cleanup replica idempotency markers");
+        sqlx::query(
+            "DELETE FROM vozen.runtime_outbox_batch
+             WHERE payload #>> '{replica,row,guild_id}' = $1",
+        )
+        .bind(&guild_id)
+        .execute(&pool)
+        .await
+        .expect("cleanup replica batches");
     }
 }

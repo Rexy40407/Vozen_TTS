@@ -2310,6 +2310,11 @@ async fn run() -> Result<(), RuntimeError> {
     }
     let runtime_batch_buffer = RuntimeBatchBuffer::default();
     if let Some(postgres) = postgres_shadow.as_ref() {
+        store
+            .lock()
+            .map_err(|_| RuntimeError::StoreLock)?
+            .enable_postgres_replica_outbox()?;
+        eprintln!("[postgres] durable SQLite change capture enabled for staging mirror");
         postgres_outbox::spawn(postgres.pool(), store.clone(), runtime_batch_buffer.clone());
     }
     run_startup_data_hygiene(&config.database_path);
