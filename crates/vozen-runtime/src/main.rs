@@ -48,6 +48,7 @@ mod loop_lag;
 mod neural_adapter;
 mod owner_command_sink;
 mod piper_adapter;
+mod postgres_shadow;
 mod premium_sink;
 mod privacy_sink;
 mod pronunciation_sink;
@@ -138,6 +139,7 @@ const GTTS_SYNTHETIC_LOCALES: &[&str] = &[
 struct RuntimeConfig {
     discord_token: String,
     database_path: PathBuf,
+    postgres_shadow: Option<postgres_shadow::PostgresShadowConfig>,
     health_bind: Option<SocketAddr>,
     public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
@@ -406,6 +408,8 @@ impl RuntimeConfig {
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("./tts.db"));
+        let postgres_shadow =
+            postgres_shadow::PostgresShadowConfig::from_environment(runtime_mode)?;
         let health_host = nonempty_env("HEALTH_HOST").unwrap_or_else(|| "127.0.0.1".to_owned());
         let health_ip = health_host
             .parse::<IpAddr>()
@@ -558,6 +562,7 @@ impl RuntimeConfig {
         Ok(Self {
             discord_token,
             database_path,
+            postgres_shadow,
             health_bind,
             public_status,
             premium_http,
@@ -2100,6 +2105,8 @@ fn http_listener_required(
 enum RuntimeError {
     #[error("invalid or incomplete Rust runtime mode: {0}")]
     RuntimeMode(#[from] runtime_mode::RuntimeModeError),
+    #[error("Postgres staging configuration failed: {0}")]
+    PostgresShadow(#[from] postgres_shadow::PostgresShadowError),
     #[error("DISCORD_TOKEN is required to start the Rust gateway")]
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
@@ -2265,6 +2272,16 @@ async fn run() -> Result<(), RuntimeError> {
         .lock()
         .map_err(|_| RuntimeError::StoreLock)?
         .verify_integrity()?;
+    // Postgres is deliberately a staging-only shadow dependency for now. SQLite remains the
+    // compatibility store and local fallback until async store adapters have completed their
+    // staged dual-read/dual-write verification.
+    let _postgres_shadow = if let Some(postgres) = config.postgres_shadow.as_ref() {
+        let runtime = postgres_shadow::PostgresShadowRuntime::connect(postgres).await?;
+        eprintln!("[postgres] staging shadow preflight passed; SQLite remains authoritative");
+        Some(runtime)
+    } else {
+        None
+    };
     run_startup_data_hygiene(&config.database_path);
     let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
     match transcription_adapter::check_ffmpeg(std::path::Path::new(&ffmpeg_path)).await {
