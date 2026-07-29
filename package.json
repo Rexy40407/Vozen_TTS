@@ -15,6 +15,7 @@
     "build:site": "node tools/minify-site.mjs",
     "check:rust-contracts": "node tools/check-rust-contracts.mjs",
     "check:rust-canaries": "node tools/check-rust-canaries.mjs",
+    "rust:staging:preflight": "node tools/rust-staging-preflight.mjs",
     "check:rust": "cargo fmt --check && cargo check --workspace --all-targets --locked && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",
     "check:rust-voice": "cargo check -p vozen-runtime --features voice-driver --all-targets --locked && cargo test -p vozen-runtime --features voice-driver --locked && cargo clippy -p vozen-runtime --features voice-driver --all-targets --locked -- -D warnings",
     "build:i18n": "node tools/build-i18n.mjs",

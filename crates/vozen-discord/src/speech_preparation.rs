@@ -9,7 +9,9 @@ use vozen_core::{
     SynthRequest, SynthesisEngine, VoicePreference, has_readable_text, prepare_speech,
     redact_blocked, redact_request,
 };
-use vozen_store::{ChannelProfile, GuildConfig, SqliteStore, StoreError, VoiceEffect};
+use vozen_store::{
+    ChannelProfile, GuildConfig, GuildPassOwner, SqliteStore, StoreError, UserVoice, VoiceEffect,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PreparedMessageSpeech {
@@ -62,6 +64,23 @@ pub struct MessageSpeechDraft {
     profile: Option<ChannelProfile>,
 }
 
+/// All durable settings used by the voice hot path.  A caller may keep this value in memory for
+/// a bounded period; no Discord identity, message text or role information is cached here.
+#[derive(Debug, Clone)]
+pub(crate) struct VoicePreparationData {
+    pub guild: GuildConfig,
+    pub profile: Option<ChannelProfile>,
+    pub blocklist: Vec<String>,
+    pub user_voice: Option<UserVoice>,
+    pub user_pronunciations: Vec<vozen_core::PronunciationEntry>,
+    pub server_pronunciations: Vec<vozen_core::PronunciationEntry>,
+    pub detection_enabled: bool,
+    pub personal_effect: VoiceEffect,
+    pub user_premium: bool,
+    pub guild_pass_owner: Option<GuildPassOwner>,
+    pub guild_premium: bool,
+}
+
 impl MessageSpeechDraft {
     pub fn rate_per_min(&self) -> i64 {
         self.guild.rate_per_min
@@ -112,6 +131,41 @@ pub fn begin_message_speech(
         guild,
         profile,
     }))
+}
+
+/// Cache-friendly equivalent of [`begin_message_speech`].
+pub(crate) fn begin_message_speech_with_data(
+    data: &VoicePreparationData,
+    input: &MessagePreparationInput<'_>,
+) -> Result<MessageSpeechDraft, MessagePreparationOutcome> {
+    let profile = if input.use_channel_profile {
+        data.profile.clone()
+    } else {
+        None
+    };
+    let max_chars = input.max_chars_override.unwrap_or_else(|| {
+        profile
+            .as_ref()
+            .and_then(|profile| profile.max_chars)
+            .unwrap_or(data.guild.max_chars)
+            .max(0) as usize
+    });
+    let cleaned = vozen_core::clean_text(
+        input.raw,
+        &CleanTextOptions {
+            max_chars,
+            resolve_user: input.resolve_user,
+            resolve_channel: input.resolve_channel,
+        },
+    );
+    if !has_readable_text(&cleaned) && input.media.is_empty() {
+        return Err(MessagePreparationOutcome::Empty);
+    }
+    Ok(MessageSpeechDraft {
+        cleaned,
+        guild: data.guild.clone(),
+        profile,
+    })
 }
 
 /// Completes preparation after the caller has accepted the message's rate-limit cost.
@@ -193,6 +247,73 @@ pub fn finish_message_speech(
     }))
 }
 
+/// Cache-friendly equivalent of [`finish_message_speech`].  It preserves the existing
+/// precedence and redaction ordering while avoiding a database read once the cache is warm.
+pub(crate) fn finish_message_speech_with_data(
+    data: &VoicePreparationData,
+    input: MessagePreparationInput<'_>,
+    draft: MessageSpeechDraft,
+) -> MessagePreparationOutcome {
+    let blocklist = &data.blocklist;
+    if input.media.is_empty() && !has_readable_text(&redact_blocked(&draft.cleaned, blocklist)) {
+        return MessagePreparationOutcome::FullyBlocked;
+    }
+
+    let configured_voice = draft
+        .profile
+        .as_ref()
+        .and_then(|profile| non_empty(profile.default_voice.as_deref()))
+        .or_else(|| non_empty(Some(draft.guild.default_voice.as_str())))
+        .or_else(|| locale_voice(draft.profile.as_ref(), input.available_models));
+    let profile_speed = draft.profile.as_ref().and_then(|profile| profile.speed);
+    let voice_preference = data.user_voice.as_ref().map(|voice| VoicePreference {
+        model: voice.model.clone(),
+        speed: voice.speed,
+        engine: synthesis_engine(voice.engine),
+    });
+    let pronunciations = data
+        .user_pronunciations
+        .iter()
+        .chain(data.server_pronunciations.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+    let prepared = prepare_speech(SpeechPreparationInput {
+        personal: &draft.cleaned,
+        pronunciations: &pronunciations,
+        user_voice: voice_preference.as_ref(),
+        available_models: input.available_models,
+        guild_default_voice: configured_voice,
+        channel_engine: draft
+            .profile
+            .as_ref()
+            .and_then(|profile| profile.engine)
+            .map(synthesis_engine),
+        default_voice: input.runtime_default_voice,
+        default_speed: profile_speed.unwrap_or(input.runtime_default_speed),
+        default_engine: input.runtime_default_engine,
+        auto_detect: data.detection_enabled,
+        detected_language: input.detected_language,
+        announce_speaker: input.announce_speaker,
+        media: input.media,
+    });
+    let mut request = redact_request(&prepared.request, blocklist);
+    request.gcloud_budget =
+        gcloud_budget_from_data(data, input.guild_id, input.user_id, request.engine);
+    if !has_readable_text(&request.text)
+        && !request.segments.as_deref().is_some_and(|segments| {
+            segments
+                .iter()
+                .any(|segment| has_readable_text(&segment.text))
+        })
+    {
+        return MessagePreparationOutcome::FullyBlocked;
+    }
+    MessagePreparationOutcome::Ready(PreparedMessageSpeech {
+        request,
+        personal_effect: data.personal_effect,
+    })
+}
+
 /// Resolves the same paid-pool precedence as the Node engine resolver. Returning `None` is
 /// intentional: the Google adapter must reject before network I/O when entitlement lookup fails.
 pub fn gcloud_budget_for(
@@ -231,6 +352,36 @@ pub fn gcloud_budget_for(
         });
     }
     None
+}
+
+fn gcloud_budget_from_data(
+    data: &VoicePreparationData,
+    guild_id: &str,
+    user_id: &str,
+    engine: SynthesisEngine,
+) -> Option<GcloudBudget> {
+    if engine != SynthesisEngine::Gcloud {
+        return None;
+    }
+    if data.user_premium {
+        return Some(GcloudBudget {
+            scope: GcloudBudgetScope::User,
+            key: user_id.to_owned(),
+            seats: None,
+        });
+    }
+    if let Some(owner) = &data.guild_pass_owner {
+        return Some(GcloudBudget {
+            scope: GcloudBudgetScope::Pass,
+            key: owner.owner_id.clone(),
+            seats: Some(owner.seats),
+        });
+    }
+    data.guild_premium.then(|| GcloudBudget {
+        scope: GcloudBudgetScope::Guild,
+        key: guild_id.to_owned(),
+        seats: None,
+    })
 }
 
 fn system_now_ms() -> i64 {

@@ -48,6 +48,10 @@ mod loop_lag;
 mod neural_adapter;
 mod owner_command_sink;
 mod piper_adapter;
+mod postgres_import;
+mod postgres_outbox;
+mod postgres_shadow;
+mod postgres_voice_cache;
 mod premium_sink;
 mod privacy_sink;
 mod pronunciation_sink;
@@ -107,7 +111,8 @@ use vozen_discord::{
     run_discord_gateway_with_state_and_sink, voice_display_options, write_planned_rejoin_marker,
 };
 use vozen_store::{
-    DEPARTURE_GRACE_MS, ProviderHealth as StoreProviderHealth, SqliteStore, month_key_utc,
+    DEPARTURE_GRACE_MS, ProviderHealth as StoreProviderHealth, RuntimeBatchBuffer, SqliteStore,
+    month_key_utc,
 };
 
 use crate::owner_command_sink::OwnerCommandRuntimeOptions;
@@ -138,6 +143,9 @@ const GTTS_SYNTHETIC_LOCALES: &[&str] = &[
 struct RuntimeConfig {
     discord_token: String,
     database_path: PathBuf,
+    postgres_shadow: Option<postgres_shadow::PostgresShadowConfig>,
+    postgres_replica_outbox: bool,
+    postgres_voice_read_cache: bool,
     health_bind: Option<SocketAddr>,
     public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
@@ -406,6 +414,20 @@ impl RuntimeConfig {
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("./tts.db"));
+        let postgres_shadow =
+            postgres_shadow::PostgresShadowConfig::from_environment(runtime_mode)?;
+        let postgres_replica_outbox = postgres_replica_outbox_enabled(
+            env::var("RUST_POSTGRES_REPLICA_OUTBOX").ok().as_deref(),
+        );
+        if postgres_replica_outbox && postgres_shadow.is_none() {
+            return Err(RuntimeError::PostgresReplicaRequiresShadow);
+        }
+        let postgres_voice_read_cache = postgres_voice_read_cache_enabled(
+            env::var("RUST_POSTGRES_VOICE_READ_CACHE").ok().as_deref(),
+        );
+        if postgres_voice_read_cache && (!postgres_replica_outbox || postgres_shadow.is_none()) {
+            return Err(RuntimeError::PostgresVoiceReadCacheRequiresReplica);
+        }
         let health_host = nonempty_env("HEALTH_HOST").unwrap_or_else(|| "127.0.0.1".to_owned());
         let health_ip = health_host
             .parse::<IpAddr>()
@@ -558,6 +580,9 @@ impl RuntimeConfig {
         Ok(Self {
             discord_token,
             database_path,
+            postgres_shadow,
+            postgres_replica_outbox,
+            postgres_voice_read_cache,
             health_bind,
             public_status,
             premium_http,
@@ -1163,6 +1188,14 @@ fn stats_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
+fn postgres_replica_outbox_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
+fn postgres_voice_read_cache_enabled(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+}
+
 fn premium_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
@@ -1272,23 +1305,50 @@ fn parse_positive_number(raw: Option<&str>, fallback: f64, integer: bool) -> Opt
 fn core_voice_event_sink(
     options: Option<CoreVoiceRuntimeOptions>,
     store: Arc<Mutex<SqliteStore>>,
+    voice_read_store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
+    runtime_batch: RuntimeBatchBuffer,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
     let Some(mut options) = options else {
         return Ok(None);
     };
-    let piper_models = validate_piper_runtime(
+    let piper_models = piper_models_for_core_voice(
+        options.settings.default_engine,
         &options.piper_path,
         &options.models_dir,
         &options.settings.default_voice,
     )?;
     options.settings.available_models =
         available_models_for_default_provider(piper_models, options.settings.default_engine);
-    Ok(Some(Arc::new(core_voice_sink::CoreVoiceGatewaySink::new(
-        store,
-        gateway_state,
-        options,
-    ))))
+    Ok(Some(Arc::new(
+        core_voice_sink::CoreVoiceGatewaySink::new_with_runtime_batch_and_voice_read_store(
+            store,
+            voice_read_store,
+            gateway_state,
+            options,
+            runtime_batch,
+        ),
+    )))
+}
+
+/// Piper is mandatory only when it is the selected default engine.  A staging
+/// run using the Google fallback must remain able to exercise Discord voice
+/// transport without first installing an unrelated local Piper model.
+#[cfg(feature = "voice-driver")]
+fn piper_models_for_core_voice(
+    default_engine: SynthesisEngine,
+    piper_path: &Path,
+    models_dir: &Path,
+    default_voice: &str,
+) -> Result<Vec<String>, RuntimeError> {
+    if default_engine == SynthesisEngine::Piper {
+        return validate_piper_runtime(piper_path, models_dir, default_voice);
+    }
+    match discover_piper_models(models_dir) {
+        Ok(models) => Ok(models),
+        Err(RuntimeError::ModelsUnavailable) => Ok(Vec::new()),
+        Err(error) => Err(error),
+    }
 }
 
 fn tts_file_event_sink(
@@ -1821,7 +1881,9 @@ fn automatic_translation_event_sink(
 fn core_voice_event_sink(
     options: Option<CoreVoiceRuntimeOptions>,
     _store: Arc<Mutex<SqliteStore>>,
+    _voice_read_store: Arc<Mutex<SqliteStore>>,
     _gateway_state: GatewayState,
+    _runtime_batch: RuntimeBatchBuffer,
 ) -> Result<Option<Arc<dyn GatewayEventSink>>, RuntimeError> {
     if options.is_some() {
         return Err(RuntimeError::VoiceDriverRequired);
@@ -2100,6 +2162,18 @@ fn http_listener_required(
 enum RuntimeError {
     #[error("invalid or incomplete Rust runtime mode: {0}")]
     RuntimeMode(#[from] runtime_mode::RuntimeModeError),
+    #[error("Postgres staging configuration failed: {0}")]
+    PostgresShadow(#[from] postgres_shadow::PostgresShadowError),
+    #[error("RUST_POSTGRES_IMPORT_SQLITE=true requires RUST_POSTGRES_MODE=shadow")]
+    PostgresImportRequiresShadow,
+    #[error("Postgres staging import failed: {0}")]
+    PostgresImport(#[from] postgres_import::ImportError),
+    #[error("Postgres staging voice-read cache failed: {0}")]
+    PostgresVoiceCache(#[from] postgres_voice_cache::PostgresVoiceCacheError),
+    #[error(
+        "RUST_POSTGRES_VOICE_READ_CACHE=true requires RUST_POSTGRES_REPLICA_OUTBOX=true and RUST_POSTGRES_MODE=shadow"
+    )]
+    PostgresVoiceReadCacheRequiresReplica,
     #[error("DISCORD_TOKEN is required to start the Rust gateway")]
     MissingToken,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
@@ -2230,6 +2304,8 @@ enum RuntimeError {
     AdminRequiresPremiumHttp,
     #[error("RUST_DASHBOARD_ENABLED/RUST_ADMIN_API_ENABLED require PREMIUM_API_ENABLED=true")]
     DashboardOrAdminRequiresPremiumApi,
+    #[error("RUST_POSTGRES_REPLICA_OUTBOX=true requires RUST_POSTGRES_MODE=shadow")]
+    PostgresReplicaRequiresShadow,
     #[error("SQLite startup failed: {0}")]
     Store(#[from] vozen_store::StoreError),
     #[error("SQLite store lock was poisoned")]
@@ -2265,6 +2341,52 @@ async fn run() -> Result<(), RuntimeError> {
         .lock()
         .map_err(|_| RuntimeError::StoreLock)?
         .verify_integrity()?;
+    // Postgres is deliberately a staging-only shadow dependency for now. SQLite remains the
+    // compatibility store and local fallback until async store adapters have completed their
+    // staged dual-read/dual-write verification.
+    let postgres_shadow = if let Some(postgres) = config.postgres_shadow.as_ref() {
+        let runtime = postgres_shadow::PostgresShadowRuntime::connect(postgres).await?;
+        eprintln!("[postgres] staging shadow preflight passed; SQLite remains authoritative");
+        Some(runtime)
+    } else {
+        None
+    };
+    if env::var("RUST_POSTGRES_IMPORT_SQLITE")
+        .ok()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+    {
+        let postgres = postgres_shadow
+            .as_ref()
+            .ok_or(RuntimeError::PostgresImportRequiresShadow)?;
+        let reports =
+            postgres_import::import_and_reconcile(&postgres.pool(), &config.database_path).await?;
+        eprintln!(
+            "[postgres] SQLite staging import reconciled {} tables",
+            reports.len()
+        );
+    }
+    let postgres_voice_read_store = if config.postgres_voice_read_cache {
+        let postgres = postgres_shadow
+            .as_ref()
+            .ok_or(RuntimeError::PostgresVoiceReadCacheRequiresReplica)?;
+        let cache = postgres_voice_cache::load(&postgres.pool()).await?;
+        postgres_voice_cache::spawn(postgres.pool(), cache.clone());
+        eprintln!("[postgres] staging voice reads use the refreshed local Postgres cache");
+        Some(cache)
+    } else {
+        None
+    };
+    let runtime_batch_buffer = RuntimeBatchBuffer::default();
+    if config.postgres_replica_outbox
+        && let Some(postgres) = postgres_shadow.as_ref()
+    {
+        store
+            .lock()
+            .map_err(|_| RuntimeError::StoreLock)?
+            .enable_postgres_replica_outbox()?;
+        eprintln!("[postgres] durable SQLite change capture enabled for staging mirror");
+        postgres_outbox::spawn(postgres.pool(), store.clone(), runtime_batch_buffer.clone());
+    }
     run_startup_data_hygiene(&config.database_path);
     let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
     match transcription_adapter::check_ffmpeg(std::path::Path::new(&ffmpeg_path)).await {
@@ -2321,9 +2443,13 @@ async fn run() -> Result<(), RuntimeError> {
     if let Some(sink) = owner_command_event_sink(config.owner_commands, store.clone())? {
         event_sinks.push(sink);
     }
-    if let Some(sink) =
-        core_voice_event_sink(config.core_voice, store.clone(), gateway_state.clone())?
-    {
+    if let Some(sink) = core_voice_event_sink(
+        config.core_voice,
+        store.clone(),
+        postgres_voice_read_store.unwrap_or_else(|| store.clone()),
+        gateway_state.clone(),
+        runtime_batch_buffer.clone(),
+    )? {
         event_sinks.push(sink);
     }
     if let Some(sink) = autocomplete_event_sink(config.autocomplete, store.clone())? {
@@ -3080,6 +3206,15 @@ mod tests {
     }
 
     #[test]
+    fn postgres_replica_outbox_is_exactly_opt_in() {
+        assert!(postgres_replica_outbox_enabled(Some("true")));
+        assert!(postgres_replica_outbox_enabled(Some(" TRUE ")));
+        assert!(!postgres_replica_outbox_enabled(Some("1")));
+        assert!(!postgres_replica_outbox_enabled(Some("yes")));
+        assert!(!postgres_replica_outbox_enabled(None));
+    }
+
+    #[test]
     fn full_mode_requires_the_explicit_browser_api_promotion_and_real_api_config() {
         let config = PremiumHttpConfig {
             browser_api_enabled: true,
@@ -3335,6 +3470,22 @@ mod tests {
                 SynthesisEngine::Neural
             ),
             vec!["en_US-amy-medium"]
+        );
+    }
+
+    #[cfg(feature = "voice-driver")]
+    #[test]
+    fn google_voice_canary_does_not_require_a_piper_installation() {
+        let missing = std::path::Path::new("__vozen_missing_staging_piper__");
+        assert_eq!(
+            piper_models_for_core_voice(
+                SynthesisEngine::Default,
+                missing,
+                missing,
+                "en_US-google-medium",
+            )
+            .expect("Google voice must run without Piper"),
+            Vec::<String>::new()
         );
     }
 

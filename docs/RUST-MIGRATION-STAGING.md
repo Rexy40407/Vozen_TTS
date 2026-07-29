@@ -71,6 +71,23 @@ environment. For the direct `cargo run` smoke command above, either export the s
 the current shell or use the Docker Compose path, whose `env_file` loads them for the container.
 Do not pass the production `.env` to a staging run.
 
+## Supabase state-cache canary
+
+After the staging SQLite copy has passed integrity checks, run the explicit import once with the
+staging Supabase connection, then start the Rust bot with both of these flags enabled:
+
+```env
+RUST_POSTGRES_MODE=shadow
+RUST_POSTGRES_REPLICA_OUTBOX=true
+RUST_POSTGRES_VOICE_READ_CACHE=true
+```
+
+The import writes a private completion marker only after every durable table reconciles by row
+count. The voice-read cache refuses to start without that marker. It is a local in-memory snapshot
+refreshed in the background, so message handling does not wait for Supabase. If the background
+refresh fails, it continues serving the last known-good cache; disable the two canary flags to
+return immediately to SQLite-only reads.
+
 With the staging bot online, verify in the test guild:
 
 1. The slash-command list appears in the staging guild and no production guild receives a command

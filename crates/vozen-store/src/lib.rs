@@ -10,7 +10,11 @@
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::Connection;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use rusqlite::{
+    Connection, params_from_iter,
+    types::{Value as SqlValue, ValueRef},
+};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -32,6 +36,8 @@ mod optout;
 mod premium;
 mod premium_code;
 mod pronunciation;
+mod runtime_batch;
+mod runtime_outbox;
 mod stripe;
 mod stt_consent;
 mod talk_stats;
@@ -75,6 +81,8 @@ pub use pronunciation::{
     AddPronunciationResult, SERVER_PRON_LIMIT, SERVER_PRON_LIMIT_PREMIUM, USER_PRON_LIMIT_FREE,
     USER_PRON_LIMIT_PREMIUM,
 };
+pub use runtime_batch::{RuntimeBatchBuffer, RuntimeBatchEvent};
+pub use runtime_outbox::{RuntimeOutboxBatch, RuntimeOutboxEnqueue};
 pub use stripe::{StripeSubscription, StripeSubscriptionInput};
 pub use stt_consent::SttConsent;
 pub use talk_stats::{GuildTalkStreak, TalkBump, TalkRow};
@@ -117,6 +125,8 @@ struct SqliteSchemaObject {
 
 #[derive(Debug, Error)]
 pub enum StoreError {
+    #[error("store cache is unavailable")]
+    CacheUnavailable,
     #[error("invalid SQLite schema contract: {0}")]
     InvalidContract(#[from] serde_json::Error),
     #[error("unsupported SQLite schema contract version {0}")]
@@ -169,6 +179,10 @@ pub enum StoreError {
     VoteRedemptionSecretMismatch,
     #[error("invalid Discord user id for vote reward")]
     InvalidVoteUserId,
+    #[error("runtime outbox batch id must be non-empty and at most 128 characters")]
+    InvalidRuntimeOutboxBatchId,
+    #[error("runtime outbox payload must be non-empty and at most 262144 bytes")]
+    InvalidRuntimeOutboxPayload,
     #[error("invalid Top.gg webhook event id")]
     InvalidTopggEventId,
     #[error("SQLite error: {0}")]
@@ -185,6 +199,112 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
+    /// Lists only tables from Vozen's generated schema contract. This is deliberately not a
+    /// general SQL interface: callers can safely use the names for a verified migration.
+    pub fn durable_table_names(&self) -> Result<Vec<String>, StoreError> {
+        let contract: SqliteSchemaContract = serde_json::from_str(SQLITE_SCHEMA)?;
+        Ok(contract
+            .objects
+            .into_iter()
+            .filter(|object| object.kind == "table")
+            .map(|object| object.name)
+            .collect())
+    }
+
+    /// Exports rows in a contract-owned table as JSON objects for the explicit Postgres importer.
+    /// Blob values are base64 objects; no current durable table relies on them, but the encoding
+    /// avoids silent loss if a future migration adds one.
+    pub fn export_table_rows(&self, table: &str) -> Result<Vec<serde_json::Value>, StoreError> {
+        if !self.durable_table_names()?.iter().any(|name| name == table) {
+            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+        }
+        let mut statement = self
+            .connection
+            .prepare(&format!("SELECT * FROM \"{table}\""))?;
+        let column_names = statement
+            .column_names()
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<Vec<_>>();
+        let mut rows = statement.query([])?;
+        let mut result = Vec::new();
+        while let Some(row) = rows.next()? {
+            let mut object = serde_json::Map::with_capacity(column_names.len());
+            for (index, name) in column_names.iter().enumerate() {
+                let value = match row.get_ref(index)? {
+                    ValueRef::Null => serde_json::Value::Null,
+                    ValueRef::Integer(value) => serde_json::Value::from(value),
+                    ValueRef::Real(value) => serde_json::Value::from(value),
+                    ValueRef::Text(value) => {
+                        serde_json::Value::from(String::from_utf8_lossy(value).into_owned())
+                    }
+                    ValueRef::Blob(value) => serde_json::json!({"base64": BASE64.encode(value)}),
+                };
+                object.insert(name.clone(), value);
+            }
+            result.push(serde_json::Value::Object(object));
+        }
+        Ok(result)
+    }
+
+    pub fn durable_table_row_count(&self, table: &str) -> Result<i64, StoreError> {
+        if !self.durable_table_names()?.iter().any(|name| name == table) {
+            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+        }
+        Ok(self
+            .connection
+            .query_row(&format!("SELECT COUNT(*) FROM \"{table}\""), [], |row| {
+                row.get(0)
+            })?)
+    }
+
+    /// Replaces one contract-owned table from a trusted Postgres cache snapshot. This is used
+    /// only by the staging read-cache process: it accepts JSON scalar values, validates every
+    /// column against SQLite's schema, and performs the replacement atomically.
+    pub fn replace_contract_table_rows(
+        &self,
+        table: &str,
+        rows: &[serde_json::Value],
+    ) -> Result<(), StoreError> {
+        if !self.durable_table_names()?.iter().any(|name| name == table) {
+            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+        }
+        let mut columns_statement = self
+            .connection
+            .prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
+        let columns = columns_statement
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        if columns.is_empty() {
+            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute(&format!("DELETE FROM \"{table}\""), [])?;
+        let fields = columns
+            .iter()
+            .map(|column| format!("\"{}\"", column.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let placeholders = (1..=columns.len())
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!("INSERT INTO \"{table}\" ({fields}) VALUES ({placeholders})");
+        let mut statement = transaction.prepare(&sql)?;
+        for row in rows {
+            let object = row
+                .as_object()
+                .ok_or_else(|| StoreError::InvalidSchemaObject(table.to_owned()))?;
+            let values = columns
+                .iter()
+                .map(|column| json_value_to_sql(object.get(column)))
+                .collect::<Result<Vec<_>, _>>()?;
+            statement.execute(params_from_iter(values))?;
+        }
+        drop(statement);
+        transaction.commit()?;
+        Ok(())
+    }
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let connection = Connection::open(path)?;
         Self::from_connection(connection)
@@ -210,6 +330,7 @@ impl SqliteStore {
         let transaction = connection.transaction()?;
         install_current_schema(&transaction)?;
         migration::migrate_legacy_schema(&transaction)?;
+        runtime_outbox::install_runtime_outbox_schema(&transaction)?;
         verify_connection_integrity(&transaction)?;
         transaction.commit()?;
         Ok(Self { connection })
@@ -233,6 +354,13 @@ impl SqliteStore {
     pub fn verify_integrity(&self) -> Result<(), StoreError> {
         verify_connection_integrity(&self.connection)
     }
+
+    /// Opt-in staging hook for asynchronously mirroring durable mutations to Postgres.
+    /// It is never enabled by a normal SQLite runtime and performs no network I/O itself.
+    pub fn enable_postgres_replica_outbox(&self) -> Result<(), StoreError> {
+        let tables = self.durable_table_names()?;
+        runtime_outbox::install_replica_triggers(&self.connection, &tables)
+    }
 }
 
 fn verify_connection_integrity(connection: &Connection) -> Result<(), StoreError> {
@@ -253,6 +381,30 @@ fn verify_connection_integrity(connection: &Connection) -> Result<(), StoreError
         )));
     }
     Ok(())
+}
+
+fn json_value_to_sql(value: Option<&serde_json::Value>) -> Result<SqlValue, StoreError> {
+    match value.unwrap_or(&serde_json::Value::Null) {
+        serde_json::Value::Null => Ok(SqlValue::Null),
+        serde_json::Value::Bool(value) => Ok(SqlValue::Integer(i64::from(*value))),
+        serde_json::Value::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                Ok(SqlValue::Integer(value))
+            } else if let Some(value) = value.as_u64() {
+                i64::try_from(value)
+                    .map(SqlValue::Integer)
+                    .map_err(|_| StoreError::InvalidSchemaObject("JSON integer range".into()))
+            } else if let Some(value) = value.as_f64() {
+                Ok(SqlValue::Real(value))
+            } else {
+                Err(StoreError::InvalidSchemaObject("JSON number".into()))
+            }
+        }
+        serde_json::Value::String(value) => Ok(SqlValue::Text(value.clone())),
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => Err(
+            StoreError::InvalidSchemaObject("JSON non-scalar value".into()),
+        ),
+    }
 }
 
 impl SqliteStore {
@@ -345,6 +497,81 @@ mod tests {
                 .has_schema_object("idx_pass_activation_guild")
                 .expect("query index")
         );
+    }
+
+    #[test]
+    fn contract_table_export_keeps_column_names_and_values() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .connection
+            .execute(
+                "INSERT INTO guild_config (guild_id, default_voice, locale) VALUES (?1, ?2, ?3)",
+                ("export-guild", "pt_PT-voice", "pt"),
+            )
+            .expect("seed");
+        assert!(
+            store
+                .durable_table_names()
+                .expect("tables")
+                .contains(&"guild_config".to_owned())
+        );
+        let rows = store.export_table_rows("guild_config").expect("export");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["guild_id"], "export-guild");
+        assert_eq!(rows[0]["default_voice"], "pt_PT-voice");
+        assert!(store.export_table_rows("not_a_contract_table").is_err());
+    }
+
+    #[test]
+    fn trusted_postgres_cache_rows_replace_a_contract_table_atomically() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .connection
+            .execute(
+                "INSERT INTO guild_config (guild_id, locale, rate_per_min) VALUES ('old', 'en', 8)",
+                [],
+            )
+            .expect("old row");
+        store
+            .replace_contract_table_rows(
+                "guild_config",
+                &[serde_json::json!({
+                    "guild_id": "fresh",
+                    "tts_channel_id": null,
+                    "autoread": 1,
+                    "default_voice": "pt_PT-google-medium",
+                    "max_chars": 300,
+                    "rate_per_min": 12,
+                    "enabled": 1,
+                    "tts_role_id": null,
+                    "locale": "pt",
+                    "xsaid": 1,
+                    "autojoin": 0,
+                    "read_bots": 0,
+                    "text_in_voice": 0,
+                    "greet_on_join": 1,
+                    "greet_locale": "en",
+                    "antispam": 0,
+                    "stay_in_call": 0,
+                    "streak_announce": 1,
+                    "soundboard": 1,
+                    "vote_promos": 0,
+                    "priority_role_id": null,
+                    "blocked_role_id": null,
+                    "translation_enabled": 0,
+                    "translation_daily_char_limit": 10000,
+                    "translation_per_user_daily_char_limit": 2000
+                })],
+            )
+            .expect("replace");
+        assert_eq!(
+            store
+                .durable_table_row_count("guild_config")
+                .expect("count"),
+            1
+        );
+        assert_eq!(store.guild_config("fresh").expect("fresh").locale, "pt");
+        assert_eq!(store.guild_config("old").expect("old").locale, "en");
     }
 
     #[test]

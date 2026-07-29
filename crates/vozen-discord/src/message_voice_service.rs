@@ -14,14 +14,14 @@ use vozen_core::{
     QueueEnqueueOptions, QueueSource, SynthesisEngine, is_repetition_spam,
 };
 use vozen_store::{
-    OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore, TalkBump, UserEngine,
-    utc_day_key_from_unix_millis,
+    OperationalMetric, OperationalProvider, ProviderHealth, RuntimeBatchBuffer, SqliteStore,
+    TalkBump, UserEngine, utc_day_key_from_unix_millis,
 };
 
 use crate::{
     CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceSettings, DiscordMessageFacts,
     GuildSynthesisCoordinator, MessagePipelineOutcome, MessagePreparationInput,
-    MessageSpeechPipeline, admit_discord_message,
+    MessageSpeechPipeline, VoiceDataCache, admit_discord_message_with_data,
 };
 
 /// Per-message values which are never persisted. `facts` must come from the same Discord event
@@ -52,10 +52,17 @@ pub enum MessageVoiceOutcome {
 }
 
 pub struct MessageVoiceService<S, P> {
+    /// Local compatibility writer: counters and fallback state remain available if Postgres is
+    /// temporarily unavailable.
     store: Arc<Mutex<SqliteStore>>,
+    /// Snapshot reader. During staging primary-read validation this is a refreshed in-memory
+    /// replica sourced from Postgres, never a network call from the message handler.
+    read_store: Arc<Mutex<SqliteStore>>,
     pipeline: Mutex<MessageSpeechPipeline>,
     duplicate_tracker: Mutex<DuplicateTracker>,
     count_gate: Mutex<CountGate>,
+    voice_data: VoiceDataCache,
+    runtime_batch: RuntimeBatchBuffer,
     synthesizer: S,
     playback: P,
     synthesis: GuildSynthesisCoordinator,
@@ -89,11 +96,59 @@ impl<S, P> MessageVoiceService<S, P> {
         settings: CoreVoiceSettings,
         now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
     ) -> Self {
+        Self::new_with_synthesis_coordinator_and_runtime_batch(
+            store,
+            synthesizer,
+            playback,
+            synthesis,
+            settings,
+            now_ms,
+            RuntimeBatchBuffer::default(),
+        )
+    }
+
+    pub fn new_with_synthesis_coordinator_and_runtime_batch(
+        store: Arc<Mutex<SqliteStore>>,
+        synthesizer: S,
+        playback: P,
+        synthesis: GuildSynthesisCoordinator,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+        runtime_batch: RuntimeBatchBuffer,
+    ) -> Self {
+        Self::new_with_synthesis_coordinator_runtime_batch_and_read_store(
+            store.clone(),
+            store,
+            synthesizer,
+            playback,
+            synthesis,
+            settings,
+            now_ms,
+            runtime_batch,
+        )
+    }
+
+    /// Uses a separate, local-only state snapshot for automatic voice reads. The write store is
+    /// retained for compatibility counters and for fallback durability; the supplied read store
+    /// must already be populated by a background task before this service is exposed.
+    pub fn new_with_synthesis_coordinator_runtime_batch_and_read_store(
+        store: Arc<Mutex<SqliteStore>>,
+        read_store: Arc<Mutex<SqliteStore>>,
+        synthesizer: S,
+        playback: P,
+        synthesis: GuildSynthesisCoordinator,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+        runtime_batch: RuntimeBatchBuffer,
+    ) -> Self {
         Self {
             store,
+            read_store,
             pipeline: Mutex::new(MessageSpeechPipeline::default()),
             duplicate_tracker: Mutex::new(DuplicateTracker::default()),
             count_gate: Mutex::new(CountGate::default()),
+            voice_data: VoiceDataCache::default(),
+            runtime_batch,
             synthesizer,
             playback,
             synthesis,
@@ -110,31 +165,32 @@ where
 {
     pub async fn execute(&self, invocation: MessageVoiceInvocation<'_>) -> MessageVoiceOutcome {
         let now_ms = (self.now_ms)();
+        let voice_data = match self.voice_data.snapshot(
+            &self.read_store,
+            invocation.facts.guild_id,
+            invocation.facts.channel_id,
+            invocation.facts.author_id,
+            now_ms,
+        ) {
+            Ok(data) => data,
+            Err(_) => return MessageVoiceOutcome::StoreUnavailable,
+        };
         let lane = {
-            let store = match self.store.lock() {
-                Ok(store) => store,
-                Err(_) => return MessageVoiceOutcome::StoreUnavailable,
-            };
-            match admit_discord_message(&store, invocation.facts) {
-                Ok(MessageSpeechDecision::Allowed { lane }) => lane,
-                Ok(MessageSpeechDecision::Denied { reason }) => {
+            match admit_discord_message_with_data(&voice_data.admission, invocation.facts) {
+                MessageSpeechDecision::Allowed { lane } => lane,
+                MessageSpeechDecision::Denied { reason } => {
                     return MessageVoiceOutcome::Denied(reason);
                 }
-                Err(_) => return MessageVoiceOutcome::StoreUnavailable,
             }
         };
 
         let prepared = {
-            let store = match self.store.lock() {
-                Ok(store) => store,
-                Err(_) => return MessageVoiceOutcome::StoreUnavailable,
-            };
             let mut pipeline = match self.pipeline.lock() {
                 Ok(pipeline) => pipeline,
                 Err(_) => return MessageVoiceOutcome::StoreUnavailable,
             };
-            pipeline.prepare_after_admission(
-                &store,
+            pipeline.prepare_after_admission_with_data(
+                &voice_data.preparation,
                 lane,
                 MessagePreparationInput {
                     guild_id: invocation.facts.guild_id,
@@ -159,21 +215,20 @@ where
         };
 
         let (request, cleaned_text, antispam) = match prepared {
-            Ok(MessagePipelineOutcome::Ready {
+            MessagePipelineOutcome::Ready {
                 lane: prepared_lane,
                 speech,
                 cleaned_text,
                 antispam,
-            }) if prepared_lane == lane => (speech.request, cleaned_text, antispam),
+            } if prepared_lane == lane => (speech.request, cleaned_text, antispam),
             // The lane was determined by the same admission above. Treat a discrepancy as a
             // store/process fault rather than accidentally granting a different priority.
-            Ok(MessagePipelineOutcome::Ready { .. }) | Ok(MessagePipelineOutcome::Denied(_)) => {
+            MessagePipelineOutcome::Ready { .. } | MessagePipelineOutcome::Denied(_) => {
                 return MessageVoiceOutcome::StoreUnavailable;
             }
-            Ok(MessagePipelineOutcome::Empty) => return MessageVoiceOutcome::Empty,
-            Ok(MessagePipelineOutcome::RateLimited) => return MessageVoiceOutcome::RateLimited,
-            Ok(MessagePipelineOutcome::FullyBlocked) => return MessageVoiceOutcome::FullyBlocked,
-            Err(_) => return MessageVoiceOutcome::StoreUnavailable,
+            MessagePipelineOutcome::Empty => return MessageVoiceOutcome::Empty,
+            MessagePipelineOutcome::RateLimited => return MessageVoiceOutcome::RateLimited,
+            MessagePipelineOutcome::FullyBlocked => return MessageVoiceOutcome::FullyBlocked,
         };
 
         if antispam
@@ -283,19 +338,19 @@ where
             pipeline.forget_guild(guild_id);
         }
         self.synthesis.forget_guild(guild_id);
+        self.voice_data.forget_guild(guild_id);
     }
 
     /// Writes only fixed, identity-free operational counters. Metric persistence is strictly
     /// best-effort: telemetry can never make an otherwise valid speech request fail.
     fn record_metric(&self, metric: OperationalMetric) {
         let now = (self.now_ms)();
+        let day = utc_day_key_from_unix_millis(now);
+        self.runtime_batch
+            .record_metric(&day, metric, OperationalProvider::Piper, 1);
         if let Ok(store) = self.store.lock() {
-            let _ = store.add_operational_metric(
-                metric,
-                OperationalProvider::Piper,
-                1.0,
-                Some(&utc_day_key_from_unix_millis(now)),
-            );
+            let _ =
+                store.add_operational_metric(metric, OperationalProvider::Piper, 1.0, Some(&day));
         }
     }
 
@@ -321,17 +376,17 @@ where
 
     fn record_synthesis_health(&self, success: bool) {
         let now = (self.now_ms)();
+        let day = utc_day_key_from_unix_millis(now);
+        let metric = if success {
+            OperationalMetric::SynthSuccess
+        } else {
+            OperationalMetric::SynthFailure
+        };
+        self.runtime_batch
+            .record_metric(&day, metric, OperationalProvider::Piper, 1);
         if let Ok(store) = self.store.lock() {
-            let _ = store.add_operational_metric(
-                if success {
-                    OperationalMetric::SynthSuccess
-                } else {
-                    OperationalMetric::SynthFailure
-                },
-                OperationalProvider::Piper,
-                1.0,
-                Some(&utc_day_key_from_unix_millis(now)),
-            );
+            let _ =
+                store.add_operational_metric(metric, OperationalProvider::Piper, 1.0, Some(&day));
             let _ = store.set_provider_health(
                 OperationalProvider::Piper,
                 if success {
@@ -361,6 +416,13 @@ where
             // audio into a failed request. The day key uses the runtime's UTC contract, which is
             // also what the Rust operational metrics use on the production VPS.
             let day = utc_day_key_from_unix_millis(now_ms);
+            self.runtime_batch.record_accepted_speech(
+                &day,
+                guild_id,
+                user_id,
+                model,
+                user_engine(engine),
+            );
             let talk = store.bump_talk(guild_id, user_id, &day).ok();
             let _ = store.bump_guild_talk(guild_id, &day);
             let _ = store.bump_talk_usage(guild_id, user_id, model, user_engine(engine));
@@ -734,5 +796,110 @@ mod tests {
             .dominant_talk_usage(&["user".into()], DominantTalkUsageOptions::default())
             .expect("usage");
         assert_eq!(usage.get("user").map(|usage| usage.samples), Some(1));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn accepts_twenty_five_concurrent_voice_requests_across_independent_servers() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        for index in 0..25 {
+            store
+                .lock()
+                .expect("store")
+                .update_guild_config(
+                    &format!("guild-{index}"),
+                    GuildConfigPatch {
+                        autoread: Some(true),
+                        tts_channel_id: Some(Some("text".into())),
+                        ..GuildConfigPatch::default()
+                    },
+                )
+                .expect("configure guild");
+        }
+        let service = Arc::new(MessageVoiceService::new(
+            store,
+            FakeSynthesizer::default(),
+            FakePlayback {
+                reserve: true,
+                enqueued: AtomicUsize::new(0),
+            },
+            settings(),
+            Arc::new(|| 0),
+        ));
+        let mut tasks = tokio::task::JoinSet::new();
+        for index in 0..25 {
+            let service = service.clone();
+            tasks.spawn(async move {
+                let guild_id = format!("guild-{index}");
+                let user_id = format!("user-{index}");
+                let resolve_user = |_: &str| "user".to_owned();
+                let resolve_channel = |_: &str| "channel".to_owned();
+                service
+                    .execute(MessageVoiceInvocation {
+                        facts: DiscordMessageFacts {
+                            guild_id: &guild_id,
+                            channel_id: "text",
+                            author_id: &user_id,
+                            author_is_bot: false,
+                            mentioned_bot: false,
+                            replied_to_bot: false,
+                            author_voice_channel_id: Some("voice"),
+                            bot_voice_channel_id: Some("voice"),
+                            member_role_ids: Some(&[]),
+                            autojoined_for_author: false,
+                        },
+                        raw: "parallel hello",
+                        media: &[],
+                        detected_language: None,
+                        announce_speaker: None,
+                        resolve_user: &resolve_user,
+                        resolve_channel: &resolve_channel,
+                    })
+                    .await
+            });
+        }
+        let mut accepted = 0;
+        while let Some(result) = tasks.join_next().await {
+            assert!(matches!(
+                result.expect("voice task"),
+                MessageVoiceOutcome::Queued { .. }
+            ));
+            accepted += 1;
+        }
+        assert_eq!(accepted, 25);
+        assert_eq!(service.synthesizer.0.load(Ordering::Relaxed), 25);
+        assert_eq!(service.playback.enqueued.load(Ordering::Relaxed), 25);
+    }
+
+    #[tokio::test]
+    async fn automatic_voice_reads_the_separate_local_postgres_snapshot_cache() {
+        let write_store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("writer")));
+        let read_store = configured_store();
+        let service =
+            MessageVoiceService::new_with_synthesis_coordinator_runtime_batch_and_read_store(
+                write_store.clone(),
+                read_store,
+                FakeSynthesizer::default(),
+                FakePlayback {
+                    reserve: true,
+                    enqueued: AtomicUsize::new(0),
+                },
+                GuildSynthesisCoordinator::default(),
+                settings(),
+                Arc::new(|| 0),
+                RuntimeBatchBuffer::default(),
+            );
+        assert!(matches!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Queued { .. }
+        ));
+        assert!(
+            write_store
+                .lock()
+                .expect("writer")
+                .guild_config("guild")
+                .expect("writer config")
+                .tts_channel_id
+                .is_none()
+        );
     }
 }
