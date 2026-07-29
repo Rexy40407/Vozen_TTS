@@ -150,13 +150,16 @@ impl SqliteStore {
         Ok(())
     }
 
-    /// Reads the oldest pending batches. The worker removes a batch only after Postgres records
-    /// its id, which makes retries safe across a process crash.
+    /// Reads pending batches in durable insertion order within the same timestamp. The SQLite
+    /// `rowid` tie-breaker is essential for replica events: a fast upsert followed by delete
+    /// must never be reordered merely because both changes happened in the same second.
+    /// The worker removes a batch only after Postgres records its id, which makes retries safe
+    /// across a process crash.
     pub fn list_runtime_outbox(&self, limit: usize) -> Result<Vec<RuntimeOutboxBatch>, StoreError> {
         let limit = i64::try_from(limit.clamp(1, 1_000)).unwrap_or(1_000);
         let mut statement = self.connection().prepare(
             "SELECT batch_id, created_at, payload FROM runtime_outbox_batch
-             ORDER BY created_at ASC, batch_id ASC LIMIT ?1",
+             ORDER BY created_at ASC, rowid ASC LIMIT ?1",
         )?;
         statement
             .query_map([limit], |row| {
@@ -302,7 +305,7 @@ mod tests {
 
         let events = store.list_runtime_outbox(10).expect("outbox");
         assert_eq!(events.len(), 3);
-        let mut operations = events
+        let operations = events
             .iter()
             .map(|event| {
                 serde_json::from_str::<serde_json::Value>(&event.payload)
@@ -313,8 +316,7 @@ mod tests {
                     .to_owned()
             })
             .collect::<Vec<_>>();
-        operations.sort();
-        assert_eq!(operations, ["delete", "upsert", "upsert"]);
+        assert_eq!(operations, ["upsert", "upsert", "delete"]);
 
         store
             .connection()
