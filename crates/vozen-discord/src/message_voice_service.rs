@@ -131,6 +131,7 @@ impl<S, P> MessageVoiceService<S, P> {
     /// Uses a separate, local-only state snapshot for automatic voice reads. The write store is
     /// retained for compatibility counters and for fallback durability; the supplied read store
     /// must already be populated by a background task before this service is exposed.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_synthesis_coordinator_runtime_batch_and_read_store(
         store: Arc<Mutex<SqliteStore>>,
         read_store: Arc<Mutex<SqliteStore>>,

@@ -2693,6 +2693,7 @@ struct HttpRouterRuntimeOptions {
     bot_token: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_http_router(
     database_path: PathBuf,
     premium_http: Option<PremiumHttpConfig>,

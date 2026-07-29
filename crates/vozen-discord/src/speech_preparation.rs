@@ -134,6 +134,7 @@ pub fn begin_message_speech(
 }
 
 /// Cache-friendly equivalent of [`begin_message_speech`].
+#[allow(clippy::result_large_err)]
 pub(crate) fn begin_message_speech_with_data(
     data: &VoicePreparationData,
     input: &MessagePreparationInput<'_>,
