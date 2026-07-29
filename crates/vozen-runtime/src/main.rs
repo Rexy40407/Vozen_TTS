@@ -2255,6 +2255,9 @@ async fn run() -> Result<(), RuntimeError> {
     // Ko-fi pending purchases are temporary attribution records. Keep the Node retention
     // boundary (90 days) so abandoned or already-claimed rows do not accumulate indefinitely.
     spawn_kofi_pending_retention(store.clone());
+    if config.admin.is_some() {
+        spawn_admin_metric_history(config.database_path.clone());
+    }
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
@@ -2891,6 +2894,18 @@ fn spawn_guild_retention(store: Arc<Mutex<SqliteStore>>) {
             if let Ok(store) = store.lock() {
                 let _ = store.purge_departed_guilds(system_now_ms(), DEPARTURE_GRACE_MS);
             }
+        }
+    });
+}
+
+/// Daily storage readings are written independently of console visits, so the owner sees an
+/// honest seven-day history even when nobody opened the dashboard that day.
+fn spawn_admin_metric_history(database_path: PathBuf) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(6 * 60 * 60));
+        loop {
+            interval.tick().await;
+            admin_metrics::record_daily_history(&database_path);
         }
     });
 }

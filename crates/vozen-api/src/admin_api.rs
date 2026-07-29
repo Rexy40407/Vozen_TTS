@@ -7,7 +7,7 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use vozen_store::{
     AdminPassRow, AdminPassesView, AdminPlusRow, DominantTalkUsageOptions, KofiPendingGrant,
     SqliteStore, TalkUsageSource, UserEngine,
@@ -134,6 +134,18 @@ pub struct AdminTopTalker {
 
 /// Coarse owner-only operational readings. These values are intentionally aggregate-only: no
 /// database paths, query contents, Discord identifiers, or individual session data are exposed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminDatabaseUsageSample {
+    /// UTC calendar day (`YYYY-MM-DD`) for a single aggregate storage reading.
+    pub day: String,
+    #[serde(rename = "databaseBytes")]
+    pub database_bytes: u64,
+    #[serde(rename = "volumeTotalBytes")]
+    pub volume_total_bytes: Option<u64>,
+    #[serde(rename = "volumeUsedBytes")]
+    pub volume_used_bytes: Option<u64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct AdminSystemMetrics {
     #[serde(rename = "databaseBytes")]
@@ -146,6 +158,10 @@ pub struct AdminSystemMetrics {
     pub volume_available_bytes: Option<u64>,
     #[serde(rename = "activeVoiceSessions")]
     pub active_voice_sessions: u64,
+    /// Up to seven daily readings, oldest first. Missing days are represented by the client so
+    /// the API never invents measurements that were not actually collected.
+    #[serde(rename = "databaseHistory")]
+    pub database_history: Vec<AdminDatabaseUsageSample>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
