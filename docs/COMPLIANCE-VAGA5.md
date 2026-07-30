@@ -67,9 +67,9 @@
 | Transparência | Anúncio no canal ao **arrancar/parar** + auto-stop quando não resta consentido; o des-deafen do bot é parte do indicador. |
 | Áudio | **Nunca persistido** (memória). Whisper **local** = sem partilha com terceiros, sem treino de IA. (Art. 15/20/21.) |
 | Transcrições | **FICAM persistidas como mensagens do Discord** (fora do `/privacy erase`) → disclosure honesta em `PRIVACY.md` + política de revogação definida no spec. |
-| Consentimento guardado | Tabela nova (`stt_consent` ou afim) → rot-guard + `PRIVACY.md`. |
+| Consentimento e limites guardados | `stt_consent` e `stt_daily_usage` → rot-guard + `PRIVACY.md`; o limite é server-UTC e não depende do relógio do cliente. |
 
-- [x] **Portão fechado (2026-07-13, F4.4):** consent-first por-locutor via **botão inline** no anúncio de arranque (só o próprio carrega → `grantSttConsent`; `hasSttConsent` é o gate — quem não consente nunca é captado); transparência ativa — anúncio no canal ao **arrancar** (com o botão) e ao **parar** + o bot des-ensurdece só durante a sessão (`selfDeaf:false`→`true`) + **auto-stop** quando não resta consentido na call; áudio **nunca persistido** (WAV efémero apagado após transcrever); transcrições disclosed como mensagens permanentes na `PRIVACY.md` §2.4 (fora do `/privacy erase`, com `/transcribe revoke` para parar futuras); Whisper **local** (faster-whisper), sem terceiros nem treino de IA. **Premium-gated + Manage-Guild** para arrancar.
+- [x] **Portão fechado (2026-07-13, F4.4):** consent-first por-locutor via **botão inline** no anúncio de arranque (só o próprio carrega → `grantSttConsent`; `hasSttConsent` é o gate — quem não consente nunca é captado); transparência ativa — anúncio no canal ao **arrancar** (com o botão) e ao **parar** + o bot des-ensurdece só durante a sessão (`selfDeaf:false`→`true`) + **auto-stop** quando não resta consentido na call; áudio **nunca persistido** (WAV efémero apagado após transcrever); transcrições disclosed como mensagens permanentes na `PRIVACY.md` §2.4 (fora do `/privacy erase`, com `/transcribe revoke` para parar futuras); Whisper **local** (faster-whisper), sem terceiros nem treino de IA. **Plus/Premium-gated + Manage-Guild** para arrancar; uso diário por pessoa é reservado atomically against the server UTC day.
 
 ---
 
