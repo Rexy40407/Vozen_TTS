@@ -168,13 +168,18 @@ impl LiveTranscriptionGatewaySink {
                 )
                 .await;
         }
-        if !self
-            .store
-            .lock()
-            .map_err(|_| GatewayEventDispatchError)?
-            .is_guild_premium(&guild_key, system_now_ms())
-            .map_err(|_| GatewayEventDispatchError)?
-        {
+        let entitled = {
+            let store = self.store.lock().map_err(|_| GatewayEventDispatchError)?;
+            store
+                .stt_daily_limit_ms(
+                    &command.user.id.get().to_string(),
+                    &guild_key,
+                    system_now_ms(),
+                )
+                .map(|limit| limit.is_some())
+                .map_err(|_| GatewayEventDispatchError)?
+        };
+        if !entitled {
             return self
                 .send_ephemeral(
                     context,
@@ -405,6 +410,7 @@ impl LiveTranscriptionGatewaySink {
             }
         };
         let ever_consented = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let quota_notified = Arc::new(Mutex::new(BTreeSet::new()));
         let has_existing_consent = self
             .gateway_state
             .voice_member_ids(&guild_key, &voice_channel_id)
@@ -412,7 +418,14 @@ impl LiveTranscriptionGatewaySink {
             .filter_map(|user_id| user_id.parse::<u64>().ok())
             .any(|user_id| self.consent_registry.is_consented(&guild_key, user_id));
         ever_consented.store(has_existing_consent, std::sync::atomic::Ordering::Release);
-        self.spawn_consumer(command.channel_id, context.http.clone(), rx, language);
+        self.spawn_consumer(
+            command.channel_id,
+            context.http.clone(),
+            rx,
+            language,
+            guild_key.clone(),
+            quota_notified.clone(),
+        );
         self.sessions
             .lock()
             .map_err(|_| GatewayEventDispatchError)?
@@ -437,19 +450,65 @@ impl LiveTranscriptionGatewaySink {
         http: Arc<serenity::http::Http>,
         mut rx: UnboundedReceiver<ReceivedUtterance>,
         language: Option<String>,
+        guild_key: String,
+        quota_notified: Arc<Mutex<BTreeSet<String>>>,
     ) {
         let transcriber = self.transcriber.clone();
+        let store = self.store.clone();
         tokio::spawn(async move {
             while let Some(received) = rx.recv().await {
-                let result = transcriber
-                    .transcribe_pcm(
-                        &received.utterance.pcm,
-                        received
-                            .utterance
-                            .duration_ms
-                            .min(MAX_SESSION_SECONDS * 1_000),
-                        language.as_deref(),
+                let requested_ms = received
+                    .utterance
+                    .duration_ms
+                    .min(MAX_SESSION_SECONDS * 1_000);
+                if requested_ms == 0 {
+                    continue;
+                }
+                let user_id = received.user_id.to_string();
+                let limit_ms = {
+                    let Ok(store) = store.lock() else {
+                        continue;
+                    };
+                    let now = system_now_ms();
+                    store
+                        .stt_daily_limit_ms(&user_id, &guild_key, now)
+                        .ok()
+                        .flatten()
+                };
+                let Some(limit_ms) = limit_ms else {
+                    Self::notify_quota_once(
+                        &channel_id,
+                        &http,
+                        &quota_notified,
+                        &user_id,
+                        "Live transcription requires an active Vozen Plus subscription or a Premium server.",
                     )
+                    .await;
+                    continue;
+                };
+                let allowed = store
+                    .lock()
+                    .ok()
+                    .and_then(|store| {
+                        store
+                            .reserve_stt_audio_ms(&user_id, requested_ms as i64, limit_ms)
+                            .ok()
+                    })
+                    .is_some_and(|reservation| reservation.allowed);
+                if !allowed {
+                    let minutes = limit_ms / 60_000;
+                    Self::notify_quota_once(
+                        &channel_id,
+                        &http,
+                        &quota_notified,
+                        &user_id,
+                        &format!("Your daily live transcription limit ({minutes} minutes) has been reached. It resets on the next server UTC day."),
+                    )
+                    .await;
+                    continue;
+                }
+                let result = transcriber
+                    .transcribe_pcm(&received.utterance.pcm, requested_ms, language.as_deref())
                     .await;
                 let Ok(transcript) = result else {
                     continue;
@@ -473,6 +532,34 @@ impl LiveTranscriptionGatewaySink {
                     .await;
             }
         });
+    }
+
+    async fn notify_quota_once(
+        channel_id: &ChannelId,
+        http: &Arc<serenity::http::Http>,
+        notified: &Arc<Mutex<BTreeSet<String>>>,
+        user_id: &str,
+        message: &str,
+    ) {
+        let should_send = notified
+            .lock()
+            .map(|mut users| users.insert(user_id.to_owned()))
+            .unwrap_or(false);
+        if !should_send {
+            return;
+        }
+        let content = format!("<@{user_id}> {message}");
+        let _ = channel_id
+            .send_message(
+                http,
+                CreateMessage::new().content(content).allowed_mentions(
+                    CreateAllowedMentions::new()
+                        .all_users(false)
+                        .all_roles(false)
+                        .everyone(false),
+                ),
+            )
+            .await;
     }
 
     async fn stop_session(

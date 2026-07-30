@@ -23,6 +23,7 @@ const POSTGRES_REPLICA_TABLES: &[&str] = &[
     "premium_user",
     "pronunciation",
     "pronunciation_user",
+    "stt_daily_usage",
     "tts_lang_detect_on",
     "tts_optout",
     "user_effect",

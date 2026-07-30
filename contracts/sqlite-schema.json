@@ -129,6 +129,11 @@
     },
     {
       "type": "table",
+      "name": "stt_daily_usage",
+      "sql": "CREATE TABLE stt_daily_usage (\n        day      TEXT NOT NULL,\n        user_id  TEXT NOT NULL,\n        audio_ms INTEGER NOT NULL DEFAULT 0 CHECK (audio_ms >= 0),\n        PRIMARY KEY (day, user_id)\n      )"
+    },
+    {
+      "type": "table",
       "name": "talk_stats",
       "sql": "CREATE TABLE talk_stats (\n        guild_id     TEXT NOT NULL,\n        user_id      TEXT NOT NULL,\n        spoken_count INTEGER NOT NULL DEFAULT 0,\n        streak       INTEGER NOT NULL DEFAULT 0,\n        best_streak  INTEGER NOT NULL DEFAULT 0,\n        last_date    TEXT NOT NULL DEFAULT '',\n        PRIMARY KEY (guild_id, user_id)\n      )"
     },
