@@ -165,6 +165,17 @@ pub struct AdminDatabaseUsageSample {
     pub volume_used_bytes: Option<u64>,
 }
 
+/// One real Supabase/PostgreSQL storage reading for the owner-only history view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminSupabaseUsageSample {
+    /// UTC calendar day (`YYYY-MM-DD`) for a single aggregate storage reading.
+    pub day: String,
+    #[serde(rename = "databaseBytes")]
+    pub database_bytes: u64,
+    #[serde(rename = "capacityBytes")]
+    pub capacity_bytes: u64,
+}
+
 /// Aggregate usage reported by the optional Supabase/PostgreSQL mirror.
 ///
 /// The capacity is configured by the runtime because PostgreSQL can report its current
@@ -175,6 +186,16 @@ pub struct AdminSupabaseMetrics {
     pub database_bytes: u64,
     #[serde(rename = "capacityBytes")]
     pub capacity_bytes: u64,
+    /// Up to seven daily Supabase readings, oldest first. These are collected locally by the
+    /// runtime; missing days remain absent rather than being estimated by the API.
+    pub history: Vec<AdminSupabaseUsageSample>,
+}
+
+/// A guild where Vozen is connected to a voice channel right now. The owner console receives a
+/// display name only: Discord IDs and channel IDs remain private to the gateway process.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminActiveVoiceServer {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -189,6 +210,8 @@ pub struct AdminSystemMetrics {
     pub volume_available_bytes: Option<u64>,
     #[serde(rename = "activeVoiceSessions")]
     pub active_voice_sessions: u64,
+    #[serde(rename = "activeVoiceServers")]
+    pub active_voice_servers: Vec<AdminActiveVoiceServer>,
     /// Up to seven daily readings, oldest first. Missing days are represented by the client so
     /// the API never invents measurements that were not actually collected.
     #[serde(rename = "databaseHistory")]

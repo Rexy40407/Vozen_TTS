@@ -9,24 +9,32 @@ use std::{
     process::Command,
 };
 
-use vozen_api::admin_api::{AdminDatabaseUsageSample, AdminSupabaseMetrics, AdminSystemMetrics};
+use vozen_api::admin_api::{
+    AdminActiveVoiceServer, AdminDatabaseUsageSample, AdminSupabaseMetrics,
+    AdminSupabaseUsageSample, AdminSystemMetrics,
+};
 
 const HISTORY_DAYS: usize = 7;
 
 pub fn snapshot_with_supabase(
     database_path: &Path,
-    active_voice_sessions: usize,
+    active_voice_servers: Vec<AdminActiveVoiceServer>,
     supabase: Option<AdminSupabaseMetrics>,
 ) -> AdminSystemMetrics {
     let database_bytes = database_bytes(database_path);
     let volume = volume_usage(database_path.parent().unwrap_or_else(|| Path::new(".")));
     let database_history = record_database_history(database_path, database_bytes, volume);
+    let supabase = supabase.map(|mut metrics| {
+        metrics.history = record_supabase_history(database_path, &metrics);
+        metrics
+    });
     AdminSystemMetrics {
         database_bytes,
         volume_total_bytes: volume.map(|value| value.total_bytes),
         volume_used_bytes: volume.map(|value| value.used_bytes),
         volume_available_bytes: volume.map(|value| value.available_bytes),
-        active_voice_sessions: u64::try_from(active_voice_sessions).unwrap_or(u64::MAX),
+        active_voice_sessions: u64::try_from(active_voice_servers.len()).unwrap_or(u64::MAX),
+        active_voice_servers,
         database_history,
         supabase,
     }
@@ -34,10 +42,13 @@ pub fn snapshot_with_supabase(
 
 /// Records today's aggregate database reading. Repeated calls replace the same day's value, so
 /// the file remains small and never turns a dashboard refresh into a time-series write storm.
-pub fn record_daily_history(database_path: &Path) {
+pub fn record_daily_history(database_path: &Path, supabase: Option<AdminSupabaseMetrics>) {
     let database_bytes = database_bytes(database_path);
     let volume = volume_usage(database_path.parent().unwrap_or_else(|| Path::new(".")));
     let _ = record_database_history(database_path, database_bytes, volume);
+    if let Some(metrics) = supabase {
+        let _ = record_supabase_history(database_path, &metrics);
+    }
 }
 
 fn record_database_history(
@@ -61,6 +72,35 @@ fn history_path(database_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.metrics-history.json", database_path.display()))
 }
 
+fn supabase_history_path(database_path: &Path) -> PathBuf {
+    PathBuf::from(format!(
+        "{}.supabase-metrics-history.json",
+        database_path.display()
+    ))
+}
+
+fn record_supabase_history(
+    database_path: &Path,
+    metrics: &AdminSupabaseMetrics,
+) -> Vec<AdminSupabaseUsageSample> {
+    let history_path = supabase_history_path(database_path);
+    let sample = AdminSupabaseUsageSample {
+        day: time::OffsetDateTime::now_utc().date().to_string(),
+        database_bytes: metrics.database_bytes,
+        capacity_bytes: metrics.capacity_bytes,
+    };
+    let history = merge_supabase_history(read_supabase_history(&history_path), sample);
+    write_history(&history_path, &history);
+    history
+}
+
+fn read_supabase_history(path: &Path) -> Vec<AdminSupabaseUsageSample> {
+    fs::read(path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
 fn read_history(path: &Path) -> Vec<AdminDatabaseUsageSample> {
     fs::read(path)
         .ok()
@@ -68,7 +108,7 @@ fn read_history(path: &Path) -> Vec<AdminDatabaseUsageSample> {
         .unwrap_or_default()
 }
 
-fn write_history(path: &Path, history: &[AdminDatabaseUsageSample]) {
+fn write_history<T: serde::Serialize>(path: &Path, history: &[T]) {
     let Ok(encoded) = serde_json::to_vec(history) else {
         return;
     };
@@ -82,6 +122,19 @@ fn merge_history(
     mut history: Vec<AdminDatabaseUsageSample>,
     sample: AdminDatabaseUsageSample,
 ) -> Vec<AdminDatabaseUsageSample> {
+    history.retain(|entry| entry.day != sample.day);
+    history.push(sample);
+    history.sort_by(|left, right| left.day.cmp(&right.day));
+    if history.len() > HISTORY_DAYS {
+        history.drain(..history.len() - HISTORY_DAYS);
+    }
+    history
+}
+
+fn merge_supabase_history(
+    mut history: Vec<AdminSupabaseUsageSample>,
+    sample: AdminSupabaseUsageSample,
+) -> Vec<AdminSupabaseUsageSample> {
     history.retain(|entry| entry.day != sample.day);
     history.push(sample);
     history.sort_by(|left, right| left.day.cmp(&right.day));
@@ -181,5 +234,30 @@ mod tests {
         );
         assert_eq!(updated.len(), HISTORY_DAYS);
         assert_eq!(updated.last().map(|sample| sample.database_bytes), Some(9));
+    }
+
+    #[test]
+    fn supabase_history_replaces_a_daily_reading_and_keeps_only_the_latest_week() {
+        let history = (1..=7)
+            .map(|day| AdminSupabaseUsageSample {
+                day: format!("2026-07-{day:02}"),
+                database_bytes: u64::try_from(day).expect("positive test day"),
+                capacity_bytes: 500,
+            })
+            .collect();
+        let history = merge_supabase_history(
+            history,
+            AdminSupabaseUsageSample {
+                day: "2026-07-08".into(),
+                database_bytes: 8,
+                capacity_bytes: 500,
+            },
+        );
+        assert_eq!(history.len(), HISTORY_DAYS);
+        assert_eq!(
+            history.first().map(|sample| sample.day.as_str()),
+            Some("2026-07-02")
+        );
+        assert_eq!(history.last().map(|sample| sample.database_bytes), Some(8));
     }
 }

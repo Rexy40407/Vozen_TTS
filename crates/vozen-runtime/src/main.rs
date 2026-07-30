@@ -2429,7 +2429,7 @@ async fn run() -> Result<(), RuntimeError> {
     // boundary (90 days) so abandoned or already-claimed rows do not accumulate indefinitely.
     spawn_kofi_pending_retention(store.clone());
     if config.admin.is_some() {
-        spawn_admin_metric_history(config.database_path.clone());
+        spawn_admin_metric_history(config.database_path.clone(), supabase_metrics.clone());
     }
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
@@ -2836,9 +2836,20 @@ fn build_http_router(
                         let supabase = supabase_metrics
                             .as_ref()
                             .and_then(|cache| cache.read().ok().and_then(|value| value.clone()));
+                        let active_voice_servers = gateway_state
+                            .bot_voice_sessions()
+                            .into_iter()
+                            .map(
+                                |(guild_id, _)| vozen_api::admin_api::AdminActiveVoiceServer {
+                                    name: gateway_state
+                                        .guild_name(&guild_id)
+                                        .unwrap_or_else(|| "Servidor a sincronizar".into()),
+                                },
+                            )
+                            .collect();
                         admin_metrics::snapshot_with_supabase(
                             &database_path,
-                            gateway_state.bot_voice_sessions().len(),
+                            active_voice_servers,
                             supabase,
                         )
                     }
@@ -3089,12 +3100,18 @@ fn spawn_guild_retention(store: Arc<Mutex<SqliteStore>>) {
 
 /// Daily storage readings are written independently of console visits, so the owner sees an
 /// honest seven-day history even when nobody opened the dashboard that day.
-fn spawn_admin_metric_history(database_path: PathBuf) {
+fn spawn_admin_metric_history(
+    database_path: PathBuf,
+    supabase_metrics: Option<postgres_metrics::SharedSupabaseMetrics>,
+) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(6 * 60 * 60));
         loop {
             interval.tick().await;
-            admin_metrics::record_daily_history(&database_path);
+            let supabase = supabase_metrics
+                .as_ref()
+                .and_then(|cache| cache.read().ok().and_then(|value| value.clone()));
+            admin_metrics::record_daily_history(&database_path, supabase);
         }
     });
 }

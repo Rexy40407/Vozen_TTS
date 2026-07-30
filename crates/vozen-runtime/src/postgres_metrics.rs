@@ -52,6 +52,7 @@ async fn read_database_size(pool: &PgPool, capacity_bytes: u64) -> Option<AdminS
     Some(AdminSupabaseMetrics {
         database_bytes,
         capacity_bytes,
+        history: Vec::new(),
     })
 }
 

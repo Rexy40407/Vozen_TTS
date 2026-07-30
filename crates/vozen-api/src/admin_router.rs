@@ -378,8 +378,8 @@ fn common_headers(headers: &mut HeaderMap, state: &AdminState) {
 mod tests {
     use super::*;
     use crate::admin_api::{
-        AdminApiConfig, AdminAuthorization, AdminAuthorizationResolver, AdminDatabaseUsageSample,
-        AdminSystemMetrics,
+        AdminActiveVoiceServer, AdminApiConfig, AdminAuthorization, AdminAuthorizationResolver,
+        AdminDatabaseUsageSample, AdminSystemMetrics,
     };
     use async_trait::async_trait;
     use axum::{body::Body, body::to_bytes, http::Request};
@@ -421,6 +421,9 @@ mod tests {
                 volume_used_bytes: Some(25_000),
                 volume_available_bytes: Some(75_000),
                 active_voice_sessions: 3,
+                active_voice_servers: vec![AdminActiveVoiceServer {
+                    name: "Servidor de teste".into(),
+                }],
                 database_history: vec![AdminDatabaseUsageSample {
                     day: "2026-07-23".into(),
                     database_bytes: 12_345,
@@ -511,6 +514,7 @@ mod tests {
                 "volumeUsedBytes": 25_000,
                 "volumeAvailableBytes": 75_000,
                 "activeVoiceSessions": 3,
+                "activeVoiceServers": [{"name": "Servidor de teste"}],
                 "databaseHistory": [{
                     "day": "2026-07-23",
                     "databaseBytes": 12_345,
