@@ -48,6 +48,7 @@ pub const USER_ERASE_TABLES: &[&str] = &[
     "user_abbreviation",
     "pronunciation_user",
     "stt_consent",
+    "stt_daily_usage",
     "vote_reward",
     "translation_preference",
     "translation_user_daily_usage",

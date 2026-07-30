@@ -1,6 +1,18 @@
--- Apply one local SQLite durable-table change inside the private Vozen schema.
--- This is called only by the server-side staging pooler worker. No Data API role has schema
--- usage or EXECUTE access, and the function intentionally validates both the table and action.
+-- Server-authoritative daily live transcription quota.
+-- The Rust runtime derives `day` from its own UTC clock; Discord/PC timestamps never enter this
+-- table. It is private and is mirrored from SQLite through the existing replica outbox.
+CREATE TABLE IF NOT EXISTS vozen.stt_daily_usage (
+  day      TEXT NOT NULL,
+  user_id  TEXT NOT NULL,
+  audio_ms BIGINT NOT NULL DEFAULT 0 CHECK (audio_ms >= 0),
+  PRIMARY KEY (day, user_id)
+);
+
+REVOKE ALL ON TABLE vozen.stt_daily_usage FROM PUBLIC, anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA vozen REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
+
+-- Existing projects already have the replica function from the first migration. Replacing it here
+-- is required so a mirrored stt_daily_usage row is accepted after this migration is applied.
 CREATE OR REPLACE FUNCTION vozen.apply_replica_event(p_event JSONB)
 RETURNS VOID
 LANGUAGE plpgsql
@@ -21,8 +33,8 @@ BEGIN
      OR v_table NOT IN (
        'blocklist', 'channel_profile', 'discord_premium_entitlement', 'guild_config',
        'premium_guild', 'premium_pass', 'premium_pass_activation', 'premium_user',
-       'pronunciation', 'pronunciation_user', 'stt_daily_usage', 'tts_lang_detect_on', 'tts_optout',
-       'user_effect', 'user_voice'
+       'pronunciation', 'pronunciation_user', 'stt_daily_usage', 'tts_lang_detect_on',
+       'tts_optout', 'user_effect', 'user_voice'
      )
      OR v_operation NOT IN ('upsert', 'delete')
      OR jsonb_typeof(v_row) <> 'object' THEN

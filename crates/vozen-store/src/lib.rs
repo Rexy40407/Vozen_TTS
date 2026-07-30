@@ -40,6 +40,7 @@ mod runtime_batch;
 mod runtime_outbox;
 mod stripe;
 mod stt_consent;
+mod stt_usage;
 mod talk_stats;
 mod telemetry;
 mod translation;
@@ -85,6 +86,7 @@ pub use runtime_batch::{RuntimeBatchBuffer, RuntimeBatchEvent};
 pub use runtime_outbox::{RuntimeOutboxBatch, RuntimeOutboxEnqueue};
 pub use stripe::{StripeSubscription, StripeSubscriptionInput};
 pub use stt_consent::SttConsent;
+pub use stt_usage::{PLUS_STT_DAILY_LIMIT_MS, PREMIUM_STT_DAILY_LIMIT_MS, SttUsageReservation};
 pub use talk_stats::{GuildTalkStreak, TalkBump, TalkRow};
 pub use telemetry::{
     ConfiguredEngineResolver, DailyOperationalMetric, DominantTalkUsage, DominantTalkUsageOptions,
@@ -157,6 +159,8 @@ pub enum StoreError {
     InvalidGuildId,
     #[error("invalid STT consent identity")]
     InvalidSttIdentity,
+    #[error("invalid STT usage reservation input")]
+    InvalidSttUsageInput,
     #[error("guild departure grace period must be non-negative")]
     InvalidDepartureGrace,
     #[error("invalid translation mapping")]
