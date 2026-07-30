@@ -4,11 +4,13 @@
 name: Deploy bot to VPS
 
 on:
-  # Deployment starts only after the complete CI workflow succeeds on main.
+  # Production is intentionally released from the Rust migration branch. Keep
+  # both branches here because GitHub evaluates workflow_run filters from the
+  # default branch's workflow definition.
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [main]
+    branches: [main, migration/vozen-rust]
   workflow_dispatch:
 
 concurrency:
