@@ -13,6 +13,7 @@ const FIRE_TIERS: [&str; 6] = [
     "💚🔥", // days 150+: the highest tier
 ];
 
+#[cfg(feature = "voice-driver")]
 const FLAME_COLORS: [&str; 6] = [
     "#ff9f1c", // orange
     "#ff8a3d", // ember orange
@@ -32,12 +33,14 @@ pub(crate) fn fire_for_streak(days: i64) -> &'static str {
 }
 
 /// Returns the visual flame colour for the current streak tier.
+#[cfg(feature = "voice-driver")]
 #[must_use]
 pub(crate) fn flame_color_for_streak(days: i64) -> &'static str {
     FLAME_COLORS[streak_tier(days)]
 }
 
 /// Returns the day at which the next colour tier is earned.
+#[cfg(feature = "voice-driver")]
 #[must_use]
 pub(crate) fn next_flame_milestone(days: i64) -> i64 {
     let safe_days = days.max(0);
@@ -60,9 +63,10 @@ pub(crate) fn style_streak_message(message: String, days: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        fire_for_streak, flame_color_for_streak, next_flame_milestone, style_streak_message,
-    };
+    use super::{fire_for_streak, style_streak_message};
+
+    #[cfg(feature = "voice-driver")]
+    use super::{flame_color_for_streak, next_flame_milestone};
 
     #[test]
     fn changes_colour_at_each_thirty_day_boundary() {
@@ -82,6 +86,7 @@ mod tests {
         assert_eq!(fire_for_streak(10_000), "💚🔥");
     }
 
+    #[cfg(feature = "voice-driver")]
     #[test]
     fn exposes_the_current_colour_and_next_milestone() {
         assert_eq!(flame_color_for_streak(42), "#ff8a3d");

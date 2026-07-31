@@ -291,12 +291,12 @@ mod tests {
 
     #[test]
     fn truncates_at_utf16_boundary_without_a_lone_surrogate() {
-        assert_eq!(clean_text("ab𝕏𝕏", &options(5)), "ab𝕏");
+        assert_eq!(clean_text("ab𠀀𠀀", &options(5)), "ab𠀀");
         assert_eq!(clean_text("hello", &options(0)), "");
         assert_eq!(clean_text(&"abcd".repeat(13), &options(10)), "abcdabcdab");
         assert_eq!(clean_text("café açaí", &options(200)), "café açaí");
         assert_eq!(clean_text("こんにちは", &options(200)), "こんにちは");
-        assert_eq!(clean_text("a𝕏b", &options(200)), "a𝕏b");
+        assert_eq!(clean_text("a𠀀b", &options(200)), "a𠀀b");
         assert!(clean_text("   ", &options(200)).is_empty());
         assert!(clean_text("```apenas codigo```", &options(200)).is_empty());
     }
