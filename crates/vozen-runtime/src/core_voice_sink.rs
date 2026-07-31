@@ -19,8 +19,8 @@ use uuid::Uuid;
 use async_trait::async_trait;
 use serenity::{
     builder::{
-        CreateActionRow, CreateAllowedMentions, CreateButton, CreateEmbed, CreateInputText,
-        CreateInteractionResponse, CreateInteractionResponseFollowup,
+        CreateActionRow, CreateAllowedMentions, CreateAttachment, CreateButton, CreateEmbed,
+        CreateInputText, CreateInteractionResponse, CreateInteractionResponseFollowup,
         CreateInteractionResponseMessage, CreateMessage, CreateModal, CreateSelectMenu,
         CreateSelectMenuKind, CreateSelectMenuOption, CreateThread, EditInteractionResponse,
     },
@@ -62,6 +62,8 @@ use crate::{
     activity_poster::{LeaderboardPoster, VotePromoPoster, random_unit},
     engine_router::PerUserCommandSynthesizer,
     piper_adapter::PiperCommandSynthesizer,
+    streak_card::{build_streak_card, fetch_avatar_data_url},
+    streak_style::style_streak_message,
     system_now_ms,
 };
 
@@ -3541,19 +3543,29 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 let mut parameters = BTreeMap::new();
                 parameters.insert("user", facts.author_id.clone());
                 parameters.insert("n", talk.streak.to_string());
-                if let Some(content) =
-                    localizer.render_key("streak.day", Some(locale.as_str()), None, &parameters)
-                {
-                    let _ = message
-                        .channel_id
-                        .send_message(
-                            &context.http,
-                            CreateMessage::new()
-                                .content(content)
-                                .allowed_mentions(no_mentions()),
-                        )
-                        .await;
+                let content = localizer
+                    .render_key("streak.day", Some(locale.as_str()), None, &parameters)
+                    .map(|content| style_streak_message(content, talk.streak));
+                let avatar_url = message.author.avatar_url();
+                let avatar_data_url = fetch_avatar_data_url(avatar_url.as_deref()).await;
+                let card = CreateAttachment::bytes(
+                    build_streak_card(
+                        &message.author.name,
+                        talk.streak,
+                        avatar_data_url.as_deref(),
+                    ),
+                    "vozen-streak.svg",
+                );
+                let mut outgoing = CreateMessage::new()
+                    .add_file(card)
+                    .allowed_mentions(no_mentions());
+                if let Some(content) = content {
+                    outgoing = outgoing.content(content);
                 }
+                let _ = message
+                    .channel_id
+                    .send_message(&context.http, outgoing)
+                    .await;
             }
 
             // Activity is counted only after the queue accepted the message. The poster itself

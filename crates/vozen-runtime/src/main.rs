@@ -60,6 +60,9 @@ mod redeem_sink;
 mod runtime_mode;
 mod server_stats_sink;
 mod stats_sink;
+#[cfg(feature = "voice-driver")]
+mod streak_card;
+mod streak_style;
 mod top_speakers_sink;
 mod topgg_metrics;
 mod transcription_adapter;

@@ -6,6 +6,7 @@
 use std::sync::LazyLock;
 
 use regex::{Captures, Regex};
+use unicode_normalization::UnicodeNormalization;
 
 static RE_CODE_BLOCK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?s)```.*?```").expect("valid code-block regex"));
@@ -67,6 +68,11 @@ pub fn clean_text(raw: &str, options: &CleanTextOptions<'_>) -> String {
         .replace_all(&text, " ")
         .into_owned();
     text.retain(|character| !is_emoji_component(character));
+    // Discord users often decorate words with Mathematical Alphanumeric Symbols (for example
+    // `𝐌𝐈𝐂𝐎𝐍`). Those code points look like letters but many TTS engines read their compatibility
+    // forms as digits or punctuation. NFKC folds them back to their ordinary letters while keeping
+    // accents and normal Unicode text intact.
+    text = text.nfkc().collect();
     let collapsed = collapse_repetitions(&text);
     truncate_utf16(&collapse_whitespace(&collapsed), options.max_chars)
 }
@@ -268,6 +274,18 @@ mod tests {
         assert_eq!(
             clean_text("check <@&999> <:fire:123> at https://x.com", &options(200)),
             "check fire at"
+        );
+    }
+
+    #[test]
+    fn folds_decorative_unicode_letters_before_tts() {
+        assert_eq!(
+            clean_text("𝐌𝐈𝐂𝐎𝐍 𝕋𝕋𝕊 𝙑𝙤𝙯𝙚𝙣", &options(200)),
+            "MICON TTS Vozen"
+        );
+        assert_eq!(
+            clean_text("Ｆｕｌｌｗｉｄｔｈ ① ²", &options(200)),
+            "Fullwidth 1 2"
         );
     }
 

@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::ui::message_embed;
+use crate::{streak_style::style_streak_message, ui::message_embed};
 use serenity::{
     builder::{CreateAllowedMentions, CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -67,10 +67,12 @@ impl TopSpeakersGatewaySink {
         for (index, row) in rows.into_iter().enumerate() {
             let mut parameters = BTreeMap::new();
             parameters.insert("rank", (index + 1).to_string());
+            let streak = row.streak;
             parameters.insert("user", row.user_id);
             parameters.insert("count", row.count.to_string());
-            parameters.insert("streak", row.streak.to_string());
-            lines.push(self.message("topspeakers.line", command, &parameters)?);
+            parameters.insert("streak", streak.to_string());
+            let line = self.message("topspeakers.line", command, &parameters)?;
+            lines.push(style_streak_message(line, streak));
         }
         Ok(lines.join("\n"))
     }

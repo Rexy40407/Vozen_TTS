@@ -6,7 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::ui::message_embed;
+use crate::{streak_style::style_streak_message, ui::message_embed};
 use serenity::{
     builder::{CreateAllowedMentions, CreateInteractionResponse, CreateInteractionResponseMessage},
     client::Context,
@@ -93,16 +93,19 @@ impl ServerStatsGatewaySink {
             for (index, row) in stats.top_speakers.into_iter().enumerate() {
                 let mut parameters = BTreeMap::new();
                 parameters.insert("rank", (index + 1).to_string());
+                let streak = row.streak;
                 parameters.insert("user", row.user_id);
                 parameters.insert("count", row.count.to_string());
-                parameters.insert("streak", row.streak.to_string());
-                lines.push(self.message("serverstats.talkerLine", command, &parameters)?);
+                parameters.insert("streak", streak.to_string());
+                let line = self.message("serverstats.talkerLine", command, &parameters)?;
+                lines.push(style_streak_message(line, streak));
             }
         }
         if premium {
             let mut parameters = BTreeMap::new();
             parameters.insert("days", stats.streak.to_string());
-            lines.push(self.message("serverstats.streak", command, &parameters)?);
+            let line = self.message("serverstats.streak", command, &parameters)?;
+            lines.push(style_streak_message(line, stats.streak));
             let mut parameters = BTreeMap::new();
             parameters.insert("points", games.points.to_string());
             parameters.insert("wins", games.wins.to_string());

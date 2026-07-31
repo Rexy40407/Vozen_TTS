@@ -58,14 +58,7 @@ pub(crate) fn admit_discord_message_with_data(
 ) -> MessageSpeechDecision {
     let config = &data.guild;
     let profile = &data.profile;
-    let auto_read = profile
-        .as_ref()
-        .and_then(|profile| profile.auto_read)
-        .unwrap_or_else(|| {
-            profile.is_none()
-                && config.autoread
-                && config.tts_channel_id.as_deref() == Some(facts.channel_id)
-        });
+    let auto_read = effective_auto_read(config, profile.as_ref(), facts.channel_id);
     let read_bots = profile
         .as_ref()
         .and_then(|profile| profile.read_bots)
@@ -98,9 +91,9 @@ pub(crate) fn admit_discord_message_with_data(
     })
 }
 
-/// Decides whether the gateway may attempt the Node-compatible auto-join before the normal
-/// admission pass. This deliberately checks every gate that precedes `maybeAutojoin` in Node:
-/// guild switch, bot-reading, trigger, channel binding, required role and passive opt-out.
+/// Decides whether the gateway may attempt auto-join before the normal admission pass. This
+/// checks the guild switch, bot-reading, configured TTS-channel trigger, channel binding, required
+/// role and passive opt-out before the transport is touched.
 ///
 /// The transport and permission check remain in the runtime adapter. Returning `true` only says
 /// that joining the author's current voice channel is worth attempting; it never grants speech
@@ -117,14 +110,7 @@ pub fn should_attempt_autojoin(
         return Ok(false);
     }
     let profile = store.channel_profile(facts.guild_id, facts.channel_id)?;
-    let auto_read = profile
-        .as_ref()
-        .and_then(|profile| profile.auto_read)
-        .unwrap_or_else(|| {
-            profile.is_none()
-                && config.autoread
-                && config.tts_channel_id.as_deref() == Some(facts.channel_id)
-        });
+    let auto_read = effective_auto_read(&config, profile.as_ref(), facts.channel_id);
     let read_bots = profile
         .as_ref()
         .and_then(|profile| profile.read_bots)
@@ -162,6 +148,24 @@ pub fn should_attempt_autojoin(
         return Ok(false);
     }
     Ok(true)
+}
+
+/// Resolves the passive text-channel trigger. Auto-join is intentionally a trigger in the
+/// configured TTS channel as well: `/config auto-join` promises to join when someone types there,
+/// even when the older standalone `autoread` toggle is off. An explicit channel override still
+/// wins, including `auto_read = false`.
+fn effective_auto_read(
+    config: &GuildConfig,
+    profile: Option<&ChannelProfile>,
+    channel_id: &str,
+) -> bool {
+    profile
+        .and_then(|profile| profile.auto_read)
+        .unwrap_or_else(|| {
+            profile.is_none()
+                && config.tts_channel_id.as_deref() == Some(channel_id)
+                && (config.autoread || config.autojoin)
+        })
 }
 
 #[cfg(test)]
@@ -206,6 +210,30 @@ mod tests {
         let mut other = candidate;
         other.channel_id = "other";
         assert!(!should_attempt_autojoin(&store, other).expect("decision"));
+    }
+
+    #[test]
+    fn autojoin_makes_the_configured_tts_channel_a_trigger_without_autoread() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    autojoin: Some(true),
+                    autoread: Some(false),
+                    tts_channel_id: Some(Some("text".into())),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("config");
+        let mut candidate = facts();
+        candidate.bot_voice_channel_id = None;
+        assert!(should_attempt_autojoin(&store, candidate).expect("decision"));
+        candidate.autojoined_for_author = true;
+        assert!(matches!(
+            admit_discord_message(&store, candidate).expect("admission"),
+            MessageSpeechDecision::Allowed { .. }
+        ));
     }
 
     #[test]
