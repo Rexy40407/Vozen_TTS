@@ -122,9 +122,16 @@ jobs:
               docker compose -p vozen-prod -f docker-compose.rust.prod.yml up -d --no-build vozen
               exit 0
             fi
-            if ! git merge-base --is-ancestor "$current_commit" "$target_commit"; then
-              echo "::error::Production checkout and requested SHA diverge"
+            if ! git diff --quiet || ! git diff --cached --quiet; then
+              echo "::error::Production checkout has local changes; refusing to replace it"
               exit 1
             fi
-            git merge --ff-only "$target_commit"
+            if git merge-base --is-ancestor "$current_commit" "$target_commit"; then
+              git merge --ff-only "$target_commit"
+            else
+              # Production may still be checked out from the legacy main history. Once the
+              # working tree is confirmed clean, detach directly at the validated migration SHA
+              # instead of rewriting or merging unrelated production history.
+              git checkout --detach "$target_commit"
+            fi
             bash scripts/deploy-rust-vps.sh
