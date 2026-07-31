@@ -11,6 +11,11 @@ on:
     types: [completed]
     branches: [migration/vozen-rust]
   workflow_dispatch:
+    inputs:
+      production_sha:
+        description: 'Exact CI-tested migration/vozen-rust commit to deploy'
+        required: true
+        type: string
 
 concurrency:
   group: deploy-bot
@@ -46,11 +51,12 @@ jobs:
           STRIPE_PRICE_PREMIUM_YEARLY: price_1Txsk7QFJYeD1Af0GipTrZTd
           STRIPE_PRICE_MAX_MONTHLY: price_1Txsp7QFJYeD1Af0LVQvo30q
           STRIPE_PRICE_MAX_YEARLY: price_1TxspPQFJYeD1Af0EG6lUKIl
+          DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.production_sha }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: STRIPE_SECRET_KEY,STRIPE_PUBLISHABLE_KEY,STRIPE_WEBHOOK_SECRET,STRIPE_PRICE_PLUS_MONTHLY,STRIPE_PRICE_PLUS_YEARLY,STRIPE_PRICE_PREMIUM_MONTHLY,STRIPE_PRICE_PREMIUM_YEARLY,STRIPE_PRICE_MAX_MONTHLY,STRIPE_PRICE_MAX_YEARLY
+          envs: STRIPE_SECRET_KEY,STRIPE_PUBLISHABLE_KEY,STRIPE_WEBHOOK_SECRET,STRIPE_PRICE_PLUS_MONTHLY,STRIPE_PRICE_PLUS_YEARLY,STRIPE_PRICE_PREMIUM_MONTHLY,STRIPE_PRICE_PREMIUM_YEARLY,STRIPE_PRICE_MAX_MONTHLY,STRIPE_PRICE_MAX_YEARLY,DEPLOY_SHA
           command_timeout: 45m
           debug: true
           script: |
@@ -59,6 +65,7 @@ jobs:
             test -n "$STRIPE_SECRET_KEY"
             test -n "$STRIPE_PUBLISHABLE_KEY"
             test -n "$STRIPE_WEBHOOK_SECRET"
+            test -n "$DEPLOY_SHA"
 
             # Keep payment credentials only in the VPS runtime env. This updates
             # existing keys in place without printing any secret values to logs.
@@ -98,15 +105,26 @@ jobs:
             set_env STRIPE_PRICE_MAX_YEARLY "$STRIPE_PRICE_MAX_YEARLY"
 
             # The production clone was originally created as a single-branch
-            # checkout. Fetch the explicit production ref and only advance by
-            # fast-forward; never replace the checkout with an unrelated branch.
+            # checkout. Fetch the production ref and verify the exact SHA tested
+            # by CI before changing the checkout.
             git fetch origin +refs/heads/migration/vozen-rust:refs/remotes/origin/migration/vozen-rust
+            git cat-file -e "$DEPLOY_SHA^{commit}"
+            git merge-base --is-ancestor "$DEPLOY_SHA" origin/migration/vozen-rust
             current_commit="$(git rev-parse HEAD)"
-            target_commit="$(git rev-parse origin/migration/vozen-rust)"
+            target_commit="$DEPLOY_SHA"
             if [ "$current_commit" = "$target_commit" ]; then
               docker compose -p vozen-prod -f docker-compose.rust.prod.yml up -d --no-build vozen
               echo "Production already runs $target_commit; runtime env refreshed"
               exit 0
             fi
-            git merge --ff-only origin/migration/vozen-rust
+            if git merge-base --is-ancestor "$target_commit" "$current_commit"; then
+              echo "Current checkout $current_commit is newer than requested $target_commit; refusing rollback"
+              docker compose -p vozen-prod -f docker-compose.rust.prod.yml up -d --no-build vozen
+              exit 0
+            fi
+            if ! git merge-base --is-ancestor "$current_commit" "$target_commit"; then
+              echo "::error::Production checkout and requested SHA diverge"
+              exit 1
+            fi
+            git merge --ff-only "$target_commit"
             bash scripts/deploy-rust-vps.sh
