@@ -43,6 +43,16 @@ describe('operational security configuration', () => {
     expect(pages).toMatch(/\n\s+run: npm run check:site\s*\n/);
     expect(pages).not.toMatch(/\n\s+run: npm run build:site\s*\n/);
   });
+  it('keeps Pages path filters anchored to existing files or directories', () => {
+    const pages = source('.github/workflows/pages.yml');
+    const paths = [...pages.matchAll(/^\s+- '([^']+)'\s*$/gm)].map((match) => match[1]);
+    expect(paths.length).toBeGreaterThan(0);
+    for (const path of paths) {
+      const directory = path.endsWith('/**') ? path.slice(0, -3) : path;
+      expect(existsSync(resolve(process.cwd(), directory)), path).toBe(true);
+    }
+    expect(pages).not.toContain('tests/operationalHardening.test.ts');
+  });
   it('diagnoses VPS deployment inputs before opening the SSH action', () => {
     const deploy = source('.github/workflows/deploy-bot.yml');
     expect(deploy).toContain('name: Validate VPS deploy inputs');
