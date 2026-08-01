@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use vozen_core::{SynthRequest, SynthesisEngine};
+use vozen_core::{RuntimeMetrics, SynthRequest, SynthesisEngine};
 use vozen_discord::{CommandSpeechSynthesizer, CommandSynthesisError};
 
 use crate::piper_adapter::PiperCommandSynthesizer;
@@ -20,6 +20,7 @@ pub struct PerUserCommandSynthesizer {
     kokoro: Option<Arc<dyn CommandSpeechSynthesizer>>,
     gcloud: Option<Arc<dyn CommandSpeechSynthesizer>>,
     neural: Option<Arc<dyn CommandSpeechSynthesizer>>,
+    metrics: Arc<RuntimeMetrics>,
 }
 
 impl PerUserCommandSynthesizer {
@@ -43,7 +44,23 @@ impl PerUserCommandSynthesizer {
             kokoro,
             gcloud,
             neural,
+            metrics: Arc::new(RuntimeMetrics::default()),
         }
+    }
+
+    #[must_use]
+    #[allow(dead_code)]
+    pub fn new_with_metrics(
+        default: Arc<dyn CommandSpeechSynthesizer>,
+        piper: Arc<dyn CommandSpeechSynthesizer>,
+        kokoro: Option<Arc<dyn CommandSpeechSynthesizer>>,
+        gcloud: Option<Arc<dyn CommandSpeechSynthesizer>>,
+        neural: Option<Arc<dyn CommandSpeechSynthesizer>>,
+        metrics: Arc<RuntimeMetrics>,
+    ) -> Self {
+        let mut router = Self::new(default, piper, kokoro, gcloud, neural);
+        router.metrics = metrics;
+        router
     }
 
     async fn default_synthesis(
@@ -62,12 +79,14 @@ impl PerUserCommandSynthesizer {
         engine: SynthesisEngine,
     ) -> Result<std::path::PathBuf, CommandSynthesisError> {
         let Some(provider) = provider else {
+            self.metrics.record_synth_fallback();
             eprintln!("[tts:router] {engine:?} provider is not configured; using Google fallback");
             return self.default_synthesis(request).await;
         };
         match provider.synthesize(&with_engine(request, engine)).await {
             Ok(path) => Ok(path),
             Err(_) => {
+                self.metrics.record_synth_fallback();
                 eprintln!("[tts:router] {engine:?} provider failed; using Google fallback");
                 self.default_synthesis(request).await
             }
@@ -185,12 +204,14 @@ mod tests {
         let default = Arc::new(FakeSynthesizer::default());
         let kokoro = Arc::new(FakeSynthesizer::default());
         kokoro.fails.store(true, Ordering::Relaxed);
-        let router = PerUserCommandSynthesizer::new(
+        let metrics = Arc::new(RuntimeMetrics::default());
+        let router = PerUserCommandSynthesizer::new_with_metrics(
             default.clone(),
             Arc::new(FakeSynthesizer::default()),
             Some(kokoro.clone()),
             None,
             None,
+            metrics.clone(),
         );
 
         router
@@ -205,6 +226,7 @@ mod tests {
             *default.received.lock().expect("received"),
             [SynthesisEngine::Default]
         );
+        assert_eq!(metrics.snapshot().synth_fallbacks, 1);
     }
 
     #[tokio::test]

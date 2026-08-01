@@ -6,6 +6,8 @@
 
 use std::path::Path;
 use std::sync::{Arc, atomic::AtomicU64};
+#[cfg(feature = "voice-driver")]
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(any(feature = "voice-driver", test))]
 use std::collections::{BTreeMap, BTreeSet};
@@ -23,6 +25,7 @@ use crate::QueueControlPlayback;
 
 #[cfg(feature = "voice-driver")]
 use vozen_core::QueueEnqueueOptions;
+use vozen_core::RuntimeMetrics;
 #[cfg(any(feature = "voice-driver", test))]
 use vozen_core::{PublicQueueItem, QueueLane, QueueSource};
 
@@ -66,7 +69,11 @@ impl EventHandler for SpokenTrackCounter {
 }
 
 #[cfg(feature = "voice-driver")]
-struct PlaybackLifecycleLogger(&'static str);
+struct PlaybackLifecycleLogger {
+    stage: &'static str,
+    metrics: Arc<RuntimeMetrics>,
+    created_at_ms: u64,
+}
 
 #[cfg(feature = "voice-driver")]
 #[async_trait]
@@ -77,13 +84,24 @@ impl EventHandler for PlaybackLifecycleLogger {
         {
             eprintln!(
                 "[voice:playback] track {}: playing={:?} ready={:?} position_ms={}",
-                self.0,
+                self.stage,
                 state.playing,
                 state.ready,
                 state.position.as_millis()
             );
         } else {
-            eprintln!("[voice:playback] track {}", self.0);
+            eprintln!("[voice:playback] track {}", self.stage);
+        }
+        if self.stage == "playable" && self.created_at_ms > 0 {
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64)
+                .unwrap_or(self.created_at_ms);
+            let ttfa_ms = now_ms.saturating_sub(self.created_at_ms);
+            self.metrics.record_ttfa_ms(ttfa_ms);
+            if ttfa_ms >= 1_000 {
+                eprintln!("[voice:latency] slow ttfa_ms={ttfa_ms}");
+            }
         }
         Some(Event::Cancel)
     }
@@ -274,6 +292,8 @@ pub struct SongbirdCommandPlayback {
     queue_metadata: Arc<Mutex<QueueTrackLedger>>,
     #[cfg(feature = "voice-driver")]
     messages_spoken: Arc<AtomicU64>,
+    #[cfg(feature = "voice-driver")]
+    metrics: Arc<RuntimeMetrics>,
 }
 
 impl SongbirdCommandPlayback {
@@ -283,8 +303,22 @@ impl SongbirdCommandPlayback {
         maximum_queue_items: usize,
         messages_spoken: Arc<AtomicU64>,
     ) -> Self {
+        Self::new_with_metrics(
+            context,
+            maximum_queue_items,
+            messages_spoken,
+            Arc::new(RuntimeMetrics::default()),
+        )
+    }
+
+    pub fn new_with_metrics(
+        context: serenity::client::Context,
+        maximum_queue_items: usize,
+        messages_spoken: Arc<AtomicU64>,
+        metrics: Arc<RuntimeMetrics>,
+    ) -> Self {
         #[cfg(not(feature = "voice-driver"))]
-        let _ = (context, maximum_queue_items, messages_spoken);
+        let _ = (context, maximum_queue_items, messages_spoken, metrics);
 
         Self {
             #[cfg(feature = "voice-driver")]
@@ -299,6 +333,8 @@ impl SongbirdCommandPlayback {
             queue_metadata: Arc::new(Mutex::new(QueueTrackLedger::default())),
             #[cfg(feature = "voice-driver")]
             messages_spoken,
+            #[cfg(feature = "voice-driver")]
+            metrics,
         }
     }
 
@@ -416,7 +452,14 @@ impl CommandVoicePlayback for SongbirdCommandPlayback {
             (TrackEvent::End, "ended"),
         ] {
             track.events.add_event(
-                EventData::new(Event::Track(event), PlaybackLifecycleLogger(stage)),
+                EventData::new(
+                    Event::Track(event),
+                    PlaybackLifecycleLogger {
+                        stage,
+                        metrics: self.metrics.clone(),
+                        created_at_ms: options.created_at_ms,
+                    },
+                ),
                 std::time::Duration::ZERO,
             );
         }

@@ -7,11 +7,12 @@
 use std::{
     path::Path,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use vozen_core::{
     CountGate, DuplicateTracker, MediaAnnouncement, MessageSpeechDecision, MessageSpeechDenial,
-    QueueEnqueueOptions, QueueSource, SynthesisEngine, is_repetition_spam,
+    QueueEnqueueOptions, QueueSource, RuntimeMetrics, SynthesisEngine, is_repetition_spam,
 };
 use vozen_store::{
     OperationalMetric, OperationalProvider, ProviderHealth, RuntimeBatchBuffer, SqliteStore,
@@ -68,6 +69,7 @@ pub struct MessageVoiceService<S, P> {
     synthesis: GuildSynthesisCoordinator,
     settings: CoreVoiceSettings,
     now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+    metrics: Arc<RuntimeMetrics>,
 }
 
 impl<S, P> MessageVoiceService<S, P> {
@@ -142,6 +144,31 @@ impl<S, P> MessageVoiceService<S, P> {
         now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
         runtime_batch: RuntimeBatchBuffer,
     ) -> Self {
+        Self::new_with_synthesis_coordinator_runtime_batch_read_store_and_metrics(
+            store,
+            read_store,
+            synthesizer,
+            playback,
+            synthesis,
+            settings,
+            now_ms,
+            runtime_batch,
+            Arc::new(RuntimeMetrics::default()),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_synthesis_coordinator_runtime_batch_read_store_and_metrics(
+        store: Arc<Mutex<SqliteStore>>,
+        read_store: Arc<Mutex<SqliteStore>>,
+        synthesizer: S,
+        playback: P,
+        synthesis: GuildSynthesisCoordinator,
+        settings: CoreVoiceSettings,
+        now_ms: Arc<dyn Fn() -> i64 + Send + Sync>,
+        runtime_batch: RuntimeBatchBuffer,
+        metrics: Arc<RuntimeMetrics>,
+    ) -> Self {
         Self {
             store,
             read_store,
@@ -155,6 +182,7 @@ impl<S, P> MessageVoiceService<S, P> {
             synthesis,
             settings,
             now_ms,
+            metrics,
         }
     }
 }
@@ -165,6 +193,7 @@ where
     P: CommandVoicePlayback,
 {
     pub async fn execute(&self, invocation: MessageVoiceInvocation<'_>) -> MessageVoiceOutcome {
+        let received_at = Instant::now();
         let now_ms = (self.now_ms)();
         let voice_data = match self.voice_data.snapshot(
             &self.read_store,
@@ -246,16 +275,23 @@ where
         let admitted_generation = self
             .synthesis
             .admission_generation(invocation.facts.guild_id);
+        let gate_started = Instant::now();
         let mut synthesis = self
             .synthesis
             .acquire(invocation.facts.guild_id, admitted_generation)
             .await;
+        let gate_wait_ms = elapsed_ms(gate_started);
+        self.metrics.record_gate_wait_ms(gate_wait_ms);
         if synthesis.was_cleared() {
             return MessageVoiceOutcome::PlaybackFailed;
         }
         synthesis.activate();
 
-        match self.playback.reserve(invocation.facts.guild_id, lane).await {
+        let reserve_started = Instant::now();
+        let reserve_result = self.playback.reserve(invocation.facts.guild_id, lane).await;
+        self.metrics
+            .record_reserve_latency_ms(elapsed_ms(reserve_started));
+        match reserve_result {
             Ok(true) => {}
             Ok(false) => {
                 self.record_metric(OperationalMetric::QueueDrop);
@@ -270,6 +306,7 @@ where
                 .await;
             return MessageVoiceOutcome::PlaybackFailed;
         }
+        let synth_started = Instant::now();
         let wav = match self.synthesizer.synthesize(&request).await {
             Ok(wav) => {
                 self.record_synthesis_health(true);
@@ -284,6 +321,7 @@ where
                 return MessageVoiceOutcome::SynthesisFailed;
             }
         };
+        let synth_ms = elapsed_ms(synth_started);
         if synthesis.cancelled() {
             let _ = self
                 .playback
@@ -291,7 +329,8 @@ where
                 .await;
             return MessageVoiceOutcome::PlaybackFailed;
         }
-        match self
+        let enqueue_started = Instant::now();
+        let enqueue_result = self
             .playback
             .enqueue_reserved(
                 invocation.facts.guild_id,
@@ -303,8 +342,16 @@ where
                     created_at_ms: now_ms.max(0) as u64,
                 },
             )
-            .await
-        {
+            .await;
+        let enqueue_ms = elapsed_ms(enqueue_started);
+        self.metrics.record_enqueue_latency_ms(enqueue_ms);
+        let total_ms = elapsed_ms(received_at);
+        if total_ms >= 1_000 {
+            eprintln!(
+                "[voice:latency] slow request total_ms={total_ms} gate_wait_ms={gate_wait_ms} synth_ms={synth_ms} enqueue_ms={enqueue_ms}"
+            );
+        }
+        match enqueue_result {
             Ok(()) => {
                 let talk = if self.should_count(
                     invocation.facts.guild_id,
@@ -442,6 +489,10 @@ fn user_engine(engine: SynthesisEngine) -> UserEngine {
         SynthesisEngine::Gcloud => UserEngine::Gcloud,
         SynthesisEngine::Default | SynthesisEngine::Neural => UserEngine::Google,
     }
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    started.elapsed().as_millis().min(u64::MAX as u128) as u64
 }
 
 #[cfg(test)]

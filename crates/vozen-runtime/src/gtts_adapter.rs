@@ -16,15 +16,21 @@ pub struct GttsCommandSynthesizer {
 pub struct GttsWithPiperFallback {
     primary: Arc<dyn CommandSpeechSynthesizer>,
     fallback: Arc<dyn CommandSpeechSynthesizer>,
+    metrics: Arc<RuntimeMetrics>,
 }
 
 impl GttsWithPiperFallback {
     #[must_use]
-    pub fn new(
+    pub fn new_with_metrics(
         primary: Arc<dyn CommandSpeechSynthesizer>,
         fallback: Arc<dyn CommandSpeechSynthesizer>,
+        metrics: Arc<RuntimeMetrics>,
     ) -> Self {
-        Self { primary, fallback }
+        Self {
+            primary,
+            fallback,
+            metrics,
+        }
     }
 }
 
@@ -69,6 +75,7 @@ impl CommandSpeechSynthesizer for GttsWithPiperFallback {
         match self.primary.synthesize(request).await {
             Ok(path) => Ok(path),
             Err(_) => {
+                self.metrics.record_synth_fallback();
                 eprintln!("[tts:gtts] using Piper fallback");
                 let mut fallback_request = request.clone();
                 fallback_request.engine = SynthesisEngine::Piper;
@@ -134,11 +141,17 @@ mod tests {
             }
         }
 
-        let fallback = GttsWithPiperFallback::new(Arc::new(Failing), Arc::new(Successful));
+        let metrics = Arc::new(RuntimeMetrics::default());
+        let fallback = GttsWithPiperFallback::new_with_metrics(
+            Arc::new(Failing),
+            Arc::new(Successful),
+            metrics.clone(),
+        );
         let output = fallback
             .synthesize(&request(SynthesisEngine::Default))
             .await
             .expect("fallback synthesis");
         assert_eq!(output, PathBuf::from("piper.wav"));
+        assert_eq!(metrics.snapshot().synth_fallbacks, 1);
     }
 }
