@@ -1,29 +1,40 @@
-# Vozen repository guide
+# Agent guidance
 
-## Source of truth
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before changing the repository and
+[`DEPLOY.md`](DEPLOY.md) before touching a deploy or migration. Those files are
+the canonical source for architecture, required checks, production boundaries,
+and rollback guidance.
 
-- `crates/` is the production Rust runtime and API.
-- `site/` is the static public website and dashboard tooling.
-- `supabase/migrations/` contains the reviewed Postgres schema contract.
-- `plans/` is legacy TypeScript history; `advisor-plans/` is the current Rust audit backlog.
+## Repository surfaces
+
+- The production bot is the Rust workspace under `crates/`.
+- `site/` is the static website; its checks live under `site-tests/`.
+- `contracts/` contains compatibility contracts checked by the tooling in
+  `tools/`.
+- Database migrations and replica work require the staging/full-mode boundary
+  described in `DEPLOY.md`; SQLite remains authoritative until an explicit
+  cutover is approved.
 
 ## Required checks
 
-Before a change is published, run the smallest relevant tests plus:
+For Rust or contract changes, run the smallest relevant targeted tests, then
+the repository gates before handoff:
 
 ```sh
-cargo fmt --check
-npm run check:site
 node tools/check-rust-contracts.mjs
-node tools/check-rust-replica-contract.mjs
+cargo fmt --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
 ```
 
-Use a separate `CARGO_TARGET_DIR` when another checkout is compiling. Never commit `target/`,
-`node_modules/`, runtime databases, `.env` files, Discord tokens, OAuth secrets, or Supabase
-credentials.
+Website changes also require `npm run check:site` (see `CONTRIBUTING.md`).
 
-## Runtime and deployment boundaries
+## Safety and scope
 
-Production is Rust full mode on the `migration/vozen-rust` branch. Staging-only ownership flags are
-documented in `docs/RUST-MIGRATION-STAGING.md`. Deploys require an explicit operator decision and
-the CI-tested commit; never deploy from an unreviewed working tree.
+- Never commit `.env` files, tokens, credentials, generated output, or build
+  directories (`target/`, `node_modules/`, `dist/`, and `.pnpm-store/`).
+- Preserve unrelated working-tree changes and public Discord, privacy, and
+  compatibility contracts.
+- Do not run destructive database commands.
+- Do not commit, push, deploy, or change production data without explicit
+  authorization from the repository owner.
