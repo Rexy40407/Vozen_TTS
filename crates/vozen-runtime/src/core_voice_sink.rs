@@ -1713,10 +1713,13 @@ impl CoreVoiceGatewaySink {
                         .map_err(|_| GatewayEventDispatchError)?,
                     )
                         as Arc<dyn vozen_discord::CommandSpeechSynthesizer>;
-                    Arc::new(crate::gtts_adapter::GttsWithPiperFallback::new(
-                        gtts,
-                        piper.clone(),
-                    ))
+                    Arc::new(
+                        crate::gtts_adapter::GttsWithPiperFallback::new_with_metrics(
+                            gtts,
+                            piper.clone(),
+                            self.gateway_state.metrics(),
+                        ),
+                    )
                 }
                 SynthesisEngine::Neural => neural.clone().ok_or(GatewayEventDispatchError)?,
                 _ => piper.clone(),
@@ -1751,11 +1754,19 @@ impl CoreVoiceGatewaySink {
             .map_err(|_| GatewayEventDispatchError)?
             .map(|provider| Arc::new(provider) as Arc<dyn vozen_discord::CommandSpeechSynthesizer>);
         let dependencies = Arc::new(VoiceDependencies {
-            synthesizer: PerUserCommandSynthesizer::new(default, piper, kokoro, gcloud, neural),
-            playback: SongbirdCommandPlayback::new(
+            synthesizer: PerUserCommandSynthesizer::new_with_metrics(
+                default,
+                piper,
+                kokoro,
+                gcloud,
+                neural,
+                self.gateway_state.metrics(),
+            ),
+            playback: SongbirdCommandPlayback::new_with_metrics(
                 context.clone(),
                 options.queue_cap,
                 self.gateway_state.message_counter(),
+                self.gateway_state.metrics(),
             ),
             synthesis: GuildSynthesisCoordinator::default(),
         });
@@ -1802,7 +1813,7 @@ impl CoreVoiceGatewaySink {
         }
         let dependencies = self.dependencies(context)?;
         let service = Arc::new(
-            MessageVoiceService::new_with_synthesis_coordinator_runtime_batch_and_read_store(
+            MessageVoiceService::new_with_synthesis_coordinator_runtime_batch_read_store_and_metrics(
                 self.store.clone(),
                 self.voice_read_store.clone(),
                 dependencies.synthesizer.clone(),
@@ -1811,6 +1822,7 @@ impl CoreVoiceGatewaySink {
                 self.options.settings.clone(),
                 Arc::new(system_now_ms),
                 self.runtime_batch.clone(),
+                self.gateway_state.metrics(),
             ),
         );
         *current = Some(service.clone());
@@ -3548,24 +3560,33 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                     .map(|content| style_streak_message(content, talk.streak));
                 let avatar_url = message.author.avatar_url();
                 let avatar_data_url = fetch_avatar_data_url(avatar_url.as_deref()).await;
-                let card = CreateAttachment::bytes(
-                    build_streak_card(
-                        &message.author.name,
-                        talk.streak,
-                        avatar_data_url.as_deref(),
-                    ),
-                    "vozen-streak.svg",
-                );
-                let mut outgoing = CreateMessage::new()
-                    .add_file(card)
-                    .allowed_mentions(no_mentions());
+                let mut outgoing = CreateMessage::new().allowed_mentions(no_mentions());
+                if let Some(card_bytes) = build_streak_card(
+                    &message.author.name,
+                    talk.streak,
+                    avatar_data_url.as_deref(),
+                ) {
+                    outgoing =
+                        outgoing.add_file(CreateAttachment::bytes(card_bytes, "vozen-streak.png"));
+                } else {
+                    eprintln!(
+                        "[streak] card rendering failed for user {}; sending text fallback",
+                        facts.author_id
+                    );
+                }
                 if let Some(content) = content {
                     outgoing = outgoing.content(content);
                 }
-                let _ = message
+                if let Err(error) = message
                     .channel_id
                     .send_message(&context.http, outgoing)
-                    .await;
+                    .await
+                {
+                    eprintln!(
+                        "[streak] announcement send failed for user {}: {error}",
+                        facts.author_id
+                    );
+                }
             }
 
             // Activity is counted only after the queue accepted the message. The poster itself

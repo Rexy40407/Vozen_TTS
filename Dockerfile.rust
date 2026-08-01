@@ -31,7 +31,7 @@ ARG PIPER_VERSION=2023.11.14-2
 ARG PIPER_LINUX_X86_64_SHA256=a50cb45f355b7af1f6d758c1b360717877ba0a398cc8cbe6d2a7a3a26e225992
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg libopus0 libsndfile1 python3 python3-venv \
+  && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg fonts-dejavu libopus0 libsndfile1 python3 python3-venv \
   && rm -rf /var/lib/apt/lists/* \
   && curl --fail --location --retry 3 \
     --output /tmp/piper-linux-x86_64.tar.gz \

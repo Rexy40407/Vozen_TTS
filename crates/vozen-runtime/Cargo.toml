@@ -9,16 +9,18 @@ rust-version.workspace = true
 [features]
 # Production-only Discord voice transport. The default runtime remains portable for shadow-mode
 # and control-plane verification; deployment must opt in deliberately.
-voice-driver = ["vozen-discord/voice-driver"]
+voice-driver = ["vozen-discord/voice-driver", "dep:resvg"]
 
 [dependencies]
 axum.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 reqwest.workspace = true
+resvg = { workspace = true, optional = true }
 serde.workspace = true
 serenity.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 sqlx.workspace = true
 songbird.workspace = true
 time.workspace = true

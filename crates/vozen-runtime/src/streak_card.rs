@@ -1,16 +1,18 @@
-//! Dynamic SVG artwork for daily streak announcements.
+//! Dynamic artwork for daily streak announcements.
 //!
-//! The card is intentionally generated at send time instead of stored as a bitmap: the same
-//! layout can show the member's current avatar, name and tier without keeping any user image on
-//! disk. Discord renders SVG attachments inline and the fallback is a plain white avatar circle.
+//! The approved layout is assembled as SVG and rasterized to PNG before it is sent to Discord.
+//! Discord does not render SVG attachments as inline images, so the SVG never leaves this module.
 
 use std::time::Duration;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use resvg::usvg;
 
 use crate::streak_style::{flame_color_for_streak, next_flame_milestone};
 
 const MAX_AVATAR_BYTES: usize = 1_000_000;
+const CARD_WIDTH: u32 = 1200;
+const CARD_HEIGHT: u32 = 680;
 
 /// Downloads a Discord CDN avatar for one card and embeds it as a bounded data URL.
 ///
@@ -36,6 +38,7 @@ pub(crate) async fn fetch_avatar_data_url(avatar_url: Option<&str>) -> Option<St
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
         .filter(|value| matches!(*value, "image/png" | "image/jpeg" | "image/webp"))
         .unwrap_or("image/png")
         .to_owned();
@@ -46,13 +49,47 @@ pub(crate) async fn fetch_avatar_data_url(avatar_url: Option<&str>) -> Option<St
     Some(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
 }
 
-/// Builds the approved wide streak card as an inline SVG attachment.
+/// Builds the approved wide streak card as a Discord-compatible PNG attachment.
 #[must_use]
 pub(crate) fn build_streak_card(
     display_name: &str,
     streak_days: i64,
     avatar_data_url: Option<&str>,
-) -> Vec<u8> {
+) -> Option<Vec<u8>> {
+    rasterize_streak_card_svg(&build_streak_card_svg(
+        display_name,
+        streak_days,
+        avatar_data_url,
+    ))
+    .or_else(|| {
+        avatar_data_url.and_then(|_| {
+            rasterize_streak_card_svg(&build_streak_card_svg(display_name, streak_days, None))
+        })
+    })
+}
+
+fn rasterize_streak_card_svg(svg: &str) -> Option<Vec<u8>> {
+    let options = usvg::Options::default();
+    let tree = usvg::Tree::from_str(svg, &options).ok()?;
+    let size = tree.size().to_int_size();
+    if size.width() != CARD_WIDTH || size.height() != CARD_HEIGHT {
+        return None;
+    }
+
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(CARD_WIDTH, CARD_HEIGHT)?;
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::default(),
+        &mut pixmap.as_mut(),
+    );
+    pixmap.encode_png().ok()
+}
+
+fn build_streak_card_svg(
+    display_name: &str,
+    streak_days: i64,
+    avatar_data_url: Option<&str>,
+) -> String {
     let name = escape_xml(&display_name.chars().take(24).collect::<String>());
     let name = if name.trim().is_empty() {
         "Vozen user".to_owned()
@@ -82,25 +119,24 @@ pub(crate) fn build_streak_card(
   <rect x="70" y="116" width="1060" height="476" rx="16" fill="none" stroke="#203248" stroke-width="1"/>
   <circle cx="600" cy="100" r="90" fill="#071522" stroke="#516072" stroke-width="2"/>
   {avatar}
-  <text x="600" y="238" text-anchor="middle" fill="#f7f9fc" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="700" letter-spacing="1.4">{name}</text>
+  <text x="600" y="238" text-anchor="middle" fill="#f7f9fc" font-family="DejaVu Sans, sans-serif" font-size="31" font-weight="700" letter-spacing="1.4">{name}</text>
   <line x1="600" y1="276" x2="600" y2="548" stroke="#506071" stroke-width="2"/>
 
   <g transform="translate(350 400)">
     <path d="M0 86C-51 75-61 30-13-10C-18 26 8 34 23 8C30 35 57 48 43 76C36 89 18 96 0 86Z" fill="{current_color}"/>
     <path d="M0 70C-17 64-25 47-6 27C-4 44 10 47 17 33C22 50 25 60 14 68C10 71 5 72 0 70Z" fill="#fff3d6" opacity="0.86"/>
-    <text x="0" y="175" text-anchor="middle" fill="#45d6dc" font-family="Arial, Helvetica, sans-serif" font-size="112" font-weight="800">{streak_days}</text>
-    <text x="0" y="218" text-anchor="middle" fill="#f7f9fc" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" letter-spacing="5">DAY STREAK</text>
+    <text x="0" y="175" text-anchor="middle" fill="#45d6dc" font-family="DejaVu Sans, sans-serif" font-size="112" font-weight="800">{streak_days}</text>
+    <text x="0" y="218" text-anchor="middle" fill="#f7f9fc" font-family="DejaVu Sans, sans-serif" font-size="24" font-weight="700" letter-spacing="5">DAY STREAK</text>
   </g>
 
   <g transform="translate(850 350)">
-    <text x="0" y="0" text-anchor="middle" fill="#d9dee7" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="3">NEXT COLOR</text>
+    <text x="0" y="0" text-anchor="middle" fill="#d9dee7" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="700" letter-spacing="3">NEXT COLOR</text>
     <path d="M0 92C-51 81-61 36-13-4C-18 32 8 40 23 14C30 41 57 54 43 82C36 95 18 102 0 92Z" fill="{next_color}"/>
     <path d="M0 76C-17 70-25 53-6 33C-4 50 10 53 17 39C22 56 25 66 14 74C10 77 5 78 0 76Z" fill="#ffffff" opacity="0.72"/>
-    <text x="0" y="168" text-anchor="middle" fill="#d9dee7" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700">AT <tspan fill="{next_color}" font-size="44">{next_milestone}</tspan> DAYS</text>
+    <text x="0" y="168" text-anchor="middle" fill="#d9dee7" font-family="DejaVu Sans, sans-serif" font-size="25" font-weight="700">AT <tspan fill="{next_color}" font-size="44">{next_milestone}</tspan> DAYS</text>
   </g>
 </svg>"##
     )
-    .into_bytes()
 }
 
 fn escape_xml(value: &str) -> String {
@@ -114,11 +150,11 @@ fn escape_xml(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::build_streak_card;
+    use super::{build_streak_card, build_streak_card_svg};
 
     #[test]
     fn card_contains_the_current_and_next_tier_without_a_milestone_row() {
-        let svg = String::from_utf8(build_streak_card("Micon & Co", 42, None)).expect("svg");
+        let svg = build_streak_card_svg("Micon & Co", 42, None);
         assert!(svg.contains("Micon &amp; Co"));
         assert!(svg.contains("DAY STREAK"));
         assert!(svg.contains("NEXT COLOR"));
@@ -127,5 +163,34 @@ mod tests {
         assert!(svg.contains("fill=\"#9b6cff\""));
         assert!(!svg.contains("30</text>"));
         assert!(svg.contains("fill=\"#ffffff\""));
+    }
+
+    #[test]
+    fn card_rasterizes_to_a_fixed_size_png() {
+        let png = build_streak_card("Micon & Co", 42, None).expect("png");
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        assert_eq!(
+            u32::from_be_bytes(png[16..20].try_into().expect("width")),
+            1200
+        );
+        assert_eq!(
+            u32::from_be_bytes(png[20..24].try_into().expect("height")),
+            680
+        );
+        assert!(!png.windows(4).any(|window| window == b"<svg"));
+    }
+
+    #[test]
+    fn invalid_avatar_falls_back_to_the_white_placeholder() {
+        let png = build_streak_card("Micon", 42, Some("data:image/png;base64,not-an-image"))
+            .expect("placeholder png");
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+    }
+
+    #[test]
+    fn valid_avatar_data_url_is_rendered_into_the_card() {
+        let avatar = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+        let png = build_streak_card("Micon", 42, Some(avatar)).expect("avatar png");
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
     }
 }
