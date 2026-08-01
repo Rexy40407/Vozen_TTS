@@ -192,11 +192,14 @@ fn worker(receiver: Receiver<Command>, store: Arc<Mutex<SqliteStore>>) {
 
 #[derive(Default)]
 struct Pending {
-    metrics: HashMap<(String, String), (String, OperationalMetric, OperationalProvider, i64)>,
+    metrics: MetricPending,
     provider_health: HashMap<String, (OperationalProvider, ProviderHealth, i64)>,
     guild_talk: HashMap<(String, String), i64>,
     talk_usage: HashMap<(String, String, String, UserEngine), i64>,
 }
+
+type MetricPending =
+    HashMap<(String, String, String), (String, OperationalMetric, OperationalProvider, i64)>;
 
 impl Pending {
     fn push(&mut self, event: Event) {
@@ -207,7 +210,7 @@ impl Pending {
                 provider,
                 value,
             } => {
-                let key = (format!("{metric:?}"), format!("{provider:?}"));
+                let key = (day.clone(), format!("{metric:?}"), format!("{provider:?}"));
                 let entry = self
                     .metrics
                     .entry(key)
@@ -266,5 +269,49 @@ impl Pending {
                 let _ = store.bump_talk_usage(&guild_id, &user_id, &model, engine);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metrics_from_different_days_keep_separate_buckets() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        let writer = SpeechTelemetryWriter::new(store.clone());
+        writer.record_metric(
+            "2026-07-31",
+            OperationalMetric::SynthSuccess,
+            OperationalProvider::Piper,
+            1,
+        );
+        writer.record_metric(
+            "2026-08-01",
+            OperationalMetric::SynthSuccess,
+            OperationalProvider::Piper,
+            1,
+        );
+        writer.flush();
+
+        let store = store.lock().expect("store");
+        assert_eq!(
+            store
+                .list_daily_operational_metrics(Some("2026-07-31"))
+                .expect("first day")
+                .iter()
+                .map(|row| row.value)
+                .sum::<i64>(),
+            1
+        );
+        assert_eq!(
+            store
+                .list_daily_operational_metrics(Some("2026-08-01"))
+                .expect("second day")
+                .iter()
+                .map(|row| row.value)
+                .sum::<i64>(),
+            1
+        );
     }
 }
