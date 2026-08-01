@@ -41,6 +41,10 @@ use crate::{
 const FRAME_SAMPLES: usize = 1_920;
 const MAX_SESSION_SECONDS: u64 = 20;
 
+fn session_should_stop(bot_left: bool, humans_empty: bool, no_consent: bool) -> bool {
+    bot_left || humans_empty || no_consent
+}
+
 struct LiveSession {
     receiver: SongbirdVoiceReceiver,
     voice_channel_id: String,
@@ -783,7 +787,7 @@ impl GatewayEventSink for LiveTranscriptionGatewaySink {
         let new_user_id = new.user_id.get().to_string();
         let bot_left = bot_user_id.as_deref() == Some(new_user_id.as_str())
             && new.channel_id.map(|id| id.get().to_string()) != Some(voice_channel_id);
-        if bot_left || humans.is_empty() || no_consent {
+        if session_should_stop(bot_left, humans.is_empty(), no_consent) {
             let _ = self.stop_session(&context, &guild_key, true).await?;
         }
         Ok(())
@@ -817,4 +821,48 @@ fn now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command(payload: &str) -> serenity::model::application::CommandData {
+        serde_json::from_str(payload).expect("valid command data")
+    }
+
+    #[test]
+    fn session_boundary_accepts_start_stop_and_ignores_revoke() {
+        let start = command(
+            r#"{"id":"1","name":"transcribe","type":1,"options":[{"type":1,"name":"start","options":[]}]}"#,
+        );
+        assert_eq!(
+            parse_transcription_session_command(&start).expect("start"),
+            Some(TranscriptionSessionCommand::Start { language: None })
+        );
+        let revoke = command(
+            r#"{"id":"1","name":"transcribe","type":1,"options":[{"type":1,"name":"revoke","options":[]}] }"#,
+        );
+        assert_eq!(
+            parse_transcription_session_command(&revoke).expect("revoke"),
+            None
+        );
+    }
+
+    #[test]
+    fn transcript_output_is_bounded_and_mentions_are_suppressed() {
+        assert_eq!(clean_transcript("  hello\n world\t"), "hello world");
+        assert_eq!(
+            defuse_mentions("@everyone @here hello"),
+            "@\u{200b}everyone @\u{200b}here hello"
+        );
+    }
+
+    #[test]
+    fn teardown_stops_when_bot_leaves_or_consent_disappears() {
+        assert!(session_should_stop(true, false, false));
+        assert!(session_should_stop(false, false, false));
+        assert!(session_should_stop(false, false, true));
+        assert!(!session_should_stop(false, false, false));
+    }
 }

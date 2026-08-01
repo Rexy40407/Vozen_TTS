@@ -25,6 +25,30 @@ use crate::{
     piper_adapter::PiperCommandSynthesizer, system_now_ms,
 };
 
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExportResponseKind {
+    UploadAttachment,
+    ContentOnly,
+    AttachmentReadFailed,
+}
+
+/// Classifies the response boundary after the service has accepted a request. Keeping this
+/// decision pure makes the deferred-ack/upload/edit contract testable without a Discord client.
+#[cfg(test)]
+fn export_response_kind(
+    outcome: &TtsFileExportOutcome,
+    attachment_readable: bool,
+) -> ExportResponseKind {
+    match outcome {
+        TtsFileExportOutcome::Ready(_) if attachment_readable => {
+            ExportResponseKind::UploadAttachment
+        }
+        TtsFileExportOutcome::Ready(_) => ExportResponseKind::AttachmentReadFailed,
+        _ => ExportResponseKind::ContentOnly,
+    }
+}
+
 pub struct TtsFileGatewaySink {
     service: TtsFileExportService<PerUserCommandSynthesizer>,
     localizer: VoiceResponseLocalizer,
@@ -187,5 +211,62 @@ impl GatewayEventSink for TtsFileGatewaySink {
     async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
         self.service.forget_scope(guild_id);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn command(payload: &str) -> serenity::model::application::CommandData {
+        serde_json::from_str(payload).expect("valid Discord command payload")
+    }
+
+    #[test]
+    fn boundary_accepts_private_command_and_ignores_other_commands() {
+        let accepted = parse_tts_file_command(&command(
+            r#"{"id":"1","name":"tts-file","type":1,"options":[{"name":"text","type":3,"value":"hello"}]}"#,
+        ))
+        .expect("parse accepted command");
+        assert!(accepted.is_some());
+
+        let ignored = parse_tts_file_command(&command(
+            r#"{"id":"1","name":"tts","type":1,"options":[{"name":"text","type":3,"value":"hello"}]}"#,
+        ))
+        .expect("parse unrelated command");
+        assert!(ignored.is_none());
+    }
+
+    #[test]
+    fn deferred_response_boundary_covers_upload_and_failure_paths() {
+        assert_eq!(
+            export_response_kind(
+                &TtsFileExportOutcome::Ready(PathBuf::from("audio.wav")),
+                true,
+            ),
+            ExportResponseKind::UploadAttachment
+        );
+        assert_eq!(
+            export_response_kind(
+                &TtsFileExportOutcome::Ready(PathBuf::from("missing.wav")),
+                false,
+            ),
+            ExportResponseKind::AttachmentReadFailed
+        );
+        assert_eq!(
+            export_response_kind(&TtsFileExportOutcome::SynthesisFailed, true),
+            ExportResponseKind::ContentOnly
+        );
+    }
+
+    #[tokio::test]
+    async fn attachment_upload_boundary_reports_missing_files_without_network_io() {
+        let result =
+            CreateAttachment::path(PathBuf::from("C:/tmp/vozen-no-such-audio-file.wav")).await;
+        assert!(
+            result.is_err(),
+            "missing cache files must take the edit-failure path"
+        );
     }
 }

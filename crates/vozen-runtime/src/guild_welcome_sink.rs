@@ -149,3 +149,65 @@ fn no_mentions() -> CreateAllowedMentions {
         .all_roles(false)
         .everyone(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serenity::model::{
+        channel::GuildChannel,
+        guild::Guild,
+        guild::Member,
+        id::{ChannelId, GuildId, UserId},
+    };
+
+    #[test]
+    fn welcome_channel_falls_back_to_lowest_visible_text_channel() {
+        let mut guild = Guild::default();
+        guild.id = GuildId::new(7);
+        guild.owner_id = UserId::new(42);
+        let mut member = Member::default();
+        member.user.id = UserId::new(42);
+
+        let mut later = GuildChannel::default();
+        later.id = ChannelId::new(20);
+        later.kind = ChannelType::Text;
+        later.position = 5;
+        let mut first = GuildChannel::default();
+        first.id = ChannelId::new(10);
+        first.kind = ChannelType::Text;
+        first.position = 1;
+        guild.channels.insert(later.id, later);
+        guild.channels.insert(first.id, first);
+
+        assert_eq!(
+            GuildWelcomeGatewaySink::pick_channel(&guild, &member).map(|channel| channel.id),
+            Some(ChannelId::new(10))
+        );
+    }
+
+    #[test]
+    fn welcome_messages_disable_every_kind_of_mention() {
+        let encoded = serde_json::to_value(no_mentions()).expect("allowed mentions json");
+        assert_eq!(
+            encoded
+                .get("parse")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(0)
+        );
+        assert_eq!(
+            encoded
+                .get("users")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(0)
+        );
+        assert_eq!(
+            encoded
+                .get("roles")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(0)
+        );
+    }
+}
