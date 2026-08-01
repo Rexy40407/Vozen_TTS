@@ -22,6 +22,7 @@ use serenity::{
     gateway::{ActivityData, ConnectionStage, ShardStageUpdateEvent},
     model::{
         gateway::{GatewayIntents, Ready},
+        id::ChannelId,
         user::OnlineStatus,
     },
 };
@@ -545,6 +546,14 @@ pub struct GatewayState {
     /// HTTP is retained after READY only for low-frequency, authorized dashboard option lookups.
     /// It contains no message content or cached guild/member state.
     http: Arc<RwLock<Option<Arc<serenity::http::Http>>>>,
+}
+
+fn effective_old_voice_channel_id(
+    old: Option<&serenity::model::voice::VoiceState>,
+    remembered_channel_id: Option<&str>,
+) -> Option<String> {
+    old.and_then(|state| state.channel_id.map(|id| id.get().to_string()))
+        .or_else(|| remembered_channel_id.map(ToOwned::to_owned))
 }
 
 impl GatewayState {
@@ -1240,6 +1249,12 @@ impl EventHandler for VozenGatewayHandler {
         let Some(guild_id) = new.guild_id else {
             return;
         };
+        // Serenity's cache can yield `old = None` when it missed the preceding state update.
+        // Keep the gateway-owned channel snapshot as a fallback so mute/deaf/stream changes do
+        // not look like a fresh join to the greeting handler.
+        let remembered_channel_id = self
+            .gateway_state
+            .voice_channel_id(&guild_id.get().to_string(), &new.user_id.get().to_string());
         self.gateway_state.update_voice_state_with_bot(
             &guild_id.get().to_string(),
             &new.user_id.get().to_string(),
@@ -1247,6 +1262,27 @@ impl EventHandler for VozenGatewayHandler {
                 .map(|channel_id| channel_id.get().to_string()),
             new.member.as_ref().is_some_and(|member| member.user.bot),
         );
+        let effective_old_channel_id =
+            effective_old_voice_channel_id(old.as_ref(), remembered_channel_id.as_deref());
+        let old = match old {
+            Some(mut state) => {
+                if state.channel_id.is_none() {
+                    state.channel_id = effective_old_channel_id
+                        .as_deref()
+                        .and_then(|channel_id| channel_id.parse::<u64>().ok())
+                        .map(ChannelId::new);
+                }
+                Some(state)
+            }
+            None => effective_old_channel_id
+                .as_deref()
+                .and_then(|channel_id| channel_id.parse::<u64>().ok())
+                .map(|channel_id| {
+                    let mut recovered = new.clone();
+                    recovered.channel_id = Some(ChannelId::new(channel_id));
+                    recovered
+                }),
+        };
         if let Some(event_sink) = &self.event_sink
             && event_sink
                 .on_voice_state_update(context, old, new)
@@ -1420,6 +1456,15 @@ mod tests {
         state.update_voice_state("guild", "user", Some("voice".into()));
         state.forget_guild("guild");
         assert_eq!(state.voice_channel_id("guild", "user"), None);
+    }
+
+    #[test]
+    fn voice_greeting_falls_back_to_the_gateway_channel_when_serenity_old_is_missing() {
+        assert_eq!(
+            effective_old_voice_channel_id(None, Some("voice")),
+            Some("voice".to_owned())
+        );
+        assert_eq!(effective_old_voice_channel_id(None, None), None);
     }
 
     #[test]
