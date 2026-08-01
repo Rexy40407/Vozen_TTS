@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- docs/MONETIZATION.md crates/vozen-api/src/stripe_api.rs .github/workflows/deploy-bot.yml site`
 
+> **Reconciliation (2026-08-01)**: The main working tree already contains user edits to
+> `docs/MONETIZATION.md` and deployment docs. Preserve them; execute the factual policy comparison
+> from the clean baseline in isolation and do not modify entitlement behavior.
+
 ## Status
 
 - **Priority**: P3

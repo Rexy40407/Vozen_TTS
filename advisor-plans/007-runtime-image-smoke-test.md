@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- .github/workflows/ci.yml Dockerfile.rust docker/healthcheck-rust.sh crates/vozen-runtime`
 
+> **Reconciliation (2026-08-01)**: The image, healthcheck, and runtime source files are clean at
+> the planned baseline; unrelated workflow/compose changes remain only in the main working tree.
+> Execute this plan in isolation and keep the smoke path credential-free and production fail-closed.
+
 ## Status
 
 - **Priority**: P2

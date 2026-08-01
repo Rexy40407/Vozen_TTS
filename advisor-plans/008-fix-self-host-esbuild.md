@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- docs/SELF-HOST.md .github/workflows/ci.yml package.json`
 
+> **Reconciliation (2026-08-01)**: The main working tree already contains the intended
+> `npm rebuild esbuild` documentation change plus package-script edits. Preserve those user changes;
+> execute and review the minimal documentation delta from the clean baseline in isolation.
+
 ## Status
 
 - **Priority**: P2

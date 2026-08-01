@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- crates/vozen-runtime/src/main.rs .env.rust.prod.example .env.rust.staging.example tools/check-rust-canaries.mjs docs/RUST-MIGRATION-STAGING.md`
 
+> **Reconciliation (2026-08-01)**: Main contains uncommitted startup and staging-runbook edits from
+> prior plans. Preserve them; execute this as a documentation/inventory exercise only. Do not delete
+> flags or change ownership, defaults, production traffic, or deploy behavior.
+
 ## Status
 
 - **Priority**: P3

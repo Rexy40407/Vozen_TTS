@@ -2,6 +2,11 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- crates/vozen-runtime/src/main.rs crates/vozen-runtime/src`
 
+> **Reconciliation (2026-08-01)**: `main.rs` and staging documentation have uncommitted user
+> changes (including the image-smoke seam and Postgres startup wiring). They are preserved and
+> excluded from the executor worktree. Because this is a high-risk refactor, any step that cannot
+> preserve startup defaults/order must stop and report rather than force a broad rewrite.
+
 ## Status
 
 - **Priority**: P3

@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- AGENTS.md CONTRIBUTING.md docs/RUST-MIGRATION-STAGING.md .github/workflows/deploy-bot.yml`
 
+> **Reconciliation (2026-08-01)**: The main working tree already contains an uncommitted root
+> `AGENTS.md` draft and Pages workflow edits. Preserve those user changes; execute a concise,
+> canonical guidance file from the clean baseline and verify it does not alter workflows.
+
 ## Status
 
 - **Priority**: P3

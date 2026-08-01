@@ -2,6 +2,11 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- crates/vozen-runtime/src/file_export_sink.rs crates/vozen-runtime/src/live_transcription_sink.rs crates/vozen-runtime/src/guild_welcome_sink.rs crates/vozen-runtime/src`
 
+> **Reconciliation (2026-08-01)**: The sink source files are clean relative to the planned baseline;
+> runtime composition and site-test files have unrelated uncommitted user changes. The executor
+> must keep those changes out of its worktree and add deterministic boundary tests without altering
+> public command/response behavior.
+
 ## Status
 
 - **Priority**: P2

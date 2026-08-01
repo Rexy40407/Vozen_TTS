@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- Cargo.toml Cargo.lock crates/*/Cargo.toml .github/workflows/ci.yml`
 
+> **Reconciliation (2026-08-01)**: No Cargo manifest or lockfile drift is present in the main working
+> tree. Documentation/workflow edits are unrelated. Treat this as an audit/documentation pass; do
+> not force dependency upgrades without a staging canary.
+
 ## Status
 
 - **Priority**: P3

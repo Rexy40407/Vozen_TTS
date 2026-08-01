@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- crates/vozen-runtime/src/main.rs docs/RUST-MIGRATION-STAGING.md .env.rust.prod.example .env.rust.staging.example`
 
+> **Reconciliation (2026-08-01)**: The main working tree already contains expanded staging-runbook
+> edits and startup/image-smoke changes. Preserve them; execute the documentation-only header update
+> from the clean baseline without changing runtime code or environment behavior.
+
 ## Status
 
 - **Priority**: P3

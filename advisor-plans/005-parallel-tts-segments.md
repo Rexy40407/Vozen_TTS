@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- crates/vozen-tts/src/lib.rs crates/vozen-tts/src/gtts.rs`
 
+> **Reconciliation (2026-08-01)**: No local working-tree drift was found in the TTS segment
+> implementation. Plan 004 is approved on its isolated branch; this plan can proceed from the clean
+> baseline and must retain its bounded provider semaphore and exact ordered WAV semantics.
+
 ## Status
 
 - **Priority**: P2

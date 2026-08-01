@@ -2,6 +2,10 @@
 
 > **Drift check**: `git diff --stat 99eef7d..HEAD -- .github/workflows/pages.yml site-tests package.json`
 
+> **Reconciliation (2026-08-01)**: The main working tree already contains the corrected `site/**`
+> test glob and related Pages changes. Preserve those user changes; execute the minimal stale-path
+> replacement from the clean baseline and verify the workflow references only existing paths/globs.
+
 ## Status
 
 - **Priority**: P2
