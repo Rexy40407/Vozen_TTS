@@ -2183,6 +2183,8 @@ enum RuntimeError {
     PostgresVoiceReadCacheRequiresReplica,
     #[error("DISCORD_TOKEN is required to start the Rust gateway")]
     MissingToken,
+    #[error("RUST_IMAGE_SMOKE must not receive production Discord credentials")]
+    ImageSmokeCredentials,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
     InvalidHealthPort,
     #[error("HEALTH_HOST must be a valid IP address")]
@@ -2337,6 +2339,9 @@ async fn main() {
 }
 
 async fn run() -> Result<(), RuntimeError> {
+    if image_smoke_enabled() {
+        return run_image_smoke().await;
+    }
     let config = RuntimeConfig::from_environment()?;
     // Share the same loopback guard as the Node supervisor. A Rust cutover must never silently
     // create a second gateway session with the same Discord token while Node is still alive.
@@ -2673,6 +2678,85 @@ async fn run() -> Result<(), RuntimeError> {
             result = axum::serve(listener, app) => result.map_err(RuntimeError::from),
         }
     }
+}
+
+/// Starts only the local health surface used by the production-image smoke test.
+///
+/// This mode is deliberately opt-in and credential-free. It opens the same SQLite store and
+/// constructs the same HTTP router as the normal runtime, but never creates a Discord gateway or
+/// acquires the production single-instance lock. A normal invocation still goes through
+/// `RuntimeConfig::from_environment`, where a missing token remains a hard startup failure.
+async fn run_image_smoke() -> Result<(), RuntimeError> {
+    if nonempty_env("DISCORD_TOKEN").is_some() {
+        return Err(RuntimeError::ImageSmokeCredentials);
+    }
+
+    let health_host = nonempty_env("HEALTH_HOST").unwrap_or_else(|| "127.0.0.1".to_owned());
+    let health_ip = health_host
+        .parse::<IpAddr>()
+        .map_err(|_| RuntimeError::InvalidHealthHost)?;
+    let health_port = env::var("HEALTH_PORT")
+        .ok()
+        .filter(|raw| !raw.trim().is_empty())
+        .and_then(|raw| raw.trim().parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .ok_or(RuntimeError::InvalidHealthPort)?;
+    let health_bind = SocketAddr::new(health_ip, health_port);
+
+    let configured_db_path = env::var_os("DB_PATH").map(PathBuf::from);
+    let database_path = configured_db_path.clone().unwrap_or_else(|| {
+        PathBuf::from(format!(
+            "/tmp/vozen-image-smoke-{}.sqlite",
+            std::process::id()
+        ))
+    });
+    let store = Arc::new(Mutex::new(SqliteStore::open(&database_path)?));
+    store
+        .lock()
+        .map_err(|_| RuntimeError::StoreLock)?
+        .verify_integrity()?;
+
+    let app = build_http_router(
+        database_path.clone(),
+        None,
+        None,
+        None,
+        None,
+        HttpRouterRuntimeOptions {
+            public_status: None,
+            bot_token: String::new(),
+        },
+        store.clone(),
+        GatewayState::default(),
+        None,
+    )?;
+    let listener = tokio::net::TcpListener::bind(health_bind).await?;
+    eprintln!(
+        "[image-smoke] SQLite and local health listener ready on http://{health_bind}/health"
+    );
+
+    let result = tokio::select! {
+        result = axum::serve(listener, app) => result.map_err(RuntimeError::HealthListener),
+        _ = wait_for_clean_shutdown_signal() => Ok(()),
+    };
+
+    // Never delete a caller-provided DB_PATH. The default smoke database is disposable and lives
+    // under /tmp, so clean it (including SQLite's optional sidecars) after a graceful stop.
+    if configured_db_path.is_none() {
+        drop(store);
+        let _ = fs::remove_file(&database_path);
+        let _ = fs::remove_file(database_path.with_extension("sqlite-wal"));
+        let _ = fs::remove_file(database_path.with_extension("sqlite-shm"));
+    }
+    result
+}
+
+fn image_smoke_enabled() -> bool {
+    image_smoke_flag_enabled(env::var("RUST_IMAGE_SMOKE").ok().as_deref())
+}
+
+fn image_smoke_flag_enabled(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
 /// Waits for an administrator-initiated process stop. SIGTERM covers systemd/VPS deployments;
@@ -3202,6 +3286,15 @@ mod tests {
         let address = SocketAddr::from(([127, 0, 0, 1], 8080));
         assert!(address.ip().is_loopback());
         assert_eq!(address.port(), 8080);
+    }
+
+    #[test]
+    fn image_smoke_mode_is_exactly_opt_in() {
+        assert!(image_smoke_flag_enabled(Some("true")));
+        assert!(image_smoke_flag_enabled(Some(" TRUE ")));
+        assert!(!image_smoke_flag_enabled(Some("1")));
+        assert!(!image_smoke_flag_enabled(Some("yes")));
+        assert!(!image_smoke_flag_enabled(None));
     }
 
     #[test]
