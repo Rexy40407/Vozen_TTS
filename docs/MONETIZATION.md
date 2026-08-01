@@ -9,11 +9,13 @@
 | Tier | Price | Scope | Notes |
 |------|-------|-------|-------|
 | **Vozen Premium** | **€6.99 / month** or **€66.99 / year** | up to **2 servers** | Full Premium benefits for everyone in the activated servers |
-| **Vozen Premium Max** | **€13.99 / month** or **€133.99 / year** | up to **5 servers** | The same benefits with five server licences |
+| **Vozen Premium Max** | **€14.99 / month** or **€133.99 / year** | up to **5 servers** | The same benefits with five server licences |
 | **Vozen Plus** | **€3.99 / month** or **€37.99 / year** | per **user** | Personal perks that follow the user across servers |
 
-Payment: ideally Discord **App Subscriptions** (native, in-app) — requires a **verified**
-bot (~75 servers) + team-owned app. Until then: **Ko-fi / Patreon + `/redeem` codes**.
+Payment: the hosted plans currently use the site's **Stripe Checkout** flow (the six
+monthly/yearly price IDs are injected by the production deploy workflow). Discord **Premium
+Apps** (native, in-app) remains the intended second channel once the app is eligible; the
+legacy **Ko-fi / Patreon + `/redeem` codes** path is still supported for manual grants.
 
 ---
 
@@ -21,13 +23,14 @@ bot (~75 servers) + team-owned app. Until then: **Ko-fi / Patreon + `/redeem` co
 
 - **Core TTS:** auto-read channel, `/tts`, "Speak" context menu, 35 languages, automatic
   language detection, mixed-language synthesis in one sentence.
-- **Voices:** all 38 current voices (Google + Piper), speed control, `/voice preview`.
+- **Voices:** all 38 current Piper voices, speed control, `/voice preview`.
 - **Personalization:** spoken nickname, the 5 personas (pirate, uwu, Yoda, cowboy,
   medieval), 10 personal abbreviations.
 - **Fun:** `/joke`, `/laugh`, `/8-ball`, `/fortune`, `/fact`, `/wyr`, birthday shout-outs,
   `/top-speakers`.
-- **Games:** **all 16 minigames + leaderboard — 100% free, always.** These drive invites
-  and engagement; paywalling them would kill growth.
+- **Games:** **13 of the 16 minigames + leaderboard — 100% free, always.** These drive
+  invites and engagement; paywalling them would kill growth. Word Chain, Wordle and Chess
+  are the three Premium games.
   - **Leaderboard: weekly reset is FREE too** (decided). Premium only adds *automatic
     roles for the weekly top players*.
 - **Admin:** blocklist, pronunciation dictionary, rate-limit, role gating, kill-switch,
@@ -117,7 +120,7 @@ app. Vozen is neither yet (verification needs ~75 servers), so the rule does not
 | Offering | Ko-fi / external | Discord SKU (USD) | Discord type | Notes |
 |---|---|---|---|---|
 | **Vozen Premium** (2 servers) | €6.99 / mo | Configure at or below the external EUR-equivalent | subscription | Preserve price parity during Discord onboarding. |
-| **Vozen Premium Max** (5 servers) | €13.99 / mo | Configure at or below the external EUR-equivalent | subscription | Preserve price parity during Discord onboarding. |
+| **Vozen Premium Max** (5 servers) | €14.99 / mo | Configure at or below the external EUR-equivalent | subscription | Preserve price parity during Discord onboarding. |
 | **Vozen Plus** (per user) | €3.99 / mo | Configure at or below the external EUR-equivalent | user subscription | Personal entitlement. |
 | **Annual plans** | €37.99 / €66.99 / €133.99 | — | annual sub ⏳ not yet supported | Offer via Discord once annual subs ship; grace period applies. |
 
