@@ -123,6 +123,7 @@ mod songbird_transport;
 mod sound_text;
 mod speak_message_command;
 mod speech_preparation;
+mod speech_telemetry;
 mod stats_command;
 mod text_quiz_driver;
 mod tictactoe_driver;

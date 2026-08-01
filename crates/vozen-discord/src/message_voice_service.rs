@@ -19,6 +19,7 @@ use vozen_store::{
     TalkBump, UserEngine, utc_day_key_from_unix_millis,
 };
 
+use crate::speech_telemetry::SpeechTelemetryWriter;
 use crate::{
     CommandSpeechSynthesizer, CommandVoicePlayback, CoreVoiceSettings, DiscordMessageFacts,
     GuildSynthesisCoordinator, MessagePipelineOutcome, MessagePreparationInput,
@@ -64,6 +65,7 @@ pub struct MessageVoiceService<S, P> {
     count_gate: Mutex<CountGate>,
     voice_data: VoiceDataCache,
     runtime_batch: RuntimeBatchBuffer,
+    telemetry: SpeechTelemetryWriter,
     synthesizer: S,
     playback: P,
     synthesis: GuildSynthesisCoordinator,
@@ -170,13 +172,14 @@ impl<S, P> MessageVoiceService<S, P> {
         metrics: Arc<RuntimeMetrics>,
     ) -> Self {
         Self {
-            store,
+            store: store.clone(),
             read_store,
             pipeline: Mutex::new(MessageSpeechPipeline::default()),
             duplicate_tracker: Mutex::new(DuplicateTracker::default()),
             count_gate: Mutex::new(CountGate::default()),
             voice_data: VoiceDataCache::default(),
             runtime_batch,
+            telemetry: SpeechTelemetryWriter::new(store.clone()),
             synthesizer,
             playback,
             synthesis,
@@ -381,6 +384,21 @@ where
         }
     }
 
+    /// Flushes best-effort speech telemetry for graceful shutdown and deterministic tests.
+    pub fn flush_telemetry(&self) {
+        self.telemetry.flush();
+    }
+
+    /// Stops the telemetry worker after flushing queued events.
+    pub fn shutdown_telemetry(&self) {
+        self.telemetry.shutdown();
+    }
+
+    #[must_use]
+    pub fn telemetry_dropped_events(&self) -> u64 {
+        self.telemetry.dropped_events()
+    }
+
     pub fn forget_guild(&self, guild_id: &str) {
         if let Ok(mut pipeline) = self.pipeline.lock() {
             pipeline.forget_guild(guild_id);
@@ -396,10 +414,8 @@ where
         let day = utc_day_key_from_unix_millis(now);
         self.runtime_batch
             .record_metric(&day, metric, OperationalProvider::Piper, 1);
-        if let Ok(store) = self.store.lock() {
-            let _ =
-                store.add_operational_metric(metric, OperationalProvider::Piper, 1.0, Some(&day));
-        }
+        self.telemetry
+            .record_metric(&day, metric, OperationalProvider::Piper, 1);
     }
 
     fn is_spam(&self, guild_id: &str, user_id: &str, cleaned: &str, now_ms: i64) -> bool {
@@ -432,19 +448,15 @@ where
         };
         self.runtime_batch
             .record_metric(&day, metric, OperationalProvider::Piper, 1);
-        if let Ok(store) = self.store.lock() {
-            let _ =
-                store.add_operational_metric(metric, OperationalProvider::Piper, 1.0, Some(&day));
-            let _ = store.set_provider_health(
-                OperationalProvider::Piper,
-                if success {
-                    ProviderHealth::Healthy
-                } else {
-                    ProviderHealth::Degraded
-                },
-                now,
-            );
-        }
+        let health = if success {
+            ProviderHealth::Healthy
+        } else {
+            ProviderHealth::Degraded
+        };
+        self.telemetry
+            .record_metric(&day, metric, OperationalProvider::Piper, 1);
+        self.telemetry
+            .record_provider_health(OperationalProvider::Piper, health, now);
     }
 
     /// Mirrors the Node rule: usage changes only after playback accepted the rendered request.
@@ -458,25 +470,26 @@ where
         engine: SynthesisEngine,
         now_ms: i64,
     ) -> Option<TalkBump> {
-        if let Ok(store) = self.store.lock() {
-            // `talk_stats` and `talk_usage` are both post-queue aggregates. Keep the writes
-            // best-effort, as Node does: a telemetry/storage hiccup must never turn accepted
-            // audio into a failed request. The day key uses the runtime's UTC contract, which is
-            // also what the Rust operational metrics use on the production VPS.
-            let day = utc_day_key_from_unix_millis(now_ms);
-            self.runtime_batch.record_accepted_speech(
-                &day,
-                guild_id,
-                user_id,
-                model,
-                user_engine(engine),
-            );
-            let talk = store.bump_talk(guild_id, user_id, &day).ok();
-            let _ = store.bump_guild_talk(guild_id, &day);
-            let _ = store.bump_talk_usage(guild_id, user_id, model, user_engine(engine));
-            return talk;
-        }
-        None
+        // `talk_stats` feeds the user-visible streak announcement and remains synchronous. The
+        // other post-queue aggregates are best-effort telemetry and are persisted by the bounded
+        // worker so an SQLite lock cannot delay an accepted speech acknowledgement.
+        let day = utc_day_key_from_unix_millis(now_ms);
+        self.runtime_batch.record_accepted_speech(
+            &day,
+            guild_id,
+            user_id,
+            model,
+            user_engine(engine),
+        );
+        let talk = self
+            .store
+            .lock()
+            .ok()
+            .and_then(|store| store.bump_talk(guild_id, user_id, &day).ok());
+        self.telemetry.record_guild_talk(guild_id, &day);
+        self.telemetry
+            .record_talk_usage(guild_id, user_id, model, user_engine(engine));
+        talk
     }
 }
 
@@ -692,6 +705,7 @@ mod tests {
             service.execute(invocation(Some("voice"))).await,
             MessageVoiceOutcome::Busy
         );
+        service.flush_telemetry();
         assert!(
             store
                 .lock()
@@ -725,6 +739,7 @@ mod tests {
             service.execute(invocation(Some("voice"))).await,
             MessageVoiceOutcome::Queued { talk: Some(_) }
         ));
+        service.flush_telemetry();
         let store = store.lock().expect("store");
         assert!(
             store
@@ -842,6 +857,7 @@ mod tests {
             service.execute(invocation(Some("voice"))).await,
             MessageVoiceOutcome::Queued { talk: None }
         ));
+        service.flush_telemetry();
         let usage = store
             .lock()
             .expect("store")
