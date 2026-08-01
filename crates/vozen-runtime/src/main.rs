@@ -2394,10 +2394,22 @@ async fn run() -> Result<(), RuntimeError> {
         let postgres = postgres_shadow
             .as_ref()
             .ok_or(RuntimeError::PostgresVoiceReadCacheRequiresReplica)?;
-        let cache = postgres_voice_cache::load(&postgres.pool()).await?;
-        postgres_voice_cache::spawn(postgres.pool(), cache.clone());
-        eprintln!("[postgres] voice reads use the refreshed local Postgres cache");
-        Some(cache)
+        match postgres_voice_cache::load(&postgres.pool()).await {
+            Ok(cache) => {
+                postgres_voice_cache::spawn(postgres.pool(), cache.clone());
+                eprintln!("[postgres] voice reads use the refreshed local Postgres cache");
+                Some(cache)
+            }
+            Err(error) => {
+                // The Postgres cache is an optimization layered over the authoritative local
+                // SQLite store. A remote schema/data hiccup must not take the Discord gateway
+                // offline; keep the local store as the voice-read source until the next restart.
+                eprintln!(
+                    "[postgres] voice-read cache unavailable; using local SQLite fallback: {error}"
+                );
+                None
+            }
+        }
     } else {
         None
     };
