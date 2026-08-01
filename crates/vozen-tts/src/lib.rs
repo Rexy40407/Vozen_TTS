@@ -13,6 +13,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use futures::{StreamExt, stream};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::{io::AsyncWriteExt, process::Command, sync::Semaphore, time::timeout};
@@ -186,6 +187,7 @@ pub struct PiperEngine<R = CommandPiperRunner> {
     models_dir: PathBuf,
     cache_dir: PathBuf,
     permits: Arc<Semaphore>,
+    segment_concurrency: usize,
     metrics: Arc<RuntimeMetrics>,
 }
 
@@ -245,11 +247,13 @@ impl<R: PiperRunner> PiperEngine<R> {
         concurrency: usize,
         metrics: Arc<RuntimeMetrics>,
     ) -> Self {
+        let segment_concurrency = concurrency.max(1);
         Self {
             runner,
             models_dir: models_dir.into(),
             cache_dir: cache_dir.into(),
-            permits: Arc::new(Semaphore::new(concurrency.max(1))),
+            permits: Arc::new(Semaphore::new(segment_concurrency)),
+            segment_concurrency,
             metrics,
         }
     }
@@ -292,13 +296,32 @@ impl<R: PiperRunner> PiperEngine<R> {
             self.metrics.record_cache_hit();
             return Ok(destination);
         }
-        let mut wavs = Vec::with_capacity(segments.len());
-        for segment in segments {
-            let path = self
-                .synth_single(&single_segment_request(request, segment))
-                .await?;
-            wavs.push(tokio::fs::read(path).await?);
-        }
+        // Keep the work queue bounded by the same provider semaphore used by single requests.
+        // Results are tagged with their original index so completion order cannot affect audio
+        // order when a later segment finishes first.
+        let indexed_wavs = stream::iter(segments.iter().cloned().enumerate().map(
+            |(index, segment)| {
+                let request = request.clone();
+                async move {
+                    let path = self
+                        .synth_single(&single_segment_request(&request, &segment))
+                        .await?;
+                    let wav = tokio::fs::read(path).await?;
+                    Ok::<_, TtsError>((index, wav))
+                }
+            },
+        ))
+        .buffer_unordered(self.segment_concurrency)
+        .collect::<Vec<_>>()
+        .await;
+        let mut indexed_wavs = indexed_wavs
+            .into_iter()
+            .collect::<Result<Vec<_>, TtsError>>()?;
+        indexed_wavs.sort_unstable_by_key(|(index, _)| *index);
+        let wavs = indexed_wavs
+            .into_iter()
+            .map(|(_, wav)| wav)
+            .collect::<Vec<_>>();
         let combined =
             concat_wavs(&wavs, wav_concat::DEFAULT_SEGMENT_SILENCE_MS).map_err(TtsError::Wav)?;
         let combined = wav_concat::prepend_silence_wav(&combined, request.lead_silence_ms)
@@ -510,6 +533,7 @@ fn speed_to_length_scale(speed: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::HashMap,
         sync::atomic::{AtomicUsize, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -519,6 +543,27 @@ mod tests {
     struct FakeRunner {
         calls: AtomicUsize,
         bytes: Vec<u8>,
+    }
+
+    struct DelayedRunner {
+        active: AtomicUsize,
+        peak: AtomicUsize,
+        specs: HashMap<String, (u64, u8)>,
+    }
+
+    impl DelayedRunner {
+        fn record_peak(&self, active: usize) {
+            let mut peak = self.peak.load(Ordering::Relaxed);
+            while active > peak {
+                match self
+                    .peak
+                    .compare_exchange(peak, active, Ordering::Relaxed, Ordering::Relaxed)
+                {
+                    Ok(_) => break,
+                    Err(observed) => peak = observed,
+                }
+            }
+        }
     }
 
     #[async_trait]
@@ -533,6 +578,27 @@ mod tests {
             self.calls.fetch_add(1, Ordering::Relaxed);
             tokio::fs::write(output, &self.bytes).await?;
             Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl PiperRunner for DelayedRunner {
+        async fn run(
+            &self,
+            _model: &Path,
+            output: &Path,
+            text: &str,
+            _speed: f64,
+        ) -> Result<(), TtsError> {
+            let active = self.active.fetch_add(1, Ordering::Relaxed) + 1;
+            self.record_peak(active);
+            let (delay_ms, marker) = self.specs.get(text).copied().unwrap_or((0, 0x7f));
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            let mut wav = wav_concat::silence_wav(10);
+            wav[44] = marker;
+            let result = tokio::fs::write(output, wav).await.map_err(TtsError::Io);
+            self.active.fetch_sub(1, Ordering::Relaxed);
+            result
         }
     }
 
@@ -674,7 +740,9 @@ mod tests {
         ]);
         let fallback = engine.synth(&segmented).await.expect("base fallback");
         assert!(parse_wav(&tokio::fs::read(fallback).await.expect("WAV")).is_ok());
-        assert_eq!(runner.calls.load(Ordering::Relaxed), 1);
+        // The valid segment may already be in flight when the missing model fails; the caller
+        // still falls back to the resolved base voice without dropping the original text.
+        assert_eq!(runner.calls.load(Ordering::Relaxed), 2);
     }
 
     #[tokio::test]
@@ -708,6 +776,55 @@ mod tests {
             empty.synth(&request()).await,
             Err(TtsError::EmptyOutput)
         ));
+        let _ = tokio::fs::remove_dir_all(root).await;
+    }
+
+    #[tokio::test]
+    async fn parallel_segments_preserve_order_and_provider_bound() {
+        let root = temp_dir("parallel-segments");
+        let models = root.join("models");
+        tokio::fs::create_dir_all(&models).await.expect("models");
+        tokio::fs::write(models.join("en_US-amy-medium.onnx"), b"model")
+            .await
+            .expect("model");
+        let runner = Arc::new(DelayedRunner {
+            active: AtomicUsize::new(0),
+            peak: AtomicUsize::new(0),
+            specs: HashMap::from([
+                ("first".to_owned(), (80, 0x31)),
+                ("second".to_owned(), (5, 0x52)),
+                ("third".to_owned(), (5, 0x73)),
+            ]),
+        });
+        let engine = PiperEngine::new(runner.clone(), &models, root.join("cache"), 2);
+        let mut segmented = request();
+        segmented.segments = Some(
+            ["first", "second", "third"]
+                .into_iter()
+                .map(|text| vozen_core::SpeechSegment {
+                    text: text.to_owned(),
+                    model: "en_US-amy-medium".to_owned(),
+                })
+                .collect(),
+        );
+
+        let output = engine.synth(&segmented).await.expect("combined WAV");
+        let wav = tokio::fs::read(output).await.expect("WAV");
+        let data = parse_wav(&wav).expect("parsed").data;
+        let first = data
+            .iter()
+            .position(|byte| *byte == 0x31)
+            .expect("first marker");
+        let second = data
+            .iter()
+            .position(|byte| *byte == 0x52)
+            .expect("second marker");
+        let third = data
+            .iter()
+            .position(|byte| *byte == 0x73)
+            .expect("third marker");
+        assert!(first < second && second < third, "segment order changed");
+        assert_eq!(runner.peak.load(Ordering::Relaxed), 2);
         let _ = tokio::fs::remove_dir_all(root).await;
     }
 
