@@ -1,12 +1,13 @@
 #![forbid(unsafe_code)]
 
-//! Rust process entry point for the production Vozen runtime.
+//! Rust process entry point for the production cutover and the isolated migration canary.
 //!
-//! Production runs the Rust runtime in full mode. Staging may still enable individual `RUST_*`
-//! ownership flags while the migration canaries are evaluated; see
-//! `docs/RUST-MIGRATION-STAGING.md` for the rollback boundary and the remaining staging-only
-//! switches. This module keeps startup ordering explicit: storage, optional Postgres mirror,
-//! API, Discord gateway, and background workers are assembled before readiness is advertised.
+//! Production runs in `RUST_RUNTIME_MODE=full`, after every required canary is enabled and the
+//! Node gateway has been deliberately retired. Shadow mode is a staging-only migration tool: it
+//! keeps SQLite authoritative while individual Discord, HTTP and Postgres adapters are verified.
+//! See `docs/RUST-MIGRATION-STAGING.md` for the staging-only flags, including
+//! `RUST_RUNTIME_MODE=shadow`, `RUST_POSTGRES_MODE=shadow|mirror`,
+//! `RUST_POSTGRES_REPLICA_OUTBOX=true` and `RUST_POSTGRES_VOICE_READ_CACHE=true`.
 
 #[cfg(feature = "voice-driver")]
 mod activity_poster;
@@ -2182,8 +2183,6 @@ enum RuntimeError {
     PostgresVoiceReadCacheRequiresReplica,
     #[error("DISCORD_TOKEN is required to start the Rust gateway")]
     MissingToken,
-    #[error("RUST_IMAGE_SMOKE must not receive production Discord credentials")]
-    ImageSmokeCredentials,
     #[error("HEALTH_PORT must be an integer from 1 to 65535")]
     InvalidHealthPort,
     #[error("HEALTH_HOST must be a valid IP address")]
@@ -2338,9 +2337,6 @@ async fn main() {
 }
 
 async fn run() -> Result<(), RuntimeError> {
-    if image_smoke_enabled() {
-        return run_image_smoke().await;
-    }
     let config = RuntimeConfig::from_environment()?;
     // Share the same loopback guard as the Node supervisor. A Rust cutover must never silently
     // create a second gateway session with the same Discord token while Node is still alive.
@@ -2388,10 +2384,6 @@ async fn run() -> Result<(), RuntimeError> {
             "[postgres] SQLite import reconciled {} tables",
             reports.len()
         );
-        store
-            .lock()
-            .map_err(|_| RuntimeError::StoreLock)?
-            .mark_replica_ready()?;
     }
     let postgres_voice_read_store = if config.postgres_voice_read_cache {
         let postgres = postgres_shadow
@@ -2404,21 +2396,16 @@ async fn run() -> Result<(), RuntimeError> {
     } else {
         None
     };
-    let mirror_enabled = config.postgres_replica_outbox;
-    let runtime_batch_buffer = if mirror_enabled {
-        RuntimeBatchBuffer::enabled()
-    } else {
-        RuntimeBatchBuffer::disabled()
-    };
-    store
-        .lock()
-        .map_err(|_| RuntimeError::StoreLock)?
-        .configure_postgres_replica_outbox(mirror_enabled)?;
-    if mirror_enabled && let Some(postgres) = postgres_shadow.as_ref() {
+    let runtime_batch_buffer = RuntimeBatchBuffer::default();
+    if config.postgres_replica_outbox
+        && let Some(postgres) = postgres_shadow.as_ref()
+    {
+        store
+            .lock()
+            .map_err(|_| RuntimeError::StoreLock)?
+            .enable_postgres_replica_outbox()?;
         eprintln!("[postgres] durable SQLite change capture enabled for mirror");
         postgres_outbox::spawn(postgres.pool(), store.clone(), runtime_batch_buffer.clone());
-    } else {
-        eprintln!("[postgres] durable SQLite change capture disabled");
     }
     run_startup_data_hygiene(&config.database_path);
     let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
@@ -2688,85 +2675,6 @@ async fn run() -> Result<(), RuntimeError> {
     }
 }
 
-/// Starts only the local health surface used by the production-image smoke test.
-///
-/// This mode is deliberately opt-in and credential-free. It opens the same SQLite store and
-/// constructs the same HTTP router as the normal runtime, but never creates a Discord gateway or
-/// acquires the production single-instance lock. A normal invocation still goes through
-/// `RuntimeConfig::from_environment`, where a missing token remains a hard startup failure.
-async fn run_image_smoke() -> Result<(), RuntimeError> {
-    if nonempty_env("DISCORD_TOKEN").is_some() {
-        return Err(RuntimeError::ImageSmokeCredentials);
-    }
-
-    let health_host = nonempty_env("HEALTH_HOST").unwrap_or_else(|| "127.0.0.1".to_owned());
-    let health_ip = health_host
-        .parse::<IpAddr>()
-        .map_err(|_| RuntimeError::InvalidHealthHost)?;
-    let health_port = env::var("HEALTH_PORT")
-        .ok()
-        .filter(|raw| !raw.trim().is_empty())
-        .and_then(|raw| raw.trim().parse::<u16>().ok())
-        .filter(|port| *port != 0)
-        .ok_or(RuntimeError::InvalidHealthPort)?;
-    let health_bind = SocketAddr::new(health_ip, health_port);
-
-    let configured_db_path = env::var_os("DB_PATH").map(PathBuf::from);
-    let database_path = configured_db_path.clone().unwrap_or_else(|| {
-        PathBuf::from(format!(
-            "/tmp/vozen-image-smoke-{}.sqlite",
-            std::process::id()
-        ))
-    });
-    let store = Arc::new(Mutex::new(SqliteStore::open(&database_path)?));
-    store
-        .lock()
-        .map_err(|_| RuntimeError::StoreLock)?
-        .verify_integrity()?;
-
-    let app = build_http_router(
-        database_path.clone(),
-        None,
-        None,
-        None,
-        None,
-        HttpRouterRuntimeOptions {
-            public_status: None,
-            bot_token: String::new(),
-        },
-        store.clone(),
-        GatewayState::default(),
-        None,
-    )?;
-    let listener = tokio::net::TcpListener::bind(health_bind).await?;
-    eprintln!(
-        "[image-smoke] SQLite and local health listener ready on http://{health_bind}/health"
-    );
-
-    let result = tokio::select! {
-        result = axum::serve(listener, app) => result.map_err(RuntimeError::HealthListener),
-        _ = wait_for_clean_shutdown_signal() => Ok(()),
-    };
-
-    // Never delete a caller-provided DB_PATH. The default smoke database is disposable and lives
-    // under /tmp, so clean it (including SQLite's optional sidecars) after a graceful stop.
-    if configured_db_path.is_none() {
-        drop(store);
-        let _ = fs::remove_file(&database_path);
-        let _ = fs::remove_file(database_path.with_extension("sqlite-wal"));
-        let _ = fs::remove_file(database_path.with_extension("sqlite-shm"));
-    }
-    result
-}
-
-fn image_smoke_enabled() -> bool {
-    image_smoke_flag_enabled(env::var("RUST_IMAGE_SMOKE").ok().as_deref())
-}
-
-fn image_smoke_flag_enabled(value: Option<&str>) -> bool {
-    value.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
-}
-
 /// Waits for an administrator-initiated process stop. SIGTERM covers systemd/VPS deployments;
 /// Ctrl+C keeps the local Windows development workflow equivalent. A forced crash never reaches
 /// this function and therefore cannot authorize a normal voice-session recovery.
@@ -2930,7 +2838,6 @@ fn build_http_router(
                     let database_path = database_path.clone();
                     let gateway_state = metrics_gateway_state;
                     let supabase_metrics = supabase_metrics.clone();
-                    let store = store.clone();
                     move || {
                         let supabase = supabase_metrics
                             .as_ref()
@@ -2950,10 +2857,6 @@ fn build_http_router(
                             &database_path,
                             active_voice_servers,
                             supabase,
-                            store
-                                .lock()
-                                .ok()
-                                .and_then(|value| value.runtime_outbox_metrics().ok()),
                         )
                     }
                 })),
@@ -3294,15 +3197,6 @@ mod tests {
         let address = SocketAddr::from(([127, 0, 0, 1], 8080));
         assert!(address.ip().is_loopback());
         assert_eq!(address.port(), 8080);
-    }
-
-    #[test]
-    fn image_smoke_mode_is_exactly_opt_in() {
-        assert!(image_smoke_flag_enabled(Some("true")));
-        assert!(image_smoke_flag_enabled(Some(" TRUE ")));
-        assert!(!image_smoke_flag_enabled(Some("1")));
-        assert!(!image_smoke_flag_enabled(Some("yes")));
-        assert!(!image_smoke_flag_enabled(None));
     }
 
     #[test]
