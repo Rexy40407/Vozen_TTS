@@ -66,11 +66,7 @@ pub async fn load(pool: &PgPool) -> Result<Arc<Mutex<SqliteStore>>, PostgresVoic
     };
     // The immutable fingerprint is an attestation written only by a complete import. It is
     // deliberately not compared with live rows: mirror batches are expected to change them.
-    if generation.as_deref().is_none_or(|value| value.is_empty())
-        || fingerprint.as_deref().is_none_or(|value| value.is_empty())
-    {
-        return Err(PostgresVoiceCacheError::InvalidImportMarker);
-    }
+    require_import_marker(generation.as_deref(), fingerprint.as_deref())?;
     let store = Arc::new(Mutex::new(SqliteStore::open_in_memory()?));
     refresh_once_with_generation(pool, &store, generation.unwrap()).await?;
     Ok(store)
@@ -120,9 +116,7 @@ async fn refresh_once_with_generation(
     .fetch_optional(&mut *transaction)
     .await
     .map_err(PostgresVoiceCacheError::Postgres)?;
-    if snapshot_generation.as_deref() != Some(expected_generation.as_str()) {
-        return Err(PostgresVoiceCacheError::GenerationMismatch);
-    }
+    require_generation(&expected_generation, snapshot_generation.as_deref())?;
     let mut snapshots = Vec::with_capacity(VOICE_CACHE_TABLES.len());
     for table in VOICE_CACHE_TABLES {
         let query = format!(
@@ -151,10 +145,43 @@ async fn refresh_once_with_generation(
     .fetch_optional(pool)
     .await
     .map_err(PostgresVoiceCacheError::Postgres)?;
-    if current_generation.as_deref() != Some(expected_generation.as_str()) {
+    replace_snapshot_if_fresh(
+        store,
+        snapshots,
+        &expected_generation,
+        current_generation.as_deref(),
+    )
+}
+
+fn require_import_marker(
+    generation: Option<&str>,
+    fingerprint: Option<&str>,
+) -> Result<(), PostgresVoiceCacheError> {
+    if generation.is_none_or(str::is_empty) || fingerprint.is_none_or(str::is_empty) {
+        return Err(PostgresVoiceCacheError::InvalidImportMarker);
+    }
+    Ok(())
+}
+
+fn require_generation(
+    expected: &str,
+    observed: Option<&str>,
+) -> Result<(), PostgresVoiceCacheError> {
+    if observed != Some(expected) {
         return Err(PostgresVoiceCacheError::GenerationMismatch);
     }
+    Ok(())
+}
 
+fn replace_snapshot_if_fresh(
+    store: &Arc<Mutex<SqliteStore>>,
+    snapshots: Vec<(String, Vec<serde_json::Value>)>,
+    expected_generation: &str,
+    observed_generation: Option<&str>,
+) -> Result<(), PostgresVoiceCacheError> {
+    // Validate before taking the lock or deleting any local rows. A failed/racing refresh therefore
+    // leaves the last known-good cache untouched.
+    require_generation(expected_generation, observed_generation)?;
     let store = store.lock().map_err(|_| PostgresVoiceCacheError::Lock)?;
     for (table, rows) in snapshots {
         store.replace_contract_table_rows(&table, &rows)?;
@@ -178,6 +205,62 @@ pub fn spawn(pool: PgPool, store: Arc<Mutex<SqliteStore>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vozen_store::GuildConfigPatch;
+
+    #[test]
+    fn malformed_import_markers_fail_closed() {
+        assert!(matches!(
+            require_import_marker(None, Some("fingerprint")),
+            Err(PostgresVoiceCacheError::InvalidImportMarker)
+        ));
+        assert!(matches!(
+            require_import_marker(Some("generation"), Some("")),
+            Err(PostgresVoiceCacheError::InvalidImportMarker)
+        ));
+    }
+
+    #[test]
+    fn generation_races_fail_closed_and_preserve_last_known_good_cache() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("cache")));
+        let guild_id = "known-good";
+        store
+            .lock()
+            .expect("cache lock")
+            .update_guild_config(
+                guild_id,
+                GuildConfigPatch {
+                    locale: Some("pt".into()),
+                    rate_per_min: Some(11),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("seed cache");
+        let mut changed = store
+            .lock()
+            .expect("cache lock")
+            .export_table_rows("guild_config")
+            .expect("export cache");
+        changed[0]["rate_per_min"] = serde_json::json!(99);
+        let result = replace_snapshot_if_fresh(
+            &store,
+            vec![("guild_config".into(), changed)],
+            "generation-a",
+            Some("generation-b"),
+        );
+        assert!(matches!(
+            result,
+            Err(PostgresVoiceCacheError::GenerationMismatch)
+        ));
+        assert_eq!(
+            store
+                .lock()
+                .expect("cache lock")
+                .guild_config(guild_id)
+                .expect("known-good config")
+                .rate_per_min,
+            11
+        );
+    }
 
     #[tokio::test]
     async fn staging_voice_cache_loads_only_after_explicit_import_when_requested() {
