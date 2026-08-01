@@ -58,7 +58,10 @@ pub use admin_stats::{
 };
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
 pub use channel_profile::{ChannelProfile, ChannelProfilePatch, MAX_CHANNEL_PROFILES_PER_GUILD};
-pub use data_lifecycle::{GUILD_PURGE_TABLES, USER_ERASE_TABLES};
+pub use data_lifecycle::{
+    GUILD_PURGE_SPECS, GUILD_PURGE_TABLES, PrivacyPurgeKey, PrivacyPurgeSpec, USER_ERASE_SPECS,
+    USER_ERASE_TABLES,
+};
 pub use gcloud_usage::{GcloudUsageScope, day_key_utc, month_key_utc};
 pub use guild_config::{GuildConfig, GuildConfigPatch};
 pub use guild_departed::DEPARTURE_GRACE_MS;
