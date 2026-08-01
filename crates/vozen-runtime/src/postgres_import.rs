@@ -109,8 +109,6 @@ pub async fn import_and_reconcile(
             postgres_rows,
         });
     }
-    let fingerprint = format!("{:x}", Sha256::digest(fingerprint_input.as_bytes()));
-    let generation = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO vozen.runtime_migration_state
            (marker, completed_at, generation, fingerprint, source_checkpoint)
@@ -122,8 +120,11 @@ pub async fn import_and_reconcile(
            fingerprint = EXCLUDED.fingerprint,
            source_checkpoint = EXCLUDED.source_checkpoint",
     )
-    .bind(generation)
-    .bind(fingerprint)
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(format!(
+        "{:x}",
+        Sha256::digest(fingerprint_input.as_bytes())
+    ))
     .bind(source_checkpoint(sqlite_path))
     .execute(&mut *transaction)
     .await
@@ -142,6 +143,8 @@ fn source_checkpoint(path: &Path) -> String {
     format!("{size}:{modified}")
 }
 
+/// Produces a stable row fingerprint for the immutable initial-import attestation.
+/// This value must not be reused as a live-refresh freshness check.
 pub(crate) fn fingerprint_rows(rows: &[serde_json::Value]) -> String {
     let mut canonical = rows.iter().map(canonical_json).collect::<Vec<_>>();
     canonical.sort();

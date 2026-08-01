@@ -8,7 +8,6 @@ use std::{
     time::Duration,
 };
 
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use thiserror::Error;
 use vozen_store::SqliteStore;
@@ -26,7 +25,6 @@ const VOICE_CACHE_TABLES: &[&str] = &[
     "premium_user",
     "pronunciation",
     "pronunciation_user",
-    "stt_daily_usage",
     "tts_lang_detect_on",
     "tts_optout",
     "user_effect",
@@ -39,8 +37,8 @@ pub enum PostgresVoiceCacheError {
     MissingInitialImport,
     #[error("Postgres initial import marker is incomplete")]
     InvalidImportMarker,
-    #[error("Postgres voice-cache fingerprint does not match the import marker")]
-    FingerprintMismatch,
+    #[error("Postgres voice-cache generation changed during refresh")]
+    GenerationMismatch,
     #[error("Postgres voice-cache query failed")]
     Postgres(#[source] sqlx::Error),
     #[error("Postgres voice-cache payload is invalid")]
@@ -66,11 +64,15 @@ pub async fn load(pool: &PgPool) -> Result<Arc<Mutex<SqliteStore>>, PostgresVoic
     let Some((generation, fingerprint)) = marker else {
         return Err(PostgresVoiceCacheError::MissingInitialImport);
     };
-    if generation.as_deref().is_none_or(|value| value.is_empty()) {
+    // The immutable fingerprint is an attestation written only by a complete import. It is
+    // deliberately not compared with live rows: mirror batches are expected to change them.
+    if generation.as_deref().is_none_or(|value| value.is_empty())
+        || fingerprint.as_deref().is_none_or(|value| value.is_empty())
+    {
         return Err(PostgresVoiceCacheError::InvalidImportMarker);
     }
     let store = Arc::new(Mutex::new(SqliteStore::open_in_memory()?));
-    refresh_once_with_marker(pool, &store, fingerprint).await?;
+    refresh_once_with_generation(pool, &store, generation.unwrap()).await?;
     Ok(store)
 }
 
@@ -79,20 +81,29 @@ pub async fn refresh_once(
     pool: &PgPool,
     store: &Arc<Mutex<SqliteStore>>,
 ) -> Result<(), PostgresVoiceCacheError> {
-    let marker: Option<Option<String>> = sqlx::query_scalar(
-        "SELECT fingerprint FROM vozen.runtime_migration_state WHERE marker = $1",
+    let generation: Option<Option<String>> = sqlx::query_scalar(
+        "SELECT generation FROM vozen.runtime_migration_state WHERE marker = $1",
     )
     .bind(IMPORT_MARKER)
     .fetch_optional(pool)
     .await
     .map_err(PostgresVoiceCacheError::Postgres)?;
-    refresh_once_with_marker(pool, store, marker.flatten()).await
+    let Some(generation) = generation else {
+        return Err(PostgresVoiceCacheError::MissingInitialImport);
+    };
+    let Some(generation) = generation else {
+        return Err(PostgresVoiceCacheError::InvalidImportMarker);
+    };
+    if generation.is_empty() {
+        return Err(PostgresVoiceCacheError::InvalidImportMarker);
+    }
+    refresh_once_with_generation(pool, store, generation).await
 }
 
-async fn refresh_once_with_marker(
+async fn refresh_once_with_generation(
     pool: &PgPool,
     store: &Arc<Mutex<SqliteStore>>,
-    marker_fingerprint: Option<String>,
+    expected_generation: String,
 ) -> Result<(), PostgresVoiceCacheError> {
     let mut transaction = pool
         .begin()
@@ -102,8 +113,17 @@ async fn refresh_once_with_marker(
         .execute(&mut *transaction)
         .await
         .map_err(PostgresVoiceCacheError::Postgres)?;
+    let snapshot_generation: Option<String> = sqlx::query_scalar(
+        "SELECT generation FROM vozen.runtime_migration_state WHERE marker = $1",
+    )
+    .bind(IMPORT_MARKER)
+    .fetch_optional(&mut *transaction)
+    .await
+    .map_err(PostgresVoiceCacheError::Postgres)?;
+    if snapshot_generation.as_deref() != Some(expected_generation.as_str()) {
+        return Err(PostgresVoiceCacheError::GenerationMismatch);
+    }
     let mut snapshots = Vec::with_capacity(VOICE_CACHE_TABLES.len());
-    let mut fingerprint_input = String::new();
     for table in VOICE_CACHE_TABLES {
         let query = format!(
             "SELECT COALESCE(jsonb_agg(to_jsonb(row)), '[]'::jsonb)::text
@@ -115,25 +135,30 @@ async fn refresh_once_with_marker(
             .map_err(PostgresVoiceCacheError::Postgres)?;
         let rows = serde_json::from_str::<Vec<serde_json::Value>>(&payload)
             .map_err(PostgresVoiceCacheError::Payload)?;
-        fingerprint_input.push_str(table);
-        fingerprint_input.push(':');
-        fingerprint_input.push_str(&crate::postgres_import::fingerprint_rows(&rows));
-        fingerprint_input.push('\n');
         snapshots.push(((*table).to_owned(), rows));
     }
-    if let Some(expected) = marker_fingerprint {
-        let actual = format!("{:x}", Sha256::digest(fingerprint_input.as_bytes()));
-        if actual != expected {
-            return Err(PostgresVoiceCacheError::FingerprintMismatch);
-        }
-    }
+    // A repeatable-read transaction gives all tables one snapshot. Compare the marker again
+    // after commit so a batch committed while the read was in flight cannot replace local state.
     transaction
         .commit()
         .await
         .map_err(PostgresVoiceCacheError::Postgres)?;
 
+    let current_generation: Option<String> = sqlx::query_scalar(
+        "SELECT generation FROM vozen.runtime_migration_state WHERE marker = $1",
+    )
+    .bind(IMPORT_MARKER)
+    .fetch_optional(pool)
+    .await
+    .map_err(PostgresVoiceCacheError::Postgres)?;
+    if current_generation.as_deref() != Some(expected_generation.as_str()) {
+        return Err(PostgresVoiceCacheError::GenerationMismatch);
+    }
+
     let store = store.lock().map_err(|_| PostgresVoiceCacheError::Lock)?;
-    store.replace_contract_tables_rows(&snapshots)?;
+    for (table, rows) in snapshots {
+        store.replace_contract_table_rows(&table, &rows)?;
+    }
     Ok(())
 }
 
@@ -170,10 +195,11 @@ mod tests {
         .await
         .expect("stage cache fixture");
         sqlx::query(
-            "INSERT INTO vozen.runtime_migration_state (marker, completed_at, generation)
-             VALUES ('sqlite_initial_import_v1', 1, 'staging-fixture')
+            "INSERT INTO vozen.runtime_migration_state (marker, completed_at, generation, fingerprint)
+             VALUES ('sqlite_initial_import_v1', 1, 'staging-fixture', 'initial-attestation')
              ON CONFLICT (marker) DO UPDATE SET completed_at = EXCLUDED.completed_at,
-                                                generation = EXCLUDED.generation",
+                                                generation = EXCLUDED.generation,
+                                                fingerprint = EXCLUDED.fingerprint",
         )
         .execute(&pool)
         .await

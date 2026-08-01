@@ -126,6 +126,7 @@ async fn deliver_batch(
     .is_some();
     if applied {
         materialize_aggregates(&mut transaction, payload).await?;
+        advance_live_generation(&mut transaction).await?;
     }
     // The applied marker is the idempotency evidence. The raw payload is transient so personal
     // rows cannot remain indefinitely in Supabase after materialization or privacy erasure.
@@ -138,6 +139,25 @@ async fn deliver_batch(
         .commit()
         .await
         .map_err(|_| "Supabase batch commit failed".to_owned())
+}
+
+/// Advances the live mirror checkpoint in the same transaction as the applied batch. The
+/// initial import fingerprint remains immutable; voice-cache refreshes use this marker to reject
+/// snapshots that raced a mirror write.
+async fn advance_live_generation(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+) -> Result<(), String> {
+    sqlx::query(
+        "UPDATE vozen.runtime_migration_state
+            SET generation = $1,
+                completed_at = EXTRACT(EPOCH FROM NOW())::bigint * 1000
+          WHERE marker = 'sqlite_initial_import_v1'",
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .execute(&mut **transaction)
+    .await
+    .map_err(|_| "Supabase live mirror checkpoint update failed".to_owned())?;
+    Ok(())
 }
 
 async fn materialize_aggregates(
