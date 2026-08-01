@@ -861,7 +861,7 @@ mod tests {
     #[test]
     fn teardown_stops_when_bot_leaves_or_consent_disappears() {
         assert!(session_should_stop(true, false, false));
-        assert!(session_should_stop(false, false, false));
+        assert!(session_should_stop(false, true, false));
         assert!(session_should_stop(false, false, true));
         assert!(!session_should_stop(false, false, false));
     }
