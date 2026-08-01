@@ -72,6 +72,8 @@ USER vozen
 
 # With no HEALTH_PORT the Rust runtime intentionally has no HTTP listener and this probe is a
 # no-op. When an API/status surface is enabled, HEALTH_PORT must be set and /health must answer.
+# CI sets RUST_IMAGE_SMOKE=true to exercise a credential-free startup seam; production never sets
+# that flag and therefore still requires DISCORD_TOKEN through the normal entrypoint.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD ["/usr/local/bin/healthcheck-rust.sh"]
 

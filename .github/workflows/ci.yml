@@ -53,6 +53,36 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - run: docker build --file Dockerfile.rust --tag vozen-rust:ci .
-      # The default probe is intentionally a no-op without HEALTH_PORT, but running it still
-      # proves the script was copied to the image and is executable by the non-root runtime user.
-      - run: docker run --rm --entrypoint /usr/local/bin/healthcheck-rust.sh vozen-rust:ci
+      # Start the real entrypoint in a credential-free smoke mode. The mode opens a temporary
+      # SQLite store and local /health listener but never creates a Discord gateway session.
+      - name: Start runtime image smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="vozen-rust-smoke-${GITHUB_RUN_ID}"
+          cleanup() { docker rm --force "$container" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run --detach --name "$container" --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --env RUST_IMAGE_SMOKE=true \
+            --env HEALTH_PORT=8080 \
+            vozen-rust:ci >/dev/null
+          for attempt in {1..30}; do
+            if docker exec "$container" /usr/local/bin/healthcheck-rust.sh; then
+              echo "runtime image smoke test passed"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$container"
+          echo "runtime image smoke test did not become ready" >&2
+          exit 1
+      - name: Verify production entrypoint remains credential-gated
+        shell: bash
+        run: |
+          set +e
+          output="$(docker run --rm vozen-rust:ci 2>&1)"
+          status=$?
+          set -e
+          test "$status" -ne 0
+          grep -Fq "DISCORD_TOKEN" <<<"$output"
