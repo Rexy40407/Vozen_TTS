@@ -3,13 +3,17 @@
 //! No Discord handler waits for this worker. A failed remote write leaves the local batch intact;
 //! a successful idempotent insert is acknowledged by removing only that local batch.
 
+use serde::Deserialize;
 use std::{
+    collections::BTreeMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use sqlx::PgPool;
-use vozen_store::{RuntimeBatchBuffer, RuntimeOutboxEnqueue, SqliteStore};
+use vozen_store::{
+    GUILD_PURGE_TABLES, RuntimeBatchBuffer, RuntimeOutboxEnqueue, SqliteStore, USER_ERASE_TABLES,
+};
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_BATCHES_PER_FLUSH: usize = 100;
@@ -123,6 +127,13 @@ async fn deliver_batch(
     if applied {
         materialize_aggregates(&mut transaction, payload).await?;
     }
+    // The applied marker is the idempotency evidence. The raw payload is transient so personal
+    // rows cannot remain indefinitely in Supabase after materialization or privacy erasure.
+    sqlx::query("DELETE FROM vozen.runtime_outbox_batch WHERE batch_id = $1")
+        .bind(batch_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| "Supabase outbox retention cleanup failed".to_owned())?;
     transaction
         .commit()
         .await
@@ -133,9 +144,9 @@ async fn materialize_aggregates(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     payload: &str,
 ) -> Result<(), String> {
-    let document: serde_json::Value = serde_json::from_str(payload)
+    let document: BatchDocument = serde_json::from_str(payload)
         .map_err(|_| "SQLite outbox contains invalid JSON".to_owned())?;
-    if document.get("replica").is_some() {
+    if document.replica.is_some() {
         sqlx::query("SELECT vozen.apply_replica_event(($1::jsonb)->'replica')")
             .bind(payload)
             .execute(&mut **transaction)
@@ -143,53 +154,188 @@ async fn materialize_aggregates(
             .map_err(|_| "Supabase durable replica write failed".to_owned())?;
         return Ok(());
     }
-    sqlx::query(
-        "INSERT INTO vozen.operational_daily_metric (day, metric, provider, value)
-         SELECT day, metric, provider, value
-         FROM jsonb_to_recordset(($1::jsonb)->'metrics')
-              AS metric_rows(day text, metric text, provider text, value bigint)
-         ON CONFLICT (day, metric, provider) DO UPDATE
-           SET value = vozen.operational_daily_metric.value + EXCLUDED.value",
-    )
-    .bind(payload)
-    .execute(&mut **transaction)
-    .await
-    .map_err(|_| "Supabase metric batch write failed".to_owned())?;
-    sqlx::query(
-        "INSERT INTO vozen.talk_usage (guild_id, user_id, language, engine, spoken_count)
-         SELECT guild_id, user_id,
-                split_part(model, '-', 1), engine, value
-         FROM jsonb_to_recordset(($1::jsonb)->'speech')
-              AS speech_rows(day text, guild_id text, user_id text, model text, engine text, value bigint)
-         ON CONFLICT (guild_id, user_id, language, engine) DO UPDATE
-           SET spoken_count = vozen.talk_usage.spoken_count + EXCLUDED.spoken_count",
-    )
-    .bind(payload)
-    .execute(&mut **transaction)
-    .await
-    .map_err(|_| "Supabase usage batch write failed".to_owned())?;
-    sqlx::query(
-        "INSERT INTO vozen.talk_stats (guild_id, user_id, spoken_count, streak, best_streak, last_date)
-         SELECT guild_id, user_id, value, 1, 1, day
-         FROM jsonb_to_recordset(($1::jsonb)->'speech')
-              AS speech_rows(day text, guild_id text, user_id text, model text, engine text, value bigint)
-         ON CONFLICT (guild_id, user_id) DO UPDATE
-           SET spoken_count = vozen.talk_stats.spoken_count + EXCLUDED.spoken_count,
+    if let Some(privacy) = document.privacy {
+        apply_privacy_tombstone(transaction, &privacy).await?;
+        return Ok(());
+    }
+    let mut metrics = BTreeMap::<(String, String, String), i64>::new();
+    let mut usage = BTreeMap::<(String, String, String, String), i64>::new();
+    let mut stats = BTreeMap::<(String, String, String), i64>::new();
+    let mut guild_days = BTreeMap::<(String, String), i64>::new();
+    for row in document.metrics {
+        *metrics
+            .entry((row.day, row.metric, row.provider))
+            .or_default() += row.value;
+    }
+    for row in document.speech {
+        let language = row.model.split('-').next().unwrap_or(&row.model).to_owned();
+        *usage
+            .entry((
+                row.guild_id.clone(),
+                row.user_id.clone(),
+                language,
+                row.engine,
+            ))
+            .or_default() += row.value;
+        *stats
+            .entry((row.guild_id.clone(), row.user_id.clone(), row.day.clone()))
+            .or_default() += row.value;
+        *guild_days.entry((row.guild_id, row.day)).or_default() += 1;
+    }
+    for ((day, metric, provider), value) in metrics {
+        sqlx::query(
+            "INSERT INTO vozen.operational_daily_metric (day, metric, provider, value)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (day, metric, provider) DO UPDATE
+             SET value = vozen.operational_daily_metric.value + EXCLUDED.value",
+        )
+        .bind(day)
+        .bind(metric)
+        .bind(provider)
+        .bind(value)
+        .execute(&mut **transaction)
+        .await
+        .map_err(|_| "Supabase metric batch write failed".to_owned())?;
+    }
+    for ((guild_id, user_id, language, engine), value) in usage {
+        sqlx::query(
+            "INSERT INTO vozen.talk_usage (guild_id, user_id, language, engine, spoken_count)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (guild_id, user_id, language, engine) DO UPDATE
+             SET spoken_count = vozen.talk_usage.spoken_count + EXCLUDED.spoken_count",
+        )
+        .bind(guild_id)
+        .bind(user_id)
+        .bind(language)
+        .bind(engine)
+        .bind(value)
+        .execute(&mut **transaction)
+        .await
+        .map_err(|error| format!("Supabase usage batch write failed: {error}"))?;
+    }
+    for ((guild_id, user_id, day), value) in stats {
+        sqlx::query(
+            "INSERT INTO vozen.talk_stats (guild_id, user_id, spoken_count, streak, best_streak, last_date)
+             VALUES ($1, $2, $3, 1, 1, $4)
+             ON CONFLICT (guild_id, user_id) DO UPDATE SET
+               spoken_count = vozen.talk_stats.spoken_count + EXCLUDED.spoken_count,
                streak = CASE
+                 WHEN vozen.talk_stats.last_date > EXCLUDED.last_date THEN vozen.talk_stats.streak
                  WHEN vozen.talk_stats.last_date = EXCLUDED.last_date THEN vozen.talk_stats.streak
-                 WHEN vozen.talk_stats.last_date::date = EXCLUDED.last_date::date - 1 THEN vozen.talk_stats.streak + 1
+                 WHEN vozen.talk_stats.last_date::date >= EXCLUDED.last_date::date - 2
+                  AND vozen.talk_stats.last_date::date < EXCLUDED.last_date::date
+                   THEN vozen.talk_stats.streak + 1
                  ELSE 1 END,
                best_streak = GREATEST(vozen.talk_stats.best_streak,
-                 CASE WHEN vozen.talk_stats.last_date = EXCLUDED.last_date THEN vozen.talk_stats.streak
-                      WHEN vozen.talk_stats.last_date::date = EXCLUDED.last_date::date - 1 THEN vozen.talk_stats.streak + 1
+                 CASE WHEN vozen.talk_stats.last_date > EXCLUDED.last_date THEN vozen.talk_stats.streak
+                      WHEN vozen.talk_stats.last_date = EXCLUDED.last_date THEN vozen.talk_stats.streak
+                      WHEN vozen.talk_stats.last_date::date >= EXCLUDED.last_date::date - 2
+                       AND vozen.talk_stats.last_date::date < EXCLUDED.last_date::date
+                        THEN vozen.talk_stats.streak + 1
                       ELSE 1 END),
                last_date = GREATEST(vozen.talk_stats.last_date, EXCLUDED.last_date)",
+        )
+        .bind(&guild_id).bind(&user_id).bind(value).bind(&day)
+        .execute(&mut **transaction).await
+        .map_err(|_| "Supabase talk statistics batch write failed".to_owned())?;
+    }
+    for ((guild_id, day), _) in guild_days {
+        sqlx::query(
+            "INSERT INTO vozen.guild_talk_streak (guild_id, streak, best_streak, last_date)
+             VALUES ($1, 1, 1, $2)
+             ON CONFLICT (guild_id) DO UPDATE SET
+               streak = CASE
+                 WHEN vozen.guild_talk_streak.last_date > EXCLUDED.last_date THEN vozen.guild_talk_streak.streak
+                 WHEN vozen.guild_talk_streak.last_date = EXCLUDED.last_date THEN vozen.guild_talk_streak.streak
+                 WHEN vozen.guild_talk_streak.last_date::date >= EXCLUDED.last_date::date - 2
+                  AND vozen.guild_talk_streak.last_date::date < EXCLUDED.last_date::date
+                   THEN vozen.guild_talk_streak.streak + 1 ELSE 1 END,
+               best_streak = GREATEST(vozen.guild_talk_streak.best_streak,
+                 CASE WHEN vozen.guild_talk_streak.last_date > EXCLUDED.last_date THEN vozen.guild_talk_streak.streak
+                      WHEN vozen.guild_talk_streak.last_date = EXCLUDED.last_date THEN vozen.guild_talk_streak.streak
+                      WHEN vozen.guild_talk_streak.last_date::date >= EXCLUDED.last_date::date - 2
+                       AND vozen.guild_talk_streak.last_date::date < EXCLUDED.last_date::date
+                        THEN vozen.guild_talk_streak.streak + 1 ELSE 1 END),
+               last_date = GREATEST(vozen.guild_talk_streak.last_date, EXCLUDED.last_date)",
+        )
+        .bind(guild_id).bind(day)
+        .execute(&mut **transaction).await
+        .map_err(|_| "Supabase guild streak batch write failed".to_owned())?;
+    }
+    Ok(())
+}
+
+async fn apply_privacy_tombstone(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    privacy: &PrivacyRow,
+) -> Result<(), String> {
+    let tables: &[&str] = match privacy.scope.as_str() {
+        "user" => USER_ERASE_TABLES,
+        "guild" => GUILD_PURGE_TABLES,
+        _ => return Err("invalid privacy tombstone scope".to_owned()),
+    };
+    for table in tables {
+        let query = format!(
+            "DELETE FROM vozen.\"{table}\" WHERE {} = $1",
+            if privacy.scope == "user" {
+                "user_id"
+            } else {
+                "guild_id"
+            }
+        );
+        sqlx::query(&query)
+            .bind(&privacy.id)
+            .execute(&mut **transaction)
+            .await
+            .map_err(|_| "Supabase privacy deletion failed".to_owned())?;
+    }
+    sqlx::query(
+        "DELETE FROM vozen.runtime_outbox_batch
+         WHERE payload #>> '{privacy,id}' = $1
+            OR payload #>> '{replica,row,user_id}' = $1
+            OR payload #>> '{replica,row,guild_id}' = $1",
     )
-    .bind(payload)
+    .bind(&privacy.id)
     .execute(&mut **transaction)
     .await
-    .map_err(|_| "Supabase talk statistics batch write failed".to_owned())?;
+    .map_err(|_| "Supabase privacy outbox cleanup failed".to_owned())?;
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct BatchDocument {
+    #[serde(default)]
+    replica: Option<serde_json::Value>,
+    #[serde(default)]
+    privacy: Option<PrivacyRow>,
+    #[serde(default)]
+    metrics: Vec<MetricRow>,
+    #[serde(default)]
+    speech: Vec<SpeechRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrivacyRow {
+    scope: String,
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MetricRow {
+    day: String,
+    metric: String,
+    provider: String,
+    value: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct SpeechRow {
+    day: String,
+    guild_id: String,
+    user_id: String,
+    model: String,
+    engine: String,
+    value: i64,
 }
 
 #[cfg(test)]
