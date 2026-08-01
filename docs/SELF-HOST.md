@@ -54,6 +54,8 @@ Look for `healthy: Ready` and a successful health response. Also check
 
 ```sh
 npm ci --ignore-scripts
+# Vitest loads esbuild. Rebuild only that audited binary after blocking all
+# dependency install scripts; do not enable install scripts globally.
 npm rebuild esbuild
 npm run check:site
 node tools/check-rust-contracts.mjs
