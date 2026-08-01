@@ -2838,6 +2838,7 @@ fn build_http_router(
                     let database_path = database_path.clone();
                     let gateway_state = metrics_gateway_state;
                     let supabase_metrics = supabase_metrics.clone();
+                    let store = store.clone();
                     move || {
                         let supabase = supabase_metrics
                             .as_ref()
@@ -2857,6 +2858,10 @@ fn build_http_router(
                             &database_path,
                             active_voice_servers,
                             supabase,
+                            store
+                                .lock()
+                                .ok()
+                                .and_then(|value| value.runtime_outbox_metrics().ok()),
                         )
                     }
                 })),

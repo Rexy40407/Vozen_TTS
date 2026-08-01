@@ -12,7 +12,8 @@ use std::{
 
 use sqlx::PgPool;
 use vozen_store::{
-    GUILD_PURGE_TABLES, RuntimeBatchBuffer, RuntimeOutboxEnqueue, SqliteStore, USER_ERASE_TABLES,
+    GUILD_PURGE_SPECS, PrivacyPurgeKey, PrivacyPurgeSpec, RuntimeBatchBuffer, RuntimeOutboxEnqueue,
+    SqliteStore, USER_ERASE_SPECS,
 };
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
@@ -289,21 +290,13 @@ async fn apply_privacy_tombstone(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     privacy: &PrivacyRow,
 ) -> Result<(), String> {
-    let tables: &[&str] = match privacy.scope.as_str() {
-        "user" => USER_ERASE_TABLES,
-        "guild" => GUILD_PURGE_TABLES,
+    let specs: &[PrivacyPurgeSpec] = match privacy.scope.as_str() {
+        "user" => USER_ERASE_SPECS,
+        "guild" => GUILD_PURGE_SPECS,
         _ => return Err("invalid privacy tombstone scope".to_owned()),
     };
-    for table in tables {
-        let query = format!(
-            "DELETE FROM vozen.\"{table}\" WHERE {} = $1",
-            if privacy.scope == "user" {
-                "user_id"
-            } else {
-                "guild_id"
-            }
-        );
-        sqlx::query(&query)
+    for spec in specs {
+        sqlx::query(&privacy_delete_statement(*spec))
             .bind(&privacy.id)
             .execute(&mut **transaction)
             .await
@@ -320,6 +313,16 @@ async fn apply_privacy_tombstone(
     .await
     .map_err(|_| "Supabase privacy outbox cleanup failed".to_owned())?;
     Ok(())
+}
+
+fn privacy_delete_statement(spec: PrivacyPurgeSpec) -> String {
+    let predicate = match spec.key {
+        PrivacyPurgeKey::UserId => "user_id = $1",
+        PrivacyPurgeKey::DiscordId => "discord_id = $1",
+        PrivacyPurgeKey::GcloudPersonalKey => "key = $1 AND scope IN ('user', 'pass')",
+        PrivacyPurgeKey::GuildId => "guild_id = $1",
+    };
+    format!("DELETE FROM vozen.\"{}\" WHERE {predicate}", spec.table)
 }
 
 #[derive(Debug, Deserialize)]

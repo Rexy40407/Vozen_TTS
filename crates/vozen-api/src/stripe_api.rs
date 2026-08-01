@@ -34,6 +34,11 @@ const STRIPE_API: &str = "https://api.stripe.com/v1";
 const STRIPE_API_VERSION: &str = "2026-06-24.dahlia";
 const SIGNATURE_TOLERANCE_SECONDS: i64 = 300;
 
+/// Convert Stripe's Unix-seconds timestamps to the store's Unix-milliseconds unit.
+fn stripe_period_end_ms(seconds: i64) -> Option<i64> {
+    seconds.checked_mul(1_000)
+}
+
 #[derive(Debug, Clone)]
 pub struct StripePriceIds {
     pub plus_monthly: String,
@@ -631,7 +636,8 @@ fn stripe_event_input(event_type: &str, object: &Value) -> Result<StripeEventInp
                 .into(),
             period_end: object
                 .pointer("/lines/data/0/period/end")
-                .and_then(Value::as_i64),
+                .and_then(Value::as_i64)
+                .and_then(stripe_period_end_ms),
         }),
         "customer.subscription.updated" | "customer.subscription.deleted" => {
             Ok(StripeEventInput::SubscriptionUpdated {
@@ -640,7 +646,10 @@ fn stripe_event_input(event_type: &str, object: &Value) -> Result<StripeEventInp
                     .and_then(Value::as_str)
                     .ok_or("missing subscription id")?
                     .into(),
-                period_end: object.get("current_period_end").and_then(Value::as_i64),
+                period_end: object
+                    .get("current_period_end")
+                    .and_then(Value::as_i64)
+                    .and_then(stripe_period_end_ms),
                 status: object
                     .get("status")
                     .and_then(Value::as_str)

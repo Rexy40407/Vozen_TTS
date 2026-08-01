@@ -15,6 +15,7 @@ pub struct StripeSubscription {
     pub user_id: String,
     pub plan: String,
     pub seats: i64,
+    /// Unix timestamp in milliseconds. Provider seconds are normalized at the API boundary.
     pub current_period_end: i64,
     pub status: String,
     pub updated_at: i64,
@@ -27,6 +28,7 @@ pub struct StripeSubscriptionInput {
     pub user_id: String,
     pub plan: String,
     pub seats: i64,
+    /// Unix timestamp in milliseconds. Callers must pass the normalized internal unit.
     pub current_period_end: i64,
     pub status: String,
     pub updated_at: i64,
@@ -203,9 +205,8 @@ impl SqliteStore {
                     ));
                 };
                 let period_end = period_end.unwrap_or(subscription.current_period_end);
-                let end_ms = period_end.saturating_mul(1000);
-                let days = ((end_ms.saturating_sub(now) + 86_399_999) / 86_400_000).max(1);
-                subscription.current_period_end = end_ms;
+                let days = ((period_end.saturating_sub(now) + 86_399_999) / 86_400_000).max(1);
+                subscription.current_period_end = period_end;
                 subscription.status = "active".into();
                 subscription.updated_at = now;
                 transaction.execute(
@@ -213,7 +214,7 @@ impl SqliteStore {
                      WHERE subscription_id=?1",
                     params![
                         subscription.subscription_id,
-                        end_ms,
+                        period_end,
                         subscription.status,
                         now
                     ],
