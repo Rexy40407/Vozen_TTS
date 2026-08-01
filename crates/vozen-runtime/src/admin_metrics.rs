@@ -10,9 +10,10 @@ use std::{
 };
 
 use vozen_api::admin_api::{
-    AdminActiveVoiceServer, AdminDatabaseUsageSample, AdminSupabaseMetrics,
-    AdminSupabaseUsageSample, AdminSystemMetrics,
+    AdminActiveVoiceServer, AdminDatabaseUsageSample, AdminPostgresOutboxMetrics,
+    AdminSupabaseMetrics, AdminSupabaseUsageSample, AdminSystemMetrics,
 };
+use vozen_store::RuntimeOutboxMetrics;
 
 const HISTORY_DAYS: usize = 7;
 
@@ -20,6 +21,7 @@ pub fn snapshot_with_supabase(
     database_path: &Path,
     active_voice_servers: Vec<AdminActiveVoiceServer>,
     supabase: Option<AdminSupabaseMetrics>,
+    outbox: Option<RuntimeOutboxMetrics>,
 ) -> AdminSystemMetrics {
     let database_bytes = database_bytes(database_path);
     let volume = volume_usage(database_path.parent().unwrap_or_else(|| Path::new(".")));
@@ -37,6 +39,12 @@ pub fn snapshot_with_supabase(
         active_voice_servers,
         database_history,
         supabase,
+        postgres_outbox: outbox.map(|value| AdminPostgresOutboxMetrics {
+            pending_rows: value.pending_rows,
+            pending_bytes: value.pending_bytes,
+            oldest_created_at: value.oldest_created_at,
+            mirror_state: "enabled".into(),
+        }),
     }
 }
 

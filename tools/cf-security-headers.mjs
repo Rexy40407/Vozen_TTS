@@ -92,16 +92,16 @@ async function main() {
       }
     }
 
-    // 3. HTTPS: Full mode + Always Use HTTPS.
+    // 3. HTTPS: Full (strict) mode + Always Use HTTPS.
     await cf(`/zones/${zoneId}/settings/ssl`, {
       method: 'PATCH',
-      body: JSON.stringify({ value: 'full' }),
+      body: JSON.stringify({ value: 'strict' }),
     });
     await cf(`/zones/${zoneId}/settings/always_use_https`, {
       method: 'PATCH',
       body: JSON.stringify({ value: 'on' }),
     });
-    console.log('SSL=full · always_use_https=on');
+    console.log('SSL=full (strict) · always_use_https=on');
 
     // 4. Transform Rule: inject the 6 headers into the response (phase http_response_headers_transform).
     const headers = {};

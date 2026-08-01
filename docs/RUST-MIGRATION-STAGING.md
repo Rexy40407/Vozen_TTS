@@ -201,3 +201,12 @@ Never run Node and Rust concurrently with the same Discord token, and never dele
 volume as part of rollback. A failed rollback remains an incident requiring the preserved logs,
 database copies and an explicit operator decision; it is not a reason to keep retrying the
 cutover automatically.
+# Operational safety gates
+
+- Production deploys an exact CI-tested SHA; the VPS refuses divergent refs and automatic rollback.
+- The SQLite mirror outbox is explicitly enabled/disabled. Disabling removes capture triggers and
+  marks the cache for a fresh import; existing backlog is preserved for inspection.
+- Imports replace a fresh generation in one transaction and publish only after row fingerprints,
+  counts and all contract tables match. A failed refresh keeps the previous local cache.
+- Do not enable the voice read cache or any primary cutover with pending outbox rows, a stale
+  generation, an orphan batch, or a fingerprint mismatch.

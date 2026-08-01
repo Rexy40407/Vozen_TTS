@@ -54,6 +54,7 @@ Look for `healthy: Ready` and a successful health response. Also check
 
 ```sh
 npm ci --ignore-scripts
+npm rebuild esbuild
 npm run check:site
 node tools/check-rust-contracts.mjs
 node tools/check-rust-canaries.mjs

@@ -198,6 +198,18 @@ pub struct AdminActiveVoiceServer {
     pub name: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminPostgresOutboxMetrics {
+    #[serde(rename = "pendingRows")]
+    pub pending_rows: u64,
+    #[serde(rename = "pendingBytes")]
+    pub pending_bytes: u64,
+    #[serde(rename = "oldestCreatedAt")]
+    pub oldest_created_at: Option<i64>,
+    #[serde(rename = "mirrorState")]
+    pub mirror_state: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct AdminSystemMetrics {
     #[serde(rename = "databaseBytes")]
@@ -218,6 +230,8 @@ pub struct AdminSystemMetrics {
     pub database_history: Vec<AdminDatabaseUsageSample>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supabase: Option<AdminSupabaseMetrics>,
+    #[serde(rename = "postgresOutbox", skip_serializing_if = "Option::is_none")]
+    pub postgres_outbox: Option<AdminPostgresOutboxMetrics>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

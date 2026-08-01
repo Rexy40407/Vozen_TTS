@@ -22,11 +22,11 @@ services:
       KOKORO_LANGS: en,es,fr,hi,it,pt,ja
       RUST_COMMANDS_STATE_PATH: /data/commands-state-rust.json
       # Public, privacy-safe status JSON consumed by https://vozen.org/status.
-      PUBLIC_STATUS_ENABLED: "true"
+      PUBLIC_STATUS_ENABLED: 'true'
     volumes:
       - ./rust-data:/data
       # Production keeps the existing model/Piper directories outside this checkout.
       - /home/vozen/discord-bot-Vozen/models:/models:ro
       - /home/vozen/piper:/opt/piper:ro
     ports:
-      - '3001:3001'
+      - '127.0.0.1:3001:3001'

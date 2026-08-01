@@ -66,6 +66,14 @@ impl SqliteStore {
                 [guild_id],
             )?;
         }
+        transaction.execute(
+            "INSERT INTO runtime_outbox_batch (batch_id, created_at, payload)
+             VALUES ('privacy-guild-' || lower(hex(randomblob(16))),
+                     CAST(strftime('%s', 'now') AS INTEGER),
+                     json_object('version', 1, 'privacy',
+                       json_object('scope', 'guild', 'id', ?1)))",
+            [guild_id],
+        )?;
         transaction.commit()?;
         Ok(())
     }
@@ -91,6 +99,14 @@ impl SqliteStore {
         transaction.execute(
             "DELETE FROM gcloud_usage WHERE key = ?1 AND scope IN ('user', 'pass')",
             params![user_id],
+        )?;
+        transaction.execute(
+            "INSERT INTO runtime_outbox_batch (batch_id, created_at, payload)
+             VALUES ('privacy-user-' || lower(hex(randomblob(16))),
+                     CAST(strftime('%s', 'now') AS INTEGER),
+                     json_object('version', 1, 'privacy',
+                       json_object('scope', 'user', 'id', ?1)))",
+            [user_id],
         )?;
         transaction.commit()?;
         Ok(())

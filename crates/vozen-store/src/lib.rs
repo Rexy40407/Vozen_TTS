@@ -83,8 +83,10 @@ pub use pronunciation::{
     USER_PRON_LIMIT_PREMIUM,
 };
 pub use runtime_batch::{RuntimeBatchBuffer, RuntimeBatchEvent};
-pub use runtime_outbox::{RuntimeOutboxBatch, RuntimeOutboxEnqueue};
-pub use stripe::{StripeSubscription, StripeSubscriptionInput};
+pub use runtime_outbox::{RuntimeOutboxBatch, RuntimeOutboxEnqueue, RuntimeOutboxMetrics};
+pub use stripe::{
+    StripeEventApplyOutcome, StripeEventInput, StripeSubscription, StripeSubscriptionInput,
+};
 pub use stt_consent::SttConsent;
 pub use stt_usage::{PLUS_STT_DAILY_LIMIT_MS, PREMIUM_STT_DAILY_LIMIT_MS, SttUsageReservation};
 pub use talk_stats::{GuildTalkStreak, TalkBump, TalkRow};
@@ -187,6 +189,8 @@ pub enum StoreError {
     InvalidRuntimeOutboxBatchId,
     #[error("runtime outbox payload must be non-empty and at most 262144 bytes")]
     InvalidRuntimeOutboxPayload,
+    #[error("Postgres replica requires a fresh SQLite import before it can be enabled")]
+    ReplicaReconcileRequired,
     #[error("invalid Top.gg webhook event id")]
     InvalidTopggEventId,
     #[error("SQLite error: {0}")]
@@ -270,42 +274,54 @@ impl SqliteStore {
         table: &str,
         rows: &[serde_json::Value],
     ) -> Result<(), StoreError> {
-        if !self.durable_table_names()?.iter().any(|name| name == table) {
-            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
-        }
-        let mut columns_statement = self
-            .connection
-            .prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
-        let columns = columns_statement
-            .query_map([], |row| row.get::<_, String>(1))?
-            .collect::<Result<Vec<_>, _>>()?;
-        if columns.is_empty() {
-            return Err(StoreError::InvalidSchemaObject(table.to_owned()));
-        }
+        self.replace_contract_tables_rows(&[(table.to_owned(), rows.to_owned())])
+    }
+
+    /// Replaces a complete cache snapshot in one SQLite transaction. Readers therefore observe
+    /// either the previous generation or the fully validated new generation, never a mixed set of
+    /// tables.
+    pub fn replace_contract_tables_rows(
+        &self,
+        tables: &[(String, Vec<serde_json::Value>)],
+    ) -> Result<(), StoreError> {
+        let allowed = self.durable_table_names()?;
         let transaction = self.connection.unchecked_transaction()?;
-        transaction.execute(&format!("DELETE FROM \"{table}\""), [])?;
-        let fields = columns
-            .iter()
-            .map(|column| format!("\"{}\"", column.replace('"', "\"\"")))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let placeholders = (1..=columns.len())
-            .map(|index| format!("?{index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!("INSERT INTO \"{table}\" ({fields}) VALUES ({placeholders})");
-        let mut statement = transaction.prepare(&sql)?;
-        for row in rows {
-            let object = row
-                .as_object()
-                .ok_or_else(|| StoreError::InvalidSchemaObject(table.to_owned()))?;
-            let values = columns
-                .iter()
-                .map(|column| json_value_to_sql(object.get(column)))
+        for (table, rows) in tables {
+            if !allowed.iter().any(|name| name == table) {
+                return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+            }
+            let mut columns_statement =
+                transaction.prepare(&format!("PRAGMA table_info(\"{table}\")"))?;
+            let columns = columns_statement
+                .query_map([], |row| row.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
-            statement.execute(params_from_iter(values))?;
+            if columns.is_empty() {
+                return Err(StoreError::InvalidSchemaObject(table.to_owned()));
+            }
+            transaction.execute(&format!("DELETE FROM \"{table}\""), [])?;
+            let fields = columns
+                .iter()
+                .map(|column| format!("\"{}\"", column.replace('"', "\"\"")))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let placeholders = (1..=columns.len())
+                .map(|index| format!("?{index}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let sql = format!("INSERT INTO \"{table}\" ({fields}) VALUES ({placeholders})");
+            let mut statement = transaction.prepare(&sql)?;
+            for row in rows {
+                let object = row
+                    .as_object()
+                    .ok_or_else(|| StoreError::InvalidSchemaObject(table.to_owned()))?;
+                let values = columns
+                    .iter()
+                    .map(|column| json_value_to_sql(object.get(column)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                statement.execute(params_from_iter(values))?;
+            }
+            drop(statement);
         }
-        drop(statement);
         transaction.commit()?;
         Ok(())
     }
@@ -361,9 +377,43 @@ impl SqliteStore {
 
     /// Opt-in staging hook for asynchronously mirroring durable mutations to Postgres.
     /// It is never enabled by a normal SQLite runtime and performs no network I/O itself.
-    pub fn enable_postgres_replica_outbox(&self) -> Result<(), StoreError> {
+    pub fn configure_postgres_replica_outbox(&self, enabled: bool) -> Result<(), StoreError> {
         let tables = self.durable_table_names()?;
-        runtime_outbox::install_replica_triggers(&self.connection, &tables)
+        if enabled {
+            let status: String = self.connection.query_row(
+                "SELECT status FROM runtime_replica_state WHERE singleton = 1",
+                [],
+                |row| row.get(0),
+            )?;
+            if status == "reconcile_required" {
+                return Err(StoreError::ReplicaReconcileRequired);
+            }
+            runtime_outbox::install_replica_triggers(&self.connection, &tables)?;
+            self.connection.execute(
+                "UPDATE runtime_replica_state SET status = 'enabled', updated_at = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE singleton = 1",
+                [],
+            )?;
+            Ok(())
+        } else {
+            runtime_outbox::disable_replica_triggers(&self.connection, &tables)?;
+            self.connection.execute(
+                "UPDATE runtime_replica_state SET status = 'reconcile_required', updated_at = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE singleton = 1",
+                [],
+            )?;
+            Ok(())
+        }
+    }
+
+    pub fn mark_replica_ready(&self) -> Result<(), StoreError> {
+        self.connection.execute(
+            "UPDATE runtime_replica_state SET status = 'ready', updated_at = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE singleton = 1",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub fn enable_postgres_replica_outbox(&self) -> Result<(), StoreError> {
+        self.configure_postgres_replica_outbox(true)
     }
 }
 

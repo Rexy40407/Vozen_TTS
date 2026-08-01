@@ -344,3 +344,10 @@ cd ~/discord-bot-Vozen && npm rebuild   # recompila os módulos nativos para o A
 ```bash
 sudo -n systemctl restart vozen.service
 ```
+# Archived Node deployment note
+
+Production now runs the Rust/Docker runtime from `migration/vozen-rust`. Use
+[`SELF-HOST.md`](SELF-HOST.md) and [`RUST-MIGRATION-STAGING.md`](RUST-MIGRATION-STAGING.md)
+for the supported deployment, exact-SHA rollout and mirror runbooks below.
+
+The historical commands below are retained for provenance only and must not be used for production.

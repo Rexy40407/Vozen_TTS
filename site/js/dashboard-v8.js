@@ -557,22 +557,22 @@
     var locales = meta.options.locales || [];
     return (
       '<section class="dash-profiles" aria-labelledby="dashProfilesTitle">' +
-      '<p class="dash-sec__t" id="dashProfilesTitle">Channel profiles</p>' +
-      '<p class="dash-row__d">Override reading and voice behaviour for one text channel. Inherit keeps the server default.</p>' +
+      '<p class="dash-sec__t" id="dashProfilesTitle">' + esc(t("dashboard.sec_voice")) + "</p>" +
+      '<p class="dash-row__d">' + esc(t("dashboard.d_ttsChannelId")) + "</p>" +
       '<div class="dash-profiles__grid">' +
       '<label class="dash-profile-field">Text channel<select class="dash-sel" id="dashProfileChannel">' +
       profileOptionHtml(channels, "", "Choose a channel") +
       "</select></label>" +
-      '<label class="dash-profile-field">Auto-read' + triStateHtml("autoRead") + "</label>" +
-      '<label class="dash-profile-field">Automatic translation' +
+      '<label class="dash-profile-field">' + esc(t("dashboard.f_autoread")) + triStateHtml("autoRead") + "</label>" +
+      '<label class="dash-profile-field">' +
       triStateHtml("translationEnabled") +
       "</label>" +
-      '<label class="dash-profile-field">Read bots' + triStateHtml("readBots") + "</label>" +
-      '<label class="dash-profile-field">Default voice<select class="dash-sel" data-p="defaultVoice">' +
+      '<label class="dash-profile-field">' + esc(t("dashboard.f_readBots")) + triStateHtml("readBots") + "</label>" +
+      '<label class="dash-profile-field">' + esc(t("dashboard.f_defaultVoice")) + '<select class="dash-sel" data-p="defaultVoice">' +
       profileOptionHtml(voices, "", "Inherit server voice") +
       "</select></label>" +
       '<label class="dash-profile-field">Engine<select class="dash-sel" data-p="engine"><option value="">Inherit</option><option value="google">Default</option><option value="piper">Piper</option><option value="kokoro">Kokoro (paid)</option><option value="gcloud">Google HD (paid)</option></select></label>' +
-      '<label class="dash-profile-field">Language<select class="dash-sel" data-p="locale">' +
+      '<label class="dash-profile-field">' + esc(t("dashboard.f_locale")) + '<select class="dash-sel" data-p="locale">' +
       profileOptionHtml(locales, "", "Infer from the voice") +
       "</select></label>" +
       '<label class="dash-profile-field">Voice effect<select class="dash-sel" data-p="effect"><option value="">None / personal choice</option><option value="robot">Robot</option><option value="echo">Echo</option><option value="deep">Deep (paid)</option><option value="chipmunk">Chipmunk (paid)</option><option value="radio">Radio (paid)</option><option value="phone">Phone (paid)</option><option value="underwater">Underwater (paid)</option><option value="demon">Demon (paid)</option></select></label>' +
@@ -580,7 +580,7 @@
       profileOptionHtml(voiceChannels, "", "Any active call") +
       "</select></label>" +
       '<label class="dash-profile-field">Speed (0.5–2.0)<input class="dash-num" data-p="speed" type="number" min="0.5" max="2" step="0.05" placeholder="Inherit"></label>' +
-      '<label class="dash-profile-field">Maximum characters<input class="dash-num" data-p="maxChars" type="number" min="1" max="2000" placeholder="Inherit"></label>' +
+      '<label class="dash-profile-field">' + esc(t("dashboard.f_maxChars")) + '<input class="dash-num" data-p="maxChars" type="number" min="1" max="2000" placeholder="Inherit"></label>' +
       "</div>" +
       '<div class="dash-profile-actions"><button type="button" class="' +
       BTN +
@@ -689,7 +689,7 @@
     if (!el) return undefined;
     var f = FIELD[key];
     if (f.type === "toggle") return el.checked;
-    if (f.type === "num") return Number(el.value);
+    if (f.type === "num") return el.value.trim() === "" ? undefined : Number(el.value);
     if (f.type === "channel") return el.value === "" ? null : el.value;
     if (f.type === "role") return el.value === "" ? null : el.value;
     return el.value;
@@ -743,7 +743,9 @@
     function countChanges() {
       var n = 0;
       eachField(sections, function (key) {
-        if (domValue(key) !== baseline[key]) n++;
+        var value = domValue(key);
+        if (FIELD[key].type === "num" && value === undefined) return;
+        if (value !== baseline[key]) n++;
       });
       return n;
     }

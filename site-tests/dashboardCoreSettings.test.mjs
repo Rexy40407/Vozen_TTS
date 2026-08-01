@@ -60,6 +60,11 @@ describe('dashboard channel and voice controls', () => {
     expect(script).toContain('/profile/');
     expect(script).toContain('method: "DELETE"');
   });
+  it('treats an empty numeric control as no change instead of zero', () => {
+    const script = source('site/js/dashboard-v8.js');
+    expect(script).toContain('el.value.trim() === "" ? undefined : Number(el.value)');
+    expect(script).toContain('FIELD[key].type === "num" && value === undefined');
+  });
   it('translates the new fields in every advertised site language', () => {
     const keys = [
       'dashboard.f_ttsChannelId',

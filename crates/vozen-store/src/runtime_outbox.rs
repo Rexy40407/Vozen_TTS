@@ -54,7 +54,14 @@ pub(crate) fn install_runtime_outbox_schema(connection: &Connection) -> Result<(
            payload TEXT NOT NULL
          );
          CREATE INDEX IF NOT EXISTS idx_runtime_outbox_created_at
-           ON runtime_outbox_batch (created_at, batch_id);",
+           ON runtime_outbox_batch (created_at, batch_id);
+         CREATE TABLE IF NOT EXISTS runtime_replica_state (
+           singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+           status TEXT NOT NULL CHECK (status IN ('ready', 'enabled', 'reconcile_required')),
+           updated_at INTEGER NOT NULL
+         );
+         INSERT OR IGNORE INTO runtime_replica_state (singleton, status, updated_at)
+           VALUES (1, 'ready', CAST(strftime('%s','now') AS INTEGER) * 1000);",
     )?;
     Ok(())
 }
@@ -104,6 +111,28 @@ pub(crate) fn install_replica_triggers(
                    END",
                 trigger = quote_identifier(&format!("{trigger_prefix}_{suffix}")),
                 table_name = quote_identifier(table),
+            ))?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RuntimeOutboxMetrics {
+    pub pending_rows: u64,
+    pub pending_bytes: u64,
+    pub oldest_created_at: Option<i64>,
+}
+
+pub(crate) fn disable_replica_triggers(
+    connection: &Connection,
+    tables: &[String],
+) -> Result<(), StoreError> {
+    for table in tables {
+        for suffix in ["ai", "au", "ad"] {
+            connection.execute_batch(&format!(
+                "DROP TRIGGER IF EXISTS {}",
+                quote_identifier(&format!("runtime_replica_{table}_{suffix}")),
             ))?;
         }
     }
@@ -180,6 +209,23 @@ impl SqliteStore {
             "DELETE FROM runtime_outbox_batch WHERE batch_id = ?1",
             [batch_id],
         )? != 0)
+    }
+
+    pub fn runtime_outbox_metrics(&self) -> Result<RuntimeOutboxMetrics, StoreError> {
+        self.connection()
+            .query_row(
+                "SELECT COUNT(*), COALESCE(SUM(length(payload)), 0), MIN(created_at)
+                 FROM runtime_outbox_batch",
+                [],
+                |row| {
+                    Ok(RuntimeOutboxMetrics {
+                        pending_rows: row.get::<_, i64>(0)?.try_into().unwrap_or(0),
+                        pending_bytes: row.get::<_, i64>(1)?.try_into().unwrap_or(0),
+                        oldest_created_at: row.get(2)?,
+                    })
+                },
+            )
+            .map_err(StoreError::from)
     }
 }
 
@@ -327,5 +373,21 @@ mod tests {
             )
             .expect("hot counter write");
         assert_eq!(store.list_runtime_outbox(10).expect("outbox").len(), 3);
+    }
+
+    #[test]
+    fn disabling_replica_capture_removes_triggers() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        let tables = store.durable_table_names().expect("contract tables");
+        install_replica_triggers(store.connection(), &tables).expect("install triggers");
+        disable_replica_triggers(store.connection(), &tables).expect("disable triggers");
+        store
+            .connection()
+            .execute(
+                "INSERT INTO guild_config (guild_id, locale) VALUES ('disabled-guild', 'pt')",
+                [],
+            )
+            .expect("insert");
+        assert!(store.list_runtime_outbox(10).expect("outbox").is_empty());
     }
 }

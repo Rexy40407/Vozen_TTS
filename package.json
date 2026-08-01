@@ -9,11 +9,12 @@
   },
   "scripts": {
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "test": "vitest run site-tests",
-    "check": "npm run format:check && npm run check:rust-contracts && npm run check:rust-canaries && npm run check:rust && npm run check:site",
+    "format:check": "node tools/check-format.mjs",
+    "test": "vitest run site-tests --pool forks --maxWorkers 1 --minWorkers 1",
+    "check": "npm run format:check && npm run check:rust-contracts && npm run check:rust-replica-contract && npm run check:rust-canaries && npm run check:rust && npm run check:site",
     "build:site": "node tools/minify-site.mjs",
     "check:rust-contracts": "node tools/check-rust-contracts.mjs",
+    "check:rust-replica-contract": "node tools/check-rust-replica-contract.mjs",
     "check:rust-canaries": "node tools/check-rust-canaries.mjs",
     "rust:staging:preflight": "node tools/rust-staging-preflight.mjs",
     "check:rust": "cargo fmt --check && cargo check --workspace --all-targets --locked && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",
@@ -21,7 +22,7 @@
     "build:i18n": "node tools/build-i18n.mjs",
     "check:i18n": "node tools/build-i18n.mjs --check",
     "check:site-copy": "node tools/check-site-copy.mjs",
-    "check:site": "vitest run site-tests/operationalHardening.test.mjs site-tests/siteTrust.test.mjs site-tests/siteI18n.test.mjs site-tests/dashboardCoreSettings.test.mjs site-tests/siteUxPolish.test.mjs site-tests/fullAuditRegression.test.mjs && npm run check:i18n && npm run check:site-copy && npm run build:site"
+    "check:site": "vitest run site-tests/operationalHardening.test.mjs site-tests/siteTrust.test.mjs site-tests/siteI18n.test.mjs site-tests/dashboardCoreSettings.test.mjs site-tests/siteUxPolish.test.mjs site-tests/fullAuditRegression.test.mjs --pool forks --maxWorkers 1 --minWorkers 1 && npm run check:i18n && npm run check:site-copy && npm run build:site"
   },
   "dependencies": {},
   "devDependencies": {

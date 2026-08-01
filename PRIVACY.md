@@ -241,3 +241,10 @@ The Vozen project authors provide only the software (open-source); each operator
 ## Nota / Note (EN)
 
 _Vozen is a self-hosted, open-source Discord TTS bot (AGPL-3.0). The instance operator is the data controller. The bot stores Discord numeric IDs plus the preferences and service records described above. Message text is processed transiently and is not stored in a database table; generated audio is kept only in a bounded, regenerable cache. Where text goes depends on `TTS_ENGINE`: Piper is local; legacy gTTS/router modes may send text to Google; neural sends text to OpenAI; Premium Google HD uses the official Google Cloud TTS API. Transcription is consent-first and local on the configured instance. Vozen does not sell data, run third-party advertising analytics, or use message content for model training. Use `/privacy erase` to delete your data, or contact the [support server](https://discord.gg/4kYw2WUbNN) to request access to a copy of it or exercise any other data right._
+
+# Supabase mirror erasure
+
+When the optional PostgreSQL mirror is enabled, `/privacy erase` and guild purge write a durable
+privacy tombstone in the same SQLite transaction as the local deletion. The mirror applies that
+tombstone to user/guild aggregates and deletes transient raw outbox payloads. Financial evidence,
+idempotency markers and the documented anti-abuse HMAC remain retained where required by the policy.

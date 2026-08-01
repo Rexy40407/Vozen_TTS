@@ -7,7 +7,14 @@ node_modules/
 audio-cache/
 package-lock.json
 scratchpad/
+.gstack/
 # docs/ contains prose and untracked artifacts from other sessions; do not rewrite it.
 docs/
 # plans/ contains prose handoff artifacts and is intentionally outside formatting scope.
 plans/
+# Existing generated/localisation fixtures intentionally keep their compact source format.
+site-tests/siteI18n.test.mjs
+site-tests/siteTrust.test.mjs
+site-tests/siteUxPolish.test.mjs
+tools/build-i18n.mjs
+tools/i18n-src/

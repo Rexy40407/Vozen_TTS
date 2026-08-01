@@ -22,7 +22,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
-use vozen_store::{SqliteStore, StripeSubscriptionInput};
+use vozen_store::{SqliteStore, StripeEventApplyOutcome, StripeEventInput};
 
 use crate::premium_api::DiscordIdentityVerifier;
 
@@ -561,202 +561,102 @@ async fn webhook(State(state): State<StripeState>, headers: HeaderMap, body: Byt
     if event_id.is_empty() {
         return StatusCode::BAD_REQUEST.into_response();
     }
-    if state
-        .store
-        .lock()
-        .ok()
-        .and_then(|store| store.stripe_event_processed(event_id).ok())
-        .unwrap_or(false)
-    {
-        return StatusCode::OK.into_response();
-    }
     let object = event
         .pointer("/data/object")
         .cloned()
         .unwrap_or(Value::Null);
-    let handled = match event_type {
-        "checkout.session.completed" => handle_checkout(&state, &object).is_ok(),
-        "invoice.paid" => handle_invoice(&state, &object).is_ok(),
-        "customer.subscription.updated" | "customer.subscription.deleted" => {
-            handle_subscription(&state, &object).is_ok()
+    let input = match stripe_event_input(event_type, &object) {
+        Ok(input) => input,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    let outcome = state.store.lock().map_err(|_| ()).and_then(|store| {
+        store
+            .apply_stripe_event_once(event_id, &input, (state.now)())
+            .map_err(|_| ())
+    });
+    match outcome {
+        Ok(StripeEventApplyOutcome::Applied | StripeEventApplyOutcome::AlreadyApplied) => {
+            StatusCode::OK.into_response()
         }
-        "invoice.payment_failed" => handle_invoice_failed(&state, &object).is_ok(),
-        _ => true,
-    };
-    if !handled {
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        Err(()) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
-    if let Ok(store) = state.store.lock() {
-        let _ = store.record_stripe_event_once(event_id, (state.now)());
-    }
-    StatusCode::OK.into_response()
 }
 
-fn handle_checkout(state: &StripeState, object: &Value) -> Result<(), String> {
-    let Some(subscription_id) = object.get("subscription").and_then(Value::as_str) else {
-        return Ok(());
-    };
-    let customer_id = object
-        .get("customer")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let metadata = object
-        .get("metadata")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let user_id = metadata
-        .get("discord_user_id")
-        .and_then(Value::as_str)
-        .or_else(|| object.get("client_reference_id").and_then(Value::as_str))
-        .unwrap_or_default();
-    let plan = metadata
-        .get("plan")
-        .and_then(Value::as_str)
-        .unwrap_or("plus");
-    let seats = metadata
-        .get("seats")
-        .and_then(Value::as_str)
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(1);
-    if customer_id.is_empty() || user_id.is_empty() {
-        return Err("Stripe checkout missing identity metadata".into());
+fn stripe_event_input(event_type: &str, object: &Value) -> Result<StripeEventInput, String> {
+    match event_type {
+        "checkout.session.completed" => {
+            let subscription_id = object
+                .get("subscription")
+                .and_then(Value::as_str)
+                .ok_or("missing subscription id")?;
+            let customer_id = object
+                .get("customer")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let metadata = object
+                .get("metadata")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            let user_id = metadata
+                .get("discord_user_id")
+                .and_then(Value::as_str)
+                .or_else(|| object.get("client_reference_id").and_then(Value::as_str))
+                .unwrap_or_default();
+            let plan = metadata
+                .get("plan")
+                .and_then(Value::as_str)
+                .unwrap_or("plus");
+            let seats = metadata
+                .get("seats")
+                .and_then(Value::as_str)
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1);
+            if customer_id.is_empty() || user_id.is_empty() {
+                return Err("Stripe checkout missing identity metadata".into());
+            }
+            Ok(StripeEventInput::Checkout {
+                subscription_id: subscription_id.into(),
+                customer_id: customer_id.into(),
+                user_id: user_id.into(),
+                plan: plan.into(),
+                seats,
+            })
+        }
+        "invoice.paid" => Ok(StripeEventInput::InvoicePaid {
+            subscription_id: object
+                .get("subscription")
+                .and_then(Value::as_str)
+                .ok_or("invoice missing subscription")?
+                .into(),
+            period_end: object
+                .pointer("/lines/data/0/period/end")
+                .and_then(Value::as_i64),
+        }),
+        "customer.subscription.updated" | "customer.subscription.deleted" => {
+            Ok(StripeEventInput::SubscriptionUpdated {
+                subscription_id: object
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("missing subscription id")?
+                    .into(),
+                period_end: object.get("current_period_end").and_then(Value::as_i64),
+                status: object
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("active")
+                    .into(),
+            })
+        }
+        "invoice.payment_failed" => Ok(StripeEventInput::InvoiceFailed {
+            subscription_id: object
+                .get("subscription")
+                .and_then(Value::as_str)
+                .ok_or("invoice missing subscription")?
+                .into(),
+        }),
+        _ => Ok(StripeEventInput::Ignored),
     }
-    state
-        .store
-        .lock()
-        .map_err(|_| "store lock".to_owned())?
-        .upsert_stripe_subscription(&StripeSubscriptionInput {
-            subscription_id: subscription_id.into(),
-            customer_id: customer_id.into(),
-            user_id: user_id.into(),
-            plan: plan.into(),
-            seats,
-            current_period_end: 0,
-            status: "active".into(),
-            updated_at: (state.now)(),
-        })
-        .map_err(|e| e.to_string())
-}
-
-fn handle_subscription(state: &StripeState, object: &Value) -> Result<(), String> {
-    let id = object
-        .get("id")
-        .and_then(Value::as_str)
-        .ok_or("missing subscription id")?;
-    let old = state
-        .store
-        .lock()
-        .map_err(|_| "store lock".to_owned())?
-        .stripe_subscription(id)
-        .map_err(|e| e.to_string())?;
-    let Some(old) = old else {
-        return Ok(());
-    };
-    let period_end = object
-        .get("current_period_end")
-        .and_then(Value::as_i64)
-        .unwrap_or(old.current_period_end);
-    let status = object
-        .get("status")
-        .and_then(Value::as_str)
-        .unwrap_or("active");
-    let input = StripeSubscriptionInput {
-        subscription_id: old.subscription_id,
-        customer_id: old.customer_id,
-        user_id: old.user_id,
-        plan: old.plan,
-        seats: old.seats,
-        current_period_end: period_end,
-        status: status.into(),
-        updated_at: (state.now)(),
-    };
-    state
-        .store
-        .lock()
-        .map_err(|_| "store lock".to_owned())?
-        .upsert_stripe_subscription(&input)
-        .map_err(|e| e.to_string())
-}
-
-fn handle_invoice(state: &StripeState, object: &Value) -> Result<(), String> {
-    let id = object
-        .get("subscription")
-        .and_then(Value::as_str)
-        .ok_or("invoice missing subscription")?;
-    let mut sub = state
-        .store
-        .lock()
-        .map_err(|_| "store lock".to_owned())?
-        .stripe_subscription(id)
-        .map_err(|e| e.to_string())?
-        .ok_or("unknown Stripe subscription")?;
-    let period_end = object
-        .pointer("/lines/data/0/period/end")
-        .and_then(Value::as_i64)
-        .unwrap_or(sub.current_period_end);
-    let now = (state.now)();
-    let end_ms = period_end.saturating_mul(1000);
-    let days = ((end_ms.saturating_sub(now) + 86_399_999) / 86_400_000).max(1);
-    sub.current_period_end = end_ms;
-    sub.status = "active".into();
-    sub.updated_at = now;
-    let store = state.store.lock().map_err(|_| "store lock".to_owned())?;
-    store
-        .upsert_stripe_subscription(&StripeSubscriptionInput {
-            subscription_id: sub.subscription_id.clone(),
-            customer_id: sub.customer_id.clone(),
-            user_id: sub.user_id.clone(),
-            plan: sub.plan.clone(),
-            seats: sub.seats,
-            current_period_end: sub.current_period_end,
-            status: sub.status.clone(),
-            updated_at: sub.updated_at,
-        })
-        .map_err(|e| e.to_string())?;
-    if sub.plan == "plus" {
-        store
-            .grant_user_premium(&sub.user_id, days, "stripe", now)
-            .map_err(|e| e.to_string())?;
-    } else {
-        store
-            .grant_guild_pass(&sub.user_id, sub.seats, days, "stripe", now)
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-fn handle_invoice_failed(state: &StripeState, object: &Value) -> Result<(), String> {
-    let Some(id) = object.get("subscription").and_then(Value::as_str) else {
-        return Ok(());
-    };
-    let Some(mut sub) = state
-        .store
-        .lock()
-        .map_err(|_| "store lock".to_owned())?
-        .stripe_subscription(id)
-        .map_err(|e| e.to_string())?
-    else {
-        return Ok(());
-    };
-    sub.status = "past_due".into();
-    sub.updated_at = (state.now)();
-    let input = StripeSubscriptionInput {
-        subscription_id: sub.subscription_id,
-        customer_id: sub.customer_id,
-        user_id: sub.user_id,
-        plan: sub.plan,
-        seats: sub.seats,
-        current_period_end: sub.current_period_end,
-        status: sub.status,
-        updated_at: sub.updated_at,
-    };
-    state
-        .store
-        .lock()
-        .map_err(|_| "store lock".to_owned())?
-        .upsert_stripe_subscription(&input)
-        .map_err(|e| e.to_string())
 }
 
 fn bearer_token(headers: &HeaderMap) -> Option<&str> {

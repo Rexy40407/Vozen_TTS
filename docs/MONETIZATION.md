@@ -19,14 +19,14 @@ bot (~75 servers) + team-owned app. Until then: **Ko-fi / Patreon + `/redeem` co
 
 ## 🆓 FREE — the essential Piper-powered core stays free
 
-- **Core TTS:** auto-read channel, `/tts`, "Speak" context menu, 34 languages, automatic
+- **Core TTS:** auto-read channel, `/tts`, "Speak" context menu, 35 languages, automatic
   language detection, mixed-language synthesis in one sentence.
 - **Voices:** all 38 current voices (Google + Piper), speed control, `/voice preview`.
 - **Personalization:** spoken nickname, the 5 personas (pirate, uwu, Yoda, cowboy,
   medieval), 10 personal abbreviations.
 - **Fun:** `/joke`, `/laugh`, `/8-ball`, `/fortune`, `/fact`, `/wyr`, birthday shout-outs,
   `/top-speakers`.
-- **Games:** **all 13 minigames + leaderboard — 100% free, always.** These drive invites
+- **Games:** **all 16 minigames + leaderboard — 100% free, always.** These drive invites
   and engagement; paywalling them would kill growth.
   - **Leaderboard: weekly reset is FREE too** (decided). Premium only adds *automatic
     roles for the weekly top players*.

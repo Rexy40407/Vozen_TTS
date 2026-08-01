@@ -3,8 +3,9 @@
 //! It never runs by default. The operator must opt in through a staging-only environment flag;
 //! each contract table is inserted in chunks and then reconciled by row count.
 
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use thiserror::Error;
 use vozen_store::SqliteStore;
@@ -25,6 +26,8 @@ pub enum ImportError {
         sqlite_rows: i64,
         postgres_rows: i64,
     },
+    #[error("content fingerprint reconciliation failed for table {table}")]
+    FingerprintMismatch { table: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,9 +43,21 @@ pub async fn import_and_reconcile(
 ) -> Result<Vec<ImportTableReport>, ImportError> {
     let store = SqliteStore::open(sqlite_path)?;
     let tables = store.durable_table_names()?;
+    let mut transaction = pool.begin().await.map_err(ImportError::Postgres)?;
     let mut reports = Vec::with_capacity(tables.len());
+    let mut fingerprint_input = String::new();
     for table in tables {
         let rows = store.export_table_rows(&table)?;
+        let table_fingerprint = fingerprint_rows(&rows);
+        fingerprint_input.push_str(&table);
+        fingerprint_input.push(':');
+        fingerprint_input.push_str(&table_fingerprint);
+        fingerprint_input.push('\n');
+        let delete = format!("DELETE FROM vozen.\"{table}\"");
+        sqlx::query(&delete)
+            .execute(&mut *transaction)
+            .await
+            .map_err(ImportError::Postgres)?;
         for chunk in rows.chunks(CHUNK_SIZE) {
             let payload = serde_json::to_string(chunk).map_err(|_| ImportError::CountMismatch {
                 table: table.clone(),
@@ -54,14 +69,14 @@ pub async fn import_and_reconcile(
             );
             sqlx::query(&query)
                 .bind(payload)
-                .execute(pool)
+                .execute(&mut *transaction)
                 .await
                 .map_err(ImportError::Postgres)?;
         }
         let sqlite_rows = store.durable_table_row_count(&table)?;
         let query = format!("SELECT COUNT(*)::bigint FROM vozen.\"{table}\"");
         let postgres_rows: i64 = sqlx::query_scalar(&query)
-            .fetch_one(pool)
+            .fetch_one(&mut *transaction)
             .await
             .map_err(ImportError::Postgres)?;
         if sqlite_rows != postgres_rows {
@@ -71,21 +86,83 @@ pub async fn import_and_reconcile(
                 postgres_rows,
             });
         }
+        let query = format!(
+            "SELECT COALESCE(jsonb_agg(to_jsonb(row)), '[]'::jsonb)::text
+             FROM vozen.\"{table}\" AS row"
+        );
+        let remote_payload: String = sqlx::query_scalar(&query)
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(ImportError::Postgres)?;
+        let remote_rows =
+            serde_json::from_str::<Vec<serde_json::Value>>(&remote_payload).map_err(|_| {
+                ImportError::FingerprintMismatch {
+                    table: table.clone(),
+                }
+            })?;
+        if fingerprint_rows(&remote_rows) != table_fingerprint {
+            return Err(ImportError::FingerprintMismatch { table });
+        }
         reports.push(ImportTableReport {
             table,
             sqlite_rows,
             postgres_rows,
         });
     }
+    let fingerprint = format!("{:x}", Sha256::digest(fingerprint_input.as_bytes()));
+    let generation = uuid::Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO vozen.runtime_migration_state (marker, completed_at)
-         VALUES ('sqlite_initial_import_v1', EXTRACT(EPOCH FROM NOW())::bigint * 1000)
-         ON CONFLICT (marker) DO UPDATE SET completed_at = EXCLUDED.completed_at",
+        "INSERT INTO vozen.runtime_migration_state
+           (marker, completed_at, generation, fingerprint, source_checkpoint)
+         VALUES ('sqlite_initial_import_v1', EXTRACT(EPOCH FROM NOW())::bigint * 1000,
+                 $1, $2, $3)
+         ON CONFLICT (marker) DO UPDATE SET
+           completed_at = EXCLUDED.completed_at,
+           generation = EXCLUDED.generation,
+           fingerprint = EXCLUDED.fingerprint,
+           source_checkpoint = EXCLUDED.source_checkpoint",
     )
-    .execute(pool)
+    .bind(generation)
+    .bind(fingerprint)
+    .bind(source_checkpoint(sqlite_path))
+    .execute(&mut *transaction)
     .await
     .map_err(ImportError::Postgres)?;
+    transaction.commit().await.map_err(ImportError::Postgres)?;
     Ok(reports)
+}
+
+fn source_checkpoint(path: &Path) -> String {
+    let metadata = std::fs::metadata(path).ok();
+    let size = metadata.as_ref().map_or(0, |value| value.len());
+    let modified = metadata
+        .and_then(|value| value.modified().ok())
+        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |value| value.as_secs());
+    format!("{size}:{modified}")
+}
+
+pub(crate) fn fingerprint_rows(rows: &[serde_json::Value]) -> String {
+    let mut canonical = rows.iter().map(canonical_json).collect::<Vec<_>>();
+    canonical.sort();
+    format!("{:x}", Sha256::digest(canonical.join("\n").as_bytes()))
+}
+
+fn canonical_json(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Object(object) => {
+            let sorted = object
+                .iter()
+                .map(|(key, value)| (key, canonical_json(value)))
+                .collect::<BTreeMap<_, _>>();
+            serde_json::to_string(&sorted).unwrap_or_default()
+        }
+        serde_json::Value::Array(values) => {
+            serde_json::to_string(&values.iter().map(canonical_json).collect::<Vec<_>>())
+                .unwrap_or_default()
+        }
+        _ => value.to_string(),
+    }
 }
 
 #[cfg(test)]

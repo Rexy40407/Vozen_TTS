@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "tables": [
+    "blocklist",
+    "channel_profile",
+    "discord_premium_entitlement",
+    "guild_config",
+    "premium_guild",
+    "premium_pass",
+    "premium_pass_activation",
+    "premium_user",
+    "pronunciation",
+    "pronunciation_user",
+    "stt_daily_usage",
+    "tts_lang_detect_on",
+    "tts_optout",
+    "user_effect",
+    "user_voice"
+  ]
+}

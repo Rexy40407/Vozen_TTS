@@ -11,7 +11,7 @@ on:
     paths:
       - 'site/**'
       - 'tools/minify-site.mjs'
-      - 'tests/operationalHardening.test.ts'
+      - 'site-tests/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/pages.yml'

@@ -1,10 +1,12 @@
 #![forbid(unsafe_code)]
 
-//! Opt-in Rust process entry point used during the Node-to-Rust shadow migration.
+//! Rust process entry point for the production Vozen runtime.
 //!
-//! It deliberately starts only the safe shared foundations (SQLite migration, Discord gateway,
-//! optional loopback HTTP route). Account, receipt-claim, Ko-fi webhook, dashboard and admin
-//! adapters are individually opt-in. Voice/message ownership still requires its own canary flag.
+//! Production runs the Rust runtime in full mode. Staging may still enable individual `RUST_*`
+//! ownership flags while the migration canaries are evaluated; see
+//! `docs/RUST-MIGRATION-STAGING.md` for the rollback boundary and the remaining staging-only
+//! switches. This module keeps startup ordering explicit: storage, optional Postgres mirror,
+//! API, Discord gateway, and background workers are assembled before readiness is advertised.
 
 #[cfg(feature = "voice-driver")]
 mod activity_poster;
@@ -2381,6 +2383,10 @@ async fn run() -> Result<(), RuntimeError> {
             "[postgres] SQLite import reconciled {} tables",
             reports.len()
         );
+        store
+            .lock()
+            .map_err(|_| RuntimeError::StoreLock)?
+            .mark_replica_ready()?;
     }
     let postgres_voice_read_store = if config.postgres_voice_read_cache {
         let postgres = postgres_shadow
@@ -2393,16 +2399,21 @@ async fn run() -> Result<(), RuntimeError> {
     } else {
         None
     };
-    let runtime_batch_buffer = RuntimeBatchBuffer::default();
-    if config.postgres_replica_outbox
-        && let Some(postgres) = postgres_shadow.as_ref()
-    {
-        store
-            .lock()
-            .map_err(|_| RuntimeError::StoreLock)?
-            .enable_postgres_replica_outbox()?;
+    let mirror_enabled = config.postgres_replica_outbox;
+    let runtime_batch_buffer = if mirror_enabled {
+        RuntimeBatchBuffer::enabled()
+    } else {
+        RuntimeBatchBuffer::disabled()
+    };
+    store
+        .lock()
+        .map_err(|_| RuntimeError::StoreLock)?
+        .configure_postgres_replica_outbox(mirror_enabled)?;
+    if mirror_enabled && let Some(postgres) = postgres_shadow.as_ref() {
         eprintln!("[postgres] durable SQLite change capture enabled for mirror");
         postgres_outbox::spawn(postgres.pool(), store.clone(), runtime_batch_buffer.clone());
+    } else {
+        eprintln!("[postgres] durable SQLite change capture disabled");
     }
     run_startup_data_hygiene(&config.database_path);
     let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
@@ -2835,6 +2846,7 @@ fn build_http_router(
                     let database_path = database_path.clone();
                     let gateway_state = metrics_gateway_state;
                     let supabase_metrics = supabase_metrics.clone();
+                    let store = store.clone();
                     move || {
                         let supabase = supabase_metrics
                             .as_ref()
@@ -2854,6 +2866,10 @@ fn build_http_router(
                             &database_path,
                             active_voice_servers,
                             supabase,
+                            store
+                                .lock()
+                                .ok()
+                                .and_then(|value| value.runtime_outbox_metrics().ok()),
                         )
                     }
                 })),

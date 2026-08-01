@@ -431,6 +431,7 @@ mod tests {
                     volume_used_bytes: Some(25_000),
                 }],
                 supabase: None,
+                postgres_outbox: None,
             })),
         }));
         admin_router(AdminRouterConfig {
