@@ -8,6 +8,8 @@ use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteStore, StoreError};
 
+const ADMIN_STRIPE_PURCHASE_SCAN_CAP: i64 = 200;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StripeSubscription {
     pub subscription_id: String,
@@ -65,6 +67,40 @@ pub enum StripeEventApplyOutcome {
 }
 
 impl SqliteStore {
+    /// Returns the most recently updated Stripe subscriptions for the owner console.
+    ///
+    /// Stripe remains the payment processor of record; this is only a small, provider-backed
+    /// projection used by the private admin panel. Customer identifiers are kept out of the
+    /// response layer, while the subscription id lets the owner correlate a row with Stripe.
+    pub fn list_stripe_subscriptions(
+        &self,
+        cap: i64,
+    ) -> Result<Vec<StripeSubscription>, StoreError> {
+        let cap = cap.clamp(1, ADMIN_STRIPE_PURCHASE_SCAN_CAP);
+        let mut statement = self.connection().prepare(
+            "SELECT subscription_id, customer_id, user_id, plan, seats,
+                    current_period_end, status, updated_at
+             FROM stripe_subscription
+             ORDER BY updated_at DESC, subscription_id DESC
+             LIMIT ?1",
+        )?;
+        statement
+            .query_map([cap], |row| {
+                Ok(StripeSubscription {
+                    subscription_id: row.get(0)?,
+                    customer_id: row.get(1)?,
+                    user_id: row.get(2)?,
+                    plan: row.get(3)?,
+                    seats: row.get(4)?,
+                    current_period_end: row.get(5)?,
+                    status: row.get(6)?,
+                    updated_at: row.get(7)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
     pub fn upsert_stripe_subscription(
         &self,
         input: &StripeSubscriptionInput,
@@ -349,5 +385,43 @@ mod tests {
                 .stripe_event_processed("evt_unknown_invoice")
                 .expect("marker")
         );
+    }
+
+    #[test]
+    fn admin_purchase_projection_returns_latest_subscriptions_first() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .upsert_stripe_subscription(&StripeSubscriptionInput {
+                subscription_id: "sub_old".into(),
+                customer_id: "cus_old".into(),
+                user_id: "user_old".into(),
+                plan: "plus".into(),
+                seats: 1,
+                current_period_end: 0,
+                status: "active".into(),
+                updated_at: NOW,
+            })
+            .expect("old subscription");
+        store
+            .upsert_stripe_subscription(&StripeSubscriptionInput {
+                subscription_id: "sub_new".into(),
+                customer_id: "cus_new".into(),
+                user_id: "user_new".into(),
+                plan: "premium".into(),
+                seats: 3,
+                current_period_end: 0,
+                status: "active".into(),
+                updated_at: NOW + 1,
+            })
+            .expect("new subscription");
+
+        let rows = store
+            .list_stripe_subscriptions(10)
+            .expect("purchase projection");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].subscription_id, "sub_new");
+        assert_eq!(rows[0].user_id, "user_new");
+        assert_eq!(rows[0].plan, "premium");
+        assert_eq!(rows[1].subscription_id, "sub_old");
     }
 }

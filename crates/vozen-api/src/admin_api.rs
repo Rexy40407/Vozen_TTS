@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use vozen_store::{
     AdminPassRow, AdminPassesView, AdminPlusRow, DominantTalkUsageOptions, KofiPendingGrant,
-    SqliteStore, TalkUsageSource, UserEngine,
+    SqliteStore, StripeSubscription, TalkUsageSource, UserEngine,
 };
 
 use crate::admin_auth::{
@@ -64,6 +64,10 @@ pub struct AdminPlus {
     #[serde(rename = "expiresAt")]
     pub expires_at: i64,
     pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -75,6 +79,27 @@ pub struct AdminPass {
     #[serde(rename = "expiresAt")]
     pub expires_at: i64,
     pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminPurchase {
+    #[serde(rename = "subscriptionId")]
+    pub subscription_id: String,
+    #[serde(rename = "userId")]
+    pub user_id: String,
+    pub plan: String,
+    pub seats: i64,
+    pub status: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -99,6 +124,8 @@ pub struct AdminPasses {
     pub plus: Vec<AdminPlus>,
     pub passes: Vec<AdminPass>,
     pub pending: Vec<AdminPending>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub purchases: Vec<AdminPurchase>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -362,11 +389,52 @@ impl AdminApi {
         let pending = store
             .all_unclaimed_kofi_pending(500)
             .map_err(|_| AdminGrantError::Store)?;
+        let purchases = store
+            .list_stripe_subscriptions(200)
+            .map_err(|_| AdminGrantError::Store)?;
         Ok(AdminPasses {
             plus: plus.into_iter().map(Into::into).collect(),
             passes: passes.into_iter().map(Into::into).collect(),
             pending: pending.into_iter().map(Into::into).collect(),
+            purchases: purchases.into_iter().map(Into::into).collect(),
         })
+    }
+
+    /// Same owner-only projection as `list_passes`, enriched with Discord display profiles.
+    /// Profiles are resolved through the already authenticated gateway client and are never
+    /// persisted in SQLite or exposed by a public route.
+    pub async fn list_passes_with_profiles(&self) -> Result<AdminPasses, AdminGrantError> {
+        let mut result = self.list_passes()?;
+        let mut ids =
+            Vec::with_capacity(result.plus.len() + result.passes.len() + result.purchases.len());
+        ids.extend(result.plus.iter().map(|row| row.user_id.clone()));
+        ids.extend(result.passes.iter().map(|row| row.user_id.clone()));
+        ids.extend(result.purchases.iter().map(|row| row.user_id.clone()));
+        ids.sort_unstable();
+        ids.dedup();
+        let profiles = match &self.resolve_talker_profiles {
+            Some(resolver) => resolver.resolve_talker_profiles(&ids).await,
+            None => HashMap::new(),
+        };
+        for row in &mut result.plus {
+            if let Some(profile) = profiles.get(&row.user_id) {
+                row.username = Some(profile.username.clone());
+                row.avatar = profile.avatar.clone();
+            }
+        }
+        for row in &mut result.passes {
+            if let Some(profile) = profiles.get(&row.user_id) {
+                row.username = Some(profile.username.clone());
+                row.avatar = profile.avatar.clone();
+            }
+        }
+        for row in &mut result.purchases {
+            if let Some(profile) = profiles.get(&row.user_id) {
+                row.username = Some(profile.username.clone());
+                row.avatar = profile.avatar.clone();
+            }
+        }
+        Ok(result)
     }
 
     pub fn list_guilds(&self) -> Result<Vec<AdminGuildRow>, AdminGrantError> {
@@ -542,6 +610,8 @@ impl From<AdminPlusRow> for AdminPlus {
             user_id: value.user_id,
             expires_at: value.expires_at,
             source: value.source,
+            username: None,
+            avatar: None,
         }
     }
 }
@@ -554,6 +624,23 @@ impl From<AdminPassRow> for AdminPass {
             used: value.used,
             expires_at: value.expires_at,
             source: value.source,
+            username: None,
+            avatar: None,
+        }
+    }
+}
+
+impl From<StripeSubscription> for AdminPurchase {
+    fn from(value: StripeSubscription) -> Self {
+        Self {
+            subscription_id: value.subscription_id,
+            user_id: value.user_id,
+            plan: value.plan,
+            seats: value.seats,
+            status: value.status,
+            created_at: value.updated_at,
+            username: None,
+            avatar: None,
         }
     }
 }
@@ -577,6 +664,7 @@ impl From<KofiPendingGrant> for AdminPending {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use vozen_store::StripeSubscriptionInput;
 
     const OWNER: &str = "1523489275155583056";
     const CLIENT: &str = "1526211106081734666";
@@ -734,5 +822,64 @@ mod tests {
             talker.avatar.as_deref(),
             Some("https://cdn.discordapp.com/avatars/user/hash.png")
         );
+    }
+
+    #[tokio::test]
+    async fn passes_enrich_stripe_purchases_and_active_grants_with_discord_profiles() {
+        let store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("store")));
+        {
+            let guard = store.lock().unwrap();
+            guard
+                .upsert_stripe_subscription(&StripeSubscriptionInput {
+                    subscription_id: "sub_profiled".into(),
+                    customer_id: "cus_profiled".into(),
+                    user_id: "user".into(),
+                    plan: "plus".into(),
+                    seats: 1,
+                    current_period_end: 0,
+                    status: "active".into(),
+                    updated_at: NOW,
+                })
+                .expect("stripe subscription");
+            guard
+                .grant_user_premium("user", 30, "stripe", NOW)
+                .expect("active grant");
+        }
+        let api = AdminApi::new(AdminApiConfig {
+            store,
+            resolver: Arc::new(Resolver),
+            now: Arc::new(|| NOW),
+            admin_session_secret: Some(SECRET.into()),
+            owner_id: Some(OWNER.into()),
+            admin_client_id: Some(CLIENT.into()),
+            session_ttl_seconds: None,
+            log: Arc::new(|_| {}),
+            resolve_guilds: None,
+            resolve_talker_profiles: Some(Arc::new(TalkerProfiles)),
+            local_day: Arc::new(|| "2026-07-23".into()),
+            system_metrics: None,
+        });
+
+        let result = api
+            .list_passes_with_profiles()
+            .await
+            .expect("passes projection");
+        let plus = result
+            .plus
+            .iter()
+            .find(|row| row.user_id == "user")
+            .expect("active plus");
+        assert_eq!(plus.username.as_deref(), Some("Ana"));
+        assert_eq!(
+            plus.avatar.as_deref(),
+            Some("https://cdn.discordapp.com/avatars/user/hash.png")
+        );
+        let purchase = result
+            .purchases
+            .iter()
+            .find(|row| row.user_id == "user")
+            .expect("stripe purchase");
+        assert_eq!(purchase.username.as_deref(), Some("Ana"));
+        assert_eq!(purchase.plan, "plus");
     }
 }
