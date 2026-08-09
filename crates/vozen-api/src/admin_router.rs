@@ -137,7 +137,7 @@ async fn admin_request(
         return response(StatusCode::FORBIDDEN, json!({"error":"forbidden"}), &state);
     }
     match (path, method) {
-        ("/api/admin/passes", Method::GET) => match state.api.list_passes() {
+        ("/api/admin/passes", Method::GET) => match state.api.list_passes_with_profiles().await {
             Ok(value) => response(
                 StatusCode::OK,
                 serde_json::to_value(value).unwrap_or_else(|_| json!({"error":"internal"})),

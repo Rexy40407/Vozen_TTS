@@ -64,6 +64,11 @@ pub struct AdminPlus {
     #[serde(rename = "expiresAt")]
     pub expires_at: i64,
     pub source: String,
+    /// Current Discord profile, resolved only for the owner console.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -75,6 +80,11 @@ pub struct AdminPass {
     #[serde(rename = "expiresAt")]
     pub expires_at: i64,
     pub source: String,
+    /// Current Discord profile, resolved only for the owner console.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -332,6 +342,38 @@ impl AdminApi {
         })
     }
 
+    /// Lists active passes and decorates each owner with the live Discord profile used by the
+    /// private console. The store query remains synchronous and bounded; only the small profile
+    /// lookup is awaited after the SQLite lock has been released.
+    pub async fn list_passes_with_profiles(&self) -> Result<AdminPasses, AdminGrantError> {
+        let mut result = self.list_passes()?;
+        let Some(resolver) = &self.resolve_talker_profiles else {
+            return Ok(result);
+        };
+        let mut ids = result
+            .plus
+            .iter()
+            .map(|row| row.user_id.clone())
+            .chain(result.passes.iter().map(|row| row.user_id.clone()))
+            .collect::<Vec<_>>();
+        ids.sort_unstable();
+        ids.dedup();
+        let profiles = resolver.resolve_talker_profiles(&ids).await;
+        for row in &mut result.plus {
+            if let Some(profile) = profiles.get(&row.user_id) {
+                row.username = Some(profile.username.clone());
+                row.avatar = profile.avatar.clone();
+            }
+        }
+        for row in &mut result.passes {
+            if let Some(profile) = profiles.get(&row.user_id) {
+                row.username = Some(profile.username.clone());
+                row.avatar = profile.avatar.clone();
+            }
+        }
+        Ok(result)
+    }
+
     pub fn list_guilds(&self) -> Result<Vec<AdminGuildRow>, AdminGrantError> {
         let Some(resolve_guilds) = &self.resolve_guilds else {
             return Ok(Vec::new());
@@ -505,6 +547,8 @@ impl From<AdminPlusRow> for AdminPlus {
             user_id: value.user_id,
             expires_at: value.expires_at,
             source: value.source,
+            username: None,
+            avatar: None,
         }
     }
 }
@@ -517,6 +561,8 @@ impl From<AdminPassRow> for AdminPass {
             used: value.used,
             expires_at: value.expires_at,
             source: value.source,
+            username: None,
+            avatar: None,
         }
     }
 }
