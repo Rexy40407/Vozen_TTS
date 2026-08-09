@@ -10,10 +10,11 @@ use std::{
 };
 
 use sqlx::{PgPool, Row};
-use vozen_api::admin_api::AdminSupabaseMetrics;
+use vozen_api::admin_api::{AdminSupabaseMetrics, AdminSupabaseUsageSample};
 
 const DEFAULT_DATABASE_CAPACITY_BYTES: u64 = 500 * 1024 * 1024;
 const REFRESH_INTERVAL: Duration = Duration::from_secs(30);
+const HISTORY_DAYS: usize = 7;
 
 pub type SharedSupabaseMetrics = Arc<RwLock<Option<AdminSupabaseMetrics>>>;
 
@@ -33,8 +34,23 @@ pub fn database_capacity_from_environment() -> u64 {
 
 pub fn spawn(pool: PgPool, cache: SharedSupabaseMetrics, capacity_bytes: u64) {
     tokio::spawn(async move {
+        let mut history = Vec::new();
         loop {
-            let reading = read_database_size(&pool, capacity_bytes).await;
+            let reading = read_database_size(&pool, capacity_bytes).await.map(|mut reading| {
+                let sample = AdminSupabaseUsageSample {
+                    day: time::OffsetDateTime::now_utc().date().to_string(),
+                    database_bytes: reading.database_bytes,
+                    capacity_bytes: reading.capacity_bytes,
+                };
+                history.retain(|entry: &AdminSupabaseUsageSample| entry.day != sample.day);
+                history.push(sample);
+                history.sort_by(|left, right| left.day.cmp(&right.day));
+                if history.len() > HISTORY_DAYS {
+                    history.drain(..history.len() - HISTORY_DAYS);
+                }
+                reading.history = history.clone();
+                reading
+            });
             if let Ok(mut current) = cache.write() {
                 *current = reading;
             }
@@ -52,6 +68,7 @@ async fn read_database_size(pool: &PgPool, capacity_bytes: u64) -> Option<AdminS
     Some(AdminSupabaseMetrics {
         database_bytes,
         capacity_bytes,
+        history: Vec::new(),
     })
 }
 

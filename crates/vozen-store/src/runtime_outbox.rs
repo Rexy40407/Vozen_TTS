@@ -46,6 +46,12 @@ pub struct RuntimeOutboxBatch {
     pub payload: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeOutboxSummary {
+    pub pending_rows: u64,
+    pub pending_bytes: u64,
+}
+
 pub(crate) fn install_runtime_outbox_schema(connection: &Connection) -> Result<(), StoreError> {
     connection.execute_batch(
         "CREATE TABLE IF NOT EXISTS runtime_outbox_batch (
@@ -172,6 +178,19 @@ impl SqliteStore {
             })?
             .collect::<Result<Vec<_>, _>>()
             .map_err(StoreError::from)
+    }
+
+    /// Returns a bounded aggregate for the owner console without loading payloads into memory.
+    pub fn runtime_outbox_summary(&self) -> Result<RuntimeOutboxSummary, StoreError> {
+        let (rows, bytes): (i64, i64) = self.connection().query_row(
+            "SELECT COUNT(*), COALESCE(SUM(length(payload)), 0) FROM runtime_outbox_batch",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok(RuntimeOutboxSummary {
+            pending_rows: u64::try_from(rows).unwrap_or(0),
+            pending_bytes: u64::try_from(bytes).unwrap_or(0),
+        })
     }
 
     pub fn delete_runtime_outbox(&self, batch_id: &str) -> Result<bool, StoreError> {

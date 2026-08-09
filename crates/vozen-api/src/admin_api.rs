@@ -185,6 +185,30 @@ pub struct AdminSupabaseMetrics {
     pub database_bytes: u64,
     #[serde(rename = "capacityBytes")]
     pub capacity_bytes: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<AdminSupabaseUsageSample>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminSupabaseUsageSample {
+    pub day: String,
+    #[serde(rename = "databaseBytes")]
+    pub database_bytes: u64,
+    #[serde(rename = "capacityBytes")]
+    pub capacity_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminPostgresOutboxMetrics {
+    #[serde(rename = "pendingRows")]
+    pub pending_rows: u64,
+    #[serde(rename = "pendingBytes")]
+    pub pending_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdminActiveVoiceServer {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -205,6 +229,10 @@ pub struct AdminSystemMetrics {
     pub database_history: Vec<AdminDatabaseUsageSample>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supabase: Option<AdminSupabaseMetrics>,
+    #[serde(rename = "postgresOutbox", skip_serializing_if = "Option::is_none")]
+    pub postgres_outbox: Option<AdminPostgresOutboxMetrics>,
+    #[serde(rename = "activeVoiceServers", skip_serializing_if = "Vec::is_empty")]
+    pub active_voice_servers: Vec<AdminActiveVoiceServer>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

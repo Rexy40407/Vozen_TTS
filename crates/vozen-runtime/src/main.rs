@@ -89,7 +89,9 @@ use vozen_api::{
     ProviderHealth as PublicProviderHealth, PublicStatusInput, PublicStatusProvider,
     RuntimeRouterConfig,
     account_api::AccountApiConfig,
-    admin_api::{AdminApiConfig, AdminTalkerProfile, AdminTalkerProfileResolver},
+    admin_api::{
+        AdminActiveVoiceServer, AdminApiConfig, AdminTalkerProfile, AdminTalkerProfileResolver,
+    },
     admin_router::AdminRouterConfig,
     dashboard_api::{
         DashboardApiConfig, DashboardOption, DashboardOptions, DashboardOptionsError,
@@ -2650,6 +2652,7 @@ async fn run() -> Result<(), RuntimeError> {
         store,
         gateway_state.clone(),
         supabase_metrics.clone(),
+        config.postgres_replica_outbox,
     )?;
     let listener = tokio::net::TcpListener::bind(health_bind).await?;
     if write_rejoin_marker_on_shutdown {
@@ -2715,6 +2718,7 @@ fn build_http_router(
     store: Arc<Mutex<SqliteStore>>,
     gateway_state: GatewayState,
     supabase_metrics: Option<postgres_metrics::SharedSupabaseMetrics>,
+    postgres_replica_outbox: bool,
 ) -> Result<axum::Router, RuntimeError> {
     let runtime_metrics = gateway_state.metrics();
     let public_status = runtime_options.public_status.map(|config| {
@@ -2832,14 +2836,40 @@ fn build_http_router(
                     let database_path = database_path.clone();
                     let gateway_state = metrics_gateway_state;
                     let supabase_metrics = supabase_metrics.clone();
+                    let metrics_store = store.clone();
                     move || {
                         let supabase = supabase_metrics
                             .as_ref()
                             .and_then(|cache| cache.read().ok().and_then(|value| value.clone()));
+                        let active_voice_sessions = gateway_state.bot_voice_sessions();
+                        let guild_names: HashMap<String, String> = gateway_state
+                            .guild_snapshots()
+                            .into_iter()
+                            .map(|guild| (guild.id, guild.name))
+                            .collect();
+                        let active_voice_servers = active_voice_sessions
+                            .iter()
+                            .map(|(guild_id, _channel_id)| AdminActiveVoiceServer {
+                                name: guild_names
+                                    .get(guild_id)
+                                    .cloned()
+                                    .unwrap_or_else(|| guild_id.clone()),
+                            })
+                            .collect();
+                        let postgres_outbox = if postgres_replica_outbox {
+                            metrics_store
+                                .lock()
+                                .ok()
+                                .and_then(|store| admin_metrics::postgres_outbox_snapshot(&store))
+                        } else {
+                            None
+                        };
                         admin_metrics::snapshot_with_supabase(
                             &database_path,
-                            gateway_state.bot_voice_sessions().len(),
+                            active_voice_sessions.len(),
                             supabase,
+                            postgres_outbox,
+                            active_voice_servers,
                         )
                     }
                 })),
@@ -3875,6 +3905,7 @@ mod tests {
             store,
             GatewayState::default(),
             None,
+            false,
         );
         assert!(matches!(
             result,
@@ -3909,6 +3940,7 @@ mod tests {
             store,
             GatewayState::default(),
             None,
+            false,
         )
         .expect("kofi-only router");
         let response = app

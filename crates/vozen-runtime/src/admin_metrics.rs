@@ -9,7 +9,11 @@ use std::{
     process::Command,
 };
 
-use vozen_api::admin_api::{AdminDatabaseUsageSample, AdminSupabaseMetrics, AdminSystemMetrics};
+use vozen_api::admin_api::{
+    AdminActiveVoiceServer, AdminDatabaseUsageSample, AdminPostgresOutboxMetrics,
+    AdminSupabaseMetrics, AdminSystemMetrics,
+};
+use vozen_store::SqliteStore;
 
 const HISTORY_DAYS: usize = 7;
 
@@ -17,6 +21,8 @@ pub fn snapshot_with_supabase(
     database_path: &Path,
     active_voice_sessions: usize,
     supabase: Option<AdminSupabaseMetrics>,
+    postgres_outbox: Option<AdminPostgresOutboxMetrics>,
+    active_voice_servers: Vec<AdminActiveVoiceServer>,
 ) -> AdminSystemMetrics {
     let database_bytes = database_bytes(database_path);
     let volume = volume_usage(database_path.parent().unwrap_or_else(|| Path::new(".")));
@@ -29,7 +35,19 @@ pub fn snapshot_with_supabase(
         active_voice_sessions: u64::try_from(active_voice_sessions).unwrap_or(u64::MAX),
         database_history,
         supabase,
+        postgres_outbox,
+        active_voice_servers,
     }
+}
+
+pub fn postgres_outbox_snapshot(store: &SqliteStore) -> Option<AdminPostgresOutboxMetrics> {
+    store
+        .runtime_outbox_summary()
+        .ok()
+        .map(|summary| AdminPostgresOutboxMetrics {
+            pending_rows: summary.pending_rows,
+            pending_bytes: summary.pending_bytes,
+        })
 }
 
 /// Records today's aggregate database reading. Repeated calls replace the same day's value, so

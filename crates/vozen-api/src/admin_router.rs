@@ -428,6 +428,8 @@ mod tests {
                     volume_used_bytes: Some(25_000),
                 }],
                 supabase: None,
+                postgres_outbox: None,
+                active_voice_servers: Vec::new(),
             })),
         }));
         admin_router(AdminRouterConfig {
