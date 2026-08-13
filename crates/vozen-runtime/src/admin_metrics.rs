@@ -24,13 +24,16 @@ pub fn snapshot_with_supabase(
     outbox: Option<RuntimeOutboxMetrics>,
 ) -> AdminSystemMetrics {
     let database_bytes = database_bytes(database_path);
+    let product_bytes = configured_product_bytes(database_path);
     let volume = volume_usage(database_path.parent().unwrap_or_else(|| Path::new(".")));
-    let database_history = record_database_history(database_path, database_bytes, volume);
+    let database_history =
+        record_database_history(database_path, database_bytes, product_bytes, volume);
     let supabase = supabase.map(|mut metrics| {
         metrics.history = record_supabase_history(database_path, &metrics);
         metrics
     });
     AdminSystemMetrics {
+        product_bytes,
         database_bytes,
         volume_total_bytes: volume.map(|value| value.total_bytes),
         volume_used_bytes: volume.map(|value| value.used_bytes),
@@ -52,8 +55,9 @@ pub fn snapshot_with_supabase(
 /// the file remains small and never turns a dashboard refresh into a time-series write storm.
 pub fn record_daily_history(database_path: &Path, supabase: Option<AdminSupabaseMetrics>) {
     let database_bytes = database_bytes(database_path);
+    let product_bytes = configured_product_bytes(database_path);
     let volume = volume_usage(database_path.parent().unwrap_or_else(|| Path::new(".")));
-    let _ = record_database_history(database_path, database_bytes, volume);
+    let _ = record_database_history(database_path, database_bytes, product_bytes, volume);
     if let Some(metrics) = supabase {
         let _ = record_supabase_history(database_path, &metrics);
     }
@@ -62,11 +66,13 @@ pub fn record_daily_history(database_path: &Path, supabase: Option<AdminSupabase
 fn record_database_history(
     database_path: &Path,
     database_bytes: u64,
+    product_bytes: u64,
     volume: Option<VolumeUsage>,
 ) -> Vec<AdminDatabaseUsageSample> {
     let history_path = history_path(database_path);
     let sample = AdminDatabaseUsageSample {
         day: time::OffsetDateTime::now_utc().date().to_string(),
+        product_bytes,
         database_bytes,
         volume_total_bytes: volume.map(|value| value.total_bytes),
         volume_used_bytes: volume.map(|value| value.used_bytes),
@@ -74,6 +80,71 @@ fn record_database_history(
     let history = merge_history(read_history(&history_path), sample);
     write_history(&history_path, &history);
     history
+}
+
+fn configured_product_bytes(database_path: &Path) -> u64 {
+    let mut roots = vec![
+        database_path.to_path_buf(),
+        PathBuf::from(format!("{}-wal", database_path.display())),
+        PathBuf::from(format!("{}-shm", database_path.display())),
+    ];
+    for name in [
+        "MODELS_DIR",
+        "PIPER_PATH",
+        "RUST_VOICE_CACHE_DIR",
+        "RUST_GTTS_CACHE_DIR",
+        "RUST_NEURAL_CACHE_DIR",
+        "RUST_GCLOUD_CACHE_DIR",
+        "RUST_KOKORO_CACHE_DIR",
+        "RUST_TTS_FILE_CACHE_DIR",
+    ] {
+        if let Ok(value) = std::env::var(name)
+            && !value.trim().is_empty()
+        {
+            roots.push(PathBuf::from(value));
+        }
+    }
+    product_bytes_from_roots(&roots)
+}
+
+fn product_bytes_from_roots(roots: &[PathBuf]) -> u64 {
+    let mut roots = roots.to_vec();
+    roots.sort_by_key(|path| path.components().count());
+    let mut accepted = Vec::new();
+    let mut total = 0u64;
+    for root in roots {
+        if accepted
+            .iter()
+            .any(|parent: &PathBuf| root.starts_with(parent))
+        {
+            continue;
+        }
+        total = total.saturating_add(path_bytes(&root));
+        accepted.push(root);
+    }
+    total
+}
+
+fn path_bytes(path: &Path) -> u64 {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return 0;
+    };
+    if metadata.file_type().is_symlink() {
+        return fs::canonicalize(path)
+            .ok()
+            .map(|target| path_bytes(&target))
+            .unwrap_or(0);
+    }
+    if metadata.is_dir() {
+        return fs::read_dir(path)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| path_bytes(&entry.path()))
+            .sum();
+    }
+    metadata.len()
 }
 
 fn history_path(database_path: &Path) -> PathBuf {
@@ -210,6 +281,7 @@ mod tests {
         let history = (1..=7)
             .map(|day| AdminDatabaseUsageSample {
                 day: format!("2026-07-{day:02}"),
+                product_bytes: u64::try_from(day).expect("positive test day"),
                 database_bytes: u64::try_from(day).expect("positive test day"),
                 volume_total_bytes: Some(100),
                 volume_used_bytes: Some(10),
@@ -219,6 +291,7 @@ mod tests {
             history,
             AdminDatabaseUsageSample {
                 day: "2026-07-08".into(),
+                product_bytes: 8,
                 database_bytes: 8,
                 volume_total_bytes: Some(100),
                 volume_used_bytes: Some(20),
@@ -235,6 +308,7 @@ mod tests {
             history,
             AdminDatabaseUsageSample {
                 day: "2026-07-08".into(),
+                product_bytes: 9,
                 database_bytes: 9,
                 volume_total_bytes: Some(100),
                 volume_used_bytes: Some(21),

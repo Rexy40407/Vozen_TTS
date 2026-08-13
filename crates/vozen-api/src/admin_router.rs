@@ -416,6 +416,7 @@ mod tests {
             resolve_talker_profiles: None,
             local_day: Arc::new(|| "2026-07-23".into()),
             system_metrics: Some(Arc::new(|| AdminSystemMetrics {
+                product_bytes: 98_765,
                 database_bytes: 12_345,
                 volume_total_bytes: Some(100_000),
                 volume_used_bytes: Some(25_000),
@@ -426,6 +427,7 @@ mod tests {
                 }],
                 database_history: vec![AdminDatabaseUsageSample {
                     day: "2026-07-23".into(),
+                    product_bytes: 98_765,
                     database_bytes: 12_345,
                     volume_total_bytes: Some(100_000),
                     volume_used_bytes: Some(25_000),
@@ -510,6 +512,7 @@ mod tests {
         assert_eq!(
             body,
             json!({
+                "productBytes": 98_765,
                 "databaseBytes": 12_345,
                 "volumeTotalBytes": 100_000,
                 "volumeUsedBytes": 25_000,
@@ -518,6 +521,7 @@ mod tests {
                 "activeVoiceServers": [{"name": "Servidor de teste"}],
                 "databaseHistory": [{
                     "day": "2026-07-23",
+                    "productBytes": 98_765,
                     "databaseBytes": 12_345,
                     "volumeTotalBytes": 100_000,
                     "volumeUsedBytes": 25_000

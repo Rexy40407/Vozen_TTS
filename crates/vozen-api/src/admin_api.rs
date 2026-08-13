@@ -186,6 +186,10 @@ pub struct AdminDatabaseUsageSample {
     pub day: String,
     #[serde(rename = "databaseBytes")]
     pub database_bytes: u64,
+    /// Product footprint at the time of the reading. Defaults to zero when
+    /// loading history written by an older runtime.
+    #[serde(rename = "productBytes", default)]
+    pub product_bytes: u64,
     #[serde(rename = "volumeTotalBytes")]
     pub volume_total_bytes: Option<u64>,
     #[serde(rename = "volumeUsedBytes")]
@@ -239,6 +243,10 @@ pub struct AdminPostgresOutboxMetrics {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct AdminSystemMetrics {
+    /// Total bytes occupied by the Vozen TTS runtime data and assets. This is
+    /// deliberately separate from the host volume usage below.
+    #[serde(rename = "productBytes")]
+    pub product_bytes: u64,
     #[serde(rename = "databaseBytes")]
     pub database_bytes: u64,
     #[serde(rename = "volumeTotalBytes")]
