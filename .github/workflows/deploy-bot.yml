@@ -95,6 +95,7 @@ jobs:
             set_env RUST_PAYMENTS_ENABLED true
             set_env RUST_CONFIG_GREET_LANGUAGE_ENABLED true
             set_env PREMIUM_API_ENABLED true
+            set_env ECOSYSTEM_OAUTH_CLIENT_ID "1537738930722443364"
             set_env STRIPE_SECRET_KEY "$STRIPE_SECRET_KEY"
             set_env STRIPE_PUBLISHABLE_KEY "$STRIPE_PUBLISHABLE_KEY"
             set_env STRIPE_WEBHOOK_SECRET "$STRIPE_WEBHOOK_SECRET"

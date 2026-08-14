@@ -81,7 +81,10 @@ type BotPresence = Arc<dyn Fn(&str) -> bool + Send + Sync>;
 
 #[derive(Clone)]
 pub struct DiscordDashboardAuthorizer {
-    expected_client_id: Arc<str>,
+    // Dashboard tokens may come from the Ecosystem login app or from a
+    // product app used by an "Add server" invite. Both IDs are explicit
+    // operator configuration; no arbitrary Discord application is trusted.
+    expected_client_ids: Arc<Vec<Arc<str>>>,
     http: Arc<dyn DashboardDiscordHttp>,
     bot_has_guild: BotPresence,
     now: Arc<dyn Fn() -> i64 + Send + Sync>,
@@ -107,14 +110,41 @@ impl DiscordDashboardAuthorizer {
         ))
     }
 
+    pub fn production_with_client_ids(
+        expected_client_ids: impl IntoIterator<Item = String>,
+        bot_has_guild: impl Fn(&str) -> bool + Send + Sync + 'static,
+    ) -> Result<Self, reqwest::Error> {
+        Ok(Self::new_with_client_ids(
+            expected_client_ids,
+            Arc::new(ReqwestDashboardDiscordHttp::new()?),
+            Arc::new(bot_has_guild),
+            Arc::new(system_now_ms),
+        ))
+    }
+
     pub fn new(
         expected_client_id: impl Into<String>,
         http: Arc<dyn DashboardDiscordHttp>,
         bot_has_guild: BotPresence,
         now: Arc<dyn Fn() -> i64 + Send + Sync>,
     ) -> Self {
+        Self::new_with_client_ids([expected_client_id.into()], http, bot_has_guild, now)
+    }
+
+    pub fn new_with_client_ids(
+        expected_client_ids: impl IntoIterator<Item = String>,
+        http: Arc<dyn DashboardDiscordHttp>,
+        bot_has_guild: BotPresence,
+        now: Arc<dyn Fn() -> i64 + Send + Sync>,
+    ) -> Self {
+        let expected_client_ids = expected_client_ids
+            .into_iter()
+            .map(|id| id.trim().to_owned())
+            .filter(|id| !id.is_empty())
+            .map(Arc::<str>::from)
+            .collect();
         Self {
-            expected_client_id: Arc::from(expected_client_id.into()),
+            expected_client_ids: Arc::new(expected_client_ids),
             http,
             bot_has_guild,
             now,
@@ -129,7 +159,7 @@ impl DiscordDashboardAuthorizer {
             return cached;
         }
         let guilds = match self.http.get_json(DISCORD_OAUTH_ME, bearer).await {
-            Ok(oauth) if oauth_authorized(&oauth, &self.expected_client_id) => {
+            Ok(oauth) if oauth_authorized(&oauth, &self.expected_client_ids) => {
                 match self.http.get_json(DISCORD_GUILDS, bearer).await {
                     Ok(guilds) => parse_manageable_guilds(guilds, &self.bot_has_guild),
                     Err(_) => None,
@@ -194,7 +224,7 @@ impl DashboardAuthorizer for DiscordDashboardAuthorizer {
     }
 }
 
-fn oauth_authorized(value: &Value, expected_client_id: &str) -> bool {
+fn oauth_authorized(value: &Value, expected_client_ids: &[Arc<str>]) -> bool {
     let Some(object) = value.as_object() else {
         return false;
     };
@@ -210,7 +240,9 @@ fn oauth_authorized(value: &Value, expected_client_id: &str) -> bool {
         .flatten()
         .filter_map(Value::as_str)
         .collect();
-    application_id == Some(expected_client_id)
+    expected_client_ids
+        .iter()
+        .any(|expected| application_id == Some(expected.as_ref()))
         && scopes.contains(&"identify")
         && scopes.contains(&"guilds")
 }
@@ -351,5 +383,42 @@ mod tests {
             no_scope.authorize_guild("secret", "guild-a").await,
             DashboardAccess::Unauthenticated
         );
+    }
+
+    #[tokio::test]
+    async fn accepts_ecosystem_and_product_audiences_explicitly() {
+        let auth = DiscordDashboardAuthorizer::new_with_client_ids(
+            ["ecosystem-app".into(), "tts-app".into()],
+            Arc::new(Fake {
+                oauth: json!({
+                    "application":{"id":"ecosystem-app"},
+                    "scopes":["identify","guilds"]
+                }),
+                guilds: json!([]),
+            }),
+            Arc::new(|_| true),
+            Arc::new(|| 1_000),
+        );
+        assert!(matches!(
+            auth.manageable_guilds("secret").await,
+            DashboardAccess::Allowed(_)
+        ));
+
+        let product = DiscordDashboardAuthorizer::new_with_client_ids(
+            ["ecosystem-app".into(), "tts-app".into()],
+            Arc::new(Fake {
+                oauth: json!({
+                    "application":{"id":"tts-app"},
+                    "scopes":["identify","guilds"]
+                }),
+                guilds: json!([]),
+            }),
+            Arc::new(|_| true),
+            Arc::new(|| 1_000),
+        );
+        assert!(matches!(
+            product.manageable_guilds("secret").await,
+            DashboardAccess::Allowed(_)
+        ));
     }
 }

@@ -212,6 +212,7 @@ struct PublicStatusConfig {
 struct PremiumHttpConfig {
     browser_api_enabled: bool,
     client_id: Option<String>,
+    dashboard_client_ids: Vec<String>,
     origin: String,
     kofi_webhook_token: Option<String>,
     kofi_shop_map: Option<String>,
@@ -2072,11 +2073,28 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
     if !browser_api_enabled && kofi_webhook_token.is_none() {
         return Ok(None);
     }
+    let ecosystem_client_id = nonempty_env("ECOSYSTEM_OAUTH_CLIENT_ID");
+    let product_client_id = nonempty_env("CLIENT_ID");
     let client_id = if browser_api_enabled {
-        Some(nonempty_env("CLIENT_ID").ok_or(RuntimeError::MissingClientId)?)
+        Some(
+            ecosystem_client_id
+                .clone()
+                .ok_or(RuntimeError::MissingClientId)?,
+        )
     } else {
-        nonempty_env("CLIENT_ID")
+        ecosystem_client_id
+            .clone()
+            .or_else(|| product_client_id.clone())
     };
+    let dashboard_client_ids = [ecosystem_client_id, product_client_id]
+        .into_iter()
+        .flatten()
+        .fold(Vec::<String>::new(), |mut ids, id| {
+            if !ids.iter().any(|existing| existing == &id) {
+                ids.push(id);
+            }
+            ids
+        });
     let origin = nonempty_env("PREMIUM_API_ORIGIN").unwrap_or_else(|| "https://vozen.org".into());
     let stripe_prices = [
         (
@@ -2118,6 +2136,7 @@ fn premium_http_from_environment() -> Result<Option<PremiumHttpConfig>, RuntimeE
     Ok(Some(PremiumHttpConfig {
         browser_api_enabled,
         client_id,
+        dashboard_client_ids,
         origin,
         kofi_webhook_token,
         kofi_shop_map,
@@ -2877,11 +2896,16 @@ fn build_http_router(
         .map(|dashboard| {
             let models = discover_piper_models(&dashboard.models_dir)?;
             let authorization_state = gateway_state.clone();
-            let authorizer = DiscordDashboardAuthorizer::production(
-                config
-                    .client_id
-                    .clone()
-                    .ok_or(RuntimeError::MissingClientId)?,
+            let dashboard_client_ids = if config.dashboard_client_ids.is_empty() {
+                config.client_id.clone().into_iter().collect()
+            } else {
+                config.dashboard_client_ids.clone()
+            };
+            if dashboard_client_ids.is_empty() {
+                return Err(RuntimeError::MissingClientId);
+            }
+            let authorizer = DiscordDashboardAuthorizer::production_with_client_ids(
+                dashboard_client_ids,
                 move |guild_id| authorization_state.bot_has_guild(guild_id),
             )
             .map_err(|_| RuntimeError::OAuthClient)?;
@@ -3374,6 +3398,7 @@ mod tests {
         let config = PremiumHttpConfig {
             browser_api_enabled: true,
             client_id: Some("client".into()),
+            dashboard_client_ids: vec!["client".into()],
             origin: "https://vozen.org".into(),
             kofi_webhook_token: None,
             kofi_shop_map: None,
@@ -4023,6 +4048,7 @@ mod tests {
             Some(PremiumHttpConfig {
                 browser_api_enabled: false,
                 client_id: None,
+                dashboard_client_ids: Vec::new(),
                 origin: "https://vozen.org".into(),
                 kofi_webhook_token: Some("token".into()),
                 kofi_shop_map: None,
