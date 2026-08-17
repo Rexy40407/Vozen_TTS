@@ -593,6 +593,14 @@ fn json_response(status: StatusCode, value: Value, state: &DashboardState) -> Re
 }
 fn common_headers(headers: &mut HeaderMap, state: &DashboardState) {
     headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, state.origin.clone());
+    // The public dashboard sends its OAuth bearer request with credentials
+    // enabled so a future same-site session bridge can be used as well. Browsers
+    // reject that cross-origin response unless this explicit opt-in is present,
+    // including for 401s and the OPTIONS preflight.
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+        HeaderValue::from_static("true"),
+    );
     headers.insert(header::VARY, HeaderValue::from_static("Origin"));
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     headers.insert(
@@ -684,13 +692,17 @@ mod tests {
     #[tokio::test]
     async fn access_precedes_config_and_post_returns_authoritative_state() {
         let app = app();
+        let unauthenticated = app
+            .clone()
+            .oneshot(request(Method::GET, "/api/dashboard/guilds", None, ""))
+            .await
+            .expect("response");
+        assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(
-            app.clone()
-                .oneshot(request(Method::GET, "/api/dashboard/guilds", None, ""))
-                .await
-                .expect("response")
-                .status(),
-            StatusCode::UNAUTHORIZED
+            unauthenticated
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
+            Some(&HeaderValue::from_static("true"))
         );
         assert_eq!(
             app.clone()
@@ -718,6 +730,36 @@ mod tests {
         assert_eq!(
             saved.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
             Some(&HeaderValue::from_static("https://vozen.org"))
+        );
+        assert_eq!(
+            saved
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
+            Some(&HeaderValue::from_static("true"))
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_preflight_allows_credentialed_browser_requests() {
+        let response = app()
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/dashboard/guilds")
+                    .header(header::ORIGIN, "https://vozen.org")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
+            Some(&HeaderValue::from_static("true"))
         );
     }
 
