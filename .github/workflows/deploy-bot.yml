@@ -16,6 +16,11 @@ on:
         description: 'Exact CI-tested migration/vozen-rust commit to deploy'
         required: true
         type: string
+      activate_prebuilt:
+        description: 'Activate an already-loaded image after a confirmed post-build metadata failure'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-bot
@@ -52,11 +57,12 @@ jobs:
           STRIPE_PRICE_MAX_MONTHLY: price_1Txsp7QFJYeD1Af0LVQvo30q
           STRIPE_PRICE_MAX_YEARLY: price_1TxspPQFJYeD1Af0EG6lUKIl
           DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.production_sha }}
+          ACTIVATE_PREBUILT: ${{ inputs.activate_prebuilt && 'true' || 'false' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: STRIPE_SECRET_KEY,STRIPE_PUBLISHABLE_KEY,STRIPE_WEBHOOK_SECRET,STRIPE_PRICE_PLUS_MONTHLY,STRIPE_PRICE_PLUS_YEARLY,STRIPE_PRICE_PREMIUM_MONTHLY,STRIPE_PRICE_PREMIUM_YEARLY,STRIPE_PRICE_MAX_MONTHLY,STRIPE_PRICE_MAX_YEARLY,DEPLOY_SHA
+          envs: STRIPE_SECRET_KEY,STRIPE_PUBLISHABLE_KEY,STRIPE_WEBHOOK_SECRET,STRIPE_PRICE_PLUS_MONTHLY,STRIPE_PRICE_PLUS_YEARLY,STRIPE_PRICE_PREMIUM_MONTHLY,STRIPE_PRICE_PREMIUM_YEARLY,STRIPE_PRICE_MAX_MONTHLY,STRIPE_PRICE_MAX_YEARLY,DEPLOY_SHA,ACTIVATE_PREBUILT
           command_timeout: 45m
           debug: true
           script: |
@@ -114,6 +120,32 @@ jobs:
             git merge-base --is-ancestor "$DEPLOY_SHA" origin/migration/vozen-rust
             current_commit="$(git rev-parse HEAD)"
             target_commit="$DEPLOY_SHA"
+            if [ "$current_commit" = "$target_commit" ] && [ "$ACTIVATE_PREBUILT" = "true" ]; then
+              docker compose -p vozen-prod -f docker-compose.rust.prod.yml up -d --no-build vozen
+              container_id="$(docker compose -p vozen-prod -f docker-compose.rust.prod.yml ps -q vozen)"
+              healthy=false
+              for _attempt in $(seq 1 48); do
+                container_health="$(
+                  docker container inspect \
+                    --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+                    "$container_id" 2>/dev/null || true
+                )"
+                if [ "$container_health" = "healthy" ] \
+                  && curl --fail --silent --show-error --max-time 5 http://127.0.0.1:3001/health >/dev/null; then
+                  healthy=true
+                  break
+                fi
+                sleep 5
+              done
+              if [ "$healthy" != "true" ]; then
+                echo "::error::Prebuilt production image did not become healthy"
+                exit 1
+              fi
+              docker builder prune --all --force
+              docker image prune --all --force
+              echo "Activated prebuilt production image for $target_commit and reclaimed unused Docker data"
+              exit 0
+            fi
             if [ "$current_commit" != "$target_commit" ]; then
               if git merge-base --is-ancestor "$target_commit" "$current_commit"; then
                 echo "Current checkout $current_commit is newer than requested $target_commit; refusing rollback"
