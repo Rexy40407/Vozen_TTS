@@ -80,8 +80,10 @@ pub(crate) fn build_streak_card(
 }
 
 fn rasterize_streak_card_svg(svg: &str) -> Option<Vec<u8>> {
-    let mut options = usvg::Options::default();
-    options.fontdb = Arc::clone(card_font_database());
+    let options = usvg::Options {
+        fontdb: Arc::clone(card_font_database()),
+        ..usvg::Options::default()
+    };
     let tree = usvg::Tree::from_str(svg, &options).ok()?;
     let size = tree.size().to_int_size();
     if size.width() != CARD_WIDTH || size.height() != CARD_HEIGHT {
