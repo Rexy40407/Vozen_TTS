@@ -113,6 +113,33 @@ struct CachedIdentity {
     expires_at: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdentityResolutionError {
+    CachedRejection,
+    OAuthInvalidToken,
+    OAuthUnavailable,
+    WrongAudience,
+    MissingIdentifyScope,
+    UserInvalidToken,
+    UserUnavailable,
+    UserMismatch,
+}
+
+impl IdentityResolutionError {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::CachedRejection => "cached_rejection",
+            Self::OAuthInvalidToken => "oauth_invalid_token",
+            Self::OAuthUnavailable => "oauth_unavailable",
+            Self::WrongAudience => "wrong_audience",
+            Self::MissingIdentifyScope => "missing_identify_scope",
+            Self::UserInvalidToken => "user_invalid_token",
+            Self::UserUnavailable => "user_unavailable",
+            Self::UserMismatch => "user_mismatch",
+        }
+    }
+}
+
 impl DiscordOAuthVerifier {
     pub fn production(
         expected_client_id: impl Into<String>,
@@ -147,44 +174,59 @@ impl DiscordOAuthVerifier {
         self
     }
 
-    async fn resolve_claim_identity(&self, bearer: &str) -> Option<DiscordIdentity> {
+    async fn resolve_claim_identity(
+        &self,
+        bearer: &str,
+    ) -> Result<DiscordIdentity, IdentityResolutionError> {
         let now = (self.now)();
         let cache_key = token_cache_key(bearer);
         if let Some(cached) = self.cache_get(cache_key, now) {
-            return cached;
+            return cached.ok_or(IdentityResolutionError::CachedRejection);
         }
 
-        let identity = match self.fetch_oauth(bearer).await {
-            Ok(oauth)
-                if oauth.application_id == self.expected_client_id.as_ref()
-                    && oauth.scopes.iter().any(|scope| scope == "identify") =>
-            {
-                match self.fetch_user(bearer).await {
-                    Ok(user) if user.id == oauth.user_id => {
-                        let fallback_decoration = if user.avatar_decoration_asset.is_none() {
-                            self.fetch_user_with_bot(&user.id)
-                                .await
-                                .ok()
-                                .and_then(|bot_user| bot_user.avatar_decoration_asset)
-                        } else {
-                            None
-                        };
-                        Some(DiscordIdentity {
-                            id: user.id,
-                            username: user.username,
-                            avatar: user.avatar,
-                            avatar_decoration_asset: user
-                                .avatar_decoration_asset
-                                .or(fallback_decoration),
-                        })
-                    }
-                    _ => None,
-                }
-            }
-            _ => None,
-        };
-        self.cache_put(cache_key, identity.clone(), now);
+        let identity = self.resolve_claim_identity_uncached(bearer).await;
+        self.cache_put(cache_key, identity.clone().ok(), now);
         identity
+    }
+
+    async fn resolve_claim_identity_uncached(
+        &self,
+        bearer: &str,
+    ) -> Result<DiscordIdentity, IdentityResolutionError> {
+        let oauth = self
+            .fetch_oauth(bearer)
+            .await
+            .map_err(|error| match error {
+                DiscordHttpError::InvalidToken => IdentityResolutionError::OAuthInvalidToken,
+                DiscordHttpError::Unavailable => IdentityResolutionError::OAuthUnavailable,
+            })?;
+        if oauth.application_id != self.expected_client_id.as_ref() {
+            return Err(IdentityResolutionError::WrongAudience);
+        }
+        if !oauth.scopes.iter().any(|scope| scope == "identify") {
+            return Err(IdentityResolutionError::MissingIdentifyScope);
+        }
+        let user = self.fetch_user(bearer).await.map_err(|error| match error {
+            DiscordHttpError::InvalidToken => IdentityResolutionError::UserInvalidToken,
+            DiscordHttpError::Unavailable => IdentityResolutionError::UserUnavailable,
+        })?;
+        if user.id != oauth.user_id {
+            return Err(IdentityResolutionError::UserMismatch);
+        }
+        let fallback_decoration = if user.avatar_decoration_asset.is_none() {
+            self.fetch_user_with_bot(&user.id)
+                .await
+                .ok()
+                .and_then(|bot_user| bot_user.avatar_decoration_asset)
+        } else {
+            None
+        };
+        Ok(DiscordIdentity {
+            id: user.id,
+            username: user.username,
+            avatar: user.avatar,
+            avatar_decoration_asset: user.avatar_decoration_asset.or(fallback_decoration),
+        })
     }
 
     async fn resolve_verified_email(
@@ -270,7 +312,12 @@ impl DiscordOAuthVerifier {
 #[async_trait]
 impl DiscordIdentityVerifier for DiscordOAuthVerifier {
     async fn resolve_identity(&self, bearer: &str) -> Result<DiscordIdentity, ()> {
-        self.resolve_claim_identity(bearer).await.ok_or(())
+        self.resolve_claim_identity(bearer).await.map_err(|error| {
+            eprintln!(
+                "[oauth] account identity rejected reason={}",
+                error.as_str()
+            );
+        })
     }
 
     async fn resolve_activation_identity(
@@ -599,6 +646,39 @@ mod tests {
         assert_eq!(http.calls.lock().unwrap().as_slice(), [DISCORD_OAUTH_ME]);
         let cache = verifier.cache.lock().unwrap();
         assert!(cache.contains_key(&token_cache_key("sensitive-token")));
+    }
+
+    #[tokio::test]
+    async fn identity_rejections_keep_a_safe_operational_reason() {
+        let wrong_audience = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("other-client", "user-a", &["identify"])),
+            user: Ok(user("user-a", None, false)),
+            bot_user: Err(DiscordHttpError::Unavailable),
+        });
+        assert_eq!(
+            verifier(wrong_audience)
+                .resolve_claim_identity("sensitive-token")
+                .await,
+            Err(IdentityResolutionError::WrongAudience)
+        );
+
+        let missing_scope = Arc::new(FakeHttp {
+            calls: Mutex::new(Vec::new()),
+            oauth: Ok(oauth("vozen-client", "user-a", &["guilds"])),
+            user: Ok(user("user-a", None, false)),
+            bot_user: Err(DiscordHttpError::Unavailable),
+        });
+        assert_eq!(
+            verifier(missing_scope)
+                .resolve_claim_identity("sensitive-token")
+                .await,
+            Err(IdentityResolutionError::MissingIdentifyScope)
+        );
+        assert_eq!(
+            IdentityResolutionError::OAuthInvalidToken.as_str(),
+            "oauth_invalid_token"
+        );
     }
 
     #[tokio::test]
