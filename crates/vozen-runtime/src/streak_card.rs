@@ -3,7 +3,10 @@
 //! The approved layout is assembled as SVG and rasterized to PNG before it is sent to Discord.
 //! Discord does not render SVG attachments as inline images, so the SVG never leaves this module.
 
-use std::time::Duration;
+use std::{
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use resvg::usvg;
@@ -13,6 +16,14 @@ use crate::streak_style::{flame_color_for_streak, next_flame_milestone};
 const MAX_AVATAR_BYTES: usize = 1_000_000;
 const CARD_WIDTH: u32 = 1200;
 const CARD_HEIGHT: u32 = 680;
+const CARD_AVATAR_SIZE: u16 = 256;
+
+/// Keeps Discord's avatar download small and static before it enters the bounded card fetch.
+#[must_use]
+pub(crate) fn card_avatar_url(url: &str) -> String {
+    let base = url.split_once('?').map_or(url, |(base, _)| base);
+    format!("{base}?size={CARD_AVATAR_SIZE}")
+}
 
 /// Downloads a Discord CDN avatar for one card and embeds it as a bounded data URL.
 ///
@@ -69,7 +80,8 @@ pub(crate) fn build_streak_card(
 }
 
 fn rasterize_streak_card_svg(svg: &str) -> Option<Vec<u8>> {
-    let options = usvg::Options::default();
+    let mut options = usvg::Options::default();
+    options.fontdb = Arc::clone(card_font_database());
     let tree = usvg::Tree::from_str(svg, &options).ok()?;
     let size = tree.size().to_int_size();
     if size.width() != CARD_WIDTH || size.height() != CARD_HEIGHT {
@@ -83,6 +95,16 @@ fn rasterize_streak_card_svg(svg: &str) -> Option<Vec<u8>> {
         &mut pixmap.as_mut(),
     );
     pixmap.encode_png().ok()
+}
+
+fn card_font_database() -> &'static Arc<usvg::fontdb::Database> {
+    static FONT_DATABASE: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
+
+    FONT_DATABASE.get_or_init(|| {
+        let mut database = usvg::fontdb::Database::new();
+        database.load_system_fonts();
+        Arc::new(database)
+    })
 }
 
 fn build_streak_card_svg(
@@ -150,7 +172,13 @@ fn escape_xml(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_streak_card, build_streak_card_svg};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+    use super::{build_streak_card, build_streak_card_svg, card_avatar_url};
+
+    fn decode_card(png: &[u8]) -> resvg::tiny_skia::Pixmap {
+        resvg::tiny_skia::Pixmap::decode_png(png).expect("decoded card")
+    }
 
     #[test]
     fn card_contains_the_current_and_next_tier_without_a_milestone_row() {
@@ -181,6 +209,44 @@ mod tests {
     }
 
     #[test]
+    fn rasterized_card_contains_the_name_and_streak_number() {
+        let png = build_streak_card("Micon & Co", 42, None).expect("png");
+        let pixmap = decode_card(&png);
+        let name_pixels = (450..750)
+            .flat_map(|x| (200..250).map(move |y| (x, y)))
+            .filter(|(x, y)| {
+                let color = pixmap.pixel(*x, *y).expect("name pixel").demultiply();
+                color.red() == 0xf7 && color.green() == 0xf9 && color.blue() == 0xfc
+            })
+            .count();
+        let cyan_text_pixels = pixmap
+            .pixels()
+            .iter()
+            .filter(|pixel| {
+                let color = pixel.demultiply();
+                color.red() == 0x45 && color.green() == 0xd6 && color.blue() == 0xdc
+            })
+            .count();
+
+        assert!(
+            name_pixels > 50,
+            "expected the member name to be rasterized, found {name_pixels} pixels"
+        );
+        assert!(
+            cyan_text_pixels > 100,
+            "expected the cyan streak number to be rasterized, found {cyan_text_pixels} pixels"
+        );
+    }
+
+    #[test]
+    fn card_avatar_url_requests_a_small_static_asset() {
+        assert_eq!(
+            card_avatar_url("https://cdn.discordapp.com/avatars/1/hash.webp?size=1024"),
+            "https://cdn.discordapp.com/avatars/1/hash.webp?size=256"
+        );
+    }
+
+    #[test]
     fn invalid_avatar_falls_back_to_the_white_placeholder() {
         let png = build_streak_card("Micon", 42, Some("data:image/png;base64,not-an-image"))
             .expect("placeholder png");
@@ -189,8 +255,16 @@ mod tests {
 
     #[test]
     fn valid_avatar_data_url_is_rendered_into_the_card() {
-        let avatar = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
-        let png = build_streak_card("Micon", 42, Some(avatar)).expect("avatar png");
-        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        let mut avatar = resvg::tiny_skia::Pixmap::new(2, 2).expect("avatar");
+        avatar.fill(resvg::tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+        let avatar = format!(
+            "data:image/png;base64,{}",
+            STANDARD.encode(avatar.encode_png().expect("avatar png"))
+        );
+        let png = build_streak_card("Micon", 42, Some(&avatar)).expect("card png");
+        let card = decode_card(&png);
+        let center = card.pixel(600, 100).expect("avatar center").demultiply();
+
+        assert_eq!((center.red(), center.green(), center.blue()), (255, 0, 0));
     }
 }
