@@ -256,9 +256,17 @@ jobs:
 
             if [ "${DIAGNOSTICS_ONLY:-false}" = "true" ]; then
               df -h / /var/lib/docker 2>/dev/null || df -h /
+              docker info --format 'Docker root: {{.DockerRootDir}}'
               docker system df --verbose
+              docker buildx ls || true
+              docker buildx du --verbose || true
+              docker image ls --all --digests
               docker ps --all --size \
                 --format 'table {{.ID}}\t{{.Status}}\t{{.Size}}\t{{.Image}}\t{{.Names}}'
+              docker volume ls
+              docker network ls
+              docker_root="$(docker info --format '{{.DockerRootDir}}')"
+              sudo -n du -xhd1 "$docker_root" 2>/dev/null || true
               exit 0
             fi
 
