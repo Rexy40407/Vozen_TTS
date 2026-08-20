@@ -69,6 +69,7 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('artifact_bytes <= 2 * 1024 * 1024 * 1024');
     expect(deploy).toContain('unpacked_bytes <= 8 * 1024 * 1024 * 1024');
     expect(deploy).toContain('docker_root="$(docker info');
+    expect(deploy).toContain('docker buildx prune --all --force');
     expect(deploy).toContain('combined_required="$((ARTIFACT_BYTES + docker_required))"');
     expect(deploy).toContain('Reject dirty and stale production state before pruning');
     expect(deploy).toContain('capture_stdout: true');

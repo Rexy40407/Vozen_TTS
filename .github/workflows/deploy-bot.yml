@@ -199,6 +199,9 @@ jobs:
 
             # Builder cache and dangling images are disposable. Keep tagged production and
             # rollback images, containers, volumes, networks, and all user data.
+            if docker buildx version >/dev/null 2>&1; then
+              docker buildx prune --all --force
+            fi
             docker builder prune --all --force
             docker image prune --force
 
@@ -415,6 +418,9 @@ jobs:
 
             # After the replacement is healthy, the previous image and build cache are disposable.
             # Do not prune containers, networks, volumes, or user data.
+            if docker buildx version >/dev/null 2>&1; then
+              docker buildx prune --all --force
+            fi
             docker builder prune --all --force
             docker image prune --all --force
 
