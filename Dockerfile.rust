@@ -21,6 +21,8 @@ RUN cargo build --locked --release -p vozen-runtime --features voice-driver
 
 # ---------- runtime ----------
 FROM debian:bookworm-slim AS runtime
+ARG VOZEN_REVISION=unknown
+LABEL org.opencontainers.image.revision="$VOZEN_REVISION"
 ENV RUST_BACKTRACE=0
 ENV HF_HOME=/data/huggingface
 WORKDIR /app

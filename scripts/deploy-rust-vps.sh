@@ -10,6 +10,8 @@ HEALTH_URL="${VOZEN_HEALTH_URL:-http://127.0.0.1:3001/health}"
 BACKUP_DIR="${VOZEN_BACKUP_DIR:-/home/vozen/vozen-backups}"
 DATABASE="${VOZEN_DATABASE:-rust-data/tts.db}"
 ROLLBACK_IMAGE="${VOZEN_ROLLBACK_IMAGE:-vozen-rust:rollback}"
+DEPLOY_STATE_DIR="${VOZEN_DEPLOY_STATE_DIR:-/home/vozen/vozen-deploy-state}"
+DEPLOY_STATE="$DEPLOY_STATE_DIR/deployed-sha"
 
 cd "$DEPLOY_DIR"
 
@@ -28,14 +30,109 @@ if [ ! -f "$DATABASE" ]; then
   exit 1
 fi
 
-previous_image=""
+if [ -L "$DEPLOY_STATE_DIR" ]; then
+  echo "Refusing deploy: deployment state directory must not be a symlink." >&2
+  exit 1
+fi
+install -d -m 700 "$DEPLOY_STATE_DIR"
+chmod 700 "$DEPLOY_STATE_DIR"
+
+resolve_rollback_source_sha() {
+  local candidate="${VOZEN_ROLLBACK_SOURCE_SHA:-}"
+  if [ -z "$candidate" ]; then
+    candidate="$(
+      docker container inspect \
+        --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+        "$CONTAINER" 2>/dev/null || true
+    )"
+    [ "$candidate" = "<no value>" ] && candidate=""
+  fi
+  if [ -z "$candidate" ] && [ -f "$DEPLOY_STATE" ] && [ ! -L "$DEPLOY_STATE" ]; then
+    candidate="$(tr -d '\r\n' < "$DEPLOY_STATE")"
+  fi
+  if [[ ! "$candidate" =~ ^[0-9a-f]{40}$ ]] \
+    || ! git cat-file -e "$candidate^{commit}" \
+    || ! git merge-base --is-ancestor "$candidate" HEAD; then
+    echo "Refusing deploy: unable to identify a trusted rollback source commit." >&2
+    return 1
+  fi
+  printf '%s\n' "$candidate"
+}
+
+build_rollback_from_source() (
+  local source_sha="$1"
+  local rollback_root rollback_checkout
+  if ! rollback_root="$(mktemp -d "${TMPDIR:-/tmp}/vozen-rollback.XXXXXX")"; then
+    return 1
+  fi
+  rollback_checkout="$rollback_root/source"
+  cleanup_rollback_worktree() {
+    local status=$?
+    local cleanup_failed=false
+    trap - EXIT INT TERM
+    if [ -e "$rollback_checkout" ] \
+      && ! git worktree remove --force "$rollback_checkout" >/dev/null 2>&1; then
+      cleanup_failed=true
+    fi
+    if [ -d "$rollback_root" ] && ! rmdir "$rollback_root" >/dev/null 2>&1; then
+      cleanup_failed=true
+    fi
+    if [ "$cleanup_failed" = "true" ]; then
+      echo "Refusing deploy: rollback worktree cleanup failed." >&2
+      status=1
+    fi
+    exit "$status"
+  }
+  trap cleanup_rollback_worktree EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  if ! git worktree add --detach "$rollback_checkout" "$source_sha" >/dev/null; then
+    return 1
+  fi
+  if ! cd "$rollback_checkout"; then
+    return 1
+  fi
+  docker build --build-arg "VOZEN_REVISION=$source_sha" \
+    --file Dockerfile.rust --tag "$ROLLBACK_IMAGE" .
+)
+
+rollback_available=false
 if docker container inspect "$CONTAINER" >/dev/null 2>&1; then
   previous_image="$(docker container inspect --format '{{.Image}}' "$CONTAINER")"
-  docker image tag "$previous_image" "$ROLLBACK_IMAGE"
+  if docker image tag "$previous_image" "$ROLLBACK_IMAGE"; then
+    rollback_available=true
+  else
+    rollback_source_sha="$(resolve_rollback_source_sha)"
+    if ! build_rollback_from_source "$rollback_source_sha"; then
+      echo "Refusing deploy: unable to rebuild the rollback image from trusted source." >&2
+      exit 1
+    fi
+    echo "Rebuilt rollback image from trusted source ${rollback_source_sha:0:12}."
+    rollback_available=true
+  fi
 fi
+
+wait_until_healthy() {
+  local container_health
+  for _attempt in $(seq 1 48); do
+    container_health="$(
+      docker container inspect \
+        --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+        "$CONTAINER" 2>/dev/null || true
+    )"
+    if [ "$container_health" = "healthy" ] \
+      && curl --fail --silent --show-error --max-time 5 "$HEALTH_URL" >/dev/null \
+      && docker logs "$CONTAINER" 2>&1 | grep -q "healthy: Ready"; then
+      return 0
+    fi
+    sleep 5
+  done
+  return 1
+}
 
 # Build while the current container remains online. Downtime starts only at the
 # force-recreate below.
+export VOZEN_BUILD_SHA="$(git rev-parse HEAD)"
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build "$SERVICE"
 
 # SQLite's online backup API includes committed WAL data without stopping the bot.
@@ -46,33 +143,22 @@ python3 scripts/backup-rust-db.py \
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
   up -d --force-recreate "$SERVICE"
 
-healthy=false
-for _attempt in $(seq 1 48); do
-  container_health="$(
-    docker container inspect \
-      --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
-      "$CONTAINER" 2>/dev/null || true
-  )"
-  if [ "$container_health" = "healthy" ] \
-    && curl --fail --silent --show-error --max-time 5 "$HEALTH_URL" >/dev/null \
-    && docker logs "$CONTAINER" 2>&1 | grep -q "healthy: Ready"; then
-    healthy=true
-    break
-  fi
-  sleep 5
-done
-
-if [ "$healthy" != "true" ]; then
+if ! wait_until_healthy; then
   echo "New Rust container did not become healthy; collecting logs." >&2
   docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" logs \
     --tail 200 "$SERVICE" >&2 || true
 
-  if [ -n "$previous_image" ]; then
+  if [ "$rollback_available" = "true" ]; then
     echo "Rolling back to the previous Rust image." >&2
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" stop "$SERVICE" || true
     docker image tag "$ROLLBACK_IMAGE" vozen-rust:prod
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
       up -d --force-recreate --no-build "$SERVICE"
+    if wait_until_healthy; then
+      echo "Rollback health verification: ok" >&2
+    else
+      echo "Rollback container did not become healthy." >&2
+    fi
   fi
   exit 1
 fi
@@ -92,6 +178,11 @@ if integrity is None or integrity[0] != "ok" or foreign_keys:
     )
 print("Post-deploy database verification: ok")
 PY
+
+deploy_state_tmp="$(mktemp "$DEPLOY_STATE_DIR/deployed-sha.XXXXXX")"
+chmod 600 "$deploy_state_tmp"
+printf '%s\n' "$VOZEN_BUILD_SHA" > "$deploy_state_tmp"
+mv "$deploy_state_tmp" "$DEPLOY_STATE"
 
 docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps "$SERVICE"

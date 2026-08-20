@@ -1,6 +1,18 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 'utf8' });
 // The site's assets are cache-busted by FILENAME (never a query string), so every rename churns
@@ -61,6 +73,309 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('Missing VPS_SSH_KEY');
     expect(deploy).toContain('debug: true');
   });
+  it('rebuilds a pruned rollback image from trusted source without snapshotting user data', () => {
+    const bash =
+      process.env.VOZEN_TEST_BASH ??
+      (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
+    if (process.platform === 'win32' && !existsSync(bash)) {
+      throw new Error('Set VOZEN_TEST_BASH to a Git Bash-compatible executable.');
+    }
+    const deployScript = resolve(process.cwd(), 'scripts/deploy-rust-vps.sh').replaceAll('\\', '/');
+    const rollbackSha = '28f3b1f14b8a0434599c71ca223540979c47534d';
+    const targetSha = 'd0ad45df15cdbbe4dcf9117218efc5178c016b70';
+    const runFixture = ({
+      healthy,
+      cleanupFails = false,
+      containerPresent = true,
+      metadataPresent = false,
+      rollbackBuildFails = false,
+      rollbackHealthy = true,
+      sourceMode = 'override',
+      stateDirSymlink = false,
+    }) => {
+      const root = mkdtempSync(join(tmpdir(), 'vozen-deploy-'));
+      try {
+        const deployDir = join(root, 'deploy');
+        const fakeBin = join(root, 'bin');
+        const dockerLog = join(root, 'docker.log');
+        const gitLog = join(root, 'git.log');
+        const rollbackState = join(root, 'rollback-active');
+        const stateDir = join(root, 'state');
+        const stateOpsLog = join(root, 'state-ops.log');
+        mkdirSync(join(deployDir, 'rust-data'), { recursive: true });
+        mkdirSync(fakeBin, { recursive: true });
+        writeFileSync(join(deployDir, '.env.rust.prod'), 'DISCORD_TOKEN=test\n');
+        writeFileSync(join(deployDir, 'rust-data', 'tts.db'), 'fixture');
+        if (stateDirSymlink) {
+          const stateTarget = join(root, 'state-target');
+          mkdirSync(stateTarget);
+          symlinkSync(stateTarget, stateDir, process.platform === 'win32' ? 'junction' : 'dir');
+        }
+        if (sourceMode === 'state') {
+          mkdirSync(stateDir, { recursive: true });
+          writeFileSync(join(stateDir, 'deployed-sha'), `${rollbackSha}\n`);
+        }
+        const writeCommand = (name, body) => {
+          const command = join(fakeBin, name);
+          writeFileSync(command, `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+          chmodSync(command, 0o755);
+        };
+        writeCommand('systemctl', 'exit 1');
+        writeCommand(
+          'install',
+          'printf \'install %s\\n\' "$*" >> "$FAKE_STATE_OPS_LOG"\nmkdir -p "$4"',
+        );
+        writeCommand('chmod', 'printf \'chmod %s\\n\' "$*" >> "$FAKE_STATE_OPS_LOG"\nexit 0');
+        writeCommand(
+          'docker',
+          String.raw`printf '%s\n' "$*" >> "$FAKE_DOCKER_LOG"
+if [ "$1" = "container" ] && [ "$2" = "inspect" ]; then
+  [ "$3" != "--format" ] && [ "$FAKE_CONTAINER_PRESENT" != "true" ] && exit 1
+  if [ "$3" = "--format" ]; then
+    if [ "$4" = "{{.Image}}" ]; then
+      echo "$FAKE_IMAGE_ID"
+    elif [[ "$4" == *"org.opencontainers.image.revision"* ]]; then
+      echo "$FAKE_LABEL_SHA"
+    elif [ "$FAKE_HEALTHY" = "true" ] || [ -f "$FAKE_ROLLBACK_STATE" ]; then
+      echo "healthy"
+    else
+      echo "unhealthy"
+    fi
+  fi
+  exit 0
+fi
+if [ "$1" = "image" ] && [ "$2" = "tag" ]; then
+  [ "$3" = "sha256:missing" ] && exit 1
+  exit 0
+fi
+if [ "$1" = "build" ] && [[ "$*" == *"--tag vozen-rust:rollback"* ]]; then
+  [ "$FAKE_ROLLBACK_BUILD_FAILS" = "true" ] && exit 1
+fi
+if [ "$1" = "logs" ]; then
+  if [ "$FAKE_HEALTHY" = "true" ] || [ -f "$FAKE_ROLLBACK_STATE" ]; then
+    echo "healthy: Ready"
+  else
+    echo "unhealthy"
+  fi
+fi
+if [ "$1" = "compose" ] && [[ "$*" == *"--no-build"* ]] \
+  && [ "$FAKE_ROLLBACK_HEALTHY" = "true" ]; then
+  touch "$FAKE_ROLLBACK_STATE"
+fi
+exit 0`,
+        );
+        writeCommand(
+          'git',
+          String.raw`printf '%s\n' "$*" >> "$FAKE_GIT_LOG"
+if [ "$1" = "rev-parse" ] && [ "$2" = "HEAD" ]; then
+  echo "$FAKE_TARGET_SHA"
+  exit 0
+fi
+if [ "$1" = "cat-file" ] || [ "$1" = "merge-base" ]; then
+  [ "$FAKE_SOURCE_TRUSTED" = "true" ]
+  exit
+fi
+if [ "$1" = "worktree" ] && [ "$2" = "add" ]; then
+  mkdir -p "$4"
+  exit 0
+fi
+if [ "$1" = "worktree" ] && [ "$2" = "remove" ]; then
+  if [ "$FAKE_CLEANUP_FAILS" = "true" ]; then
+    rmdir "$4"
+    exit 1
+  fi
+  rmdir "$4"
+  exit 0
+fi
+exit 64`,
+        );
+        writeCommand('python3', 'cat >/dev/null || true\nexit 0');
+        writeCommand('curl', '[ "$FAKE_HEALTHY" = "true" ] || [ -f "$FAKE_ROLLBACK_STATE" ]');
+        writeCommand('seq', 'echo 1');
+        writeCommand('sleep', 'exit 0');
+        const posix = (value) => {
+          const normalized = value.replaceAll('\\', '/');
+          return process.platform === 'win32'
+            ? normalized.replace(/^([A-Za-z]):/, (_match, drive) => `/${drive.toLowerCase()}`)
+            : normalized;
+        };
+        const result = spawnSync(
+          bash,
+          [
+            '-c',
+            'export PATH="$1:/usr/bin:/bin"; exec bash "$2"',
+            'vozen-deploy-fixture',
+            posix(fakeBin),
+            deployScript,
+          ],
+          {
+            encoding: 'utf8',
+            timeout: 5_000,
+            env: {
+              ...process.env,
+              FAKE_CONTAINER_PRESENT: String(containerPresent),
+              FAKE_CLEANUP_FAILS: String(cleanupFails),
+              FAKE_DOCKER_LOG: posix(dockerLog),
+              FAKE_GIT_LOG: posix(gitLog),
+              FAKE_HEALTHY: String(healthy),
+              FAKE_IMAGE_ID: metadataPresent ? 'sha256:present' : 'sha256:missing',
+              FAKE_LABEL_SHA: sourceMode === 'label' ? rollbackSha : '',
+              FAKE_ROLLBACK_BUILD_FAILS: String(rollbackBuildFails),
+              FAKE_ROLLBACK_HEALTHY: String(rollbackHealthy),
+              FAKE_ROLLBACK_SHA: rollbackSha,
+              FAKE_ROLLBACK_STATE: posix(rollbackState),
+              FAKE_SOURCE_TRUSTED: String(sourceMode !== 'invalid'),
+              FAKE_STATE_OPS_LOG: posix(stateOpsLog),
+              FAKE_TARGET_SHA: targetSha,
+              VOZEN_BACKUP_DIR: posix(join(root, 'backups')),
+              VOZEN_COMPOSE_FILE: 'docker-compose.rust.prod.yml',
+              VOZEN_COMPOSE_PROJECT: 'vozen-prod',
+              VOZEN_COMPOSE_SERVICE: 'vozen',
+              VOZEN_DATABASE: 'rust-data/tts.db',
+              VOZEN_DEPLOY_DIR: posix(deployDir),
+              VOZEN_DEPLOY_STATE_DIR: posix(stateDir),
+              VOZEN_HEALTH_URL: 'http://127.0.0.1:3001/health',
+              VOZEN_ROLLBACK_IMAGE: 'vozen-rust:rollback',
+              VOZEN_ROLLBACK_SOURCE_SHA: ['override', 'invalid'].includes(sourceMode)
+                ? rollbackSha
+                : '',
+            },
+          },
+        );
+        const calls = existsSync(dockerLog) ? readFileSync(dockerLog, 'utf8') : '';
+        const gitCalls = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : '';
+        const stateOps = existsSync(stateOpsLog) ? readFileSync(stateOpsLog, 'utf8') : '';
+        const deployedShaPath = join(stateDir, 'deployed-sha');
+        const deployedSha = existsSync(deployedShaPath)
+          ? readFileSync(deployedShaPath, 'utf8').trim()
+          : '';
+        return { calls, deployedSha, gitCalls, result, stateOps };
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    };
+
+    const healthy = runFixture({ healthy: true });
+    expect(healthy.result.status, JSON.stringify(healthy)).toBe(0);
+    expect(healthy.result.stdout).toContain(
+      'Rebuilt rollback image from trusted source 28f3b1f14b8a.',
+    );
+    expect(healthy.calls).toContain(
+      `build --build-arg VOZEN_REVISION=${rollbackSha} --file Dockerfile.rust --tag vozen-rust:rollback .`,
+    );
+    expect(healthy.gitCalls).toContain(`worktree add --detach`);
+    expect(healthy.gitCalls).toContain(rollbackSha);
+    expect(healthy.calls).toContain('compose -p vozen-prod');
+    expect(healthy.deployedSha).toBe(targetSha);
+    expect(healthy.stateOps).toContain('install -d -m 700');
+    expect(healthy.stateOps).toContain('chmod 700');
+    expect(healthy.stateOps).toMatch(/chmod 600 .*deployed-sha\./);
+    expect(healthy.calls).not.toContain('container commit');
+    expect(healthy.calls).not.toContain('image tag vozen-rust:rollback vozen-rust:prod');
+
+    const unhealthy = runFixture({ healthy: false });
+    expect(unhealthy.result.status).toBe(1);
+    expect(unhealthy.result.stderr).toContain('Rolling back to the previous Rust image.');
+    expect(unhealthy.result.stderr).toContain('Rollback health verification: ok');
+    expect(unhealthy.deployedSha).toBe('');
+    expect(unhealthy.calls).toContain('image tag vozen-rust:rollback vozen-rust:prod');
+    expect(unhealthy.calls).toContain('up -d --force-recreate --no-build vozen');
+
+    const noRollbackBuild = runFixture({ healthy: true, rollbackBuildFails: true });
+    expect(noRollbackBuild.result.status).toBe(1);
+    expect(noRollbackBuild.result.stderr).toContain(
+      'Refusing deploy: unable to rebuild the rollback image from trusted source.',
+    );
+    expect(noRollbackBuild.calls).not.toContain('compose -p vozen-prod');
+
+    const cleanupFailure = runFixture({ healthy: true, cleanupFails: true });
+    expect(cleanupFailure.result.status).toBe(1);
+    expect(cleanupFailure.result.stderr).toContain(
+      'Refusing deploy: rollback worktree cleanup failed.',
+    );
+    expect(cleanupFailure.calls).not.toContain('compose -p vozen-prod');
+
+    const invalidSource = runFixture({ healthy: true, sourceMode: 'invalid' });
+    expect(invalidSource.result.status).toBe(1);
+    expect(invalidSource.result.stderr).toContain(
+      'Refusing deploy: unable to identify a trusted rollback source commit.',
+    );
+    expect(invalidSource.calls).not.toContain('build --build-arg');
+
+    const stateSource = runFixture({ healthy: true, sourceMode: 'state' });
+    expect(stateSource.result.status, JSON.stringify(stateSource)).toBe(0);
+    expect(stateSource.gitCalls).not.toContain('rev-list');
+
+    const labelledSource = runFixture({ healthy: true, sourceMode: 'label' });
+    expect(labelledSource.result.status, JSON.stringify(labelledSource)).toBe(0);
+    expect(labelledSource.calls).toContain('org.opencontainers.image.revision');
+
+    const missingSource = runFixture({ healthy: true, sourceMode: 'missing' });
+    expect(missingSource.result.status).toBe(1);
+    expect(missingSource.result.stderr).toContain(
+      'Refusing deploy: unable to identify a trusted rollback source commit.',
+    );
+
+    const symlinkedState = runFixture({ healthy: true, stateDirSymlink: true });
+    expect(symlinkedState.result.status).toBe(1);
+    expect(symlinkedState.result.stderr).toContain(
+      'Refusing deploy: deployment state directory must not be a symlink.',
+    );
+    expect(symlinkedState.calls).toBe('');
+    expect(symlinkedState.gitCalls).toBe('');
+
+    const normalRollback = runFixture({ healthy: false, metadataPresent: true });
+    expect(normalRollback.result.status).toBe(1);
+    expect(normalRollback.calls).not.toContain('build --build-arg');
+    expect(normalRollback.calls).toContain('image tag sha256:present vozen-rust:rollback');
+    expect(normalRollback.calls).toContain('image tag vozen-rust:rollback vozen-rust:prod');
+    expect(normalRollback.calls).toContain('up -d --force-recreate --no-build vozen');
+
+    const failedRollback = runFixture({ healthy: false, rollbackHealthy: false });
+    expect(failedRollback.result.status).toBe(1);
+    expect(failedRollback.result.stderr).toContain('Rollback container did not become healthy.');
+    expect(failedRollback.result.stderr).not.toContain('Rollback health verification: ok');
+    expect(failedRollback.calls).toContain('up -d --force-recreate --no-build vozen');
+    expect(failedRollback.deployedSha).toBe('');
+
+    const failedWithState = runFixture({ healthy: false, sourceMode: 'state' });
+    expect(failedWithState.result.status).toBe(1);
+    expect(failedWithState.deployedSha).toBe(rollbackSha);
+
+    const firstDeploy = runFixture({ healthy: true, containerPresent: false });
+    expect(firstDeploy.result.status).toBe(0);
+    expect(firstDeploy.calls).toContain('build vozen');
+    expect(firstDeploy.calls).toContain('up -d --force-recreate vozen');
+    expect(firstDeploy.calls).not.toContain('image tag');
+    expect(firstDeploy.calls).not.toContain('container commit');
+    expect(firstDeploy.calls).not.toContain('--no-build');
+    const deployScriptSource = source('scripts/deploy-rust-vps.sh');
+    const composeSource = source('docker-compose.rust.prod.yml');
+    const dockerfileSource = source('Dockerfile.rust');
+    expect(deployScriptSource).not.toContain('docker container commit');
+    expect(deployScriptSource).toContain('export VOZEN_BUILD_SHA="$(git rev-parse HEAD)"');
+    expect(composeSource).toContain('VOZEN_REVISION: ${VOZEN_BUILD_SHA:-unknown}');
+    expect(composeSource).toMatch(/tmpfs:\s*\n\s+- \/tmp:mode=1777/);
+    expect(dockerfileSource).toContain('org.opencontainers.image.revision');
+    const deployWorkflow = source('.github/workflows/deploy-bot.yml');
+    const runDeploy = deployWorkflow.slice(
+      deployWorkflow.indexOf('run_rust_deploy()'),
+      deployWorkflow.indexOf('if ! git diff --quiet'),
+    );
+    expect(runDeploy).toMatch(
+      /if \[ ! -f "\$deploy_state" \][\s\S]*&& \[\[ ! "\$running_revision" =~ \^\[0-9a-f\]\{40\}\$ \]\]; then[\s\S]*rollback_source_sha="28f3b1f6df4d1f84d22e0afa2718c657dffcae80"/,
+    );
+    expect(runDeploy).toContain('VOZEN_DEPLOY_STATE_DIR="$deploy_state_dir"');
+    expect(runDeploy).toContain('VOZEN_ROLLBACK_SOURCE_SHA="$rollback_source_sha"');
+    expect(runDeploy).toContain('bash scripts/deploy-rust-vps.sh');
+    const sameShaRetry = deployWorkflow.slice(
+      deployWorkflow.indexOf('if [ "$current_commit" = "$target_commit" ]'),
+      deployWorkflow.indexOf('if git merge-base --is-ancestor "$target_commit"'),
+    );
+    expect(sameShaRetry).toContain('run_rust_deploy');
+    expect(sameShaRetry).not.toContain('docker compose');
+    expect(deployWorkflow).toContain('28f3b1f6df4d1f84d22e0afa2718c657dffcae80');
+  }, 30_000);
   it('keeps payment credentials in the VPS runtime file instead of the SSH command line', () => {
     const deploy = source('.github/workflows/deploy-bot.yml');
     expect(deploy).toContain('require_runtime_secret STRIPE_SECRET_KEY');

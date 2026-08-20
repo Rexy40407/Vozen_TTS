@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.rust
+      args:
+        VOZEN_REVISION: ${VOZEN_BUILD_SHA:-unknown}
     image: vozen-rust:prod
     restart: unless-stopped
     env_file:
@@ -23,6 +25,8 @@ services:
       RUST_COMMANDS_STATE_PATH: /data/commands-state-rust.json
       # Public, privacy-safe status JSON consumed by https://vozen.org/status.
       PUBLIC_STATUS_ENABLED: 'true'
+    tmpfs:
+      - /tmp:mode=1777
     volumes:
       - ./rust-data:/data
       # Production keeps the existing model/Piper directories outside this checkout.
