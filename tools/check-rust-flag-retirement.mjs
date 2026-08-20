@@ -31,7 +31,9 @@ if (!fullList) throw new Error('could not find FULL_RUNTIME_FLAGS');
 const sourceFlags = [...fullList[1].matchAll(/"(RUST_[A-Z0-9_]+)"/g)].map((match) => match[1]);
 const matrixFlags = [...matrix.matchAll(/^\| (RUST_[A-Z0-9_]+) \|/gm)].map((match) => match[1]);
 const stagingFlags = [...staging.matchAll(/^\s*(RUST_[A-Z0-9_]+)=/gm)].map((match) => match[1]);
-const productionFlags = [...production.matchAll(/^\s*(RUST_[A-Z0-9_]+)=/gm)].map((match) => match[1]);
+const productionFlags = [...production.matchAll(/^\s*(RUST_[A-Z0-9_]+)=/gm)].map(
+  (match) => match[1],
+);
 
 function unique(values, label) {
   const duplicates = values.filter((value, index) => values.indexOf(value) !== index);
