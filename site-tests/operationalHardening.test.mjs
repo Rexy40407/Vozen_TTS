@@ -50,6 +50,17 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('Missing VPS_SSH_KEY');
     expect(deploy).toContain('debug: true');
   });
+  it('keeps payment credentials in the VPS runtime file instead of the SSH command line', () => {
+    const deploy = source('.github/workflows/deploy-bot.yml');
+    expect(deploy).toContain('require_runtime_secret STRIPE_SECRET_KEY');
+    expect(deploy).toContain('require_runtime_secret STRIPE_PUBLISHABLE_KEY');
+    expect(deploy).toContain('require_runtime_secret STRIPE_WEBHOOK_SECRET');
+    expect(deploy).toContain('the remote command line is observable to local processes');
+    expect(deploy).not.toContain('STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}');
+    expect(deploy).not.toContain('STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}');
+    expect(deploy).not.toContain('STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}');
+    expect(deploy).not.toMatch(/^\s*envs:\s*.*STRIPE_/m);
+  });
   it('keeps the Night Signal treatment scoped to Discord entry points', () => {
     const css = source(SITE_CSS);
     const index = source('site/index.html');
@@ -140,7 +151,9 @@ describe('operational security configuration', () => {
     expect(script).toContain('login({ billing: true });');
     expect(script).toContain('BILLING_INTENT_KEY');
     expect(script).toContain('const BILLING_OAUTH_REDIRECT = new URL("/", location.href).href');
-    expect(script).toContain('options && options.billing === true ? BILLING_OAUTH_REDIRECT : OAUTH_REDIRECT');
+    expect(script).toContain(
+      'options && options.billing === true ? BILLING_OAUTH_REDIRECT : OAUTH_REDIRECT',
+    );
     expect(script).toContain('location.replace("/#premium")');
     expect(script).toContain('history.replaceState(null, "", "#premium")');
     const checkoutSource = script.slice(
@@ -161,7 +174,9 @@ describe('operational security configuration', () => {
     const page = source('site/index.html');
     expect(page).toContain('css/billing-v3.css?v=compact-checkout-v1');
     expect(page).toContain('js/i18n-v41.js?v=payment-element');
-    expect(page).toContain('<script defer data-vozen-stripe src="https://js.stripe.com/dahlia/stripe.js"></script>');
+    expect(page).toContain(
+      '<script defer data-vozen-stripe src="https://js.stripe.com/dahlia/stripe.js"></script>',
+    );
     expect(page).toContain('js/main-v51.js?v=embedded-checkout-v1');
     expect(source(SITE_JS)).toContain('BILLING_COPY_FALLBACKS');
   });
@@ -440,8 +455,14 @@ describe('operational security configuration', () => {
   });
   it('keeps Stripe-hosted checkout as a safe fallback and configures embedded Checkout', () => {
     const stripe = source('crates/vozen-api/src/stripe_api.rs');
-    const hosted = stripe.slice(stripe.indexOf('async fn checkout('), stripe.indexOf('async fn checkout_elements('));
-    const elements = stripe.slice(stripe.indexOf('async fn checkout_elements('), stripe.indexOf('async fn portal('));
+    const hosted = stripe.slice(
+      stripe.indexOf('async fn checkout('),
+      stripe.indexOf('async fn checkout_elements('),
+    );
+    const elements = stripe.slice(
+      stripe.indexOf('async fn checkout_elements('),
+      stripe.indexOf('async fn portal('),
+    );
     expect(hosted).toContain('("ui_mode", "hosted_page".to_owned())');
     expect(hosted).toContain('("success_url", success_url)');
     expect(hosted).toContain('("cancel_url", cancel_url)');

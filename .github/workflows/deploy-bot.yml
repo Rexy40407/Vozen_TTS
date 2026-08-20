@@ -47,34 +47,36 @@ jobs:
       # This action receives the production SSH key, so it is pinned to a commit.
       - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         env:
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STRIPE_PRICE_PLUS_MONTHLY: price_1TxsU9QFJYeD1Af0C1HtEWWE
-          STRIPE_PRICE_PLUS_YEARLY: price_1TxsXSQFJYeD1Af0B2o7xYKq
-          STRIPE_PRICE_PREMIUM_MONTHLY: price_1TxsdeQFJYeD1Af0ujsKbFde
-          STRIPE_PRICE_PREMIUM_YEARLY: price_1Txsk7QFJYeD1Af0GipTrZTd
-          STRIPE_PRICE_MAX_MONTHLY: price_1Txsp7QFJYeD1Af0LVQvo30q
-          STRIPE_PRICE_MAX_YEARLY: price_1TxspPQFJYeD1Af0EG6lUKIl
           DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.production_sha }}
           ACTIVATE_PREBUILT: ${{ inputs.activate_prebuilt && 'true' || 'false' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: STRIPE_SECRET_KEY,STRIPE_PUBLISHABLE_KEY,STRIPE_WEBHOOK_SECRET,STRIPE_PRICE_PLUS_MONTHLY,STRIPE_PRICE_PLUS_YEARLY,STRIPE_PRICE_PREMIUM_MONTHLY,STRIPE_PRICE_PREMIUM_YEARLY,STRIPE_PRICE_MAX_MONTHLY,STRIPE_PRICE_MAX_YEARLY,DEPLOY_SHA,ACTIVATE_PREBUILT
+          envs: DEPLOY_SHA,ACTIVATE_PREBUILT
           command_timeout: 45m
           debug: true
           script: |
             set -euo pipefail
             cd ~/vozen-rust-prod
-            test -n "$STRIPE_SECRET_KEY"
-            test -n "$STRIPE_PUBLISHABLE_KEY"
-            test -n "$STRIPE_WEBHOOK_SECRET"
             test -n "$DEPLOY_SHA"
 
-            # Keep payment credentials only in the VPS runtime env. This updates
-            # existing keys in place without printing any secret values to logs.
+            # Payment credentials are provisioned directly on the VPS in a
+            # mode-600 environment file. Do not carry them in this SSH action:
+            # the remote command line is observable to local processes.
+            require_runtime_secret() {
+              key="$1"
+              if ! grep -Eq "^${key}=.+" .env.rust.prod; then
+                echo "::error title=Missing VPS runtime secret::${key} must be provisioned directly on the VPS."
+                exit 1
+              fi
+            }
+            require_runtime_secret STRIPE_SECRET_KEY
+            require_runtime_secret STRIPE_PUBLISHABLE_KEY
+            require_runtime_secret STRIPE_WEBHOOK_SECRET
+
+            # Keep non-sensitive runtime flags current without printing any
+            # configuration values in the deployment logs.
             set_env() {
               key="$1"
               value="$2"
@@ -102,15 +104,12 @@ jobs:
             set_env RUST_CONFIG_GREET_LANGUAGE_ENABLED true
             set_env PREMIUM_API_ENABLED true
             set_env ECOSYSTEM_OAUTH_CLIENT_ID "1537738930722443364"
-            set_env STRIPE_SECRET_KEY "$STRIPE_SECRET_KEY"
-            set_env STRIPE_PUBLISHABLE_KEY "$STRIPE_PUBLISHABLE_KEY"
-            set_env STRIPE_WEBHOOK_SECRET "$STRIPE_WEBHOOK_SECRET"
-            set_env STRIPE_PRICE_PLUS_MONTHLY "$STRIPE_PRICE_PLUS_MONTHLY"
-            set_env STRIPE_PRICE_PLUS_YEARLY "$STRIPE_PRICE_PLUS_YEARLY"
-            set_env STRIPE_PRICE_PREMIUM_MONTHLY "$STRIPE_PRICE_PREMIUM_MONTHLY"
-            set_env STRIPE_PRICE_PREMIUM_YEARLY "$STRIPE_PRICE_PREMIUM_YEARLY"
-            set_env STRIPE_PRICE_MAX_MONTHLY "$STRIPE_PRICE_MAX_MONTHLY"
-            set_env STRIPE_PRICE_MAX_YEARLY "$STRIPE_PRICE_MAX_YEARLY"
+            set_env STRIPE_PRICE_PLUS_MONTHLY price_1TxsU9QFJYeD1Af0C1HtEWWE
+            set_env STRIPE_PRICE_PLUS_YEARLY price_1TxsXSQFJYeD1Af0B2o7xYKq
+            set_env STRIPE_PRICE_PREMIUM_MONTHLY price_1TxsdeQFJYeD1Af0ujsKbFde
+            set_env STRIPE_PRICE_PREMIUM_YEARLY price_1Txsk7QFJYeD1Af0GipTrZTd
+            set_env STRIPE_PRICE_MAX_MONTHLY price_1Txsp7QFJYeD1Af0LVQvo30q
+            set_env STRIPE_PRICE_MAX_YEARLY price_1TxspPQFJYeD1Af0EG6lUKIl
 
             # The production clone was originally created as a single-branch
             # checkout. Fetch the production ref and verify the exact SHA tested
