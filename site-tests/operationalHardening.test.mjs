@@ -61,6 +61,17 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('Missing VPS_SSH_KEY');
     expect(deploy).toContain('debug: true');
   });
+  it('keeps payment credentials in the VPS runtime file instead of the SSH command line', () => {
+    const deploy = source('.github/workflows/deploy-bot.yml');
+    expect(deploy).toContain('require_runtime_secret STRIPE_SECRET_KEY');
+    expect(deploy).toContain('require_runtime_secret STRIPE_PUBLISHABLE_KEY');
+    expect(deploy).toContain('require_runtime_secret STRIPE_WEBHOOK_SECRET');
+    expect(deploy).toContain('the remote command line is observable to local processes');
+    expect(deploy).not.toContain('STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}');
+    expect(deploy).not.toContain('STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}');
+    expect(deploy).not.toContain('STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}');
+    expect(deploy).not.toMatch(/^\s*envs:\s*.*STRIPE_/m);
+  });
   it('keeps the Night Signal treatment scoped to Discord entry points', () => {
     const css = source(SITE_CSS);
     const index = source('site/index.html');
