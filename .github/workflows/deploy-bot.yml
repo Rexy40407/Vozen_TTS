@@ -213,8 +213,10 @@ jobs:
             container="vozen-prod-vozen-1"
             live_image="$(docker container inspect --format '{{.Image}}' "$container")"
             [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
+            rollback_available=false
             if docker image inspect "$live_image" >/dev/null 2>&1; then
               docker image tag "$live_image" vozen-rust:rollback
+              rollback_available=true
             else
               # The legacy host discarded the image record and its content metadata, so a
               # Docker commit cannot recreate it. Discard only the two inactive tags and their
@@ -225,20 +227,45 @@ jobs:
               reclaim_build_storage
               recovery_available="$(df --output=avail --block-size=1 /home/vozen | tail -n 1 | tr -d ' ')"
               recovery_required="$((ARTIFACT_BYTES + 3 * UNPACKED_BYTES + 2 * 1024 * 1024 * 1024))"
-              (( recovery_available >= recovery_required )) || {
-                echo "Insufficient space to preserve the legacy rollback image safely." >&2
-                exit 1
-              }
-              docker export "$container" | docker image import \
-                --change 'ENTRYPOINT ["/usr/local/bin/vozen-runtime"]' \
-                --change 'WORKDIR /app' \
-                --change 'USER vozen' \
-                --change 'ENV RUST_BACKTRACE=0' \
-                --change 'ENV HF_HOME=/data/huggingface' \
-                --change 'HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD ["/usr/local/bin/healthcheck-rust.sh"]' \
-                - vozen-rust:rollback
+              if (( recovery_available >= recovery_required )); then
+                docker export "$container" | docker image import \
+                  --change 'ENTRYPOINT ["/usr/local/bin/vozen-runtime"]' \
+                  --change 'WORKDIR /app' \
+                  --change 'USER vozen' \
+                  --change 'ENV RUST_BACKTRACE=0' \
+                  --change 'ENV HF_HOME=/data/huggingface' \
+                  --change 'HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD ["/usr/local/bin/healthcheck-rust.sh"]' \
+                  - vozen-rust:rollback
+                rollback_available=true
+              else
+                # Last-resort migration for this broken legacy host: its running container has
+                # no recoverable image and itself pins all remaining build storage. Back up the
+                # SQLite database before stopping it; if removal cannot proceed, restart it.
+                cd ~/vozen-rust-prod
+                python3 scripts/backup-rust-db.py \
+                  --source rust-data/tts.db \
+                  --destination-dir /home/vozen/vozen-backups
+                [ "$(docker container inspect --format '{{.State.Running}}' "$container")" = true ]
+                legacy_container_stopped=false
+                restore_legacy_container() {
+                  status=$?
+                  if [ "$legacy_container_stopped" = true ]; then
+                    docker start "$container" >/dev/null 2>&1 || true
+                  fi
+                  exit "$status"
+                }
+                trap restore_legacy_container EXIT
+                docker stop --time 30 "$container"
+                legacy_container_stopped=true
+                docker rm "$container"
+                legacy_container_stopped=false
+                trap - EXIT
+                reclaim_build_storage
+              fi
             fi
-            docker image inspect vozen-rust:rollback >/dev/null
+            if [ "$rollback_available" = true ]; then
+              docker image inspect vozen-rust:rollback >/dev/null
+            fi
             docker image rm vozen-rust:prod || true
 
             # Builder cache and dangling images are now disposable. The legacy Docker builder

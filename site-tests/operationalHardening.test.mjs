@@ -76,6 +76,10 @@ describe('operational security configuration', () => {
     expect(deploy).toContain("--change 'ENTRYPOINT [\"/usr/local/bin/vozen-runtime\"]'");
     expect(deploy).toContain('Docker export excludes bind-mounted data');
     expect(deploy).toContain('3 * UNPACKED_BYTES + 2 * 1024 * 1024 * 1024');
+    expect(deploy).toContain('python3 scripts/backup-rust-db.py');
+    expect(deploy).toContain('docker stop --time 30 "$container"');
+    expect(deploy).toContain('docker rm "$container"');
+    expect(deploy).toContain('docker start "$container" >/dev/null 2>&1 || true');
     expect(deploy).toContain('docker image rm vozen-rust:prod || true');
     expect(deploy).toContain('docker system prune --force');
     expect(deploy).toContain('neither --all nor --volumes');
