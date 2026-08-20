@@ -204,8 +204,15 @@ jobs:
             container="vozen-prod-vozen-1"
             live_image="$(docker container inspect --format '{{.Image}}' "$container")"
             [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
-            docker image inspect "$live_image" >/dev/null
-            docker image tag "$live_image" vozen-rust:rollback
+            if docker image inspect "$live_image" >/dev/null 2>&1; then
+              docker image tag "$live_image" vozen-rust:rollback
+            else
+              # The legacy host discarded the image record of its still-healthy container.
+              # Capture its read-only filesystem as the rollback image; bind-mounted data is
+              # not part of a Docker commit and remains untouched on the host.
+              docker container commit --pause=false "$container" vozen-rust:rollback
+            fi
+            docker image inspect vozen-rust:rollback >/dev/null
             docker image rm vozen-rust:prod || true
 
             # Builder cache and dangling images are now disposable. The legacy Docker builder
