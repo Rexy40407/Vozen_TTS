@@ -42,6 +42,65 @@ const i18nBundle = () => {
   return sandbox.window.VOZEN_I18N ?? {};
 };
 describe('operational security configuration', () => {
+  it('accepts only the expected CI-built Docker archive', () => {
+    const root = mkdtempSync(join(tmpdir(), 'vozen-image-archive-'));
+    const python = process.platform === 'win32' ? 'python' : 'python3';
+    const revision = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const generator = `
+import io, json, sys, tarfile
+archive, revision, tag, label, unsafe = sys.argv[1:]
+with tarfile.open(archive, "w:gz") as image:
+    def add(name, payload):
+        payload = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+        member = tarfile.TarInfo(name)
+        member.size = len(payload)
+        image.addfile(member, io.BytesIO(payload))
+    add("manifest.json", [{"Config": "config.json", "RepoTags": [tag], "Layers": ["layer.tar"]}])
+    add("config.json", {"config": {"Labels": {"org.opencontainers.image.revision": label}}})
+    add("layer.tar", b"")
+    if unsafe:
+        add(unsafe, b"unsafe")
+`;
+    const makeArchive = ({
+      tag = `vozen-rust:${revision}`,
+      label = revision,
+      unsafe = '',
+      name = 'image.tar.gz',
+    } = {}) => {
+      const archive = join(root, name);
+      const created = spawnSync(python, ['-c', generator, archive, revision, tag, label, unsafe], {
+        encoding: 'utf8',
+      });
+      expect(created.status, created.stderr).toBe(0);
+      return archive;
+    };
+    const validate = (archive) =>
+      spawnSync(python, ['scripts/validate-docker-image-archive.py', archive, revision], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+      });
+
+    try {
+      expect(validate(makeArchive()).status).toBe(0);
+
+      const wrongTag = validate(makeArchive({ tag: 'vozen-rust:wrong', name: 'wrong-tag.tar.gz' }));
+      expect(wrongTag.status).toBe(1);
+      expect(wrongTag.stderr).toContain('exactly the expected tag');
+
+      const wrongLabel = validate(
+        makeArchive({ label: revision.replace(/^b/, 'a'), name: 'wrong-label.tar.gz' }),
+      );
+      expect(wrongLabel.status).toBe(1);
+      expect(wrongLabel.stderr).toContain('revision label mismatch');
+
+      const traversal = validate(makeArchive({ unsafe: '../escape', name: 'traversal.tar.gz' }));
+      expect(traversal.status).toBe(1);
+      expect(traversal.stderr).toContain('unsafe production image artifact entry');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('gates pull requests and GitHub Pages with the same site verification command', () => {
     const pkg = JSON.parse(source('package.json'));
     const ci = source('.github/workflows/ci.yml');
@@ -85,11 +144,15 @@ describe('operational security configuration', () => {
     const targetSha = 'd0ad45df15cdbbe4dcf9117218efc5178c016b70';
     const runFixture = ({
       healthy,
+      backupFails = false,
       cleanupFails = false,
       containerPresent = true,
       metadataPresent = false,
+      prebuilt = false,
+      prebuiltRevision = targetSha,
       rollbackBuildFails = false,
       rollbackHealthy = true,
+      rollbackImageRevision = '',
       sourceMode = 'override',
       stateDirSymlink = false,
     }) => {
@@ -99,6 +162,7 @@ describe('operational security configuration', () => {
         const fakeBin = join(root, 'bin');
         const dockerLog = join(root, 'docker.log');
         const gitLog = join(root, 'git.log');
+        const prodTagState = join(root, 'prod-tag');
         const rollbackState = join(root, 'rollback-active');
         const stateDir = join(root, 'state');
         const stateOpsLog = join(root, 'state-ops.log');
@@ -146,6 +210,13 @@ if [ "$1" = "container" ] && [ "$2" = "inspect" ]; then
 fi
 if [ "$1" = "image" ] && [ "$2" = "tag" ]; then
   [ "$3" = "sha256:missing" ] && exit 1
+  [ "$4" = "vozen-rust:prod" ] && printf '%s\n' "$3" > "$FAKE_PROD_TAG_STATE"
+  exit 0
+fi
+if [ "$1" = "image" ] && [ "$2" = "inspect" ] && [ "$3" = "--format" ]; then
+  [ "$5" = "vozen-rust:artifact" ] && echo "$FAKE_PREBUILT_SHA"
+  [ "$5" = "vozen-rust:rollback" ] && echo "$FAKE_ROLLBACK_IMAGE_SHA"
+  [ "$5" = "vozen-rust:prod" ] && echo "$FAKE_PREVIOUS_PROD_ID"
   exit 0
 fi
 if [ "$1" = "build" ] && [[ "$*" == *"--tag vozen-rust:rollback"* ]]; then
@@ -159,7 +230,8 @@ if [ "$1" = "logs" ]; then
   fi
 fi
 if [ "$1" = "compose" ] && [[ "$*" == *"--no-build"* ]] \
-  && [ "$FAKE_ROLLBACK_HEALTHY" = "true" ]; then
+  && [ "$FAKE_ROLLBACK_HEALTHY" = "true" ] \
+  && grep -Fq "image tag vozen-rust:rollback vozen-rust:prod" "$FAKE_DOCKER_LOG"; then
   touch "$FAKE_ROLLBACK_STATE"
 fi
 exit 0`,
@@ -189,7 +261,10 @@ if [ "$1" = "worktree" ] && [ "$2" = "remove" ]; then
 fi
 exit 64`,
         );
-        writeCommand('python3', 'cat >/dev/null || true\nexit 0');
+        writeCommand(
+          'python3',
+          '[ "$1" = "scripts/backup-rust-db.py" ] && [ "$FAKE_BACKUP_FAILS" = "true" ] && exit 1\ncat >/dev/null || true\nexit 0',
+        );
         writeCommand('curl', '[ "$FAKE_HEALTHY" = "true" ] || [ -f "$FAKE_ROLLBACK_STATE" ]');
         writeCommand('seq', 'echo 1');
         writeCommand('sleep', 'exit 0');
@@ -215,13 +290,18 @@ exit 64`,
               ...process.env,
               FAKE_CONTAINER_PRESENT: String(containerPresent),
               FAKE_CLEANUP_FAILS: String(cleanupFails),
+              FAKE_BACKUP_FAILS: String(backupFails),
               FAKE_DOCKER_LOG: posix(dockerLog),
               FAKE_GIT_LOG: posix(gitLog),
               FAKE_HEALTHY: String(healthy),
               FAKE_IMAGE_ID: metadataPresent ? 'sha256:present' : 'sha256:missing',
               FAKE_LABEL_SHA: sourceMode === 'label' ? rollbackSha : '',
+              FAKE_PREBUILT_SHA: prebuiltRevision,
+              FAKE_PREVIOUS_PROD_ID: 'sha256:previous-prod',
+              FAKE_PROD_TAG_STATE: posix(prodTagState),
               FAKE_ROLLBACK_BUILD_FAILS: String(rollbackBuildFails),
               FAKE_ROLLBACK_HEALTHY: String(rollbackHealthy),
+              FAKE_ROLLBACK_IMAGE_SHA: rollbackImageRevision,
               FAKE_ROLLBACK_SHA: rollbackSha,
               FAKE_ROLLBACK_STATE: posix(rollbackState),
               FAKE_SOURCE_TRUSTED: String(sourceMode !== 'invalid'),
@@ -235,6 +315,7 @@ exit 64`,
               VOZEN_DEPLOY_DIR: posix(deployDir),
               VOZEN_DEPLOY_STATE_DIR: posix(stateDir),
               VOZEN_HEALTH_URL: 'http://127.0.0.1:3001/health',
+              VOZEN_PREBUILT_IMAGE: prebuilt ? 'vozen-rust:artifact' : '',
               VOZEN_ROLLBACK_IMAGE: 'vozen-rust:rollback',
               VOZEN_ROLLBACK_SOURCE_SHA: ['override', 'invalid'].includes(sourceMode)
                 ? rollbackSha
@@ -249,7 +330,8 @@ exit 64`,
         const deployedSha = existsSync(deployedShaPath)
           ? readFileSync(deployedShaPath, 'utf8').trim()
           : '';
-        return { calls, deployedSha, gitCalls, result, stateOps };
+        const prodImage = existsSync(prodTagState) ? readFileSync(prodTagState, 'utf8').trim() : '';
+        return { calls, deployedSha, gitCalls, prodImage, result, stateOps };
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -273,6 +355,37 @@ exit 64`,
     expect(healthy.calls).not.toContain('container commit');
     expect(healthy.calls).not.toContain('image tag vozen-rust:rollback vozen-rust:prod');
 
+    const prebuiltHealthy = runFixture({ healthy: true, prebuilt: true });
+    expect(prebuiltHealthy.result.status, JSON.stringify(prebuiltHealthy)).toBe(0);
+    expect(prebuiltHealthy.result.stdout).toContain('Using CI-built production image');
+    expect(prebuiltHealthy.calls).toContain('image tag vozen-rust:artifact vozen-rust:prod');
+    expect(prebuiltHealthy.calls).toContain('up -d --force-recreate --no-build vozen');
+    expect(prebuiltHealthy.calls).not.toContain(
+      'compose -p vozen-prod -f docker-compose.rust.prod.yml build vozen',
+    );
+
+    const reusedRollback = runFixture({
+      healthy: true,
+      prebuilt: true,
+      rollbackImageRevision: rollbackSha,
+    });
+    expect(reusedRollback.result.status, JSON.stringify(reusedRollback)).toBe(0);
+    expect(reusedRollback.result.stdout).toContain(
+      'Using rollback image verified at trusted source',
+    );
+    expect(reusedRollback.calls).not.toContain('build --build-arg');
+
+    const mismatchedPrebuilt = runFixture({
+      healthy: true,
+      prebuilt: true,
+      prebuiltRevision: rollbackSha,
+    });
+    expect(mismatchedPrebuilt.result.status).toBe(1);
+    expect(mismatchedPrebuilt.result.stderr).toContain(
+      'Refusing deploy: prebuilt image revision does not match the checked-out commit.',
+    );
+    expect(mismatchedPrebuilt.calls).not.toContain('up -d --force-recreate');
+
     const unhealthy = runFixture({ healthy: false });
     expect(unhealthy.result.status).toBe(1);
     expect(unhealthy.result.stderr).toContain('Rolling back to the previous Rust image.');
@@ -280,6 +393,17 @@ exit 64`,
     expect(unhealthy.deployedSha).toBe('');
     expect(unhealthy.calls).toContain('image tag vozen-rust:rollback vozen-rust:prod');
     expect(unhealthy.calls).toContain('up -d --force-recreate --no-build vozen');
+
+    const unhealthyPrebuilt = runFixture({ healthy: false, prebuilt: true });
+    expect(unhealthyPrebuilt.result.status).toBe(1);
+    expect(unhealthyPrebuilt.calls).toContain('image rm vozen-rust:artifact');
+    expect(unhealthyPrebuilt.prodImage).toBe('vozen-rust:rollback');
+
+    const failedBackup = runFixture({ healthy: true, prebuilt: true, backupFails: true });
+    expect(failedBackup.result.status).toBe(1);
+    expect(failedBackup.calls).toContain('image rm vozen-rust:artifact');
+    expect(failedBackup.prodImage).toBe('sha256:previous-prod');
+    expect(failedBackup.calls).not.toContain('up -d --force-recreate --no-build vozen');
 
     const noRollbackBuild = runFixture({ healthy: true, rollbackBuildFails: true });
     expect(noRollbackBuild.result.status).toBe(1);
@@ -359,6 +483,13 @@ exit 64`,
     expect(dockerfileSource).toContain('FROM rust:1.97.1-bookworm AS builder');
     expect(dockerfileSource).not.toMatch(/^COPY .*rust-toolchain/m);
     expect(dockerfileSource).toContain('org.opencontainers.image.revision');
+    const ciWorkflow = source('.github/workflows/ci.yml');
+    expect(ciWorkflow).toContain('--build-arg "VOZEN_REVISION=$GITHUB_SHA"');
+    expect(ciWorkflow).toContain('docker image save "vozen-rust:$GITHUB_SHA"');
+    expect(ciWorkflow).toContain('name: vozen-rust-image-${{ github.sha }}');
+    expect(ciWorkflow).toContain(
+      'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+    );
     const deployWorkflow = source('.github/workflows/deploy-bot.yml');
     const runDeploy = deployWorkflow.slice(
       deployWorkflow.indexOf('run_rust_deploy()'),

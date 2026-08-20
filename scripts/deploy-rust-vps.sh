@@ -10,6 +10,7 @@ HEALTH_URL="${VOZEN_HEALTH_URL:-http://127.0.0.1:3001/health}"
 BACKUP_DIR="${VOZEN_BACKUP_DIR:-/home/vozen/vozen-backups}"
 DATABASE="${VOZEN_DATABASE:-rust-data/tts.db}"
 ROLLBACK_IMAGE="${VOZEN_ROLLBACK_IMAGE:-vozen-rust:rollback}"
+PREBUILT_IMAGE="${VOZEN_PREBUILT_IMAGE:-}"
 DEPLOY_STATE_DIR="${VOZEN_DEPLOY_STATE_DIR:-/home/vozen/vozen-deploy-state}"
 DEPLOY_STATE="$DEPLOY_STATE_DIR/deployed-sha"
 
@@ -103,11 +104,20 @@ if docker container inspect "$CONTAINER" >/dev/null 2>&1; then
     rollback_available=true
   else
     rollback_source_sha="$(resolve_rollback_source_sha)"
-    if ! build_rollback_from_source "$rollback_source_sha"; then
-      echo "Refusing deploy: unable to rebuild the rollback image from trusted source." >&2
-      exit 1
+    rollback_revision="$(
+      docker image inspect \
+        --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+        "$ROLLBACK_IMAGE" 2>/dev/null || true
+    )"
+    if [ "$rollback_revision" = "$rollback_source_sha" ]; then
+      echo "Using rollback image verified at trusted source ${rollback_source_sha:0:12}."
+    else
+      if ! build_rollback_from_source "$rollback_source_sha"; then
+        echo "Refusing deploy: unable to rebuild the rollback image from trusted source." >&2
+        exit 1
+      fi
+      echo "Rebuilt rollback image from trusted source ${rollback_source_sha:0:12}."
     fi
-    echo "Rebuilt rollback image from trusted source ${rollback_source_sha:0:12}."
     rollback_available=true
   fi
 fi
@@ -130,10 +140,47 @@ wait_until_healthy() {
   return 1
 }
 
-# Build while the current container remains online. Downtime starts only at the
-# force-recreate below.
 export VOZEN_BUILD_SHA="$(git rev-parse HEAD)"
-docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build "$SERVICE"
+compose_build_args=()
+if [ -n "$PREBUILT_IMAGE" ]; then
+  prebuilt_revision="$(
+    docker image inspect \
+      --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+      "$PREBUILT_IMAGE" 2>/dev/null || true
+  )"
+  if [ "$prebuilt_revision" != "$VOZEN_BUILD_SHA" ]; then
+    echo "Refusing deploy: prebuilt image revision does not match the checked-out commit." >&2
+    exit 1
+  fi
+  previous_prod_image="$(
+    docker image inspect --format '{{.Id}}' vozen-rust:prod 2>/dev/null || true
+  )"
+  rollback_promoted=false
+  cleanup_failed_candidate() {
+    status=$?
+    if [ "$status" -ne 0 ]; then
+      if [ "$rollback_promoted" != "true" ]; then
+        if [ -n "$previous_prod_image" ]; then
+          if ! docker image tag "$previous_prod_image" vozen-rust:prod; then
+            echo "Warning: failed to restore the previous production image tag." >&2
+          fi
+        else
+          docker image rm vozen-rust:prod >/dev/null 2>&1 || true
+        fi
+      fi
+      docker image rm "$PREBUILT_IMAGE" >/dev/null 2>&1 || true
+    fi
+    exit "$status"
+  }
+  trap cleanup_failed_candidate EXIT
+  docker image tag "$PREBUILT_IMAGE" vozen-rust:prod
+  compose_build_args=(--no-build)
+  echo "Using CI-built production image for ${VOZEN_BUILD_SHA:0:12}."
+else
+  # Build while the current container remains online. Downtime starts only at the
+  # force-recreate below.
+  docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build "$SERVICE"
+fi
 
 # SQLite's online backup API includes committed WAL data without stopping the bot.
 python3 scripts/backup-rust-db.py \
@@ -141,7 +188,7 @@ python3 scripts/backup-rust-db.py \
   --destination-dir "$BACKUP_DIR"
 
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
-  up -d --force-recreate "$SERVICE"
+  up -d --force-recreate "${compose_build_args[@]}" "$SERVICE"
 
 if ! wait_until_healthy; then
   echo "New Rust container did not become healthy; collecting logs." >&2
@@ -152,6 +199,7 @@ if ! wait_until_healthy; then
     echo "Rolling back to the previous Rust image." >&2
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" stop "$SERVICE" || true
     docker image tag "$ROLLBACK_IMAGE" vozen-rust:prod
+    rollback_promoted=true
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
       up -d --force-recreate --no-build "$SERVICE"
     if wait_until_healthy; then
@@ -188,3 +236,4 @@ docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps "$SERVICE"
 curl --fail --silent --show-error --max-time 5 "$HEALTH_URL"
 echo
+trap - EXIT
