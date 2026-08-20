@@ -198,12 +198,15 @@ jobs:
             (( UNPACKED_BYTES > 0 && UNPACKED_BYTES <= 8 * 1024 * 1024 * 1024 ))
 
             # Builder cache and dangling images are disposable. Keep tagged production and
-            # rollback images, containers, volumes, networks, and all user data.
+            # rollback images, the running container, volumes, and all user data. The legacy
+            # Docker builder can retain cache that both builder-prune commands do not see, so
+            # the final system prune intentionally has neither --all nor --volumes.
             if docker buildx version >/dev/null 2>&1; then
               docker buildx prune --all --force
             fi
             docker builder prune --all --force
             docker image prune --force
+            docker system prune --force
 
             docker_root="$(docker info --format '{{.DockerRootDir}}')"
             artifact_device="$(df --output=source /home/vozen | tail -n 1)"
