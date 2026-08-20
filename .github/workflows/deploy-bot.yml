@@ -197,20 +197,46 @@ jobs:
             (( ARTIFACT_BYTES > 0 && ARTIFACT_BYTES <= 2 * 1024 * 1024 * 1024 ))
             (( UNPACKED_BYTES > 0 && UNPACKED_BYTES <= 8 * 1024 * 1024 * 1024 ))
 
+            reclaim_build_storage() {
+              if docker buildx version >/dev/null 2>&1; then
+                docker buildx prune --all --force
+              fi
+              docker builder prune --all --force
+              docker image prune --force
+              docker system prune --force
+            }
+
             # Build cache from historical VPS builds remains non-reclaimable while it is
-            # referenced by the dormant prod image. First tag the image of the *running*,
-            # healthy production container as rollback, then release only that inactive prod
-            # tag. This does not stop or delete the container, its volumes, networks, or data.
+            # referenced by dormant images. First protect the *running*, healthy production
+            # container as rollback, then release only inactive image tags. This does not stop
+            # or delete the container, its volumes, networks, or data.
             container="vozen-prod-vozen-1"
             live_image="$(docker container inspect --format '{{.Image}}' "$container")"
             [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
             if docker image inspect "$live_image" >/dev/null 2>&1; then
               docker image tag "$live_image" vozen-rust:rollback
             else
-              # The legacy host discarded the image record of its still-healthy container.
-              # Capture its read-only filesystem as the rollback image; bind-mounted data is
-              # not part of a Docker commit and remains untouched on the host.
-              docker container commit --pause=false "$container" vozen-rust:rollback
+              # The legacy host discarded the image record and its content metadata, so a
+              # Docker commit cannot recreate it. Discard only the two inactive tags and their
+              # historical build layers, then stream-export the live container into a rollback
+              # image. Docker export excludes bind-mounted data, so durable host data remains
+              # untouched and the live container is never stopped.
+              docker image rm vozen-rust:rollback vozen-rust:prod || true
+              reclaim_build_storage
+              recovery_available="$(df --output=avail --block-size=1 /home/vozen | tail -n 1 | tr -d ' ')"
+              recovery_required="$((ARTIFACT_BYTES + 3 * UNPACKED_BYTES + 2 * 1024 * 1024 * 1024))"
+              (( recovery_available >= recovery_required )) || {
+                echo "Insufficient space to preserve the legacy rollback image safely." >&2
+                exit 1
+              }
+              docker export "$container" | docker image import \
+                --change 'ENTRYPOINT ["/usr/local/bin/vozen-runtime"]' \
+                --change 'WORKDIR /app' \
+                --change 'USER vozen' \
+                --change 'ENV RUST_BACKTRACE=0' \
+                --change 'ENV HF_HOME=/data/huggingface' \
+                --change 'HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD ["/usr/local/bin/healthcheck-rust.sh"]' \
+                - vozen-rust:rollback
             fi
             docker image inspect vozen-rust:rollback >/dev/null
             docker image rm vozen-rust:prod || true
@@ -218,12 +244,7 @@ jobs:
             # Builder cache and dangling images are now disposable. The legacy Docker builder
             # can retain cache that both builder-prune commands do not see, so the final system
             # prune intentionally has neither --all nor --volumes.
-            if docker buildx version >/dev/null 2>&1; then
-              docker buildx prune --all --force
-            fi
-            docker builder prune --all --force
-            docker image prune --force
-            docker system prune --force
+            reclaim_build_storage
 
             docker_root="$(docker info --format '{{.DockerRootDir}}')"
             artifact_device="$(df --output=source /home/vozen | tail -n 1)"
