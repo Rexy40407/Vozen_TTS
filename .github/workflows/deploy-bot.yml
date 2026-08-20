@@ -16,11 +16,6 @@ on:
         description: 'Exact CI-tested migration/vozen-rust commit to deploy'
         required: true
         type: string
-      activate_prebuilt:
-        description: 'Activate an already-loaded image after a confirmed post-build metadata failure'
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
   group: deploy-bot
@@ -48,12 +43,11 @@ jobs:
       - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         env:
           DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.production_sha }}
-          ACTIVATE_PREBUILT: ${{ inputs.activate_prebuilt && 'true' || 'false' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: DEPLOY_SHA,ACTIVATE_PREBUILT
+          envs: DEPLOY_SHA
           command_timeout: 45m
           debug: true
           script: |
@@ -75,8 +69,63 @@ jobs:
             require_runtime_secret STRIPE_PUBLISHABLE_KEY
             require_runtime_secret STRIPE_WEBHOOK_SECRET
 
-            # Keep non-sensitive runtime flags current without printing any
-            # configuration values in the deployment logs.
+            # The production clone was originally created as a single-branch
+            # checkout. Fetch the production ref and verify the exact SHA tested
+            # by CI before changing the checkout.
+            git fetch origin +refs/heads/migration/vozen-rust:refs/remotes/origin/migration/vozen-rust
+            git cat-file -e "$DEPLOY_SHA^{commit}"
+            git merge-base --is-ancestor "$DEPLOY_SHA" origin/migration/vozen-rust
+            current_commit="$(git rev-parse HEAD)"
+            target_commit="$DEPLOY_SHA"
+            compose_project="vozen-prod"
+            compose_service="vozen"
+            compose_file="docker-compose.rust.prod.yml"
+            deploy_state_dir="/home/vozen/vozen-deploy-state"
+            container="${compose_project}-${compose_service}-1"
+            run_rust_deploy() {
+              rollback_source_sha=""
+              deploy_state="$deploy_state_dir/deployed-sha"
+              running_revision="$(
+                docker container inspect \
+                  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+                  "$container" 2>/dev/null || true
+              )"
+              # One-time bootstrap for the unlabelled container that was verified running before
+              # revision-labelled images and protected deploy state existed. Once this deploy
+              # succeeds, the host-only state file and immutable image label take precedence.
+              if [ ! -f "$deploy_state" ] \
+                && [[ ! "$running_revision" =~ ^[0-9a-f]{40}$ ]]; then
+                rollback_source_sha="28f3b1f6df4d1f84d22e0afa2718c657dffcae80"
+              fi
+              VOZEN_COMPOSE_PROJECT="$compose_project" \
+                VOZEN_COMPOSE_SERVICE="$compose_service" \
+                VOZEN_COMPOSE_FILE="$compose_file" \
+                VOZEN_DEPLOY_STATE_DIR="$deploy_state_dir" \
+                VOZEN_ROLLBACK_SOURCE_SHA="$rollback_source_sha" \
+                bash scripts/deploy-rust-vps.sh
+            }
+            # The VPS runtime env and durable data are intentionally untracked and excluded from
+            # the Dockerfile's selective COPY inputs. Every other tracked or untracked path must
+            # match the CI-tested checkout exactly.
+            if ! checkout_status="$(
+              git status --porcelain --untracked-files=all -- . \
+                ':(exclude).env.rust.prod' ':(exclude)rust-data/**'
+            )"; then
+              echo "::error::Unable to verify production checkout cleanliness"
+              exit 1
+            fi
+            if [ -n "$checkout_status" ]; then
+              echo "::error::Production checkout has local changes; refusing to deploy it"
+              exit 1
+            fi
+            if [ "$current_commit" != "$target_commit" ] \
+              && git merge-base --is-ancestor "$target_commit" "$current_commit"; then
+              echo "Current checkout $current_commit is newer than requested $target_commit; refusing rollback"
+              exit 0
+            fi
+
+            # Keep non-sensitive runtime flags current without printing any configuration values.
+            # This happens only after stale and dirty requests have been rejected without effects.
             set_env() {
               key="$1"
               value="$2"
@@ -111,50 +160,7 @@ jobs:
             set_env STRIPE_PRICE_MAX_MONTHLY price_1Txsp7QFJYeD1Af0LVQvo30q
             set_env STRIPE_PRICE_MAX_YEARLY price_1TxspPQFJYeD1Af0EG6lUKIl
 
-            # The production clone was originally created as a single-branch
-            # checkout. Fetch the production ref and verify the exact SHA tested
-            # by CI before changing the checkout.
-            git fetch origin +refs/heads/migration/vozen-rust:refs/remotes/origin/migration/vozen-rust
-            git cat-file -e "$DEPLOY_SHA^{commit}"
-            git merge-base --is-ancestor "$DEPLOY_SHA" origin/migration/vozen-rust
-            current_commit="$(git rev-parse HEAD)"
-            target_commit="$DEPLOY_SHA"
-            if [ "$current_commit" = "$target_commit" ] && [ "$ACTIVATE_PREBUILT" = "true" ]; then
-              docker compose -p vozen-prod -f docker-compose.rust.prod.yml up -d --no-build vozen
-              container_id="$(docker compose -p vozen-prod -f docker-compose.rust.prod.yml ps -q vozen)"
-              healthy=false
-              for _attempt in $(seq 1 48); do
-                container_health="$(
-                  docker container inspect \
-                    --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
-                    "$container_id" 2>/dev/null || true
-                )"
-                if [ "$container_health" = "healthy" ] \
-                  && curl --fail --silent --show-error --max-time 5 http://127.0.0.1:3001/health >/dev/null; then
-                  healthy=true
-                  break
-                fi
-                sleep 5
-              done
-              if [ "$healthy" != "true" ]; then
-                echo "::error::Prebuilt production image did not become healthy"
-                exit 1
-              fi
-              docker builder prune --all --force
-              docker image prune --all --force
-              echo "Activated prebuilt production image for $target_commit and reclaimed unused Docker data"
-              exit 0
-            fi
             if [ "$current_commit" != "$target_commit" ]; then
-              if git merge-base --is-ancestor "$target_commit" "$current_commit"; then
-                echo "Current checkout $current_commit is newer than requested $target_commit; refusing rollback"
-                docker compose -p vozen-prod -f docker-compose.rust.prod.yml up -d --no-build vozen
-                exit 0
-              fi
-              if ! git diff --quiet || ! git diff --cached --quiet; then
-                echo "::error::Production checkout has local changes; refusing to replace it"
-                exit 1
-              fi
               if git merge-base --is-ancestor "$current_commit" "$target_commit"; then
                 git merge --ff-only "$target_commit"
               else
@@ -168,7 +174,7 @@ jobs:
             # Keep the running image for rollback, but reclaim images unused by any container.
             # Preserve BuildKit cache here so a failed export can resume without recompiling Rust.
             docker image prune --all --force
-            bash scripts/deploy-rust-vps.sh
+            run_rust_deploy
 
             # After the replacement is healthy, the previous image and build cache are disposable.
             # Do not prune containers, networks, volumes, or user data.

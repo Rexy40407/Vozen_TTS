@@ -1,6 +1,16 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 const source = (path) => readFileSync(resolve(process.cwd(), path), { encoding: 'utf8' });
 // The site's assets are cache-busted by FILENAME (never a query string), so every rename churns
@@ -50,6 +60,144 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('Missing VPS_SSH_KEY');
     expect(deploy).toContain('debug: true');
   });
+  it('keeps every canonical deploy branch fail-closed and CI-pinned', () => {
+    const bash =
+      process.env.VOZEN_TEST_BASH ??
+      (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
+    if (process.platform === 'win32' && !existsSync(bash)) {
+      throw new Error('Set VOZEN_TEST_BASH to a Git Bash-compatible executable.');
+    }
+    const workflow = source('.github/workflows/deploy-bot.yml');
+    const marker = workflow.match(/^([ \t]*)script: \|\r?$/m);
+    expect(marker).not.toBeNull();
+    const remoteIndent = marker[1].length + 2;
+    const remoteScript = workflow
+      .slice(marker.index + marker[0].length)
+      .replace(/^\r?\n/, '')
+      .split(/\r?\n/)
+      .map((line) => (line.startsWith(' '.repeat(remoteIndent)) ? line.slice(remoteIndent) : line))
+      .join('\n')
+      .replace('cd ~/vozen-rust-prod', 'cd "$VOZEN_TEST_DEPLOY_DIR"');
+    const targetSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const currentByMode = {
+      dirty: targetSha,
+      forward: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      runtime: targetSha,
+      same: targetSha,
+      stale: 'cccccccccccccccccccccccccccccccccccccccc',
+      status_error: targetSha,
+      unrelated: 'dddddddddddddddddddddddddddddddddddddddd',
+    };
+    const runFixture = (mode) => {
+      const root = mkdtempSync(join(tmpdir(), 'vozen-main-deploy-'));
+      try {
+        const deployDir = join(root, 'deploy');
+        const bashEnv = join(root, 'bash-env.sh');
+        const gitLog = join(root, 'git.log');
+        const mutationLog = join(root, 'mutation.log');
+        mkdirSync(deployDir);
+        writeFileSync(
+          join(deployDir, '.env.rust.prod'),
+          'STRIPE_SECRET_KEY=test\nSTRIPE_PUBLISHABLE_KEY=test\nSTRIPE_WEBHOOK_SECRET=test\n',
+        );
+        writeFileSync(
+          bashEnv,
+          String.raw`git() {
+printf '%s\n' "$*" >> "$FAKE_GIT_LOG"
+if [ "$1" = "fetch" ] || [ "$1" = "cat-file" ]; then return 0; fi
+if [ "$1" = "rev-parse" ]; then echo "$FAKE_CURRENT_SHA"; return 0; fi
+if [ "$1" = "status" ]; then
+  [[ "$*" == *":(exclude).env.rust.prod"* ]] || return 65
+  [[ "$*" == *":(exclude)rust-data/**"* ]] || return 65
+  [ "$FAKE_MODE" = "status_error" ] && return 2
+  [ "$FAKE_MODE" = "dirty" ] && echo "?? crates/rogue.rs"
+  return 0
+fi
+if [ "$1" = "merge-base" ]; then
+  [ "$4" = "origin/migration/vozen-rust" ] && return 0
+  [ "$FAKE_MODE" = "stale" ] && [ "$3" = "$FAKE_TARGET_SHA" ] && return 0
+  [ "$FAKE_MODE" = "forward" ] && [ "$3" = "$FAKE_CURRENT_SHA" ] && return 0
+  return 1
+fi
+if [ "$1" = "merge" ] || [ "$1" = "checkout" ]; then return 0; fi
+return 64
+}
+docker() { printf 'docker %s\n' "$*" >> "$FAKE_MUTATION_LOG"; }
+bash() { printf 'deploy %s\n' "$*" >> "$FAKE_MUTATION_LOG"; }
+chmod() { return 0; }
+export -f git docker bash chmod`,
+        );
+        const posix = (value) => {
+          const normalized = value.replaceAll('\\', '/');
+          return process.platform === 'win32'
+            ? normalized.replace(/^([A-Za-z]):/, (_match, drive) => `/${drive.toLowerCase()}`)
+            : normalized;
+        };
+        const result = spawnSync(bash, ['-c', remoteScript], {
+          encoding: 'utf8',
+          timeout: 3_000,
+          env: {
+            ...process.env,
+            BASH_ENV: posix(bashEnv),
+            DEPLOY_SHA: targetSha,
+            FAKE_CURRENT_SHA: currentByMode[mode],
+            FAKE_GIT_LOG: posix(gitLog),
+            FAKE_MODE: mode,
+            FAKE_MUTATION_LOG: posix(mutationLog),
+            FAKE_TARGET_SHA: targetSha,
+            VOZEN_TEST_DEPLOY_DIR: posix(deployDir),
+          },
+        });
+        return {
+          envFile: readFileSync(join(deployDir, '.env.rust.prod'), 'utf8'),
+          gitCalls: existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : '',
+          mutations: existsSync(mutationLog) ? readFileSync(mutationLog, 'utf8') : '',
+          result,
+        };
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    };
+
+    const statusError = runFixture('status_error');
+    expect(
+      statusError.result.status,
+      `${statusError.result.stdout}\n${statusError.result.stderr}`,
+    ).toBe(1);
+    expect(statusError.result.stdout).toContain('Unable to verify production checkout cleanliness');
+    expect(statusError.mutations).toBe('');
+
+    const dirty = runFixture('dirty');
+    expect(dirty.result.status).toBe(1);
+    expect(dirty.result.stdout).toContain('Production checkout has local changes');
+    expect(dirty.mutations).toBe('');
+
+    const stale = runFixture('stale');
+    expect(stale.result.status).toBe(0);
+    expect(stale.result.stdout).toContain('refusing rollback');
+    expect(stale.mutations).toBe('');
+    expect(stale.envFile).not.toContain('RUST_PAYMENTS_ENABLED');
+
+    const same = runFixture('same');
+    expect(same.result.status).toBe(0);
+    expect(same.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
+    expect(same.gitCalls).toContain(':(exclude).env.rust.prod');
+    expect(same.gitCalls).toContain(':(exclude)rust-data/**');
+
+    const runtime = runFixture('runtime');
+    expect(runtime.result.status).toBe(0);
+    expect(runtime.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
+
+    const forward = runFixture('forward');
+    expect(forward.result.status).toBe(0);
+    expect(forward.gitCalls).toContain(`merge --ff-only ${targetSha}`);
+    expect(forward.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
+
+    const unrelated = runFixture('unrelated');
+    expect(unrelated.result.status).toBe(0);
+    expect(unrelated.gitCalls).toContain(`checkout --detach ${targetSha}`);
+    expect(unrelated.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
+  }, 30_000);
   it('keeps payment credentials in the VPS runtime file instead of the SSH command line', () => {
     const deploy = source('.github/workflows/deploy-bot.yml');
     expect(deploy).toContain('require_runtime_secret STRIPE_SECRET_KEY');
