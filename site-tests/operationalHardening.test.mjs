@@ -356,6 +356,8 @@ exit 64`,
     expect(deployScriptSource).toContain('export VOZEN_BUILD_SHA="$(git rev-parse HEAD)"');
     expect(composeSource).toContain('VOZEN_REVISION: ${VOZEN_BUILD_SHA:-unknown}');
     expect(composeSource).toMatch(/tmpfs:\s*\n\s+- \/tmp:mode=1777/);
+    expect(dockerfileSource).toContain('FROM rust:1.97.1-bookworm AS builder');
+    expect(dockerfileSource).not.toMatch(/^COPY .*rust-toolchain/m);
     expect(dockerfileSource).toContain('org.opencontainers.image.revision');
     const deployWorkflow = source('.github/workflows/deploy-bot.yml');
     const runDeploy = deployWorkflow.slice(
