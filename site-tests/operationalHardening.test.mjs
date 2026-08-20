@@ -59,6 +59,69 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('Missing VPS_USER');
     expect(deploy).toContain('Missing VPS_SSH_KEY');
     expect(deploy).toContain('debug: true');
+    expect(deploy).toContain('actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c');
+    expect(deploy).toContain('appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345');
+    expect(deploy).toContain('.conclusion == "success"');
+    expect(deploy).toContain('.event == "push"');
+    expect(deploy).toContain('.head_repository.id == $repository_id');
+    expect(deploy).toContain('.head_sha == $sha');
+    expect(deploy).toContain('sha256sum --check "vozen-rust-$DEPLOY_SHA.tar.gz.sha256"');
+    expect(deploy).toContain('artifact_bytes <= 2 * 1024 * 1024 * 1024');
+    expect(deploy).toContain('unpacked_bytes <= 8 * 1024 * 1024 * 1024');
+    expect(deploy).toContain('docker_root="$(docker info');
+    expect(deploy).toContain('combined_required="$((ARTIFACT_BYTES + docker_required))"');
+    expect(deploy).toContain('Reject dirty and stale production state before pruning');
+    expect(deploy).toContain('capture_stdout: true');
+    expect(deploy).toContain("steps.release_decision.outputs.decision == 'deploy'");
+    expect(deploy).toContain('candidate_cleanup_armed=true');
+    expect(deploy).toContain('docker image rm "$candidate_image"');
+    expect(deploy).toContain('python3 scripts/validate-docker-image-archive.py');
+    expect(deploy).toContain("if: always() && env.DIAGNOSTICS_ONLY != 'true'");
+  });
+  it('normalizes one preflight marker from bannered ssh-action stdout', () => {
+    const bash =
+      process.env.VOZEN_TEST_BASH ??
+      (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
+    const workflow = source('.github/workflows/deploy-bot.yml');
+    const stepStart = workflow.indexOf('- name: Normalize production preflight decision');
+    const stepEnd = workflow.indexOf('\n      - name:', stepStart + 1);
+    const step = workflow.slice(stepStart, stepEnd);
+    const marker = step.match(/^([ \t]*)run: \|\r?$/m);
+    expect(marker).not.toBeNull();
+    const indent = marker[1].length + 2;
+    const script = step
+      .slice(marker.index + marker[0].length)
+      .replace(/^\r?\n/, '')
+      .split(/\r?\n/)
+      .map((line) => (line.startsWith(' '.repeat(indent)) ? line.slice(indent) : line))
+      .join('\n');
+    const runNormalizer = (captured) => {
+      const root = mkdtempSync(join(tmpdir(), 'vozen-preflight-normalizer-'));
+      try {
+        const output = join(root, 'github-output');
+        const result = spawnSync(bash, ['-c', script], {
+          encoding: 'utf8',
+          env: { ...process.env, GITHUB_OUTPUT: output, PREFLIGHT_STDOUT: captured },
+        });
+        return {
+          decision: existsSync(output) ? readFileSync(output, 'utf8').trim() : '',
+          result,
+        };
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    };
+
+    const bannered = runNormalizer(
+      "======CMD======\nprintf 'VOZEN_PREFLIGHT=stale\\n'\nprintf 'VOZEN_PREFLIGHT=deploy\\n'\n======END======\nout: VOZEN_PREFLIGHT=deploy\n================================\n✅ Successfully executed commands",
+    );
+    expect(bannered.result.status, bannered.result.stderr).toBe(0);
+    expect(bannered.decision).toBe('decision=deploy');
+    expect(runNormalizer('out: VOZEN_PREFLIGHT=stale').decision).toBe('decision=stale');
+    expect(
+      runNormalizer('out: VOZEN_PREFLIGHT=deploy\nout: VOZEN_PREFLIGHT=stale').result.status,
+    ).toBe(1);
+    expect(runNormalizer('Successfully executed commands').result.status).toBe(1);
   });
   it('keeps every canonical deploy branch fail-closed and CI-pinned', () => {
     const bash =
@@ -68,15 +131,21 @@ describe('operational security configuration', () => {
       throw new Error('Set VOZEN_TEST_BASH to a Git Bash-compatible executable.');
     }
     const workflow = source('.github/workflows/deploy-bot.yml');
-    const marker = workflow.match(/^([ \t]*)script: \|\r?$/m);
+    const deployStep = workflow.slice(
+      workflow.indexOf('# This action receives the production SSH key'),
+    );
+    const marker = deployStep.match(/^([ \t]*)script: \|\r?$/m);
     expect(marker).not.toBeNull();
     const remoteIndent = marker[1].length + 2;
-    const remoteScript = workflow
+    const scriptBlock = deployStep
       .slice(marker.index + marker[0].length)
       .replace(/^\r?\n/, '')
       .split(/\r?\n/)
       .map((line) => (line.startsWith(' '.repeat(remoteIndent)) ? line.slice(remoteIndent) : line))
-      .join('\n')
+      .join('\n');
+    const nextStep = scriptBlock.search(/^ {6}- name:/m);
+    const remoteScript = scriptBlock
+      .slice(0, nextStep === -1 ? undefined : nextStep)
       .replace('cd ~/vozen-rust-prod', 'cd "$VOZEN_TEST_DEPLOY_DIR"');
     const targetSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     const currentByMode = {
@@ -93,10 +162,15 @@ describe('operational security configuration', () => {
       const root = mkdtempSync(join(tmpdir(), 'vozen-main-deploy-'));
       try {
         const deployDir = join(root, 'deploy');
+        const artifactRoot = join(root, 'artifacts');
+        const artifactDir = join(artifactRoot, targetSha);
         const bashEnv = join(root, 'bash-env.sh');
         const gitLog = join(root, 'git.log');
         const mutationLog = join(root, 'mutation.log');
         mkdirSync(deployDir);
+        mkdirSync(artifactDir, { recursive: true });
+        writeFileSync(join(artifactDir, `vozen-rust-${targetSha}.tar.gz`), 'fixture');
+        writeFileSync(join(artifactDir, `vozen-rust-${targetSha}.tar.gz.sha256`), 'fixture');
         writeFileSync(
           join(deployDir, '.env.rust.prod'),
           'STRIPE_SECRET_KEY=test\nSTRIPE_PUBLISHABLE_KEY=test\nSTRIPE_WEBHOOK_SECRET=test\n',
@@ -127,7 +201,10 @@ return 64
 docker() { printf 'docker %s\n' "$*" >> "$FAKE_MUTATION_LOG"; }
 bash() { printf 'deploy %s\n' "$*" >> "$FAKE_MUTATION_LOG"; }
 chmod() { return 0; }
-export -f git docker bash chmod`,
+gzip() { return 0; }
+python3() { return 0; }
+sha256sum() { return 0; }
+export -f git docker bash chmod gzip python3 sha256sum`,
         );
         const posix = (value) => {
           const normalized = value.replaceAll('\\', '/');
@@ -149,6 +226,7 @@ export -f git docker bash chmod`,
             FAKE_MUTATION_LOG: posix(mutationLog),
             FAKE_TARGET_SHA: targetSha,
             VOZEN_TEST_DEPLOY_DIR: posix(deployDir),
+            VOZEN_ARTIFACT_ROOT: posix(artifactRoot),
           },
         });
         return {
@@ -156,6 +234,7 @@ export -f git docker bash chmod`,
           gitCalls: existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : '',
           mutations: existsSync(mutationLog) ? readFileSync(mutationLog, 'utf8') : '',
           result,
+          stagedArtifactPresent: existsSync(join(artifactDir, `vozen-rust-${targetSha}.tar.gz`)),
         };
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -177,16 +256,19 @@ export -f git docker bash chmod`,
     ).toBe(1);
     expect(statusError.result.stdout).toContain('Unable to verify production checkout cleanliness');
     expect(statusError.mutations).toBe('');
+    expect(statusError.stagedArtifactPresent).toBe(false);
 
     const dirty = runFixture('dirty');
     expect(dirty.result.status).toBe(1);
     expect(dirty.result.stdout).toContain('Production checkout has local changes');
     expect(dirty.mutations).toBe('');
+    expect(dirty.stagedArtifactPresent).toBe(false);
 
     const stale = runFixture('stale');
     expect(stale.result.status).toBe(0);
     expect(stale.result.stdout).toContain('refusing rollback');
     expect(stale.mutations).toBe('');
+    expect(stale.stagedArtifactPresent).toBe(false);
     expect(stale.envFile).not.toContain('RUST_PAYMENTS_ENABLED');
 
     const same = runFixture('same');
