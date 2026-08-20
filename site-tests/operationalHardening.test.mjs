@@ -113,7 +113,7 @@ describe('operational security configuration', () => {
     };
 
     const bannered = runNormalizer(
-      "======CMD======\nprintf 'VOZEN_PREFLIGHT=stale\\n'\nprintf 'VOZEN_PREFLIGHT=deploy\\n'\n======END======\nout: VOZEN_PREFLIGHT=deploy\n================================\n✅ Successfully executed commands",
+      "======CMD======\nprintf 'VOZEN_PREFLIGHT=stale\\n'\nprintf 'VOZEN_PREFLIGHT=deploy\\n'\n======END======\nVOZEN_PREFLIGHT=deploy\n================================\n✅ Successfully executed commands",
     );
     expect(bannered.result.status, bannered.result.stderr).toBe(0);
     expect(bannered.decision).toBe('decision=deploy');

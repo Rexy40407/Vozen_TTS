@@ -169,7 +169,7 @@ jobs:
           set -euo pipefail
           mapfile -t markers < <(
             sed --quiet --regexp-extended \
-              's/^out: VOZEN_PREFLIGHT=(deploy|stale)\r?$/VOZEN_PREFLIGHT=\1/p' \
+              's/^(out: )?VOZEN_PREFLIGHT=(deploy|stale)\r?$/VOZEN_PREFLIGHT=\2/p' \
               <<<"$PREFLIGHT_STDOUT"
           )
           if [ "${#markers[@]}" -ne 1 ]; then
