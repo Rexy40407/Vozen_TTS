@@ -181,6 +181,7 @@ export -f git docker bash chmod`,
 
     const same = runFixture('same');
     expect(same.result.status).toBe(0);
+    expect(same.mutations).toContain('docker builder prune --all --force');
     expect(same.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
     expect(same.gitCalls).toContain(':(exclude).env.rust.prod');
     expect(same.gitCalls).toContain(':(exclude).env.rust.prod.backup-*');

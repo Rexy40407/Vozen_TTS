@@ -174,8 +174,10 @@ jobs:
               fi
             fi
 
-            # Keep the running image for rollback, but reclaim images unused by any container.
-            # Preserve BuildKit cache here so a failed export can resume without recompiling Rust.
+            # Keep the running container and its layers, but reclaim disposable build cache and
+            # images before exporting the separately rebuilt rollback image. This bounds the
+            # disk-space high-water mark on the VPS without touching volumes or user data.
+            docker builder prune --all --force
             docker image prune --all --force
             run_rust_deploy
 
