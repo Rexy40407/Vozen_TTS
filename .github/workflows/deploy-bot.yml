@@ -116,6 +116,7 @@ jobs:
             fi
             if [ -n "$checkout_status" ]; then
               echo "::error::Production checkout has local changes; refusing to deploy it"
+              printf 'Unexpected checkout path: %s\n' "$checkout_status"
               exit 1
             fi
             if [ "$current_commit" != "$target_commit" ] \
