@@ -109,7 +109,9 @@ jobs:
             # match the CI-tested checkout exactly.
             if ! checkout_status="$(
               git status --porcelain --untracked-files=all -- . \
-                ':(exclude).env.rust.prod' ':(exclude)rust-data/**'
+                ':(exclude).env.rust.prod' \
+                ':(exclude).env.rust.prod.backup-*' \
+                ':(exclude)rust-data/**'
             )"; then
               echo "::error::Unable to verify production checkout cleanliness"
               exit 1

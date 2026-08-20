@@ -108,6 +108,7 @@ if [ "$1" = "fetch" ] || [ "$1" = "cat-file" ]; then return 0; fi
 if [ "$1" = "rev-parse" ]; then echo "$FAKE_CURRENT_SHA"; return 0; fi
 if [ "$1" = "status" ]; then
   [[ "$*" == *":(exclude).env.rust.prod"* ]] || return 65
+  [[ "$*" == *":(exclude).env.rust.prod.backup-*"* ]] || return 65
   [[ "$*" == *":(exclude)rust-data/**"* ]] || return 65
   [ "$FAKE_MODE" = "status_error" ] && return 2
   [ "$FAKE_MODE" = "dirty" ] && echo "?? crates/rogue.rs"
@@ -182,6 +183,7 @@ export -f git docker bash chmod`,
     expect(same.result.status).toBe(0);
     expect(same.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
     expect(same.gitCalls).toContain(':(exclude).env.rust.prod');
+    expect(same.gitCalls).toContain(':(exclude).env.rust.prod.backup-*');
     expect(same.gitCalls).toContain(':(exclude)rust-data/**');
 
     const runtime = runFixture('runtime');
