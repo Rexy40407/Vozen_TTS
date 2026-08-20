@@ -80,6 +80,7 @@ describe('operational security configuration', () => {
       .replace('cd ~/vozen-rust-prod', 'cd "$VOZEN_TEST_DEPLOY_DIR"');
     const targetSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
     const currentByMode = {
+      diagnostics: targetSha,
       dirty: targetSha,
       forward: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       runtime: targetSha,
@@ -141,6 +142,7 @@ export -f git docker bash chmod`,
             ...process.env,
             BASH_ENV: posix(bashEnv),
             DEPLOY_SHA: targetSha,
+            DIAGNOSTICS_ONLY: mode === 'diagnostics' ? 'true' : 'false',
             FAKE_CURRENT_SHA: currentByMode[mode],
             FAKE_GIT_LOG: posix(gitLog),
             FAKE_MODE: mode,
@@ -159,6 +161,14 @@ export -f git docker bash chmod`,
         rmSync(root, { recursive: true, force: true });
       }
     };
+
+    const diagnostics = runFixture('diagnostics');
+    expect(diagnostics.result.status).toBe(0);
+    expect(diagnostics.mutations).toContain('docker system df --verbose');
+    expect(diagnostics.mutations).toContain('docker ps --all --size');
+    expect(diagnostics.mutations).not.toContain('docker builder prune');
+    expect(diagnostics.mutations).not.toContain('deploy scripts/deploy-rust-vps.sh');
+    expect(diagnostics.gitCalls).toBe('');
 
     const statusError = runFixture('status_error');
     expect(

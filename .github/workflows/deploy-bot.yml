@@ -16,6 +16,11 @@ on:
         description: 'Exact CI-tested migration/vozen-rust commit to deploy'
         required: true
         type: string
+      diagnostics_only:
+        description: 'Report VPS filesystem and Docker storage usage without changing state'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-bot
@@ -43,17 +48,26 @@ jobs:
       - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         env:
           DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.production_sha }}
+          DIAGNOSTICS_ONLY: ${{ inputs.diagnostics_only && 'true' || 'false' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: DEPLOY_SHA
+          envs: DEPLOY_SHA,DIAGNOSTICS_ONLY
           command_timeout: 45m
           debug: true
           script: |
             set -euo pipefail
             cd ~/vozen-rust-prod
             test -n "$DEPLOY_SHA"
+
+            if [ "${DIAGNOSTICS_ONLY:-false}" = "true" ]; then
+              df -h / /var/lib/docker 2>/dev/null || df -h /
+              docker system df --verbose
+              docker ps --all --size \
+                --format 'table {{.ID}}\t{{.Status}}\t{{.Size}}\t{{.Image}}\t{{.Names}}'
+              exit 0
+            fi
 
             # Payment credentials are provisioned directly on the VPS in a
             # mode-600 environment file. Do not carry them in this SSH action:
