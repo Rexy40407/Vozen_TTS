@@ -197,10 +197,20 @@ jobs:
             (( ARTIFACT_BYTES > 0 && ARTIFACT_BYTES <= 2 * 1024 * 1024 * 1024 ))
             (( UNPACKED_BYTES > 0 && UNPACKED_BYTES <= 8 * 1024 * 1024 * 1024 ))
 
-            # Builder cache and dangling images are disposable. Keep tagged production and
-            # rollback images, the running container, volumes, and all user data. The legacy
-            # Docker builder can retain cache that both builder-prune commands do not see, so
-            # the final system prune intentionally has neither --all nor --volumes.
+            # Build cache from historical VPS builds remains non-reclaimable while it is
+            # referenced by the dormant prod image. First tag the image of the *running*,
+            # healthy production container as rollback, then release only that inactive prod
+            # tag. This does not stop or delete the container, its volumes, networks, or data.
+            container="vozen-prod-vozen-1"
+            live_image="$(docker container inspect --format '{{.Image}}' "$container")"
+            [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
+            docker image inspect "$live_image" >/dev/null
+            docker image tag "$live_image" vozen-rust:rollback
+            docker image rm vozen-rust:prod || true
+
+            # Builder cache and dangling images are now disposable. The legacy Docker builder
+            # can retain cache that both builder-prune commands do not see, so the final system
+            # prune intentionally has neither --all nor --volumes.
             if docker buildx version >/dev/null 2>&1; then
               docker buildx prune --all --force
             fi

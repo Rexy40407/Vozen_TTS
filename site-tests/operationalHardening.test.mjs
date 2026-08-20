@@ -70,6 +70,9 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('unpacked_bytes <= 8 * 1024 * 1024 * 1024');
     expect(deploy).toContain('docker_root="$(docker info');
     expect(deploy).toContain('docker buildx prune --all --force');
+    expect(deploy).toContain('container="vozen-prod-vozen-1"');
+    expect(deploy).toContain('docker image tag "$live_image" vozen-rust:rollback');
+    expect(deploy).toContain('docker image rm vozen-rust:prod || true');
     expect(deploy).toContain('docker system prune --force');
     expect(deploy).toContain('neither --all nor --volumes');
     expect(deploy).not.toContain('docker system prune --all');
