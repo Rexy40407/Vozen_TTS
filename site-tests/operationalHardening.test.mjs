@@ -40,7 +40,7 @@ describe('operational security configuration', () => {
     expect(pkg.scripts?.['check:site']).toContain('--pool forks --maxWorkers 1 --minWorkers 1');
     expect(ci).toMatch(/\n {2}site:\s*\n/);
     expect(ci).toMatch(/\n\s+- run: npm run check:site\s*\n/);
-    expect(pages).toMatch(/\n\s+run: npm run check:site\s*\n/);
+    expect(pages).toMatch(/\n\s+- run: npm run check:site\s*\n/);
     expect(pages).not.toMatch(/\n\s+run: npm run build:site\s*\n/);
   });
   it('keeps Pages path filters anchored to existing files or directories', () => {
