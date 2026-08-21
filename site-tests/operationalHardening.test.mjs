@@ -49,7 +49,7 @@ describe('operational security configuration', () => {
     );
     expect(ci).toMatch(/\n {2}site:\s*\n/);
     expect(ci).toMatch(/\n\s+- run: npm run check:site\s*\n/);
-    expect(pages).toMatch(/\n\s+run: npm run check:site\s*\n/);
+    expect(pages).toMatch(/\n\s+- run: npm run check:site\s*\n/);
     expect(pages).not.toMatch(/\n\s+run: npm run build:site\s*\n/);
   });
   it('diagnoses VPS deployment inputs before opening the SSH action', () => {
