@@ -7,7 +7,7 @@ imagem nem do processo de deploy.
 ## VPS
 
 ```sh
-git clone https://github.com/Rexy40407/vozen.git
+git clone --branch migration/vozen-rust --single-branch https://github.com/Rexy40407/vozen.git
 cd vozen
 cp .env.rust.prod.example .env.rust.prod
 # preencher DISCORD_TOKEN, CLIENT_ID e integrações Top.gg/Ko-fi/API necessárias
@@ -41,7 +41,7 @@ Once Caddy points `api.vozen.org` at port 3001, `https://vozen.org/status`
 reads the live bot, database, and voice-provider state. The public endpoint only
 exposes coarse aggregate states; it never exposes tokens, messages, or internals.
 
-1. `git fetch origin && git checkout main && git pull --ff-only`.
+1. `git fetch origin && git checkout migration/vozen-rust && git pull --ff-only`.
 2. Pare o compose, copie `rust-data/tts.db` para um backup datado.
 3. `docker compose -f docker-compose.rust.prod.yml up -d --build`.
 4. Se a verificação falhar, volte ao commit anterior e restaure apenas a cópia

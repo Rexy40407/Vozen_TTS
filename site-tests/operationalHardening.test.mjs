@@ -59,7 +59,7 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('Missing VPS_HOST');
     expect(deploy).toContain('Missing VPS_USER');
     expect(deploy).toContain('Missing VPS_SSH_KEY');
-    expect(deploy).toContain('debug: true');
+    expect(deploy).toContain('debug: false');
   });
   it('keeps payment credentials in the VPS runtime file instead of the SSH command line', () => {
     const deploy = source('.github/workflows/deploy-bot.yml');
