@@ -164,8 +164,31 @@ fn canonical_json(value: &serde_json::Value) -> String {
             serde_json::to_string(&values.iter().map(canonical_json).collect::<Vec<_>>())
                 .unwrap_or_default()
         }
+        serde_json::Value::Number(number) => canonical_number(number),
         _ => value.to_string(),
     }
+}
+
+/// SQLite commonly serializes a REAL value such as `1.0`, while PostgreSQL may
+/// return the same value as the JSON number `1`.  Both values represent the
+/// same database value and must therefore produce the same import fingerprint.
+/// Keep large integers on their original lossless representation instead of
+/// routing them through an imprecise `f64` conversion.
+fn canonical_number(number: &serde_json::Number) -> String {
+    const MAX_EXACT_F64_INTEGER: f64 = 9_007_199_254_740_991.0;
+
+    if let Some(value) = number.as_f64()
+        && value.is_finite()
+        && value.abs() <= MAX_EXACT_F64_INTEGER
+        && value.fract() == 0.0
+    {
+        if value == 0.0 {
+            return "0".to_owned();
+        }
+        return format!("{value:.0}");
+    }
+
+    number.to_string()
 }
 
 #[cfg(test)]
@@ -200,6 +223,28 @@ mod tests {
             postgres_rows: 1,
         };
         assert!(error.to_string().contains("guild_config"));
+    }
+
+    #[test]
+    fn canonical_json_treats_integral_numeric_spellings_equally() {
+        let sqlite = serde_json::json!({
+            "speed": 1.0,
+            "nested": [2.0, -3.0, 0.0],
+        });
+        let postgres = serde_json::json!({
+            "speed": 1,
+            "nested": [2, -3, 0],
+        });
+
+        assert_eq!(canonical_json(&sqlite), canonical_json(&postgres));
+    }
+
+    #[test]
+    fn canonical_json_keeps_fractional_values_distinct() {
+        let first = serde_json::json!({ "speed": 1.05 });
+        let second = serde_json::json!({ "speed": 1.5 });
+
+        assert_ne!(canonical_json(&first), canonical_json(&second));
     }
 
     /// Opt-in staging integration test. It uses a fresh SQLite source and removes only its
