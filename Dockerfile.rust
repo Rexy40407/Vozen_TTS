@@ -13,7 +13,9 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends build-essential cmake pkg-config libopus-dev \
   && rm -rf /var/lib/apt/lists/*
 
-COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+# The base image already pins the production compiler. Do not copy the developer toolchain file:
+# its clippy/rustfmt components would make a production build depend on static.rust-lang.org.
+COPY Cargo.toml Cargo.lock ./
 COPY contracts ./contracts
 COPY crates ./crates
 
@@ -21,6 +23,8 @@ RUN cargo build --locked --release -p vozen-runtime --features voice-driver
 
 # ---------- runtime ----------
 FROM debian:bookworm-slim AS runtime
+ARG VOZEN_REVISION=unknown
+LABEL org.opencontainers.image.revision="$VOZEN_REVISION"
 ENV RUST_BACKTRACE=0
 ENV HF_HOME=/data/huggingface
 WORKDIR /app

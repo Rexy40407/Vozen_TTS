@@ -52,7 +52,9 @@ jobs:
     needs: rust
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - run: docker build --file Dockerfile.rust --tag vozen-rust:ci .
+      - run: >-
+          docker build --build-arg "VOZEN_REVISION=$GITHUB_SHA"
+          --file Dockerfile.rust --tag "vozen-rust:$GITHUB_SHA" .
       # Start the real entrypoint in a credential-free smoke mode. The mode opens a temporary
       # SQLite store and local /health listener but never creates a Discord gateway session.
       - name: Start runtime image smoke test
@@ -66,7 +68,7 @@ jobs:
             --tmpfs /tmp:rw,noexec,nosuid,size=64m \
             --env RUST_IMAGE_SMOKE=true \
             --env HEALTH_PORT=8080 \
-            vozen-rust:ci >/dev/null
+            "vozen-rust:$GITHUB_SHA" >/dev/null
           for attempt in {1..30}; do
             if docker exec "$container" /usr/local/bin/healthcheck-rust.sh; then
               echo "runtime image smoke test passed"
@@ -81,8 +83,31 @@ jobs:
         shell: bash
         run: |
           set +e
-          output="$(docker run --rm vozen-rust:ci 2>&1)"
+          output="$(docker run --rm "vozen-rust:$GITHUB_SHA" 2>&1)"
           status=$?
           set -e
           test "$status" -ne 0
           grep -Fq "DISCORD_TOKEN" <<<"$output"
+      - name: Export immutable production image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/migration/vozen-rust'
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact="$RUNNER_TEMP/vozen-rust-$GITHUB_SHA.tar.gz"
+          docker image save "vozen-rust:$GITHUB_SHA" | gzip --fast > "$artifact"
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum "$(basename "$artifact")" > "$(basename "$artifact").sha256"
+          )
+      - name: Upload immutable production image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/migration/vozen-rust'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vozen-rust-image-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/vozen-rust-${{ github.sha }}.tar.gz
+            ${{ runner.temp }}/vozen-rust-${{ github.sha }}.tar.gz.sha256
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+          overwrite: true
