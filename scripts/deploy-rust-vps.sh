@@ -31,10 +31,23 @@ if [ ! -f "$DATABASE" ]; then
   exit 1
 fi
 
-previous_image=""
+rollback_available=false
 if docker container inspect "$CONTAINER" >/dev/null 2>&1; then
   previous_image="$(docker container inspect --format '{{.Image}}' "$CONTAINER")"
-  docker image tag "$previous_image" "$ROLLBACK_IMAGE"
+  if docker image inspect "$previous_image" >/dev/null 2>&1; then
+    docker image tag "$previous_image" "$ROLLBACK_IMAGE"
+    rollback_available=true
+  fi
+fi
+if [ "$rollback_available" != "true" ] && docker image inspect "$ROLLBACK_IMAGE" >/dev/null 2>&1; then
+  # A bootstrap deploy can recover this tag by committing the still-running
+  # container when Docker's old image metadata was already pruned. Do not
+  # proceed without one of these two independently recoverable rollback paths.
+  rollback_available=true
+fi
+if [ "$rollback_available" != "true" ]; then
+  echo "Refusing deploy: no recoverable rollback image is available." >&2
+  exit 1
 fi
 
 # CI can construct a small, label-verified runtime layer on top of the current
@@ -103,7 +116,7 @@ if [ "$healthy" != "true" ]; then
   docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" logs \
     --tail 200 "$SERVICE" >&2 || true
 
-  if [ -n "$previous_image" ]; then
+  if [ "$rollback_available" = "true" ]; then
     echo "Rolling back to the previous Rust image." >&2
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" stop "$SERVICE" || true
     docker image tag "$ROLLBACK_IMAGE" vozen-rust:prod

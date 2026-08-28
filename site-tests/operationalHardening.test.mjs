@@ -76,14 +76,28 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('container="vozen-prod-vozen-1"');
     expect(deploy).toContain('docker image tag "$live_image" vozen-rust:rollback');
     expect(deploy).toContain('Extract verified runtime binary for layer-preserving deploy');
-    expect(deploy).toContain('Running production image is not recoverable as a delta deployment base.');
+    expect(deploy).toContain(
+      'Running production image is not recoverable as a delta deployment base.',
+    );
+    expect(deploy).toContain('VOZEN_PREFLIGHT=deploy_%s');
+    expect(deploy).toContain('deploy_mode="full"');
+    expect(deploy).toContain('Transfer CI-verified full-image bootstrap');
+    expect(deploy).toContain('docker commit "$container" vozen-rust:rollback');
+    expect(deploy).toContain(
+      'Loaded bootstrap image revision does not match the CI-tested commit.',
+    );
+    expect(deploy).toContain(
+      'gzip --decompress --stdout "$artifact_dir/$image_archive" | docker image load',
+    );
     expect(deploy).toContain('docker image rm vozen-rust:prod || true');
     expect(deploy).toContain('docker system prune --force');
     expect(deploy).toContain('neither --all nor --volumes');
     expect(deploy).not.toContain('docker system prune --all');
     expect(deploy).not.toContain('docker system prune --volumes');
     expect(deploy).toContain('combined_required="$((BINARY_BYTES + layer_load_headroom))"');
-    expect(deploy).toContain('Runtime-layer inputs changed; refusing a binary-only VPS deployment.');
+    expect(deploy).toContain(
+      'Runtime-layer inputs changed; refusing a binary-only VPS deployment.',
+    );
     expect(deploy).toContain('docker commit');
     expect(deploy).toContain('Reject dirty and stale production state before pruning');
     expect(deploy).toContain('capture_stdout: true');
@@ -105,7 +119,9 @@ describe('operational security configuration', () => {
     expect(deployScript).toContain('compose_build_mode="--no-build"');
     expect(deployScript).toContain('up -d --force-recreate --no-build "$SERVICE"');
     expect(deployScript).toContain('state_file="$DEPLOY_STATE_DIR/deployed-sha"');
-    expect(deployScript).toContain('docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build "$SERVICE"');
+    expect(deployScript).toContain(
+      'docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build "$SERVICE"',
+    );
   });
   it('normalizes one preflight marker from bannered ssh-action stdout', () => {
     const bash =
@@ -142,13 +158,16 @@ describe('operational security configuration', () => {
     };
 
     const bannered = runNormalizer(
-      "======CMD======\nprintf 'VOZEN_PREFLIGHT=stale\\n'\nprintf 'VOZEN_PREFLIGHT=deploy\\n'\n======END======\nVOZEN_PREFLIGHT=deploy\n================================\n✅ Successfully executed commands",
+      "======CMD======\nprintf 'VOZEN_PREFLIGHT=stale\\n'\nprintf 'VOZEN_PREFLIGHT=deploy_delta\\n'\n======END======\nVOZEN_PREFLIGHT=deploy_delta\n================================\n✅ Successfully executed commands",
     );
     expect(bannered.result.status, bannered.result.stderr).toBe(0);
-    expect(bannered.decision).toBe('decision=deploy');
-    expect(runNormalizer('out: VOZEN_PREFLIGHT=stale').decision).toBe('decision=stale');
+    expect(bannered.decision).toBe('decision=deploy\nmode=delta');
+    expect(runNormalizer('out: VOZEN_PREFLIGHT=deploy_full').decision).toBe(
+      'decision=deploy\nmode=full',
+    );
+    expect(runNormalizer('out: VOZEN_PREFLIGHT=stale').decision).toBe('decision=stale\nmode=stale');
     expect(
-      runNormalizer('out: VOZEN_PREFLIGHT=deploy\nout: VOZEN_PREFLIGHT=stale').result.status,
+      runNormalizer('out: VOZEN_PREFLIGHT=deploy_delta\nout: VOZEN_PREFLIGHT=stale').result.status,
     ).toBe(1);
     expect(runNormalizer('Successfully executed commands').result.status).toBe(1);
   });
@@ -261,6 +280,7 @@ export -f git docker bash chmod gzip python3 sha256sum`,
             BASH_ENV: posix(bashEnv),
             DEPLOY_SHA: targetSha,
             DIAGNOSTICS_ONLY: mode === 'diagnostics' ? 'true' : 'false',
+            DEPLOY_MODE: 'delta',
             FAKE_CURRENT_SHA: currentByMode[mode],
             FAKE_GIT_LOG: posix(gitLog),
             FAKE_MODE: mode,
