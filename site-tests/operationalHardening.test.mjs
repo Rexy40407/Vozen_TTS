@@ -612,7 +612,8 @@ export -f git docker bash chmod gzip python3 sha256sum sudo`,
     expect(script).not.toContain('fonts.gstatic.com');
     expect(script).toContain("style-src 'self' 'unsafe-inline'");
     expect(script).toContain("font-src 'self'");
-    expect(script).toContain("script-src 'self' https://js.stripe.com https://*.js.stripe.com");
+    expect(script).toContain("script-src 'self' https://static.cloudflareinsights.com https://js.stripe.com https://*.js.stripe.com");
+    expect(script).toContain("connect-src 'self' https://cloudflareinsights.com");
     expect(script).toContain('frame-src https://checkout.stripe.com https://js.stripe.com');
     expect(script).toContain('https://api.stripe.com');
     expect(script).toContain('https://link.com');
