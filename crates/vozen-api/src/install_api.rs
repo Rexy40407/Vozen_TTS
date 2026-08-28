@@ -131,7 +131,7 @@ fn is_canonical_callback(raw: &str) -> bool {
         && url
             .host_str()
             .is_some_and(|host| host.eq_ignore_ascii_case("api.vozen.org"))
-        && url.path() == "/rust/api/install/tts/callback"
+        && url.path() == "/api/install/tts/callback"
         && url.query().is_none()
         && url.fragment().is_none()
 }
@@ -360,13 +360,13 @@ mod tests {
     #[test]
     fn installation_callback_is_pinned_to_the_public_api_origin() {
         assert!(is_canonical_callback(
-            "https://api.vozen.org/rust/api/install/tts/callback"
+            "https://api.vozen.org/api/install/tts/callback"
         ));
         assert!(!is_canonical_callback(
-            "https://api.vozen.org/rust/api/install/tts/callback?next=https://evil.invalid"
+            "https://api.vozen.org/api/install/tts/callback?next=https://evil.invalid"
         ));
         assert!(!is_canonical_callback(
-            "https://evil.invalid/rust/api/install/tts/callback"
+            "https://evil.invalid/api/install/tts/callback"
         ));
     }
 }

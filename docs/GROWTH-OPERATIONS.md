@@ -36,7 +36,7 @@ replayed delivery does not change the entitlement or vote count.
 In the Discord Developer Portal, register exactly:
 
 ```
-https://api.vozen.org/rust/api/install/tts/callback
+https://api.vozen.org/api/install/tts/callback
 ```
 
 Then provision only on the server:
@@ -57,7 +57,7 @@ Only after that can the website deploy set
 `window.VOZEN_INSTALL.ttsStartEndpoint` to:
 
 ```
-https://api.vozen.org/rust/api/install/tts/start
+https://api.vozen.org/api/install/tts/start
 ```
 
 Leaving it empty is intentional: all existing CTAs then keep using the

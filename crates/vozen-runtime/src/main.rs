@@ -2077,7 +2077,7 @@ fn tts_install_oauth_from_environment() -> Result<Option<TtsInstallOAuthRuntimeC
         client_id: required("CLIENT_ID")?,
         client_secret: required("TTS_INSTALL_OAUTH_CLIENT_SECRET")?,
         redirect_uri: nonempty_env("TTS_INSTALL_OAUTH_REDIRECT_URI")
-            .unwrap_or_else(|| "https://api.vozen.org/rust/api/install/tts/callback".to_owned()),
+            .unwrap_or_else(|| "https://api.vozen.org/api/install/tts/callback".to_owned()),
         success_redirect: nonempty_env("TTS_INSTALL_OAUTH_SUCCESS_REDIRECT")
             .unwrap_or_else(|| "https://vozen.org/dashboard/".to_owned()),
         state_secret: required("TTS_INSTALL_OAUTH_STATE_SECRET")?,
