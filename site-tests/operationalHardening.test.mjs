@@ -89,6 +89,11 @@ describe('operational security configuration', () => {
     expect(deploy).toContain(
       'gzip --decompress --stdout "$artifact_dir/$image_archive" | docker image load',
     );
+    expect(deploy).toContain('run_full_bootstrap()');
+    expect(deploy).toContain('retained-container rollback protection');
+    expect(deploy).toContain('PRAGMA integrity_check');
+    expect(deploy).toContain('docker container rename "$container" "$rollback_container"');
+    expect(deploy).toContain('up -d --force-recreate --no-build "$compose_service"');
     expect(deploy).toContain('docker image rm vozen-rust:prod || true');
     expect(deploy).toContain('docker system prune --force');
     expect(deploy).toContain('neither --all nor --volumes');

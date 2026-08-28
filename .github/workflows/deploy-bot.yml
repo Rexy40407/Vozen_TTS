@@ -481,7 +481,131 @@ jobs:
             compose_file="docker-compose.rust.prod.yml"
             deploy_state_dir="/home/vozen/vozen-deploy-state"
             container="${compose_project}-${compose_service}-1"
+            run_full_bootstrap() {
+              # The migration checkout owns the normal deploy script. A full-image bootstrap must
+              # also work while that checkout predates the container-retention fallback: the image
+              # was checksum- and OCI-label-verified above, and the current container is retained
+              # until the replacement passes application health and SQLite integrity verification.
+              rollback_container="${container}-rollback"
+              database="${VOZEN_DATABASE:-rust-data/tts.db}"
+              backup_dir="${VOZEN_BACKUP_DIR:-/home/vozen/vozen-backups}"
+              health_url="${VOZEN_HEALTH_URL:-http://127.0.0.1:3001/health}"
+              rollback_active=false
+
+              restore_full_bootstrap() {
+                if [ "$rollback_active" != "true" ]; then
+                  return 0
+                fi
+                echo "Restoring the retained production container after full bootstrap failure." >&2
+                docker compose -p "$compose_project" -f "$compose_file" stop "$compose_service" >/dev/null 2>&1 || true
+                docker rm --force "$container" >/dev/null 2>&1 || true
+                if ! docker container rename "$rollback_container" "$container"; then
+                  echo "::error::Could not restore the retained production container name." >&2
+                  return 1
+                fi
+                if ! docker start "$container"; then
+                  echo "::error::Could not restart the retained production container." >&2
+                  return 1
+                fi
+                rollback_active=false
+              }
+
+              if systemctl is-active --quiet vozen.service; then
+                echo "::error::Legacy vozen.service is active; refusing a competing full bootstrap." >&2
+                return 1
+              fi
+              test -f .env.rust.prod
+              test -f "$database"
+              if docker container inspect "$rollback_container" >/dev/null 2>&1; then
+                echo "::error::A retained rollback container already exists; refusing to overwrite it." >&2
+                return 1
+              fi
+              docker image inspect "$candidate_image" >/dev/null
+              candidate_revision="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$candidate_image")"
+              if [ "$candidate_revision" != "$target_commit" ]; then
+                echo "::error::Full bootstrap image revision does not match the CI-tested commit." >&2
+                return 1
+              fi
+
+              docker image tag "$candidate_image" vozen-rust:prod
+              if ! python3 scripts/backup-rust-db.py --source "$database" --destination-dir "$backup_dir"; then
+                echo "::error::Database backup failed; retaining the current production container." >&2
+                return 1
+              fi
+              if ! docker container rename "$container" "$rollback_container"; then
+                echo "::error::Could not retain the current production container for rollback." >&2
+                return 1
+              fi
+              rollback_active=true
+              if ! docker stop "$rollback_container"; then
+                restore_full_bootstrap || true
+                return 1
+              fi
+              if ! docker compose -p "$compose_project" -f "$compose_file" up -d --force-recreate --no-build "$compose_service"; then
+                restore_full_bootstrap || true
+                return 1
+              fi
+
+              healthy=false
+              for _ in $(seq 1 48); do
+                if [ "$(docker container inspect --format '{{.State.Health.Status}}' "$container" 2>/dev/null || true)" = "healthy" ] \
+                  && curl --fail --silent --show-error "$health_url" >/dev/null \
+                  && docker logs --tail 120 "$container" 2>&1 | grep --quiet 'healthy: Ready'; then
+                  healthy=true
+                  break
+                fi
+                sleep 5
+              done
+              if [ "$healthy" != "true" ]; then
+                echo "::error::Full bootstrap candidate did not become healthy." >&2
+                docker logs --tail 160 "$container" 2>&1 || true
+                restore_full_bootstrap || true
+                return 1
+              fi
+              if ! python3 - "$database" <<'PY'
+import sqlite3
+import sys
+
+connection = sqlite3.connect(sys.argv[1])
+try:
+    result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+finally:
+    connection.close()
+if result.lower() != "ok":
+    raise SystemExit(f"SQLite integrity check failed: {result}")
+PY
+              then
+                echo "::error::Full bootstrap database integrity verification failed." >&2
+                restore_full_bootstrap || true
+                return 1
+              fi
+              if ! (
+                if [ -L "$deploy_state_dir" ]; then
+                  echo "Deployment state directory must not be a symlink." >&2
+                  exit 1
+                fi
+                install -d -m 700 "$deploy_state_dir"
+                chmod 700 "$deploy_state_dir"
+                state_tmp="$(mktemp "$deploy_state_dir/deployed-sha.XXXXXX")"
+                chmod 600 "$state_tmp"
+                printf '%s\n' "$target_commit" > "$state_tmp"
+                mv -f "$state_tmp" "$deploy_state_dir/deployed-sha"
+              ); then
+                echo "::error::Could not persist the verified deployment state." >&2
+                restore_full_bootstrap || true
+                return 1
+              fi
+              if ! docker rm "$rollback_container" >/dev/null; then
+                echo "::warning::Replacement is healthy but its stopped rollback container needs manual cleanup." >&2
+              fi
+              rollback_active=false
+              echo "Full bootstrap deployed $target_commit with retained-container rollback protection."
+            }
             run_rust_deploy() {
+              if [ "$DEPLOY_MODE" = "full" ]; then
+                run_full_bootstrap
+                return
+              fi
               rollback_source_sha=""
               deploy_state="$deploy_state_dir/deployed-sha"
               running_revision="$(
