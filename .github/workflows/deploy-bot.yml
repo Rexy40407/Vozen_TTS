@@ -563,17 +563,17 @@ jobs:
                 return 1
               fi
               if ! python3 - "$database" <<'PY'
-import sqlite3
-import sys
+            import sqlite3
+            import sys
 
-connection = sqlite3.connect(sys.argv[1])
-try:
-    result = connection.execute("PRAGMA integrity_check").fetchone()[0]
-finally:
-    connection.close()
-if result.lower() != "ok":
-    raise SystemExit(f"SQLite integrity check failed: {result}")
-PY
+            connection = sqlite3.connect(sys.argv[1])
+            try:
+                result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            finally:
+                connection.close()
+            if result.lower() != "ok":
+                raise SystemExit(f"SQLite integrity check failed: {result}")
+            PY
               then
                 echo "::error::Full bootstrap database integrity verification failed." >&2
                 restore_full_bootstrap || true
