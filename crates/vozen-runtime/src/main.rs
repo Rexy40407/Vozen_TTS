@@ -121,14 +121,14 @@ use vozen_discord::{
 };
 use vozen_store::{
     DEPARTURE_GRACE_MS, ProviderHealth as StoreProviderHealth, RuntimeBatchBuffer, SqliteStore,
-    month_key_utc,
+    TopggSyncDetail, month_key_utc,
 };
 
 use crate::owner_command_sink::OwnerCommandRuntimeOptions;
 use crate::runtime_mode::RuntimeMode;
 use crate::topgg_metrics::{
     ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, TopggMetricsTrigger,
-    post_topgg_stats_with_shards, sync_topgg_commands,
+    post_topgg_stats_with_shards, sync_topgg_commands, validate_topgg_v1_token,
 };
 use crate::transcription_adapter::TranscriptionRuntimeOptions;
 use crate::transcription_control_sink::SttConsentRegistry;
@@ -2547,7 +2547,7 @@ async fn run() -> Result<(), RuntimeError> {
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
     loop_lag::spawn(gateway_state.metrics().as_ref().clone());
-    let topgg_trigger = config.topgg_metrics.map(|topgg_metrics| {
+    let topgg_trigger = if let Some(topgg_metrics) = config.topgg_metrics {
         let trigger = TopggMetricsTrigger::default();
         spawn_topgg_metrics(
             topgg_metrics,
@@ -2555,8 +2555,21 @@ async fn run() -> Result<(), RuntimeError> {
             store.clone(),
             trigger.clone(),
         );
-        trigger
-    });
+        Some(trigger)
+    } else {
+        // A missing token must be visible to the owner panel rather than looking like a quiet
+        // integration that has simply never had a guild lifecycle event.
+        if let Ok(store) = store.lock() {
+            let _ = store.record_topgg_sync_attempt(
+                system_now_ms(),
+                None,
+                None,
+                false,
+                TopggSyncDetail::Unconfigured,
+            );
+        }
+        None
+    };
     // Only a runtime that owns Rust voice sessions may write the shared restart marker. A
     // shadow process must never authorize the still-live Node process to reconnect calls.
     let write_rejoin_marker_on_shutdown = config.core_voice.is_some();
@@ -3377,8 +3390,17 @@ fn spawn_topgg_metrics(
 ) {
     tokio::spawn(async move {
         let Ok(http) = ReqwestTopggMetricsHttp::new() else {
-            // The listing is optional. A local client construction failure must never block the
-            // Discord gateway or trigger a retry loop with partial configuration.
+            // The listing is optional, but a local client construction failure must not make the
+            // broken setup invisible to an operator.
+            if let Ok(store) = store.lock() {
+                let _ = store.record_topgg_sync_attempt(
+                    system_now_ms(),
+                    None,
+                    None,
+                    false,
+                    TopggSyncDetail::TransportFailure,
+                );
+            }
             return;
         };
         // Node starts Top.gg work from ClientReady. Do not publish a transient zero while the
@@ -3386,35 +3408,47 @@ fn spawn_topgg_metrics(
         while !gateway_state.is_ready() {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        if let Some(commands) = public_topgg_commands() {
-            let _ = sync_topgg_commands(&http, &config.token, commands).await;
-        }
         let mut interval = tokio::time::interval(TOPGG_POST_INTERVAL);
+        let mut commands_synced = false;
         loop {
             tokio::select! {
                 _ = interval.tick() => {},
                 _ = trigger.notified() => {},
             }
             let server_count = gateway_state.guild_count();
-            let outcome = post_topgg_stats_with_shards(
-                &http,
-                &config.client_id,
-                &config.token,
-                server_count,
-                1,
-            )
-            .await;
+            // Verify the v1 Bearer credential first. In particular, this prevents a legacy or
+            // revoked token from being mistaken for a successful posting path.
+            let validation = validate_topgg_v1_token(&http, &config.token).await;
+            let outcome = if validation.succeeded() {
+                if !commands_synced {
+                    if let Some(commands) = public_topgg_commands() {
+                        commands_synced = sync_topgg_commands(&http, &config.token, commands).await;
+                    }
+                }
+                post_topgg_stats_with_shards(
+                    &http,
+                    &config.client_id,
+                    &config.token,
+                    server_count,
+                    1,
+                )
+                .await
+            } else {
+                validation
+            };
             if let Ok(store) = store.lock() {
                 let _ = store.record_topgg_sync_attempt(
                     system_now_ms(),
                     outcome.status(),
-                    server_count,
+                    Some(server_count),
                     outcome.succeeded(),
+                    outcome.detail(),
                 );
             }
             if !outcome.succeeded() {
                 eprintln!(
-                    "[topgg] metrics publish failed: status={:?}, server_count={server_count}",
+                    "[topgg] v1 validation or metrics publish failed: detail={}, status={:?}, server_count={server_count}",
+                    outcome.detail().as_storage(),
                     outcome.status(),
                 );
             }

@@ -9,7 +9,9 @@ use std::{sync::Arc, time::Duration};
 use async_trait::async_trait;
 use serde_json::Value;
 use tokio::sync::Notify;
+use vozen_store::TopggSyncDetail;
 
+const V1_PROJECT_URL: &str = "https://top.gg/api/v1/projects/@me";
 const V1_METRICS_URL: &str = "https://top.gg/api/v1/projects/@me/metrics";
 const V1_COMMANDS_URL: &str = "https://top.gg/api/v1/projects/@me/commands";
 pub const TOPGG_POST_INTERVAL: Duration = Duration::from_secs(30 * 60);
@@ -36,11 +38,12 @@ pub struct TopggMetricsRequest {
     pub url: String,
     pub method: TopggMetricsMethod,
     pub authorization: String,
-    pub body: Value,
+    pub body: Option<Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TopggMetricsMethod {
+    Get,
     Patch,
     Put,
 }
@@ -72,6 +75,19 @@ impl TopggMetricsOutcome {
             Self::TransportFailure | Self::InvalidConfiguration => None,
         }
     }
+
+    pub const fn detail(self) -> TopggSyncDetail {
+        match self {
+            Self::Success { .. } => TopggSyncDetail::Delivered,
+            Self::HttpFailure { status: 401 | 403 } => TopggSyncDetail::V1AuthenticationFailed,
+            Self::HttpFailure { status: 404 } => TopggSyncDetail::ProjectNotFound,
+            Self::HttpFailure { status: 400 | 422 } => TopggSyncDetail::InvalidMetricsPayload,
+            Self::HttpFailure { status: 429 } => TopggSyncDetail::RateLimited,
+            Self::HttpFailure { .. } => TopggSyncDetail::HttpFailure,
+            Self::TransportFailure => TopggSyncDetail::TransportFailure,
+            Self::InvalidConfiguration => TopggSyncDetail::InvalidConfiguration,
+        }
+    }
 }
 
 #[async_trait]
@@ -94,21 +110,62 @@ impl ReqwestTopggMetricsHttp {
 #[async_trait]
 impl TopggMetricsHttp for ReqwestTopggMetricsHttp {
     async fn send(&self, request: TopggMetricsRequest) -> Result<TopggMetricsResponse, ()> {
-        let method = match request.method {
+        let TopggMetricsRequest {
+            url,
+            method,
+            authorization,
+            body,
+        } = request;
+        let method = match method {
+            TopggMetricsMethod::Get => reqwest::Method::GET,
             TopggMetricsMethod::Patch => reqwest::Method::PATCH,
             TopggMetricsMethod::Put => reqwest::Method::PUT,
         };
-        let response = self
+        let request = self
             .client
-            .request(method, &request.url)
-            .header(reqwest::header::AUTHORIZATION, request.authorization)
-            .json(&request.body)
-            .send()
-            .await
-            .map_err(|_| ())?;
+            .request(method, url)
+            .header(reqwest::header::AUTHORIZATION, authorization);
+        let request = if let Some(body) = body {
+            request.json(&body)
+        } else {
+            request
+        };
+        let response = request.send().await.map_err(|_| ())?;
         Ok(TopggMetricsResponse {
             status: response.status().as_u16(),
         })
+    }
+}
+
+/// Verifies the current Top.gg v1 token before any mutable request is made.
+///
+/// v0 credentials cannot authenticate to this Bearer-only endpoint. Top.gg
+/// intentionally does not expose enough detail to distinguish a revoked token
+/// from a legacy one, so both are reported as a single actionable, sanitized
+/// v1 authentication failure.
+pub async fn validate_topgg_v1_token(
+    http: &impl TopggMetricsHttp,
+    token: &str,
+) -> TopggMetricsOutcome {
+    if token.trim().is_empty() {
+        return TopggMetricsOutcome::InvalidConfiguration;
+    }
+    match http
+        .send(TopggMetricsRequest {
+            url: V1_PROJECT_URL.into(),
+            method: TopggMetricsMethod::Get,
+            authorization: format!("Bearer {token}"),
+            body: None,
+        })
+        .await
+    {
+        Ok(response) if (200..300).contains(&response.status) => TopggMetricsOutcome::Success {
+            status: response.status,
+        },
+        Ok(response) => TopggMetricsOutcome::HttpFailure {
+            status: response.status,
+        },
+        Err(()) => TopggMetricsOutcome::TransportFailure,
     }
 }
 
@@ -144,10 +201,10 @@ pub async fn post_topgg_stats_with_shards(
             url: V1_METRICS_URL.into(),
             method: TopggMetricsMethod::Patch,
             authorization: format!("Bearer {token}"),
-            body: serde_json::json!({
+            body: Some(serde_json::json!({
                 "server_count": server_count,
                 "shard_count": shard_count.max(1),
-            }),
+            })),
         })
         .await;
     match v1 {
@@ -175,7 +232,7 @@ pub async fn sync_topgg_commands(
         url: V1_COMMANDS_URL.into(),
         method: TopggMetricsMethod::Put,
         authorization: format!("Bearer {token}"),
-        body: Value::Array(commands),
+        body: Some(Value::Array(commands)),
     })
     .await
     .is_ok_and(|response| (200..300).contains(&response.status))
@@ -227,7 +284,7 @@ mod tests {
                 url: V1_METRICS_URL.into(),
                 method: TopggMetricsMethod::Patch,
                 authorization: "Bearer token".into(),
-                body: serde_json::json!({ "server_count": 42, "shard_count": 1 }),
+                body: Some(serde_json::json!({ "server_count": 42, "shard_count": 1 })),
             }]
         );
     }
@@ -240,6 +297,32 @@ mod tests {
             TopggMetricsOutcome::HttpFailure { status: 404 }
         );
         assert_eq!(http.requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn v1_token_validation_uses_the_read_only_project_endpoint() {
+        let http = fake([Ok(TopggMetricsResponse { status: 200 })]);
+        assert_eq!(
+            validate_topgg_v1_token(&http, "token").await,
+            TopggMetricsOutcome::Success { status: 200 }
+        );
+        assert_eq!(
+            http.requests.lock().unwrap().as_slice(),
+            &[TopggMetricsRequest {
+                url: V1_PROJECT_URL.into(),
+                method: TopggMetricsMethod::Get,
+                authorization: "Bearer token".into(),
+                body: None,
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn v1_token_authentication_failure_has_a_sanitized_actionable_detail() {
+        let http = fake([Ok(TopggMetricsResponse { status: 401 })]);
+        let outcome = validate_topgg_v1_token(&http, "old-token").await;
+        assert_eq!(outcome.status(), Some(401));
+        assert_eq!(outcome.detail(), TopggSyncDetail::V1AuthenticationFailed);
     }
 
     #[tokio::test]
@@ -267,7 +350,7 @@ mod tests {
         );
         assert_eq!(
             http.requests.lock().unwrap()[0].body,
-            serde_json::json!({ "server_count": 166, "shard_count": 3 })
+            Some(serde_json::json!({ "server_count": 166, "shard_count": 3 }))
         );
     }
 
@@ -283,7 +366,7 @@ mod tests {
                 url: V1_COMMANDS_URL.into(),
                 method: TopggMetricsMethod::Put,
                 authorization: "Bearer token".into(),
-                body: serde_json::json!([{ "name": "join" }]),
+                body: Some(serde_json::json!([{ "name": "join" }])),
             }]
         );
     }

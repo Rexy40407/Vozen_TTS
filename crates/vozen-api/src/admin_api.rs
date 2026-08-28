@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use vozen_store::{
     AdminPassRow, AdminPassesView, AdminPlusRow, DominantTalkUsageOptions, KofiPendingGrant,
-    SqliteStore, StripeSubscription, TalkUsageSource, TopggSyncStatus, UserEngine,
+    SqliteStore, StripeSubscription, TalkUsageSource, TopggSyncDetail, TopggSyncStatus, UserEngine,
 };
 
 use crate::admin_auth::{
@@ -230,6 +230,8 @@ pub struct AdminTopggSync {
     pub last_success_at: Option<i64>,
     #[serde(rename = "lastStatus")]
     pub last_status: Option<u16>,
+    #[serde(rename = "lastDetail")]
+    pub last_detail: TopggSyncDetail,
     #[serde(rename = "lastServerCount")]
     pub last_server_count: Option<i64>,
     #[serde(rename = "currentServerCount")]
@@ -734,6 +736,7 @@ impl AdminTopggSync {
             last_attempt_at: value.last_attempt_at,
             last_success_at: value.last_success_at,
             last_status: value.last_status,
+            last_detail: value.last_detail,
             last_server_count: value.last_server_count,
             current_server_count,
             drift_percent,
@@ -903,6 +906,7 @@ mod tests {
             last_success_at: Some(NOW),
             last_status: Some(204),
             last_server_count: Some(100),
+            last_detail: TopggSyncDetail::Delivered,
             consecutive_failures: 0,
             stale: false,
         };

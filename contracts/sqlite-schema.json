@@ -170,7 +170,7 @@
     {
       "type": "table",
       "name": "topgg_sync_state",
-      "sql": "CREATE TABLE topgg_sync_state (\n        singleton             INTEGER PRIMARY KEY CHECK (singleton = 1),\n        last_attempt_at       INTEGER NOT NULL,\n        last_success_at       INTEGER,\n        last_status           INTEGER,\n        last_server_count     INTEGER,\n        consecutive_failures  INTEGER NOT NULL DEFAULT 0\n      )"
+      "sql": "CREATE TABLE topgg_sync_state (\n        singleton             INTEGER PRIMARY KEY CHECK (singleton = 1),\n        last_attempt_at       INTEGER NOT NULL,\n        last_success_at       INTEGER,\n        last_status           INTEGER,\n        last_server_count     INTEGER,\n        last_detail           TEXT NOT NULL DEFAULT 'unknown',\n        consecutive_failures  INTEGER NOT NULL DEFAULT 0\n      )"
     },
     {
       "type": "table",

@@ -102,7 +102,7 @@ pub use telemetry::{
     OperationalMetric, OperationalProvider, ProviderHealth, ProviderHealthSnapshot,
     TalkUsageSource, provider_for_engine, utc_day_key, utc_day_key_from_unix_millis,
 };
-pub use topgg_sync_state::{TOPGG_STALE_AFTER_MS, TopggSyncStatus};
+pub use topgg_sync_state::{TOPGG_STALE_AFTER_MS, TopggSyncDetail, TopggSyncStatus};
 pub use translation::{
     TranslationMapping, TranslationPreference, TranslationPreferencePatch, TranslationReservation,
     TranslationReservationDenial,

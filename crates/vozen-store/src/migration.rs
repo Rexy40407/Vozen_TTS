@@ -53,6 +53,9 @@ const CHANNEL_PROFILE_COLUMNS: &[(&str, &str)] = &[
     ("effect", "TEXT"),
 ];
 
+const TOPGG_SYNC_STATE_COLUMNS: &[(&str, &str)] =
+    &[("last_detail", "TEXT NOT NULL DEFAULT 'unknown'")];
+
 pub(crate) fn migrate_legacy_schema(connection: &Connection) -> Result<(), StoreError> {
     // Removed voice cloning stored biometric-consent metadata. This deletion is deliberately
     // irreversible and mirrors the privacy purge in Node before a Rust cutover is permitted.
@@ -87,6 +90,7 @@ pub(crate) fn migrate_legacy_schema(connection: &Connection) -> Result<(), Store
         "kofi_pending",
         &[("is_subscription", "INTEGER NOT NULL DEFAULT 0")],
     )?;
+    add_missing_columns(connection, "topgg_sync_state", TOPGG_SYNC_STATE_COLUMNS)?;
 
     let supporter_columns = table_columns(connection, "kofi_supporter")?;
     if supporter_columns.contains("email") && !supporter_columns.contains("email_hash") {
@@ -181,6 +185,15 @@ mod tests {
              CREATE TABLE kofi_supporter (email TEXT PRIMARY KEY, discord_id TEXT NOT NULL, updated_at INTEGER NOT NULL);
              CREATE TABLE vote_promo_state (guild_id TEXT PRIMARY KEY, last_post_at INTEGER NOT NULL);
              INSERT INTO vote_promo_state VALUES ('guild', 1);
+             CREATE TABLE topgg_sync_state (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                last_attempt_at INTEGER NOT NULL,
+                last_success_at INTEGER,
+                last_status INTEGER,
+                last_server_count INTEGER,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0
+             );
+             INSERT INTO topgg_sync_state VALUES (1, 1, NULL, NULL, NULL, 1);
              CREATE TABLE user_clone (user_id TEXT PRIMARY KEY, sample_path TEXT NOT NULL, consent_at INTEGER NOT NULL);
              CREATE TABLE vote_redemption (user_hash TEXT PRIMARY KEY, redeemed_at INTEGER NOT NULL);
              CREATE TABLE tts_lang_detect_off (guild_id TEXT NOT NULL, user_id TEXT NOT NULL);",
@@ -194,6 +207,17 @@ mod tests {
         assert!(columns(store.connection(), "kofi_supporter").contains("email_hash"));
         assert!(!columns(store.connection(), "kofi_supporter").contains("email"));
         assert!(columns(store.connection(), "vote_promo_state").contains("last_kind"));
+        assert!(columns(store.connection(), "topgg_sync_state").contains("last_detail"));
+        assert_eq!(
+            store
+                .connection()
+                .query_row("SELECT last_detail FROM topgg_sync_state", [], |row| row
+                    .get::<_, String>(
+                    0
+                ))
+                .expect("topgg detail"),
+            "unknown"
+        );
         assert!(
             store
                 .connection()
