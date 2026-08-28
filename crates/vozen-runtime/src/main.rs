@@ -4291,7 +4291,7 @@ mod tests {
     }
 
     #[test]
-    fn retention_removes_only_expired_raw_vote_records_and_delivery_ids() {
+    fn retention_removes_expired_vote_records_delivery_ids_and_pseudonymous_ledger() {
         let store = SqliteStore::open_in_memory().expect("store");
         let secret = "0123456789abcdef0123456789abcdef";
         let user = "12345678901234567";
@@ -4303,7 +4303,10 @@ mod tests {
             1_000 + vozen_store::VOTE_REWARD_MS + vozen_store::TOPGG_EVENT_RETENTION_MS + 1,
         )
         .expect("purge");
-        assert_eq!((rewards, events), (1, 1));
+        // `events` combines the delivery-id deduplication row and the
+        // pseudonymous rolling-window ledger row. Both have the same 30-day
+        // retention boundary and must disappear together.
+        assert_eq!((rewards, events), (1, 2));
         assert!(
             store
                 .vote_reward_status(
