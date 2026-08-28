@@ -335,7 +335,8 @@ chmod() { return 0; }
 gzip() { return 0; }
 python3() { return 0; }
 sha256sum() { return 0; }
-export -f git docker bash chmod gzip python3 sha256sum`,
+sudo() { return 0; }
+export -f git docker bash chmod gzip python3 sha256sum sudo`,
         );
         const posix = (value) => {
           const normalized = value.replaceAll('\\', '/');
