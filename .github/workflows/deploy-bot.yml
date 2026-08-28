@@ -278,17 +278,24 @@ jobs:
             docker_device="$(df --output=source "$docker_root" | tail -n 1)"
             artifact_available="$(df --output=avail --block-size=1 /home/vozen | tail -n 1 | tr -d ' ')"
             docker_available="$(df --output=avail --block-size=1 "$docker_root" | tail -n 1 | tr -d ' ')"
-            docker_required="$((2 * UNPACKED_BYTES + 2 * 1024 * 1024 * 1024))"
+
+            # `docker image load` streams the tar and deduplicates the stable base, runtime and
+            # model layers that are already retained by the healthy rollback image. Reserving two
+            # full uncompressed archives here rejects a safe replacement on small VPS disks even
+            # though only the changed runtime layer is materialised. Keep 512 MiB for that layer,
+            # Docker metadata and a recoverable failed-load cleanup; the archive itself still has
+            # to fit before SCP starts.
+            layer_load_headroom="$((512 * 1024 * 1024))"
             if [ "$artifact_device" = "$docker_device" ]; then
-              combined_required="$((ARTIFACT_BYTES + docker_required))"
+              combined_required="$((ARTIFACT_BYTES + layer_load_headroom))"
               (( artifact_available >= combined_required )) || {
-                echo "Insufficient shared filesystem space for archive and docker load." >&2
+                echo "Insufficient shared filesystem space for the verified archive and layer-aware Docker load." >&2
                 exit 1
               }
             else
-              artifact_required="$((ARTIFACT_BYTES + 1024 * 1024 * 1024))"
-              (( artifact_available >= artifact_required && docker_available >= docker_required )) || {
-                echo "Insufficient artifact or Docker filesystem space." >&2
+              artifact_required="$((ARTIFACT_BYTES + layer_load_headroom))"
+              (( artifact_available >= artifact_required && docker_available >= layer_load_headroom )) || {
+                echo "Insufficient artifact or Docker filesystem space for the layer-aware load." >&2
                 exit 1
               }
             fi
