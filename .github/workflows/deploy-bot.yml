@@ -314,6 +314,7 @@ jobs:
                 exit 1
               }
               docker image tag "$live_image" vozen-rust:rollback
+              docker image inspect vozen-rust:rollback >/dev/null
             else
               # Docker cannot safely commit this container because the backing
               # image content has already lost metadata. The deploy script keeps
@@ -321,7 +322,6 @@ jobs:
               # starts and health-checks the verified replacement.
               docker container inspect "$container" >/dev/null
             fi
-            docker image inspect vozen-rust:rollback >/dev/null
             docker image rm vozen-rust:prod || true
 
             # Builder cache and dangling images are now disposable. The legacy Docker builder
