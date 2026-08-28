@@ -82,7 +82,7 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('VOZEN_PREFLIGHT=deploy_%s');
     expect(deploy).toContain('deploy_mode="full"');
     expect(deploy).toContain('Transfer CI-verified full-image bootstrap');
-    expect(deploy).toContain('docker commit "$container" vozen-rust:rollback');
+    expect(deploy).toContain('The deploy script keeps');
     expect(deploy).toContain(
       'Loaded bootstrap image revision does not match the CI-tested commit.',
     );
@@ -120,10 +120,16 @@ describe('operational security configuration', () => {
     expect(deployScript).toContain('up -d --force-recreate --no-build "$SERVICE"');
     expect(deployScript).toContain('state_file="$DEPLOY_STATE_DIR/deployed-sha"');
     expect(deployScript).toContain(
+      'ROLLBACK_CONTAINER="${VOZEN_ROLLBACK_CONTAINER:-${CONTAINER}-rollback}"',
+    );
+    expect(deployScript).toContain('rollback_mode="container"');
+    expect(deployScript).toContain('docker container rename "$CONTAINER" "$ROLLBACK_CONTAINER"');
+    expect(deployScript).toContain('restore_container_rollback');
+    expect(deployScript).toContain(
       'docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build "$SERVICE"',
     );
   });
-  it('accepts a pre-created rollback image when Docker lost the running image metadata', () => {
+  it('retains the old container when Docker lost the running image metadata', () => {
     const bash =
       process.env.VOZEN_TEST_BASH ??
       (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
@@ -146,6 +152,9 @@ describe('operational security configuration', () => {
 docker() {
   printf 'docker %s\n' "$*" >> "$FAKE_MUTATION_LOG"
   if [ "$1" = "container" ] && [ "$2" = "inspect" ]; then
+    if [ "$3" = "$FAKE_ROLLBACK_CONTAINER" ] && [ "$FAKE_RECOVERY_MODE" = "container" ]; then
+      return 1
+    fi
     case "$*" in
       *State.Health*) printf 'healthy\n' ;;
       *) printf '%s\n' "$FAKE_LIVE_IMAGE" ;;
@@ -154,6 +163,7 @@ docker() {
   fi
   if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then
     [[ "$*" == *"$FAKE_LIVE_IMAGE"* ]] && return 1
+    [[ "$FAKE_RECOVERY_MODE" = "container" && "$*" == *"vozen-rust:rollback"* ]] && return 1
     if [[ "$*" == *--format* ]]; then printf '%s\n' "$FAKE_TARGET_SHA"; fi
     return 0
   fi
@@ -180,7 +190,9 @@ export -f systemctl docker curl python3`,
             ...process.env,
             BASH_ENV: posix(bashEnv),
             FAKE_LIVE_IMAGE: liveImage,
+            FAKE_RECOVERY_MODE: 'container',
             FAKE_MUTATION_LOG: posix(mutations),
+            FAKE_ROLLBACK_CONTAINER: 'vozen-prod-vozen-1-rollback',
             FAKE_TARGET_SHA: targetSha,
             VOZEN_DEPLOY_DIR: posix(deployDir),
             VOZEN_PREBUILT_IMAGE: `vozen-rust:${targetSha}`,
@@ -192,7 +204,11 @@ export -f systemctl docker curl python3`,
       const log = readFileSync(mutations, 'utf8');
       expect(log).toContain(`docker image tag vozen-rust:${targetSha} vozen-rust:prod`);
       expect(log).not.toContain(`docker image tag ${liveImage} vozen-rust:rollback`);
-      expect(log).toContain('docker image inspect vozen-rust:rollback');
+      expect(log).toContain(
+        'docker container rename vozen-prod-vozen-1 vozen-prod-vozen-1-rollback',
+      );
+      expect(log).toContain('docker stop vozen-prod-vozen-1-rollback');
+      expect(log).toContain('docker rm vozen-prod-vozen-1-rollback');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

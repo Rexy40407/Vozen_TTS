@@ -10,6 +10,7 @@ HEALTH_URL="${VOZEN_HEALTH_URL:-http://127.0.0.1:3001/health}"
 BACKUP_DIR="${VOZEN_BACKUP_DIR:-/home/vozen/vozen-backups}"
 DATABASE="${VOZEN_DATABASE:-rust-data/tts.db}"
 ROLLBACK_IMAGE="${VOZEN_ROLLBACK_IMAGE:-vozen-rust:rollback}"
+ROLLBACK_CONTAINER="${VOZEN_ROLLBACK_CONTAINER:-${CONTAINER}-rollback}"
 PREBUILT_IMAGE="${VOZEN_PREBUILT_IMAGE:-}"
 EXPECTED_IMAGE_REVISION="${VOZEN_EXPECTED_IMAGE_REVISION:-}"
 DEPLOY_STATE_DIR="${VOZEN_DEPLOY_STATE_DIR:-}"
@@ -32,23 +33,58 @@ if [ ! -f "$DATABASE" ]; then
 fi
 
 rollback_available=false
+rollback_mode=""
 if docker container inspect "$CONTAINER" >/dev/null 2>&1; then
   previous_image="$(docker container inspect --format '{{.Image}}' "$CONTAINER")"
   if docker image inspect "$previous_image" >/dev/null 2>&1; then
     docker image tag "$previous_image" "$ROLLBACK_IMAGE"
     rollback_available=true
+    rollback_mode="image"
   fi
 fi
 if [ "$rollback_available" != "true" ] && docker image inspect "$ROLLBACK_IMAGE" >/dev/null 2>&1; then
-  # A bootstrap deploy can recover this tag by committing the still-running
-  # container when Docker's old image metadata was already pruned. Do not
-  # proceed without one of these two independently recoverable rollback paths.
+  # A previous deploy may already have preserved an inspectable image even if
+  # the image backing the running container has since lost metadata.
   rollback_available=true
+  rollback_mode="image"
 fi
 if [ "$rollback_available" != "true" ]; then
-  echo "Refusing deploy: no recoverable rollback image is available." >&2
-  exit 1
+  # Docker can keep a running container after deleting its image metadata and
+  # layer content records. In that state neither image tagging nor `commit` is
+  # recoverable. Preserve the container itself: it is stopped only when the
+  # replacement is ready, kept under a distinct name during health checks, and
+  # restarted unchanged if anything fails.
+  docker container inspect "$CONTAINER" >/dev/null 2>&1 || {
+    echo "Refusing deploy: no recoverable rollback image or container is available." >&2
+    exit 1
+  }
+  if docker container inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1; then
+    echo "Refusing deploy: retained rollback container $ROLLBACK_CONTAINER already exists." >&2
+    exit 1
+  fi
+  rollback_available=true
+  rollback_mode="container"
 fi
+
+container_rollback_active=false
+restore_container_rollback() {
+  if [ "$container_rollback_active" != "true" ]; then
+    return 0
+  fi
+  echo "Restoring the retained Rust container rollback." >&2
+  docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" stop "$SERVICE" || true
+  docker rm --force "$CONTAINER" >/dev/null 2>&1 || true
+  docker container rename "$ROLLBACK_CONTAINER" "$CONTAINER" || true
+  docker start "$CONTAINER" >/dev/null 2>&1 || true
+  container_rollback_active=false
+}
+restore_container_rollback_on_error() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    restore_container_rollback
+  fi
+  exit "$status"
+}
 
 # CI can construct a small, label-verified runtime layer on top of the current
 # healthy image. Rebuilding it here would need to unpack the Python/model layers
@@ -87,6 +123,17 @@ python3 scripts/backup-rust-db.py \
   --source "$DATABASE" \
   --destination-dir "$BACKUP_DIR"
 
+# When Docker's image metadata is unrecoverable, retain the old container as
+# the rollback target rather than trying to export a second full filesystem.
+# Docker Compose creates the replacement once the canonical name is free; it
+# does not remove the renamed container without an explicit --remove-orphans.
+if [ "$rollback_mode" = "container" ]; then
+  docker container rename "$CONTAINER" "$ROLLBACK_CONTAINER"
+  container_rollback_active=true
+  trap restore_container_rollback_on_error EXIT
+  docker stop "$ROLLBACK_CONTAINER"
+fi
+
 if [ "$compose_build_mode" = "--no-build" ]; then
   docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
     up -d --force-recreate --no-build "$SERVICE"
@@ -116,12 +163,14 @@ if [ "$healthy" != "true" ]; then
   docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" logs \
     --tail 200 "$SERVICE" >&2 || true
 
-  if [ "$rollback_available" = "true" ]; then
+  if [ "$rollback_mode" = "image" ]; then
     echo "Rolling back to the previous Rust image." >&2
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" stop "$SERVICE" || true
     docker image tag "$ROLLBACK_IMAGE" vozen-rust:prod
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
       up -d --force-recreate --no-build "$SERVICE"
+  else
+    restore_container_rollback
   fi
   exit 1
 fi
@@ -155,6 +204,11 @@ if [ -n "$EXPECTED_IMAGE_REVISION" ] && [ -n "$DEPLOY_STATE_DIR" ]; then
   mv "$state_tmp" "$state_file"
 fi
 
+if [ "$rollback_mode" = "container" ]; then
+  docker rm "$ROLLBACK_CONTAINER" >/dev/null
+  container_rollback_active=false
+  trap - EXIT
+fi
 docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps "$SERVICE"
 curl --fail --silent --show-error --max-time 5 "$HEALTH_URL"

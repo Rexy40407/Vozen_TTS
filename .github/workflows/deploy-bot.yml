@@ -315,10 +315,11 @@ jobs:
               }
               docker image tag "$live_image" vozen-rust:rollback
             else
-              # The container is healthy but Docker no longer has an inspectable image record.
-              # Snapshot it *while it is still running* so failed bootstrap health checks can
-              # restore exactly this filesystem without touching its database volume.
-              docker commit "$container" vozen-rust:rollback >/dev/null
+              # Docker cannot safely commit this container because the backing
+              # image content has already lost metadata. The deploy script keeps
+              # the stopped container itself under a rollback name while it
+              # starts and health-checks the verified replacement.
+              docker container inspect "$container" >/dev/null
             fi
             docker image inspect vozen-rust:rollback >/dev/null
             docker image rm vozen-rust:prod || true
