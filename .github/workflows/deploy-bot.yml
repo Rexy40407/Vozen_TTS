@@ -101,6 +101,38 @@ jobs:
           echo "compressed_bytes=$artifact_bytes" >> "$GITHUB_OUTPUT"
           echo "unpacked_bytes=$unpacked_bytes" >> "$GITHUB_OUTPUT"
 
+      # The VPS keeps the prior image as rollback. The runtime executable is the
+      # only changed layer for Rust-only releases, so extract it from the
+      # checksum-verified CI image on the runner and transfer the small,
+      # independently checksummed delta rather than a second multi-gigabyte
+      # Python/model filesystem to a constrained production disk.
+      - name: Extract verified runtime binary for layer-preserving deploy
+        if: env.DIAGNOSTICS_ONLY != 'true'
+        id: runtime_binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd .vozen-deploy-artifact
+          image="vozen-rust:$DEPLOY_SHA"
+          container="vozen-runtime-extract-${GITHUB_RUN_ID}"
+          cleanup() {
+            docker rm --force "$container" >/dev/null 2>&1 || true
+            docker image rm "$image" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker image load --input "vozen-rust-$DEPLOY_SHA.tar.gz" >/dev/null
+          docker create --name "$container" "$image" >/dev/null
+          mkdir runtime-binary
+          binary="runtime-binary/vozen-runtime-$DEPLOY_SHA"
+          docker cp "$container:/usr/local/bin/vozen-runtime" "$binary"
+          test -s "$binary"
+          test -x "$binary"
+          (
+            cd runtime-binary
+            sha256sum "$(basename "$binary")" > "$(basename "$binary").sha256"
+          )
+          echo "binary_bytes=$(stat --format=%s "$binary")" >> "$GITHUB_OUTPUT"
+
       - name: Check production release direction
         if: env.DIAGNOSTICS_ONLY != 'true'
         id: production_preflight
@@ -183,19 +215,16 @@ jobs:
         if: env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy'
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         env:
-          ARTIFACT_BYTES: ${{ steps.image_artifact.outputs.compressed_bytes }}
-          UNPACKED_BYTES: ${{ steps.image_artifact.outputs.unpacked_bytes }}
+          BINARY_BYTES: ${{ steps.runtime_binary.outputs.binary_bytes }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: ARTIFACT_BYTES,UNPACKED_BYTES
+          envs: BINARY_BYTES
           script: |
             set -euo pipefail
-            [[ "$ARTIFACT_BYTES" =~ ^[0-9]+$ ]]
-            [[ "$UNPACKED_BYTES" =~ ^[0-9]+$ ]]
-            (( ARTIFACT_BYTES > 0 && ARTIFACT_BYTES <= 2 * 1024 * 1024 * 1024 ))
-            (( UNPACKED_BYTES > 0 && UNPACKED_BYTES <= 8 * 1024 * 1024 * 1024 ))
+            [[ "$BINARY_BYTES" =~ ^[0-9]+$ ]]
+            (( BINARY_BYTES > 0 && BINARY_BYTES <= 512 * 1024 * 1024 ))
 
             reclaim_build_storage() {
               if docker buildx version >/dev/null 2>&1; then
@@ -213,59 +242,15 @@ jobs:
             container="vozen-prod-vozen-1"
             live_image="$(docker container inspect --format '{{.Image}}' "$container")"
             [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
-            rollback_available=false
-            if docker image inspect "$live_image" >/dev/null 2>&1; then
-              docker image tag "$live_image" vozen-rust:rollback
-              rollback_available=true
-            else
-              # The legacy host discarded the image record and its content metadata, so a
-              # Docker commit cannot recreate it. Discard only the two inactive tags and their
-              # historical build layers, then stream-export the live container into a rollback
-              # image. Docker export excludes bind-mounted data, so durable host data remains
-              # untouched and the live container is never stopped.
-              docker image rm vozen-rust:rollback vozen-rust:prod || true
-              reclaim_build_storage
-              recovery_available="$(df --output=avail --block-size=1 /home/vozen | tail -n 1 | tr -d ' ')"
-              recovery_required="$((ARTIFACT_BYTES + 3 * UNPACKED_BYTES + 2 * 1024 * 1024 * 1024))"
-              if (( recovery_available >= recovery_required )); then
-                docker export "$container" | docker image import \
-                  --change 'ENTRYPOINT ["/usr/local/bin/vozen-runtime"]' \
-                  --change 'WORKDIR /app' \
-                  --change 'USER vozen' \
-                  --change 'ENV RUST_BACKTRACE=0' \
-                  --change 'ENV HF_HOME=/data/huggingface' \
-                  --change 'HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD ["/usr/local/bin/healthcheck-rust.sh"]' \
-                  - vozen-rust:rollback
-                rollback_available=true
-              else
-                # Last-resort migration for this broken legacy host: its running container has
-                # no recoverable image and itself pins all remaining build storage. Back up the
-                # SQLite database before stopping it; if removal cannot proceed, restart it.
-                cd ~/vozen-rust-prod
-                python3 scripts/backup-rust-db.py \
-                  --source rust-data/tts.db \
-                  --destination-dir /home/vozen/vozen-backups
-                [ "$(docker container inspect --format '{{.State.Running}}' "$container")" = true ]
-                legacy_container_stopped=false
-                restore_legacy_container() {
-                  status=$?
-                  if [ "$legacy_container_stopped" = true ]; then
-                    docker start "$container" >/dev/null 2>&1 || true
-                  fi
-                  exit "$status"
-                }
-                trap restore_legacy_container EXIT
-                docker stop --time 30 "$container"
-                legacy_container_stopped=true
-                docker rm "$container"
-                legacy_container_stopped=false
-                trap - EXIT
-                reclaim_build_storage
-              fi
-            fi
-            if [ "$rollback_available" = true ]; then
-              docker image inspect vozen-rust:rollback >/dev/null
-            fi
+            # A layer-preserving candidate needs the live image as its immutable base. Refuse
+            # rather than stopping a healthy bot or exporting a second full filesystem when the
+            # host can no longer recover that image.
+            docker image inspect "$live_image" >/dev/null 2>&1 || {
+              echo "Running production image is not recoverable as a delta deployment base." >&2
+              exit 1
+            }
+            docker image tag "$live_image" vozen-rust:rollback
+            docker image inspect vozen-rust:rollback >/dev/null
             docker image rm vozen-rust:prod || true
 
             # Builder cache and dangling images are now disposable. The legacy Docker builder
@@ -279,37 +264,34 @@ jobs:
             artifact_available="$(df --output=avail --block-size=1 /home/vozen | tail -n 1 | tr -d ' ')"
             docker_available="$(df --output=avail --block-size=1 "$docker_root" | tail -n 1 | tr -d ' ')"
 
-            # `docker image load` streams the tar and deduplicates the stable base, runtime and
-            # model layers that are already retained by the healthy rollback image. Reserving two
-            # full uncompressed archives here rejects a safe replacement on small VPS disks even
-            # though only the changed runtime layer is materialised. Keep 512 MiB for that layer,
-            # Docker metadata and a recoverable failed-load cleanup; the archive itself still has
-            # to fit before SCP starts.
+            # The candidate inherits the healthy rollback image and adds only the CI-verified
+            # Rust executable. Keep 512 MiB for that small writable layer, Docker metadata and
+            # cleanup; the Python/model filesystem is never copied a second time to the VPS.
             layer_load_headroom="$((512 * 1024 * 1024))"
             if [ "$artifact_device" = "$docker_device" ]; then
-              combined_required="$((ARTIFACT_BYTES + layer_load_headroom))"
+              combined_required="$((BINARY_BYTES + layer_load_headroom))"
               (( artifact_available >= combined_required )) || {
-                echo "Insufficient shared filesystem space for the verified archive and layer-aware Docker load." >&2
+                echo "Insufficient shared filesystem space for the verified runtime delta." >&2
                 exit 1
               }
             else
-              artifact_required="$((ARTIFACT_BYTES + layer_load_headroom))"
+              artifact_required="$((BINARY_BYTES + layer_load_headroom))"
               (( artifact_available >= artifact_required && docker_available >= layer_load_headroom )) || {
-                echo "Insufficient artifact or Docker filesystem space for the layer-aware load." >&2
+                echo "Insufficient artifact or Docker filesystem space for the verified runtime delta." >&2
                 exit 1
               }
             fi
 
-      - name: Transfer CI-built production image
+      - name: Transfer CI-verified runtime delta
         if: env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy'
         uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: .vozen-deploy-artifact/*
+          source: .vozen-deploy-artifact/runtime-binary/*
           target: /home/vozen/vozen-deploy-artifacts/${{ env.DEPLOY_SHA }}
-          strip_components: 1
+          strip_components: 2
 
       # This action receives the production SSH key, so it is pinned to a commit.
       - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
@@ -344,17 +326,19 @@ jobs:
 
             artifact_root="${VOZEN_ARTIFACT_ROOT:-/home/vozen/vozen-deploy-artifacts}"
             artifact_dir="$artifact_root/$DEPLOY_SHA"
-            artifact="vozen-rust-$DEPLOY_SHA.tar.gz"
+            runtime_binary="vozen-runtime-$DEPLOY_SHA"
             candidate_image="vozen-rust:$DEPLOY_SHA"
+            candidate_container="vozen-runtime-candidate-${DEPLOY_SHA:0:12}"
             candidate_cleanup_armed=false
             cleanup_staged_artifact() {
-              rm --force -- "$artifact_dir/$artifact" "$artifact_dir/$artifact.sha256"
+              rm --force -- "$artifact_dir/$runtime_binary" "$artifact_dir/$runtime_binary.sha256"
               rmdir -- "$artifact_dir" 2>/dev/null || true
             }
             cleanup_deploy_attempt() {
               status=$?
               cleanup_staged_artifact || true
               if [ "$status" -ne 0 ] && [ "$candidate_cleanup_armed" = "true" ]; then
+                docker rm --force "$candidate_container" >/dev/null 2>&1 || true
                 docker image rm "$candidate_image" >/dev/null 2>&1 || true
                 docker image prune --force >/dev/null 2>&1 || true
               fi
@@ -410,6 +394,7 @@ jobs:
                 VOZEN_DEPLOY_STATE_DIR="$deploy_state_dir" \
                 VOZEN_ROLLBACK_SOURCE_SHA="$rollback_source_sha" \
                 VOZEN_PREBUILT_IMAGE="vozen-rust:$target_commit" \
+                VOZEN_EXPECTED_IMAGE_REVISION="$target_commit" \
                 bash scripts/deploy-rust-vps.sh
             }
             # The VPS runtime env and durable data are intentionally untracked and excluded from
@@ -483,20 +468,53 @@ jobs:
             fi
 
             artifact_dir="$artifact_root/$target_commit"
-            artifact="vozen-rust-$target_commit.tar.gz"
             (
               cd "$artifact_dir"
-              sha256sum --check "$artifact.sha256"
+              sha256sum --check "$runtime_binary.sha256"
             )
-            python3 scripts/validate-docker-image-archive.py \
-              "$artifact_dir/$artifact" "$target_commit"
+            test -s "$artifact_dir/$runtime_binary"
 
-            # Storage was reclaimed and capacity-checked before transfer. Load only the image
-            # already built and smoke-tested by CI.
+            # A delta is safe only when the container's image identifies a migration commit and
+            # no runtime layer inputs changed since it. Rust sources and the SQLite schema compile
+            # into this executable; Docker, Python, model and healthcheck changes require a full
+            # image release with more VPS storage instead of silently inheriting stale tools.
+            revision_label='{{index .Config.Labels "org.opencontainers.image.revision"}}'
+            live_image="$(docker container inspect --format '{{.Image}}' "$container")"
+            base_revision="$(docker container inspect --format "$revision_label" "$container")"
+            if [[ ! "$base_revision" =~ ^[0-9a-f]{40}$ ]]; then
+              # A state value is written only after a prebuilt image passed health and SQLite
+              # verification. It is a narrowly scoped fallback for Docker metadata loss, never
+              # a guess at the image's origin.
+              state_file="$deploy_state_dir/deployed-sha"
+              if [ -f "$state_file" ]; then
+                base_revision="$(tr -d '\r\n' < "$state_file")"
+              fi
+            fi
+            [[ "$base_revision" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "Running image has no verified deployment revision; refusing a binary delta." >&2
+              exit 1
+            }
+            git cat-file -e "$base_revision^{commit}"
+            git merge-base --is-ancestor "$base_revision" "$target_commit"
+            if git diff --name-only "$base_revision" "$target_commit" | grep --extended-regexp --quiet '^(Dockerfile\.rust|docker/|tools/(requirements-|kokoro_server\.py|whisper_sidecar\.py)|assets/sfx/)'; then
+              echo "Runtime-layer inputs changed; refusing a binary-only VPS deployment." >&2
+              exit 1
+            fi
+
+            # Build a one-layer candidate on top of the running image. The previous image remains
+            # tagged as rollback, and `deploy-rust-vps.sh` still performs backup, recreate, health
+            # and database-integrity verification before making this candidate authoritative.
             candidate_cleanup_armed=true
-            gzip --decompress --stdout "$artifact_dir/$artifact" | docker image load
+            docker rm --force "$candidate_container" >/dev/null 2>&1 || true
+            docker create --name "$candidate_container" "$live_image" >/dev/null
+            docker cp "$artifact_dir/$runtime_binary" "$candidate_container:/usr/local/bin/vozen-runtime"
+            docker commit \
+              --change "LABEL org.opencontainers.image.revision=$target_commit" \
+              "$candidate_container" "$candidate_image" >/dev/null
+            docker rm "$candidate_container" >/dev/null
             cleanup_staged_artifact
             run_rust_deploy
+            docker image rm "$candidate_image" >/dev/null
             candidate_cleanup_armed=false
 
             # After the replacement is healthy, the previous image and build cache are disposable.
@@ -507,7 +525,7 @@ jobs:
             docker builder prune --all --force
             docker image prune --all --force
 
-      - name: Remove staged production image
+      - name: Remove staged runtime delta
         if: always() && env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy'
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         env:
@@ -522,6 +540,6 @@ jobs:
             [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
             artifact_dir="/home/vozen/vozen-deploy-artifacts/$DEPLOY_SHA"
             rm --force -- \
-              "$artifact_dir/vozen-rust-$DEPLOY_SHA.tar.gz" \
-              "$artifact_dir/vozen-rust-$DEPLOY_SHA.tar.gz.sha256"
+              "$artifact_dir/vozen-runtime-$DEPLOY_SHA" \
+              "$artifact_dir/vozen-runtime-$DEPLOY_SHA.sha256"
             rmdir -- "$artifact_dir" 2>/dev/null || true

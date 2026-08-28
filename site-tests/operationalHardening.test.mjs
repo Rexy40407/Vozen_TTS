@@ -72,27 +72,37 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('docker buildx prune --all --force');
     expect(deploy).toContain('container="vozen-prod-vozen-1"');
     expect(deploy).toContain('docker image tag "$live_image" vozen-rust:rollback');
-    expect(deploy).toContain('docker export "$container" | docker image import');
-    expect(deploy).toContain("--change 'ENTRYPOINT [\"/usr/local/bin/vozen-runtime\"]'");
-    expect(deploy).toContain('Docker export excludes bind-mounted data');
-    expect(deploy).toContain('3 * UNPACKED_BYTES + 2 * 1024 * 1024 * 1024');
-    expect(deploy).toContain('python3 scripts/backup-rust-db.py');
-    expect(deploy).toContain('docker stop --time 30 "$container"');
-    expect(deploy).toContain('docker rm "$container"');
-    expect(deploy).toContain('docker start "$container" >/dev/null 2>&1 || true');
+    expect(deploy).toContain('Extract verified runtime binary for layer-preserving deploy');
+    expect(deploy).toContain('Running production image is not recoverable as a delta deployment base.');
     expect(deploy).toContain('docker image rm vozen-rust:prod || true');
     expect(deploy).toContain('docker system prune --force');
     expect(deploy).toContain('neither --all nor --volumes');
     expect(deploy).not.toContain('docker system prune --all');
     expect(deploy).not.toContain('docker system prune --volumes');
-    expect(deploy).toContain('combined_required="$((ARTIFACT_BYTES + docker_required))"');
+    expect(deploy).toContain('combined_required="$((BINARY_BYTES + layer_load_headroom))"');
+    expect(deploy).toContain('Runtime-layer inputs changed; refusing a binary-only VPS deployment.');
+    expect(deploy).toContain('docker commit');
     expect(deploy).toContain('Reject dirty and stale production state before pruning');
     expect(deploy).toContain('capture_stdout: true');
     expect(deploy).toContain("steps.release_decision.outputs.decision == 'deploy'");
     expect(deploy).toContain('candidate_cleanup_armed=true');
     expect(deploy).toContain('docker image rm "$candidate_image"');
-    expect(deploy).toContain('python3 scripts/validate-docker-image-archive.py');
+    expect(deploy).toContain('sha256sum --check "$runtime_binary.sha256"');
+    expect(deploy).toContain('VOZEN_EXPECTED_IMAGE_REVISION="$target_commit"');
     expect(deploy).toContain("if: always() && env.DIAGNOSTICS_ONLY != 'true'");
+  });
+  it('uses only a label-verified prebuilt image when the CI delta is available', () => {
+    const deployScript = source('scripts/deploy-rust-vps.sh');
+    expect(deployScript).toContain('PREBUILT_IMAGE="${VOZEN_PREBUILT_IMAGE:-}"');
+    expect(deployScript).toContain('EXPECTED_IMAGE_REVISION="${VOZEN_EXPECTED_IMAGE_REVISION:-}"');
+    expect(deployScript).toContain('DEPLOY_STATE_DIR="${VOZEN_DEPLOY_STATE_DIR:-}"');
+    expect(deployScript).toContain('invalid prebuilt image reference');
+    expect(deployScript).toContain('prebuilt image revision does not match the CI-tested commit');
+    expect(deployScript).toContain('docker image tag "$PREBUILT_IMAGE" vozen-rust:prod');
+    expect(deployScript).toContain('compose_build_mode="--no-build"');
+    expect(deployScript).toContain('up -d --force-recreate --no-build "$SERVICE"');
+    expect(deployScript).toContain('state_file="$DEPLOY_STATE_DIR/deployed-sha"');
+    expect(deployScript).toContain('docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build "$SERVICE"');
   });
   it('normalizes one preflight marker from bannered ssh-action stdout', () => {
     const bash =
@@ -185,8 +195,8 @@ describe('operational security configuration', () => {
         const mutationLog = join(root, 'mutation.log');
         mkdirSync(deployDir);
         mkdirSync(artifactDir, { recursive: true });
-        writeFileSync(join(artifactDir, `vozen-rust-${targetSha}.tar.gz`), 'fixture');
-        writeFileSync(join(artifactDir, `vozen-rust-${targetSha}.tar.gz.sha256`), 'fixture');
+        writeFileSync(join(artifactDir, `vozen-runtime-${targetSha}`), 'fixture');
+        writeFileSync(join(artifactDir, `vozen-runtime-${targetSha}.sha256`), 'fixture');
         writeFileSync(
           join(deployDir, '.env.rust.prod'),
           'STRIPE_SECRET_KEY=test\nSTRIPE_PUBLISHABLE_KEY=test\nSTRIPE_WEBHOOK_SECRET=test\n',
@@ -207,14 +217,23 @@ if [ "$1" = "status" ]; then
 fi
 if [ "$1" = "merge-base" ]; then
   [ "$4" = "origin/migration/vozen-rust" ] && return 0
+  [ "$3" = "$4" ] && return 0
   [ "$FAKE_MODE" = "stale" ] && [ "$3" = "$FAKE_TARGET_SHA" ] && return 0
   [ "$FAKE_MODE" = "forward" ] && [ "$3" = "$FAKE_CURRENT_SHA" ] && return 0
   return 1
 fi
-if [ "$1" = "merge" ] || [ "$1" = "checkout" ]; then return 0; fi
+if [ "$1" = "merge" ] || [ "$1" = "checkout" ] || [ "$1" = "diff" ]; then return 0; fi
 return 64
 }
-docker() { printf 'docker %s\n' "$*" >> "$FAKE_MUTATION_LOG"; }
+docker() {
+  printf 'docker %s\n' "$*" >> "$FAKE_MUTATION_LOG"
+  if [ "$1" = "container" ]; then
+    printf '%s\n' "$FAKE_CURRENT_SHA"
+  elif [ "$1" = "info" ]; then
+    printf '%s\n' /var/lib/docker
+  fi
+  return 0
+}
 bash() { printf 'deploy %s\n' "$*" >> "$FAKE_MUTATION_LOG"; }
 chmod() { return 0; }
 gzip() { return 0; }
@@ -228,8 +247,11 @@ export -f git docker bash chmod gzip python3 sha256sum`,
             ? normalized.replace(/^([A-Za-z]):/, (_match, drive) => `/${drive.toLowerCase()}`)
             : normalized;
         };
-        const result = spawnSync(bash, ['-c', remoteScript], {
+        // Feed the remote script through stdin: Windows command-line escaping can
+        // otherwise mutate the many Docker template quotes passed to `bash -c`.
+        const result = spawnSync(bash, ['-s'], {
           encoding: 'utf8',
+          input: remoteScript,
           timeout: 3_000,
           env: {
             ...process.env,
@@ -250,7 +272,7 @@ export -f git docker bash chmod gzip python3 sha256sum`,
           gitCalls: existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : '',
           mutations: existsSync(mutationLog) ? readFileSync(mutationLog, 'utf8') : '',
           result,
-          stagedArtifactPresent: existsSync(join(artifactDir, `vozen-rust-${targetSha}.tar.gz`)),
+          stagedArtifactPresent: existsSync(join(artifactDir, `vozen-runtime-${targetSha}`)),
         };
       } finally {
         rmSync(root, { recursive: true, force: true });
@@ -288,8 +310,8 @@ export -f git docker bash chmod gzip python3 sha256sum`,
     expect(stale.envFile).not.toContain('RUST_PAYMENTS_ENABLED');
 
     const same = runFixture('same');
-    expect(same.result.status).toBe(0);
-    expect(same.mutations).toContain('docker builder prune --all --force');
+    expect(same.result.status, `${same.result.stdout}\n${same.result.stderr}`).toBe(0);
+    expect(same.mutations).toContain('docker commit');
     expect(same.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
     expect(same.gitCalls).toContain(':(exclude).env.rust.prod');
     expect(same.gitCalls).toContain(':(exclude).env.rust.prod.backup-*');
@@ -305,9 +327,8 @@ export -f git docker bash chmod gzip python3 sha256sum`,
     expect(forward.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
 
     const unrelated = runFixture('unrelated');
-    expect(unrelated.result.status).toBe(0);
-    expect(unrelated.gitCalls).toContain(`checkout --detach ${targetSha}`);
-    expect(unrelated.mutations).toContain('deploy scripts/deploy-rust-vps.sh');
+    expect(unrelated.result.status).toBe(1);
+    expect(unrelated.mutations).not.toContain('deploy scripts/deploy-rust-vps.sh');
   }, 30_000);
   it('keeps payment credentials in the VPS runtime file instead of the SSH command line', () => {
     const deploy = source('.github/workflows/deploy-bot.yml');
