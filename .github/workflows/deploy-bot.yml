@@ -439,6 +439,24 @@ jobs:
                 exit 1
               fi
               rm -rf -- "$probe_dir"
+              printf '\nExternal growth configuration (values withheld):\n'
+              configured() {
+                key="$1"
+                if grep -Eq "^${key}=.+" .env.rust.prod; then
+                  printf '%s: present\n' "$key"
+                else
+                  printf '%s: missing\n' "$key"
+                fi
+              }
+              for key in \
+                TOPGG_TOKEN TOPGG_WEBHOOK_SECRET VOTE_REDEMPTION_SECRET \
+                RUST_TTS_INSTALL_OAUTH_ENABLED TTS_INSTALL_OAUTH_CLIENT_SECRET \
+                TTS_INSTALL_OAUTH_STATE_SECRET TTS_INSTALL_OAUTH_REDIRECT_URI \
+                CLOUDFLARE_WEB_ANALYTICS_ENABLED CLOUDFLARE_ACCOUNT_ID \
+                CLOUDFLARE_ZONE_ID CLOUDFLARE_WEB_ANALYTICS_SITE_TAG \
+                CLOUDFLARE_WEB_ANALYTICS_TOKEN; do
+                configured "$key"
+              done
               exit 0
             fi
 
