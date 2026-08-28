@@ -123,6 +123,80 @@ describe('operational security configuration', () => {
       'docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build "$SERVICE"',
     );
   });
+  it('accepts a pre-created rollback image when Docker lost the running image metadata', () => {
+    const bash =
+      process.env.VOZEN_TEST_BASH ??
+      (process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash');
+    if (process.platform === 'win32' && !existsSync(bash)) {
+      throw new Error('Set VOZEN_TEST_BASH to a Git Bash-compatible executable.');
+    }
+    const root = mkdtempSync(join(tmpdir(), 'vozen-bootstrap-rollback-'));
+    try {
+      const deployDir = join(root, 'deploy');
+      const bashEnv = join(root, 'bash-env.sh');
+      const mutations = join(root, 'mutations.log');
+      const targetSha = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+      const liveImage = `sha256:${'a'.repeat(64)}`;
+      mkdirSync(join(deployDir, 'rust-data'), { recursive: true });
+      writeFileSync(join(deployDir, '.env.rust.prod'), 'RUNTIME_TEST=1\n');
+      writeFileSync(join(deployDir, 'rust-data', 'tts.db'), 'fixture');
+      writeFileSync(
+        bashEnv,
+        String.raw`systemctl() { return 1; }
+docker() {
+  printf 'docker %s\n' "$*" >> "$FAKE_MUTATION_LOG"
+  if [ "$1" = "container" ] && [ "$2" = "inspect" ]; then
+    case "$*" in
+      *State.Health*) printf 'healthy\n' ;;
+      *) printf '%s\n' "$FAKE_LIVE_IMAGE" ;;
+    esac
+    return 0
+  fi
+  if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then
+    [[ "$*" == *"$FAKE_LIVE_IMAGE"* ]] && return 1
+    if [[ "$*" == *--format* ]]; then printf '%s\n' "$FAKE_TARGET_SHA"; fi
+    return 0
+  fi
+  if [ "$1" = "logs" ]; then printf 'healthy: Ready\n'; fi
+  return 0
+}
+curl() { return 0; }
+python3() { return 0; }
+export -f systemctl docker curl python3`,
+      );
+      const posix = (value) => {
+        const normalized = value.replaceAll('\\', '/');
+        return process.platform === 'win32'
+          ? normalized.replace(/^([A-Za-z]):/, (_match, drive) => `/${drive.toLowerCase()}`)
+          : normalized;
+      };
+      const result = spawnSync(
+        bash,
+        [posix(resolve(process.cwd(), 'scripts/deploy-rust-vps.sh'))],
+        {
+          encoding: 'utf8',
+          timeout: 5_000,
+          env: {
+            ...process.env,
+            BASH_ENV: posix(bashEnv),
+            FAKE_LIVE_IMAGE: liveImage,
+            FAKE_MUTATION_LOG: posix(mutations),
+            FAKE_TARGET_SHA: targetSha,
+            VOZEN_DEPLOY_DIR: posix(deployDir),
+            VOZEN_PREBUILT_IMAGE: `vozen-rust:${targetSha}`,
+            VOZEN_EXPECTED_IMAGE_REVISION: targetSha,
+          },
+        },
+      );
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+      const log = readFileSync(mutations, 'utf8');
+      expect(log).toContain(`docker image tag vozen-rust:${targetSha} vozen-rust:prod`);
+      expect(log).not.toContain(`docker image tag ${liveImage} vozen-rust:rollback`);
+      expect(log).toContain('docker image inspect vozen-rust:rollback');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it('normalizes one preflight marker from bannered ssh-action stdout', () => {
     const bash =
       process.env.VOZEN_TEST_BASH ??
