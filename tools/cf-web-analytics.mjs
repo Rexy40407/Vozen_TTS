@@ -35,6 +35,12 @@ function failureSummary(json) {
   return messages.join('; ') || 'Cloudflare rejected the request';
 }
 
+function safePath(path) {
+  return path
+    .replace(/\/accounts\/[^/]+/g, '/accounts/{account_id}')
+    .replace(/\/zones\/[^/]+/g, '/zones/{zone_id}');
+}
+
 async function cf(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
     ...options,
@@ -46,7 +52,7 @@ async function cf(path, options = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok || body.success !== true) {
-    throw new Error(`${options.method || 'GET'} ${path} failed: ${failureSummary(body)}`);
+    throw new Error(`${options.method || 'GET'} ${safePath(path)} failed: ${failureSummary(body)}`);
   }
   return body.result;
 }
