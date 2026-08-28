@@ -44,6 +44,21 @@ const SECURITY_HEADERS = {
     'microphone=(), payment=(self "https://js.stripe.com" "https://*.js.stripe.com" "https://checkout.stripe.com"), usb=()',
 };
 
+function safePath(path) {
+  return path
+    .replace(/\/zones\/[^/]+/g, '/zones/{zone_id}')
+    .replace(/\/accounts\/[^/]+/g, '/accounts/{account_id}');
+}
+
+function failureSummary(json) {
+  const errors = Array.isArray(json?.errors) ? json.errors : [];
+  const messages = errors
+    .map((error) => String(error?.message || error?.code || '').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  return messages.join('; ') || 'Cloudflare rejected the request';
+}
+
 async function cf(path, opts = {}) {
   const res = await fetch(API + path, {
     ...opts,
@@ -55,7 +70,7 @@ async function cf(path, opts = {}) {
   });
   const json = await res.json().catch(() => ({}));
   if (!json.success) {
-    throw new Error(`${opts.method || 'GET'} ${path} -> ${JSON.stringify(json.errors || json)}`);
+    throw new Error(`${opts.method || 'GET'} ${safePath(path)} -> ${failureSummary(json)}`);
   }
   return json.result;
 }
@@ -69,7 +84,7 @@ async function main() {
     );
   }
   const zoneId = zones[0].id;
-  console.log(`zona: ${ZONE_NAME} (${zoneId}) status=${zones[0].status}`);
+  console.log(`zona: ${ZONE_NAME} status=${zones[0].status}`);
   if (zones[0].status !== 'active') {
     console.warn(
       "WARNING: the zone is not 'active' yet (nameservers are still propagating). The rule is created, " +
