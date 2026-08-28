@@ -3420,10 +3420,8 @@ fn spawn_topgg_metrics(
             // revoked token from being mistaken for a successful posting path.
             let validation = validate_topgg_v1_token(&http, &config.token).await;
             let outcome = if validation.succeeded() {
-                if !commands_synced {
-                    if let Some(commands) = public_topgg_commands() {
-                        commands_synced = sync_topgg_commands(&http, &config.token, commands).await;
-                    }
+                if !commands_synced && let Some(commands) = public_topgg_commands() {
+                    commands_synced = sync_topgg_commands(&http, &config.token, commands).await;
                 }
                 post_topgg_stats_with_shards(
                     &http,
