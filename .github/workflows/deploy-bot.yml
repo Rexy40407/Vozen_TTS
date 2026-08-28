@@ -419,6 +419,10 @@ jobs:
               docker network ls
               docker_root="$(docker info --format '{{.DockerRootDir}}')"
               sudo -n du -xhd1 "$docker_root" 2>/dev/null || true
+              printf '\nRust database and backup usage:\n'
+              du -sh rust-data/tts.db rust-data/tts.db-wal rust-data/tts.db-shm 2>/dev/null || true
+              du -sh /home/vozen/vozen-backups 2>/dev/null || true
+              find /home/vozen/vozen-backups -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM %10s %f\n' 2>/dev/null | sort || true
               exit 0
             fi
 
