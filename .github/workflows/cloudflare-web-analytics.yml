@@ -1,0 +1,31 @@
+name: Configure Cloudflare Web Analytics
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Create the manual vozen.org property if it does not exist'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Verify or provision manual Web Analytics
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          if [ "${{ inputs.apply }}" = "true" ]; then
+            node tools/cf-web-analytics.mjs --apply
+          else
+            node tools/cf-web-analytics.mjs
+          fi
