@@ -154,13 +154,11 @@ impl PremiumGatewaySink {
                     .vote_reward_status(&user_id, secret, now)
                     .map_err(|_| GatewayEventDispatchError)?
                     .eligible;
-                if eligible {
-                    if let Some(client_id) = self.client_id.as_deref() {
-                        lines.push(String::new());
-                        let mut parameters = BTreeMap::new();
-                        parameters.insert("url", format!("https://top.gg/bot/{client_id}/vote"));
-                        lines.push(self.message("vote.upsell", command, &parameters)?);
-                    }
+                if eligible && let Some(client_id) = self.client_id.as_deref() {
+                    lines.push(String::new());
+                    let mut parameters = BTreeMap::new();
+                    parameters.insert("url", format!("https://top.gg/bot/{client_id}/vote"));
+                    lines.push(self.message("vote.upsell", command, &parameters)?);
                 }
             }
         }
