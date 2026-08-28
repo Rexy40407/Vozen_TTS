@@ -56,6 +56,45 @@ jobs:
           test -n "$VPS_USER" || { echo "::error title=Missing VPS_USER::Add the VPS_USER repository secret."; exit 1; }
           test -n "$VPS_SSH_KEY" || { echo "::error title=Missing VPS_SSH_KEY::Add the VPS_SSH_KEY repository secret."; exit 1; }
 
+      # The prior full-image attempt exhausted the VPS before its final cleanup
+      # could run, including the exact staging directory below. Reclaim only
+      # that known failed artefact and Docker data which is not referenced by
+      # any container; the running bot, rollback image, volumes, networks and
+      # database are never stopped, removed or pruned here.
+      - name: Reclaim known failed deploy storage before preflight
+        if: env.DIAGNOSTICS_ONLY != 'true'
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            container="vozen-prod-vozen-1"
+            docker container inspect "$container" >/dev/null
+
+            artifact_root="/home/vozen/vozen-deploy-artifacts"
+            stale_sha="1a8d3dedd78261bca2b646a9af360f216219d783"
+            stale_dir="$artifact_root/$stale_sha"
+            case "$stale_dir" in
+              /home/vozen/vozen-deploy-artifacts/1a8d3dedd78261bca2b646a9af360f216219d783) ;;
+              *) echo "Unsafe failed-artifact path" >&2; exit 1 ;;
+            esac
+            if [ -d "$stale_dir" ]; then
+              rm --force -- \
+                "$stale_dir/vozen-rust-$stale_sha.tar.gz" \
+                "$stale_dir/vozen-rust-$stale_sha.tar.gz.sha256"
+              rmdir -- "$stale_dir"
+            fi
+
+            if docker buildx version >/dev/null 2>&1; then
+              docker buildx prune --all --force
+            fi
+            docker builder prune --all --force
+            docker image prune --all --force
+            docker system prune --force
+            df -h / /home/vozen "$(docker info --format '{{.DockerRootDir}}')"
+
       - name: Verify immutable image artifact provenance
         if: env.DIAGNOSTICS_ONLY != 'true'
         id: artifact

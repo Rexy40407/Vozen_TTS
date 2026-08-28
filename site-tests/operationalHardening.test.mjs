@@ -58,6 +58,9 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('Missing VPS_HOST');
     expect(deploy).toContain('Missing VPS_USER');
     expect(deploy).toContain('Missing VPS_SSH_KEY');
+    expect(deploy).toContain('Reclaim known failed deploy storage before preflight');
+    expect(deploy).toContain('stale_sha="1a8d3dedd78261bca2b646a9af360f216219d783"');
+    expect(deploy).toContain('docker image prune --all --force');
     expect(deploy).toContain('debug: true');
     expect(deploy).toContain('actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c');
     expect(deploy).toContain('appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345');
