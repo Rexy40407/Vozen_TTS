@@ -94,6 +94,7 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('PRAGMA integrity_check');
     expect(deploy).toContain('docker container rename "$container" "$rollback_container"');
     expect(deploy).toContain('up -d --force-recreate --no-build "$compose_service"');
+    expect(deploy).toContain('Database backup failed before full bootstrap');
     expect(deploy).toContain('docker image rm vozen-rust:prod || true');
     expect(deploy).toContain('docker system prune --force');
     expect(deploy).toContain('neither --all nor --volumes');

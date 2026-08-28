@@ -501,14 +501,14 @@ jobs:
             compose_file="docker-compose.rust.prod.yml"
             deploy_state_dir="/home/vozen/vozen-deploy-state"
             container="${compose_project}-${compose_service}-1"
+            database="${VOZEN_DATABASE:-rust-data/tts.db}"
+            backup_dir="${VOZEN_BACKUP_DIR:-/home/vozen/vozen-backups}"
             run_full_bootstrap() {
               # The migration checkout owns the normal deploy script. A full-image bootstrap must
               # also work while that checkout predates the container-retention fallback: the image
               # was checksum- and OCI-label-verified above, and the current container is retained
               # until the replacement passes application health and SQLite integrity verification.
               rollback_container="${container}-rollback"
-              database="${VOZEN_DATABASE:-rust-data/tts.db}"
-              backup_dir="${VOZEN_BACKUP_DIR:-/home/vozen/vozen-backups}"
               health_url="${VOZEN_HEALTH_URL:-http://127.0.0.1:3001/health}"
               rollback_active=false
 
@@ -546,12 +546,7 @@ jobs:
                 echo "::error::Full bootstrap image revision does not match the CI-tested commit." >&2
                 return 1
               fi
-
               docker image tag "$candidate_image" vozen-rust:prod
-              if ! python3 scripts/backup-rust-db.py --source "$database" --destination-dir "$backup_dir"; then
-                echo "::error::Database backup failed; retaining the current production container." >&2
-                return 1
-              fi
               if ! docker container rename "$container" "$rollback_container"; then
                 echo "::error::Could not retain the current production container for rollback." >&2
                 return 1
@@ -776,6 +771,14 @@ jobs:
                 sha256sum --check "$image_checksum"
               )
               test -s "$artifact_dir/$image_archive"
+              # Back up before loading the multi-gigabyte candidate image. A backup failure then
+              # aborts without changing Docker state and without competing with the image layer
+              # for the last free blocks on the constrained production filesystem.
+              test -f "$database"
+              if ! python3 scripts/backup-rust-db.py --source "$database" --destination-dir "$backup_dir"; then
+                echo "::error::Database backup failed before full bootstrap; retaining the current production container." >&2
+                exit 1
+              fi
               candidate_cleanup_armed=true
               gzip --decompress --stdout "$artifact_dir/$image_archive" | docker image load >/dev/null
               docker image inspect "$candidate_image" >/dev/null
