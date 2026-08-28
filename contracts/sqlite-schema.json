@@ -44,6 +44,21 @@
     },
     {
       "type": "table",
+      "name": "guild_growth_activity_day",
+      "sql": "CREATE TABLE guild_growth_activity_day (\n        guild_id TEXT NOT NULL,\n        day      TEXT NOT NULL,\n        PRIMARY KEY (guild_id, day)\n      )"
+    },
+    {
+      "type": "table",
+      "name": "guild_growth_lifecycle",
+      "sql": "CREATE TABLE guild_growth_lifecycle (\n        guild_id           TEXT PRIMARY KEY,\n        product            TEXT NOT NULL DEFAULT 'tts',\n        first_joined_at    INTEGER NOT NULL,\n        last_joined_at     INTEGER NOT NULL,\n        install_source     TEXT NOT NULL DEFAULT 'unknown',\n        setup_completed_at INTEGER,\n        first_value_at     INTEGER,\n        last_active_at     INTEGER,\n        departed_at        INTEGER\n      )"
+    },
+    {
+      "type": "table",
+      "name": "growth_daily_metric",
+      "sql": "CREATE TABLE growth_daily_metric (\n        day      TEXT NOT NULL,\n        product  TEXT NOT NULL,\n        source   TEXT NOT NULL,\n        event    TEXT NOT NULL,\n        value    INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (day, product, source, event)\n      )"
+    },
+    {
+      "type": "table",
       "name": "guild_talk_streak",
       "sql": "CREATE TABLE guild_talk_streak (\n        guild_id    TEXT PRIMARY KEY,\n        streak      INTEGER NOT NULL DEFAULT 0,\n        best_streak INTEGER NOT NULL DEFAULT 0,\n        last_date   TEXT NOT NULL DEFAULT ''\n      )"
     },
@@ -149,6 +164,16 @@
     },
     {
       "type": "table",
+      "name": "install_oauth_state",
+      "sql": "CREATE TABLE install_oauth_state (\n        state_hash TEXT PRIMARY KEY,\n        expires_at INTEGER NOT NULL,\n        used_at INTEGER\n      )"
+    },
+    {
+      "type": "table",
+      "name": "topgg_sync_state",
+      "sql": "CREATE TABLE topgg_sync_state (\n        singleton             INTEGER PRIMARY KEY CHECK (singleton = 1),\n        last_attempt_at       INTEGER NOT NULL,\n        last_success_at       INTEGER,\n        last_status           INTEGER,\n        last_server_count     INTEGER,\n        consecutive_failures  INTEGER NOT NULL DEFAULT 0\n      )"
+    },
+    {
+      "type": "table",
       "name": "translation_daily_usage",
       "sql": "CREATE TABLE translation_daily_usage (\n        day TEXT NOT NULL,\n        guild_id TEXT NOT NULL,\n        chars INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (day, guild_id)\n      )"
     },
@@ -224,13 +249,13 @@
     },
     {
       "type": "table",
-      "name": "vote_redemption",
-      "sql": "CREATE TABLE vote_redemption (\n        user_hash   TEXT PRIMARY KEY,\n        redeemed_at INTEGER NOT NULL\n      )"
+      "name": "vote_redemption_meta",
+      "sql": "CREATE TABLE vote_redemption_meta (\n        singleton          INTEGER PRIMARY KEY CHECK (singleton = 1),\n        secret_fingerprint TEXT NOT NULL\n      )"
     },
     {
       "type": "table",
-      "name": "vote_redemption_meta",
-      "sql": "CREATE TABLE vote_redemption_meta (\n        singleton          INTEGER PRIMARY KEY CHECK (singleton = 1),\n        secret_fingerprint TEXT NOT NULL\n      )"
+      "name": "vote_reward_ledger",
+      "sql": "CREATE TABLE vote_reward_ledger (\n        user_hash  TEXT NOT NULL,\n        granted_at INTEGER NOT NULL,\n        PRIMARY KEY (user_hash, granted_at)\n      )"
     },
     {
       "type": "table",

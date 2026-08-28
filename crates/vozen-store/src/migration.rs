@@ -56,7 +56,11 @@ const CHANNEL_PROFILE_COLUMNS: &[(&str, &str)] = &[
 pub(crate) fn migrate_legacy_schema(connection: &Connection) -> Result<(), StoreError> {
     // Removed voice cloning stored biometric-consent metadata. This deletion is deliberately
     // irreversible and mirrors the privacy purge in Node before a Rust cutover is permitted.
-    connection.execute_batch("DROP TABLE IF EXISTS user_clone;")?;
+    // `vote_redemption` was the old lifetime HMAC marker. The current promotion has a 30-day
+    // rolling cap and `vote_reward_ledger` is purged on that same window, so retaining the
+    // legacy marker would be unnecessary pseudonymous personal data.
+    connection
+        .execute_batch("DROP TABLE IF EXISTS user_clone; DROP TABLE IF EXISTS vote_redemption;")?;
 
     add_missing_columns(connection, "guild_config", GUILD_CONFIG_COLUMNS)?;
     add_missing_columns(
@@ -178,6 +182,7 @@ mod tests {
              CREATE TABLE vote_promo_state (guild_id TEXT PRIMARY KEY, last_post_at INTEGER NOT NULL);
              INSERT INTO vote_promo_state VALUES ('guild', 1);
              CREATE TABLE user_clone (user_id TEXT PRIMARY KEY, sample_path TEXT NOT NULL, consent_at INTEGER NOT NULL);
+             CREATE TABLE vote_redemption (user_hash TEXT PRIMARY KEY, redeemed_at INTEGER NOT NULL);
              CREATE TABLE tts_lang_detect_off (guild_id TEXT NOT NULL, user_id TEXT NOT NULL);",
         ).expect("legacy schema");
         drop(legacy);
@@ -208,6 +213,11 @@ mod tests {
                 == "pt_PT-google-medium"
         );
         assert!(!store.has_schema_object("user_clone").expect("clone purged"));
+        assert!(
+            !store
+                .has_schema_object("vote_redemption")
+                .expect("legacy vote marker purged")
+        );
         assert!(
             !store
                 .has_schema_object("tts_lang_detect_off")

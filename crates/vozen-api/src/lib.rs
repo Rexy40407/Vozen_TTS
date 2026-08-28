@@ -16,10 +16,12 @@ pub mod dashboard_api;
 pub mod dashboard_oauth;
 pub mod dashboard_validation;
 pub mod discord_oauth;
+pub mod install_api;
 pub mod kofi_webhook;
 pub mod premium_api;
 pub mod stripe_api;
 pub mod topgg_webhook;
+pub mod web_analytics;
 
 use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, header};
@@ -122,6 +124,7 @@ pub struct RuntimeRouterConfig {
     pub premium: Option<premium_api::PremiumApiConfig>,
     pub stripe: Option<stripe_api::StripeApiConfig>,
     pub dashboard: Option<dashboard_api::DashboardApiConfig>,
+    pub install: Option<install_api::InstallApiConfig>,
     pub admin: Option<admin_router::AdminRouterConfig>,
     pub kofi_webhook: Option<kofi_webhook::KofiWebhookConfig>,
     pub topgg_webhook: Option<topgg_webhook::TopggWebhookConfig>,
@@ -135,6 +138,8 @@ pub enum RuntimeRouterError {
     Premium(#[from] premium_api::PremiumApiConfigError),
     #[error("dashboard API configuration: {0}")]
     Dashboard(#[from] dashboard_api::DashboardApiConfigError),
+    #[error("TTS install API configuration: {0}")]
+    Install(#[from] install_api::InstallApiConfigError),
     #[error("admin API configuration: {0}")]
     Admin(#[from] admin_router::AdminRouterConfigError),
     #[error("Ko-fi webhook configuration: {0}")]
@@ -162,6 +167,9 @@ pub fn runtime_router(config: RuntimeRouterConfig) -> Result<Router, RuntimeRout
     }
     if let Some(dashboard) = config.dashboard {
         router = router.merge(dashboard_api::dashboard_router(dashboard)?);
+    }
+    if let Some(install) = config.install {
+        router = router.merge(install_api::install_router(install)?);
     }
     if let Some(admin) = config.admin {
         router = router.merge(admin_router::admin_router(admin)?);
@@ -271,6 +279,7 @@ mod tests {
             premium: None,
             stripe: None,
             dashboard: None,
+            install: None,
             admin: None,
             kofi_webhook: None,
             topgg_webhook: None,

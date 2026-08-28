@@ -73,7 +73,7 @@ legacy **Ko-fi / Patreon + `/redeem` codes** path is still supported for manual 
 - **For Free (growth):** lite voice effects, mini soundboard, limited triggers,
   `/translate` with a daily quota — each gives the taste that converts.
 - **For Premium (revenue):** the full version of each + Kokoro + 24/7 + custom greetings.
-- **Growth loop:** the first eligible `/vote` on top.gg unlocks **48h of Vozen Plus**, once per Discord account ever.
+- **Growth loop:** each eligible `/vote` on top.gg unlocks **24h of Vozen Plus**; cap it at four rewards in a rolling 30-day window and no more than 48 hours ahead.
   Free for us, addictive for them, boosts our ranking.
 
 ---

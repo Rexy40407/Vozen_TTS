@@ -1,0 +1,520 @@
+//! Privacy-aware growth lifecycle for Discord servers.
+//!
+//! The per-server row is only retained while the bot is installed (plus the existing departure
+//! grace period). The dashboard reads aggregate daily counters and coarse conversion/retention
+//! rates; it never receives a guild ID from this module.
+
+use rusqlite::{OptionalExtension, params};
+
+use crate::{SqliteStore, StoreError, utc_day_key_from_unix_millis};
+
+const PRODUCT: &str = "tts";
+const UNKNOWN_SOURCE: &str = "unknown";
+const DAY_MS: i64 = 24 * 60 * 60 * 1_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GrowthEvent {
+    Joined,
+    Left,
+    SetupCompleted,
+    FirstValue,
+    Active,
+}
+
+impl GrowthEvent {
+    const fn as_database(self) -> &'static str {
+        match self {
+            Self::Joined => "joined",
+            Self::Left => "left",
+            Self::SetupCompleted => "setup_completed",
+            Self::FirstValue => "first_value",
+            Self::Active => "active",
+        }
+    }
+}
+
+/// Aggregated lifetime-to-date lifecycle information. All counters are server counts, never
+/// message counts or Discord identifiers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GrowthOverview {
+    pub current_guilds: i64,
+    pub joins: i64,
+    pub leaves: i64,
+    pub setup_completed: i64,
+    pub first_value: i64,
+    pub retained_w7: i64,
+    pub eligible_w7: i64,
+    pub retained_w30: i64,
+    pub eligible_w30: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrowthDailyMetric {
+    pub day: String,
+    pub source: String,
+    pub joins: i64,
+    pub leaves: i64,
+    pub setup_completed: i64,
+    pub first_value: i64,
+    pub active: i64,
+}
+
+impl SqliteStore {
+    /// Records a Guild Create event. A re-invite clears the departure timestamp while preserving
+    /// the first observed installation, which keeps cohort metrics stable across reconnects.
+    pub fn record_guild_join(
+        &self,
+        guild_id: &str,
+        source: Option<&str>,
+        now: i64,
+    ) -> Result<bool, StoreError> {
+        validate_guild_id(guild_id)?;
+        let source = normalize_source(source)?;
+        let transaction = self.connection().unchecked_transaction()?;
+        let existing_departure: Option<Option<i64>> = transaction
+            .query_row(
+                "SELECT departed_at FROM guild_growth_lifecycle WHERE guild_id = ?1",
+                [guild_id],
+                |row| row.get::<_, Option<i64>>(0),
+            )
+            .optional()?;
+        let counted = match existing_departure {
+            None => {
+                transaction.execute(
+                    "INSERT INTO guild_growth_lifecycle
+                       (guild_id, product, first_joined_at, last_joined_at, install_source)
+                     VALUES (?1, ?2, ?3, ?3, ?4)",
+                    params![guild_id, PRODUCT, now, source],
+                )?;
+                add_daily(&transaction, now, &source, GrowthEvent::Joined)?;
+                true
+            }
+            Some(Some(_)) => {
+                let current_source: String = transaction.query_row(
+                    "SELECT install_source FROM guild_growth_lifecycle WHERE guild_id = ?1",
+                    [guild_id],
+                    |row| row.get(0),
+                )?;
+                transaction.execute(
+                    "UPDATE guild_growth_lifecycle
+                     SET last_joined_at = ?2,
+                         departed_at = NULL,
+                         install_source = CASE WHEN install_source = 'unknown' THEN ?3 ELSE install_source END
+                     WHERE guild_id = ?1",
+                    params![guild_id, now, source],
+                )?;
+                // A re-invite is still a genuine acquisition event. Attribute it to the original
+                // known source when possible rather than overwriting campaign attribution.
+                add_daily(
+                    &transaction,
+                    now,
+                    if current_source == UNKNOWN_SOURCE {
+                        &source
+                    } else {
+                        &current_source
+                    },
+                    GrowthEvent::Joined,
+                )?;
+                true
+            }
+            Some(None) => {
+                // Discord emits Guild Create during every gateway resume. An already-active row
+                // is therefore not a new acquisition and must not inflate the join series.
+                transaction.execute(
+                    "UPDATE guild_growth_lifecycle SET last_joined_at = ?2 WHERE guild_id = ?1",
+                    params![guild_id, now],
+                )?;
+                false
+            }
+        };
+        transaction.commit()?;
+        Ok(counted)
+    }
+
+    /// Saves a validated OAuth attribution before Guild Create arrives. The server ID remains
+    /// private and the untrusted public source is reduced to a small allowlisted token.
+    pub fn set_guild_install_source(
+        &self,
+        guild_id: &str,
+        source: &str,
+        now: i64,
+    ) -> Result<(), StoreError> {
+        validate_guild_id(guild_id)?;
+        let source = normalize_source(Some(source))?;
+        self.connection().execute(
+            "INSERT INTO guild_growth_lifecycle
+               (guild_id, product, first_joined_at, last_joined_at, install_source)
+             VALUES (?1, ?2, ?3, ?3, ?4)
+             ON CONFLICT(guild_id) DO UPDATE SET
+               install_source = CASE
+                 WHEN guild_growth_lifecycle.install_source = 'unknown' THEN excluded.install_source
+                 ELSE guild_growth_lifecycle.install_source
+               END",
+            params![guild_id, PRODUCT, now, source],
+        )?;
+        Ok(())
+    }
+
+    /// Records a confirmed departure once. Transient Discord guild unavailability is filtered by
+    /// the gateway before this method is called.
+    pub fn record_guild_departure(&self, guild_id: &str, now: i64) -> Result<bool, StoreError> {
+        validate_guild_id(guild_id)?;
+        let transaction = self.connection().unchecked_transaction()?;
+        transaction.execute(
+            "INSERT INTO guild_growth_lifecycle
+               (guild_id, product, first_joined_at, last_joined_at, install_source, departed_at)
+             VALUES (?1, ?2, ?3, ?3, ?4, ?3)
+             ON CONFLICT(guild_id) DO NOTHING",
+            params![guild_id, PRODUCT, now, UNKNOWN_SOURCE],
+        )?;
+        let changed = transaction.execute(
+            "UPDATE guild_growth_lifecycle
+             SET departed_at = ?2 WHERE guild_id = ?1 AND departed_at IS NULL",
+            params![guild_id, now],
+        )?;
+        if changed != 0 {
+            let source = lifecycle_source(&transaction, guild_id)?;
+            add_daily(&transaction, now, &source, GrowthEvent::Left)?;
+        }
+        transaction.commit()?;
+        Ok(changed != 0)
+    }
+
+    /// Marks the first completed guided setup. Repeated settings updates do not inflate the
+    /// funnel.
+    pub fn record_guild_setup_completed(&self, guild_id: &str, now: i64) -> Result<(), StoreError> {
+        self.record_once(
+            guild_id,
+            now,
+            "setup_completed_at",
+            GrowthEvent::SetupCompleted,
+        )
+    }
+
+    /// Marks the first successful user-facing value (a queued/reproduced TTS item) and records
+    /// one active-server observation per UTC day.
+    pub fn record_guild_first_value(&self, guild_id: &str, now: i64) -> Result<(), StoreError> {
+        self.record_once(guild_id, now, "first_value_at", GrowthEvent::FirstValue)?;
+        self.record_guild_activity(guild_id, now)
+    }
+
+    /// Records activity at most once per server per UTC day.
+    pub fn record_guild_activity(&self, guild_id: &str, now: i64) -> Result<(), StoreError> {
+        validate_guild_id(guild_id)?;
+        let transaction = self.connection().unchecked_transaction()?;
+        ensure_lifecycle(&transaction, guild_id, now)?;
+        transaction.execute(
+            "UPDATE guild_growth_lifecycle SET last_active_at = ?2 WHERE guild_id = ?1",
+            params![guild_id, now],
+        )?;
+        let day = utc_day_key_from_unix_millis(now);
+        let inserted = transaction.execute(
+            "INSERT OR IGNORE INTO guild_growth_activity_day (guild_id, day) VALUES (?1, ?2)",
+            params![guild_id, day],
+        )?;
+        if inserted != 0 {
+            let source = lifecycle_source(&transaction, guild_id)?;
+            add_daily(&transaction, now, &source, GrowthEvent::Active)?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Produces owner-only aggregate lifecycle counters. A server is retained when it was active
+    /// at or after the seven/thirty-day milestone; newer cohorts are excluded from the matching
+    /// denominator.
+    pub fn growth_overview(&self, now: i64) -> Result<GrowthOverview, StoreError> {
+        let connection = self.connection();
+        let sum = |event: GrowthEvent| -> Result<i64, StoreError> {
+            connection
+                .query_row(
+                    "SELECT COALESCE(SUM(value), 0) FROM growth_daily_metric
+                     WHERE product = ?1 AND event = ?2",
+                    params![PRODUCT, event.as_database()],
+                    |row| row.get(0),
+                )
+                .map_err(StoreError::from)
+        };
+        let current_guilds = connection.query_row(
+            "SELECT COUNT(*) FROM guild_growth_lifecycle WHERE departed_at IS NULL",
+            [],
+            |row| row.get(0),
+        )?;
+        let eligible_w7 = count_eligible(connection, now, 7)?;
+        let retained_w7 = count_retained(connection, now, 7)?;
+        let eligible_w30 = count_eligible(connection, now, 30)?;
+        let retained_w30 = count_retained(connection, now, 30)?;
+        Ok(GrowthOverview {
+            current_guilds,
+            joins: sum(GrowthEvent::Joined)?,
+            leaves: sum(GrowthEvent::Left)?,
+            setup_completed: sum(GrowthEvent::SetupCompleted)?,
+            first_value: sum(GrowthEvent::FirstValue)?,
+            retained_w7,
+            eligible_w7,
+            retained_w30,
+            eligible_w30,
+        })
+    }
+
+    pub fn list_growth_daily_metrics(
+        &self,
+        from_day: &str,
+        to_day: &str,
+    ) -> Result<Vec<GrowthDailyMetric>, StoreError> {
+        validate_day(from_day)?;
+        validate_day(to_day)?;
+        if from_day > to_day {
+            return Err(StoreError::InvalidOperationalMetricDay(from_day.to_owned()));
+        }
+        let mut statement = self.connection().prepare(
+            "SELECT day, source,
+               COALESCE(SUM(CASE WHEN event = 'joined' THEN value END), 0),
+               COALESCE(SUM(CASE WHEN event = 'left' THEN value END), 0),
+               COALESCE(SUM(CASE WHEN event = 'setup_completed' THEN value END), 0),
+               COALESCE(SUM(CASE WHEN event = 'first_value' THEN value END), 0),
+               COALESCE(SUM(CASE WHEN event = 'active' THEN value END), 0)
+             FROM growth_daily_metric
+             WHERE product = ?1 AND day >= ?2 AND day <= ?3
+             GROUP BY day, source ORDER BY day ASC, source ASC",
+        )?;
+        statement
+            .query_map(params![PRODUCT, from_day, to_day], |row| {
+                Ok(GrowthDailyMetric {
+                    day: row.get(0)?,
+                    source: row.get(1)?,
+                    joins: row.get(2)?,
+                    leaves: row.get(3)?,
+                    setup_completed: row.get(4)?,
+                    first_value: row.get(5)?,
+                    active: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(StoreError::from)
+    }
+
+    fn record_once(
+        &self,
+        guild_id: &str,
+        now: i64,
+        column: &str,
+        event: GrowthEvent,
+    ) -> Result<(), StoreError> {
+        validate_guild_id(guild_id)?;
+        let transaction = self.connection().unchecked_transaction()?;
+        ensure_lifecycle(&transaction, guild_id, now)?;
+        let changed = transaction.execute(
+            &format!(
+                "UPDATE guild_growth_lifecycle SET {column} = ?2
+                 WHERE guild_id = ?1 AND {column} IS NULL"
+            ),
+            params![guild_id, now],
+        )?;
+        if changed != 0 {
+            let source = lifecycle_source(&transaction, guild_id)?;
+            add_daily(&transaction, now, &source, event)?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+}
+
+fn ensure_lifecycle(
+    transaction: &rusqlite::Transaction<'_>,
+    guild_id: &str,
+    now: i64,
+) -> Result<(), StoreError> {
+    transaction.execute(
+        "INSERT OR IGNORE INTO guild_growth_lifecycle
+           (guild_id, product, first_joined_at, last_joined_at, install_source)
+         VALUES (?1, ?2, ?3, ?3, ?4)",
+        params![guild_id, PRODUCT, now, UNKNOWN_SOURCE],
+    )?;
+    Ok(())
+}
+
+fn lifecycle_source(
+    transaction: &rusqlite::Transaction<'_>,
+    guild_id: &str,
+) -> Result<String, StoreError> {
+    transaction
+        .query_row(
+            "SELECT install_source FROM guild_growth_lifecycle WHERE guild_id = ?1",
+            [guild_id],
+            |row| row.get(0),
+        )
+        .map_err(StoreError::from)
+}
+
+fn add_daily(
+    transaction: &rusqlite::Transaction<'_>,
+    now: i64,
+    source: &str,
+    event: GrowthEvent,
+) -> Result<(), StoreError> {
+    transaction.execute(
+        "INSERT INTO growth_daily_metric (day, product, source, event, value)
+         VALUES (?1, ?2, ?3, ?4, 1)
+         ON CONFLICT(day, product, source, event) DO UPDATE SET value = value + 1",
+        params![
+            utc_day_key_from_unix_millis(now),
+            PRODUCT,
+            source,
+            event.as_database(),
+        ],
+    )?;
+    Ok(())
+}
+
+fn count_eligible(
+    connection: &rusqlite::Connection,
+    now: i64,
+    days: i64,
+) -> Result<i64, StoreError> {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM guild_growth_lifecycle
+             WHERE first_value_at IS NOT NULL AND first_value_at <= ?1",
+            [now.saturating_sub(days.saturating_mul(DAY_MS))],
+            |row| row.get(0),
+        )
+        .map_err(StoreError::from)
+}
+
+fn count_retained(
+    connection: &rusqlite::Connection,
+    now: i64,
+    days: i64,
+) -> Result<i64, StoreError> {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM guild_growth_lifecycle
+             WHERE first_value_at IS NOT NULL
+               AND first_value_at <= ?1
+               AND last_active_at >= first_value_at + ?2",
+            params![
+                now.saturating_sub(days.saturating_mul(DAY_MS)),
+                days * DAY_MS
+            ],
+            |row| row.get(0),
+        )
+        .map_err(StoreError::from)
+}
+
+fn validate_guild_id(guild_id: &str) -> Result<(), StoreError> {
+    if guild_id.trim().is_empty() {
+        Err(StoreError::InvalidGuildId)
+    } else {
+        Ok(())
+    }
+}
+
+fn normalize_source(source: Option<&str>) -> Result<String, StoreError> {
+    let source = source.unwrap_or(UNKNOWN_SOURCE).trim();
+    let valid = !source.is_empty()
+        && source.len() <= 48
+        && source
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+    if valid {
+        Ok(source.to_owned())
+    } else {
+        Err(StoreError::InvalidGrowthSource)
+    }
+}
+
+fn validate_day(day: &str) -> Result<(), StoreError> {
+    let valid = day.len() == 10
+        && day.as_bytes().get(4) == Some(&b'-')
+        && day.as_bytes().get(7) == Some(&b'-')
+        && day
+            .bytes()
+            .enumerate()
+            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit());
+    if valid {
+        Ok(())
+    } else {
+        Err(StoreError::InvalidOperationalMetricDay(day.to_owned()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DAY: i64 = 86_400_000;
+    const NOW: i64 = 60 * DAY;
+
+    #[test]
+    fn records_one_funnel_event_and_one_active_server_per_day() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .record_guild_join("guild", Some("tts-hero"), DAY)
+            .expect("join");
+        store
+            .record_guild_setup_completed("guild", DAY + 1)
+            .expect("setup");
+        store
+            .record_guild_setup_completed("guild", DAY + 2)
+            .expect("duplicate setup");
+        store
+            .record_guild_first_value("guild", DAY + 3)
+            .expect("first value");
+        store
+            .record_guild_activity("guild", DAY + 4)
+            .expect("same active day");
+
+        let metrics = store
+            .list_growth_daily_metrics("1970-01-02", "1970-01-02")
+            .expect("daily metrics");
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].source, "tts-hero");
+        assert_eq!(metrics[0].joins, 1);
+        assert_eq!(metrics[0].setup_completed, 1);
+        assert_eq!(metrics[0].first_value, 1);
+        assert_eq!(metrics[0].active, 1);
+    }
+
+    #[test]
+    fn departure_is_idempotent_and_rejoin_restores_current_guild_count() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store.record_guild_join("guild", None, DAY).expect("join");
+        store
+            .record_guild_departure("guild", DAY + 1)
+            .expect("departure");
+        store
+            .record_guild_departure("guild", DAY + 2)
+            .expect("duplicate departure");
+        assert_eq!(store.growth_overview(NOW).expect("overview").leaves, 1);
+
+        store
+            .record_guild_join("guild", Some("topgg"), DAY + 3)
+            .expect("rejoin");
+        let overview = store.growth_overview(NOW).expect("overview");
+        assert_eq!(overview.current_guilds, 1);
+        assert_eq!(overview.joins, 2);
+    }
+
+    #[test]
+    fn retention_excludes_immature_cohorts_and_rejects_invalid_sources() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        assert!(
+            store
+                .record_guild_join("guild", Some("Top GG"), DAY)
+                .is_err()
+        );
+        store.record_guild_join("guild", None, DAY).expect("join");
+        store
+            .record_guild_first_value("guild", DAY)
+            .expect("first value");
+        store
+            .record_guild_activity("guild", DAY + 8 * DAY)
+            .expect("week activity");
+        let overview = store.growth_overview(NOW).expect("overview");
+        assert_eq!(overview.eligible_w7, 1);
+        assert_eq!(overview.retained_w7, 1);
+        assert_eq!(overview.eligible_w30, 1);
+        assert_eq!(overview.retained_w30, 0);
+    }
+}

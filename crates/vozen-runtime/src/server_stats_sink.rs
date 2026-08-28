@@ -127,7 +127,7 @@ impl ServerStatsGatewaySink {
             if let (Some(client_id), Some(secret)) = (&self.client_id, &self.redemption_secret)
                 && secret.len() >= VOTE_REDEMPTION_SECRET_MIN_LENGTH
                 && store
-                    .vote_reward_status(&user_id, secret)
+                    .vote_reward_status(&user_id, secret, now_ms)
                     .map_err(|_| GatewayEventDispatchError)?
                     .eligible
             {

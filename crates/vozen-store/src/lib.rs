@@ -25,8 +25,10 @@ mod channel_profile;
 mod data_lifecycle;
 mod game_score;
 mod gcloud_usage;
+mod growth_lifecycle;
 mod guild_config;
 mod guild_departed;
+mod install_oauth_state;
 mod kofi_claim;
 mod kofi_delivery;
 mod kofi_pending;
@@ -43,6 +45,7 @@ mod stt_consent;
 mod stt_usage;
 mod talk_stats;
 mod telemetry;
+mod topgg_sync_state;
 mod translation;
 mod user_profile;
 mod user_voice;
@@ -63,6 +66,7 @@ pub use data_lifecycle::{
     USER_ERASE_TABLES,
 };
 pub use gcloud_usage::{GcloudUsageScope, day_key_utc, month_key_utc};
+pub use growth_lifecycle::{GrowthDailyMetric, GrowthOverview};
 pub use guild_config::{GuildConfig, GuildConfigPatch};
 pub use guild_departed::DEPARTURE_GRACE_MS;
 pub use kofi_claim::{
@@ -98,6 +102,7 @@ pub use telemetry::{
     OperationalMetric, OperationalProvider, ProviderHealth, ProviderHealthSnapshot,
     TalkUsageSource, provider_for_engine, utc_day_key, utc_day_key_from_unix_millis,
 };
+pub use topgg_sync_state::{TOPGG_STALE_AFTER_MS, TopggSyncStatus};
 pub use translation::{
     TranslationMapping, TranslationPreference, TranslationPreferencePatch, TranslationReservation,
     TranslationReservationDenial,
@@ -109,7 +114,8 @@ pub use voice_presence::VoicePresence;
 pub use vote_promo::{CommunityPromoKind, PROMO_SLOT_COOLDOWN_MS};
 pub use vote_reward::{
     TOPGG_EVENT_RETENTION_MS, TopggVoteRewardResult, VOTE_REDEMPTION_SECRET_MIN_LENGTH,
-    VOTE_REWARD_MS, VoteRewardResult, VoteRewardStatus,
+    VOTE_REWARD_MAX_AHEAD_MS, VOTE_REWARD_MAX_GRANTS_PER_30_DAYS, VOTE_REWARD_MS, VoteRewardResult,
+    VoteRewardStatus,
 };
 
 pub const SQLITE_SCHEMA_CONTRACT_VERSION: u16 = 1;
@@ -162,6 +168,8 @@ pub enum StoreError {
     InvalidGcloudLimit,
     #[error("invalid Discord guild id")]
     InvalidGuildId,
+    #[error("growth source must be a short lowercase campaign token")]
+    InvalidGrowthSource,
     #[error("invalid STT consent identity")]
     InvalidSttIdentity,
     #[error("invalid STT usage reservation input")]
@@ -196,6 +204,8 @@ pub enum StoreError {
     ReplicaReconcileRequired,
     #[error("invalid Top.gg webhook event id")]
     InvalidTopggEventId,
+    #[error("Top.gg server count is outside SQLite's integer range")]
+    InvalidTopggServerCount,
     #[error("SQLite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
     #[error("SQLite integrity check failed: {0}")]

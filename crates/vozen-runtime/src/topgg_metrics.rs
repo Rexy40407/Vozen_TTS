@@ -1,19 +1,35 @@
 //! Opt-in Top.gg server-count publishing.
 //!
 //! Listing availability is never part of Discord's critical path. Requests are bounded and all
-//! failures become `false`, with the legacy API attempted only when Top.gg explicitly reports
-//! that the v1 metrics endpoint is unavailable.
+//! failures become observable private health data; this integration only uses the current v1
+//! API and never silently falls back to a legacy token or endpoint.
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use serde_json::Value;
+use tokio::sync::Notify;
 
 const V1_METRICS_URL: &str = "https://top.gg/api/v1/projects/@me/metrics";
 const V1_COMMANDS_URL: &str = "https://top.gg/api/v1/projects/@me/commands";
-const LEGACY_METRICS_BASE_URL: &str = "https://top.gg/api/bots";
 pub const TOPGG_POST_INTERVAL: Duration = Duration::from_secs(30 * 60);
 const TOPGG_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Coalesces guild lifecycle changes into an immediate Top.gg publish. `Notify` intentionally
+/// keeps at most one pending wake-up so a burst of Guild Create/Delete events cannot cause a
+/// request storm.
+#[derive(Clone, Default)]
+pub struct TopggMetricsTrigger(Arc<Notify>);
+
+impl TopggMetricsTrigger {
+    pub fn request_sync(&self) {
+        self.0.notify_one();
+    }
+
+    pub async fn notified(&self) {
+        self.0.notified().await;
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TopggMetricsRequest {
@@ -26,13 +42,36 @@ pub struct TopggMetricsRequest {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TopggMetricsMethod {
     Patch,
-    Post,
     Put,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TopggMetricsResponse {
     pub status: u16,
+}
+
+/// The privacy-safe result of a metrics publish attempt. It deliberately keeps no response
+/// body: Top.gg can return problem details that are useful for an operator but must never be
+/// copied into a public status endpoint or logs unbounded remote data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TopggMetricsOutcome {
+    Success { status: u16 },
+    HttpFailure { status: u16 },
+    TransportFailure,
+    InvalidConfiguration,
+}
+
+impl TopggMetricsOutcome {
+    pub const fn succeeded(self) -> bool {
+        matches!(self, Self::Success { .. })
+    }
+
+    pub const fn status(self) -> Option<u16> {
+        match self {
+            Self::Success { status } | Self::HttpFailure { status } => Some(status),
+            Self::TransportFailure | Self::InvalidConfiguration => None,
+        }
+    }
 }
 
 #[async_trait]
@@ -57,7 +96,6 @@ impl TopggMetricsHttp for ReqwestTopggMetricsHttp {
     async fn send(&self, request: TopggMetricsRequest) -> Result<TopggMetricsResponse, ()> {
         let method = match request.method {
             TopggMetricsMethod::Patch => reqwest::Method::PATCH,
-            TopggMetricsMethod::Post => reqwest::Method::POST,
             TopggMetricsMethod::Put => reqwest::Method::PUT,
         };
         let response = self
@@ -76,35 +114,50 @@ impl TopggMetricsHttp for ReqwestTopggMetricsHttp {
 
 /// Sends only a non-negative exact count. Returns false for every remote error so an outage
 /// cannot interfere with Discord startup or command handling.
+#[cfg(test)]
 pub async fn post_topgg_stats(
     http: &impl TopggMetricsHttp,
     bot_id: &str,
     token: &str,
     server_count: usize,
 ) -> bool {
+    post_topgg_stats_with_shards(http, bot_id, token, server_count, 1)
+        .await
+        .succeeded()
+}
+
+/// Publishes an exact guild count and the number of active gateway shards. The detailed outcome
+/// is consumed by the runtime's private health surface so configuration/authentication failures
+/// do not disappear into a boolean while Discord itself keeps serving normally.
+pub async fn post_topgg_stats_with_shards(
+    http: &impl TopggMetricsHttp,
+    bot_id: &str,
+    token: &str,
+    server_count: usize,
+    shard_count: usize,
+) -> TopggMetricsOutcome {
     if token.trim().is_empty() || !is_discord_application_id(bot_id) {
-        return false;
+        return TopggMetricsOutcome::InvalidConfiguration;
     }
     let v1 = http
         .send(TopggMetricsRequest {
             url: V1_METRICS_URL.into(),
             method: TopggMetricsMethod::Patch,
             authorization: format!("Bearer {token}"),
-            body: serde_json::json!({ "server_count": server_count }),
+            body: serde_json::json!({
+                "server_count": server_count,
+                "shard_count": shard_count.max(1),
+            }),
         })
         .await;
     match v1 {
-        Ok(response) if (200..300).contains(&response.status) => true,
-        Ok(response) if matches!(response.status, 404 | 405) => http
-            .send(TopggMetricsRequest {
-                url: format!("{LEGACY_METRICS_BASE_URL}/{bot_id}/stats"),
-                method: TopggMetricsMethod::Post,
-                authorization: token.to_owned(),
-                body: serde_json::json!({ "server_count": server_count }),
-            })
-            .await
-            .is_ok_and(|response| (200..300).contains(&response.status)),
-        Ok(_) | Err(()) => false,
+        Ok(response) if (200..300).contains(&response.status) => TopggMetricsOutcome::Success {
+            status: response.status,
+        },
+        Ok(response) => TopggMetricsOutcome::HttpFailure {
+            status: response.status,
+        },
+        Err(()) => TopggMetricsOutcome::TransportFailure,
     }
 }
 
@@ -174,22 +227,19 @@ mod tests {
                 url: V1_METRICS_URL.into(),
                 method: TopggMetricsMethod::Patch,
                 authorization: "Bearer token".into(),
-                body: serde_json::json!({ "server_count": 42 }),
+                body: serde_json::json!({ "server_count": 42, "shard_count": 1 }),
             }]
         );
     }
 
     #[tokio::test]
-    async fn only_missing_v1_endpoint_falls_back_to_legacy_auth() {
-        let http = fake([
-            Ok(TopggMetricsResponse { status: 404 }),
-            Ok(TopggMetricsResponse { status: 200 }),
-        ]);
-        assert!(post_topgg_stats(&http, BOT, "token", 3).await);
-        let requests = http.requests.lock().unwrap();
-        assert_eq!(requests.len(), 2);
-        assert_eq!(requests[1].method, TopggMetricsMethod::Post);
-        assert_eq!(requests[1].authorization, "token");
+    async fn missing_v1_endpoint_is_an_observable_failure_without_legacy_fallback() {
+        let http = fake([Ok(TopggMetricsResponse { status: 404 })]);
+        assert_eq!(
+            post_topgg_stats_with_shards(&http, BOT, "token", 3, 1).await,
+            TopggMetricsOutcome::HttpFailure { status: 404 }
+        );
+        assert_eq!(http.requests.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -206,6 +256,19 @@ mod tests {
         let http = fake([Ok(TopggMetricsResponse { status: 200 })]);
         assert!(!post_topgg_stats(&http, "bot", "", 1).await);
         assert!(http.requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn detailed_outcome_keeps_the_http_status_without_exposing_remote_body() {
+        let http = fake([Ok(TopggMetricsResponse { status: 401 })]);
+        assert_eq!(
+            post_topgg_stats_with_shards(&http, BOT, "token", 166, 3).await,
+            TopggMetricsOutcome::HttpFailure { status: 401 }
+        );
+        assert_eq!(
+            http.requests.lock().unwrap()[0].body,
+            serde_json::json!({ "server_count": 166, "shard_count": 3 })
+        );
     }
 
     #[tokio::test]

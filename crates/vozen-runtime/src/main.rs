@@ -103,11 +103,13 @@ use vozen_api::{
     },
     dashboard_oauth::DiscordDashboardAuthorizer,
     discord_oauth::DiscordOAuthVerifier,
+    install_api::InstallApiConfig,
     kofi_webhook::KofiWebhookConfig,
     map_public_status,
     premium_api::{ClaimHelpNotifier, DiscordClaimHelpNotifier, PremiumApiConfig},
     runtime_router,
     topgg_webhook::TopggWebhookConfig,
+    web_analytics::CloudflareWebAnalyticsConfig,
 };
 use vozen_contracts::DiscordCommandCatalog;
 use vozen_core::{SynthesisEngine, parse_kofi_shop_map};
@@ -125,7 +127,8 @@ use vozen_store::{
 use crate::owner_command_sink::OwnerCommandRuntimeOptions;
 use crate::runtime_mode::RuntimeMode;
 use crate::topgg_metrics::{
-    ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, post_topgg_stats, sync_topgg_commands,
+    ReqwestTopggMetricsHttp, TOPGG_POST_INTERVAL, TopggMetricsTrigger,
+    post_topgg_stats_with_shards, sync_topgg_commands,
 };
 use crate::transcription_adapter::TranscriptionRuntimeOptions;
 use crate::transcription_control_sink::SttConsentRegistry;
@@ -156,6 +159,7 @@ struct RuntimeConfig {
     health_bind: Option<SocketAddr>,
     public_status: Option<PublicStatusConfig>,
     premium_http: Option<PremiumHttpConfig>,
+    install_oauth: Option<TtsInstallOAuthRuntimeConfig>,
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
     topgg_metrics: Option<TopggMetricsRuntimeConfig>,
     vote_redemption_secret: Option<String>,
@@ -234,6 +238,14 @@ struct TopggMetricsRuntimeConfig {
     token: String,
 }
 
+struct TtsInstallOAuthRuntimeConfig {
+    client_id: String,
+    client_secret: String,
+    redirect_uri: String,
+    success_redirect: String,
+    state_secret: String,
+}
+
 /// Browser dashboard migration is separate from the command promotion. It stays disabled unless
 /// the operator explicitly enables it, so a loopback Rust shadow process cannot take ownership
 /// of account configuration accidentally.
@@ -248,6 +260,7 @@ struct AdminRuntimeOptions {
     session_secret: Option<String>,
     owner_id: Option<String>,
     client_id: Option<String>,
+    web_analytics: Option<CloudflareWebAnalyticsConfig>,
 }
 
 struct RuntimeDashboardOptionsProvider {
@@ -455,6 +468,7 @@ impl RuntimeConfig {
             Err(env::VarError::NotUnicode(_)) => return Err(RuntimeError::InvalidHealthPort),
         };
         let premium_http = premium_http_from_environment()?;
+        let install_oauth = tts_install_oauth_from_environment()?;
         if runtime_mode.is_full()
             && !browser_api_promoted(
                 env::var("RUST_BROWSER_API_ENABLED").ok().as_deref(),
@@ -574,12 +588,13 @@ impl RuntimeConfig {
             || public_commands;
         let automatic_translation = automatic_translation_from_environment();
         let dashboard = dashboard_from_environment()?;
-        let admin = admin_from_environment();
+        let admin = admin_from_environment()?;
         if http_listener_required(
             health_bind,
             premium_http.is_some(),
             dashboard.is_some(),
             admin.is_some(),
+            install_oauth.is_some(),
             topgg_webhook.is_some(),
             public_status.is_some(),
         ) {
@@ -594,6 +609,7 @@ impl RuntimeConfig {
             health_bind,
             public_status,
             premium_http,
+            install_oauth,
             topgg_webhook,
             topgg_metrics,
             vote_redemption_secret,
@@ -1253,17 +1269,39 @@ fn dashboard_enabled(raw: Option<&str>) -> bool {
     raw.is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
-fn admin_from_environment() -> Option<AdminRuntimeOptions> {
+fn admin_from_environment() -> Result<Option<AdminRuntimeOptions>, RuntimeError> {
     if !admin_enabled(env::var("RUST_ADMIN_API_ENABLED").ok().as_deref()) {
-        return None;
+        return Ok(None);
     }
-    Some(AdminRuntimeOptions {
+    let web_analytics = if env::var("CLOUDFLARE_WEB_ANALYTICS_ENABLED")
+        .ok()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+    {
+        Some(CloudflareWebAnalyticsConfig::new(
+            nonempty_env("CLOUDFLARE_ACCOUNT_ID").ok_or(
+                RuntimeError::MissingCloudflareWebAnalytics("CLOUDFLARE_ACCOUNT_ID"),
+            )?,
+            nonempty_env("CLOUDFLARE_ZONE_ID").ok_or(
+                RuntimeError::MissingCloudflareWebAnalytics("CLOUDFLARE_ZONE_ID"),
+            )?,
+            nonempty_env("CLOUDFLARE_WEB_ANALYTICS_SITE_TAG").ok_or(
+                RuntimeError::MissingCloudflareWebAnalytics("CLOUDFLARE_WEB_ANALYTICS_SITE_TAG"),
+            )?,
+            nonempty_env("CLOUDFLARE_WEB_ANALYTICS_TOKEN").ok_or(
+                RuntimeError::MissingCloudflareWebAnalytics("CLOUDFLARE_WEB_ANALYTICS_TOKEN"),
+            )?,
+        )?)
+    } else {
+        None
+    };
+    Ok(Some(AdminRuntimeOptions {
         panel_origin: nonempty_env("ADMIN_PANEL_ORIGIN")
             .unwrap_or_else(|| "https://rexy40407.github.io".to_owned()),
         session_secret: nonempty_env("ADMIN_SESSION_SECRET"),
         owner_id: nonempty_env("OWNER_ID"),
         client_id: nonempty_env("ADMIN_CLIENT_ID").or_else(|| nonempty_env("CLIENT_ID")),
-    })
+        web_analytics,
+    }))
 }
 
 fn admin_enabled(raw: Option<&str>) -> bool {
@@ -2022,6 +2060,30 @@ fn topgg_metrics_from_environment() -> Result<Option<TopggMetricsRuntimeConfig>,
     Ok(Some(TopggMetricsRuntimeConfig { client_id, token }))
 }
 
+/// The installation callback is opt-in because Discord must be configured
+/// with the exact HTTPS callback before public CTAs point to it. All companion
+/// values are required together; a partial configuration fails rather than
+/// exposing a flow that cannot safely complete.
+fn tts_install_oauth_from_environment() -> Result<Option<TtsInstallOAuthRuntimeConfig>, RuntimeError>
+{
+    if !env::var("RUST_TTS_INSTALL_OAUTH_ENABLED")
+        .ok()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
+    {
+        return Ok(None);
+    }
+    let required = |name| nonempty_env(name).ok_or(RuntimeError::MissingTtsInstallOAuth(name));
+    Ok(Some(TtsInstallOAuthRuntimeConfig {
+        client_id: required("CLIENT_ID")?,
+        client_secret: required("TTS_INSTALL_OAUTH_CLIENT_SECRET")?,
+        redirect_uri: nonempty_env("TTS_INSTALL_OAUTH_REDIRECT_URI")
+            .unwrap_or_else(|| "https://api.vozen.org/rust/api/install/tts/callback".to_owned()),
+        success_redirect: nonempty_env("TTS_INSTALL_OAUTH_SUCCESS_REDIRECT")
+            .unwrap_or_else(|| "https://vozen.org/dashboard/".to_owned()),
+        state_secret: required("TTS_INSTALL_OAUTH_STATE_SECRET")?,
+    }))
+}
+
 /// A configured secret is an explicit request to serve this sensitive endpoint. It is never
 /// inferred from a port or from the generic premium flag; missing companion values fail startup
 /// once the HTTP listener is enabled instead of silently resetting reward eligibility.
@@ -2178,10 +2240,12 @@ fn http_listener_required(
     premium_http: bool,
     dashboard: bool,
     admin: bool,
+    install_oauth: bool,
     topgg_webhook: bool,
     public_status: bool,
 ) -> bool {
-    health_bind.is_none() && (premium_http || dashboard || admin || topgg_webhook || public_status)
+    health_bind.is_none()
+        && (premium_http || dashboard || admin || install_oauth || topgg_webhook || public_status)
 }
 
 #[derive(Debug, Error)]
@@ -2225,9 +2289,15 @@ enum RuntimeError {
     )]
     FullRuntimeOwnerCommandsRequired,
     #[error(
-        "CLIENT_ID is required when PREMIUM_API_ENABLED=true or TOPGG_WEBHOOK_SECRET is configured"
+        "CLIENT_ID is required when PREMIUM_API_ENABLED=true, RUST_TTS_INSTALL_OAUTH_ENABLED=true, TOPGG_TOKEN, or TOPGG_WEBHOOK_SECRET is configured"
     )]
     MissingClientId,
+    #[error("{0} is required when RUST_TTS_INSTALL_OAUTH_ENABLED=true")]
+    MissingTtsInstallOAuth(&'static str),
+    #[error("{0} is required when CLOUDFLARE_WEB_ANALYTICS_ENABLED=true")]
+    MissingCloudflareWebAnalytics(&'static str),
+    #[error("Cloudflare Web Analytics configuration failed: {0}")]
+    CloudflareWebAnalytics(#[from] vozen_api::web_analytics::CloudflareWebAnalyticsConfigError),
     #[error("Rust Discord command registration failed")]
     CommandRegistration,
     #[error("VOTE_REDEMPTION_SECRET is required when TOPGG_WEBHOOK_SECRET is configured")]
@@ -2461,7 +2531,7 @@ async fn run() -> Result<(), RuntimeError> {
     }
     register_rust_commands_if_enabled(&config).await?;
     // Retention is best effort: a one-off SQLite lock must not take down Discord, and the next
-    // daily pass retries. The permanent HMAC marker is deliberately not touched by this job.
+    // daily pass retries. The pseudonymous 30-day vote ledger is purged by its own retention job.
     spawn_vote_retention(store.clone());
     // Google HD counters are cost-control metadata, not personal message content. Keep the same
     // bounded monthly retention as the Node runtime without letting an old row block startup.
@@ -2477,9 +2547,16 @@ async fn run() -> Result<(), RuntimeError> {
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
     loop_lag::spawn(gateway_state.metrics().as_ref().clone());
-    if let Some(topgg_metrics) = config.topgg_metrics {
-        spawn_topgg_metrics(topgg_metrics, gateway_state.clone());
-    }
+    let topgg_trigger = config.topgg_metrics.map(|topgg_metrics| {
+        let trigger = TopggMetricsTrigger::default();
+        spawn_topgg_metrics(
+            topgg_metrics,
+            gateway_state.clone(),
+            store.clone(),
+            trigger.clone(),
+        );
+        trigger
+    });
     // Only a runtime that owns Rust voice sessions may write the shared restart marker. A
     // shadow process must never authorize the still-live Node process to reconnect calls.
     let write_rejoin_marker_on_shutdown = config.core_voice.is_some();
@@ -2488,7 +2565,7 @@ async fn run() -> Result<(), RuntimeError> {
     // This sink only records departure markers and clears them on guild_create; it does not
     // consume messages or interactions, so it is safe while Node remains authoritative.
     event_sinks.push(Arc::new(
-        guild_lifecycle_sink::GuildLifecycleGatewaySink::new(store.clone()),
+        guild_lifecycle_sink::GuildLifecycleGatewaySink::new(store.clone(), topgg_trigger),
     ));
     if config.welcome {
         event_sinks.push(Arc::new(
@@ -2682,6 +2759,7 @@ async fn run() -> Result<(), RuntimeError> {
     let app = build_http_router(
         config.database_path.clone(),
         config.premium_http,
+        config.install_oauth,
         config.dashboard,
         config.admin,
         config.topgg_webhook,
@@ -2749,6 +2827,7 @@ async fn run_image_smoke() -> Result<(), RuntimeError> {
 
     let app = build_http_router(
         database_path.clone(),
+        None,
         None,
         None,
         None,
@@ -2829,6 +2908,7 @@ struct HttpRouterRuntimeOptions {
 fn build_http_router(
     database_path: PathBuf,
     premium_http: Option<PremiumHttpConfig>,
+    install_oauth: Option<TtsInstallOAuthRuntimeConfig>,
     dashboard: Option<DashboardRuntimeOptions>,
     admin: Option<AdminRuntimeOptions>,
     topgg_webhook: Option<TopggWebhookRuntimeConfig>,
@@ -2848,10 +2928,20 @@ fn build_http_router(
         if admin.is_some() {
             return Err(RuntimeError::AdminRequiresPremiumHttp);
         }
+        let install = install_oauth.map(|install| InstallApiConfig {
+            client_id: install.client_id,
+            client_secret: install.client_secret,
+            redirect_uri: install.redirect_uri,
+            success_redirect: install.success_redirect,
+            state_secret: install.state_secret,
+            store: store.clone(),
+            now: Arc::new(system_now_ms),
+        });
         return runtime_router(RuntimeRouterConfig {
             public_status,
             account: None,
             premium: None,
+            install,
             stripe: None,
             dashboard: None,
             admin: None,
@@ -2990,6 +3080,7 @@ fn build_http_router(
                 origin: admin.panel_origin,
                 api: Arc::new(api),
                 now: now.clone(),
+                web_analytics: admin.web_analytics,
             })
         })
         .transpose()?;
@@ -3057,11 +3148,21 @@ fn build_http_router(
     } else {
         None
     };
+    let install = install_oauth.map(|install| InstallApiConfig {
+        client_id: install.client_id,
+        client_secret: install.client_secret,
+        redirect_uri: install.redirect_uri,
+        success_redirect: install.success_redirect,
+        state_secret: install.state_secret,
+        store: store.clone(),
+        now: now.clone(),
+    });
     runtime_router(RuntimeRouterConfig {
         public_status,
         account,
         premium,
         stripe,
+        install,
         // Only `RUST_DASHBOARD_ENABLED=true` produces this route. Its authorizer rechecks
         // OAuth audience/scope, Manage Guild and current bot presence before the options
         // provider asks Discord for the bot's current authorised channels and roles.
@@ -3268,7 +3369,12 @@ fn spawn_kofi_pending_retention(store: Arc<Mutex<SqliteStore>>) {
     });
 }
 
-fn spawn_topgg_metrics(config: TopggMetricsRuntimeConfig, gateway_state: GatewayState) {
+fn spawn_topgg_metrics(
+    config: TopggMetricsRuntimeConfig,
+    gateway_state: GatewayState,
+    store: Arc<Mutex<SqliteStore>>,
+    trigger: TopggMetricsTrigger,
+) {
     tokio::spawn(async move {
         let Ok(http) = ReqwestTopggMetricsHttp::new() else {
             // The listing is optional. A local client construction failure must never block the
@@ -3283,15 +3389,35 @@ fn spawn_topgg_metrics(config: TopggMetricsRuntimeConfig, gateway_state: Gateway
         if let Some(commands) = public_topgg_commands() {
             let _ = sync_topgg_commands(&http, &config.token, commands).await;
         }
+        let mut interval = tokio::time::interval(TOPGG_POST_INTERVAL);
         loop {
-            let _ = post_topgg_stats(
+            tokio::select! {
+                _ = interval.tick() => {},
+                _ = trigger.notified() => {},
+            }
+            let server_count = gateway_state.guild_count();
+            let outcome = post_topgg_stats_with_shards(
                 &http,
                 &config.client_id,
                 &config.token,
-                gateway_state.guild_count(),
+                server_count,
+                1,
             )
             .await;
-            tokio::time::sleep(TOPGG_POST_INTERVAL).await;
+            if let Ok(store) = store.lock() {
+                let _ = store.record_topgg_sync_attempt(
+                    system_now_ms(),
+                    outcome.status(),
+                    server_count,
+                    outcome.succeeded(),
+                );
+            }
+            if !outcome.succeeded() {
+                eprintln!(
+                    "[topgg] metrics publish failed: status={:?}, server_count={server_count}",
+                    outcome.status(),
+                );
+            }
         }
     });
 }
@@ -3354,13 +3480,13 @@ mod tests {
     #[test]
     fn opted_in_http_surfaces_require_a_listener() {
         assert!(http_listener_required(
-            None, true, false, false, false, false
+            None, true, false, false, false, false, false
         ));
         assert!(http_listener_required(
-            None, false, true, false, false, false
+            None, false, true, false, false, false, false
         ));
         assert!(http_listener_required(
-            None, false, false, false, true, false
+            None, false, false, false, false, true, false
         ));
         assert!(!http_listener_required(
             Some(SocketAddr::from(([127, 0, 0, 1], 8080))),
@@ -3369,9 +3495,10 @@ mod tests {
             true,
             true,
             true,
+            true,
         ));
         assert!(!http_listener_required(
-            None, false, false, false, false, false
+            None, false, false, false, false, false, false
         ));
     }
 
@@ -4019,11 +4146,13 @@ mod tests {
             PathBuf::from("/tmp/vozen-test.sqlite"),
             None,
             None,
+            None,
             Some(AdminRuntimeOptions {
                 panel_origin: "https://admin.example".into(),
                 session_secret: Some("01234567890123456789012345678901".into()),
                 owner_id: Some("123456789012345678".into()),
                 client_id: Some("123456789012345678".into()),
+                web_analytics: None,
             }),
             None,
             HttpRouterRuntimeOptions {
@@ -4058,6 +4187,7 @@ mod tests {
                 stripe_webhook_secret: None,
                 stripe_prices: None,
             }),
+            None,
             None,
             None,
             None,
@@ -4176,9 +4306,13 @@ mod tests {
         assert_eq!((rewards, events), (1, 1));
         assert!(
             store
-                .vote_reward_status(user, secret)
+                .vote_reward_status(
+                    user,
+                    secret,
+                    1_000 + vozen_store::VOTE_REWARD_MS + vozen_store::TOPGG_EVENT_RETENTION_MS + 1,
+                )
                 .expect("status")
-                .already_redeemed
+                .eligible
         );
     }
 

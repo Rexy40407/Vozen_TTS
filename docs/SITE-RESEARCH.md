@@ -55,7 +55,7 @@
 | 16 | **/best-discord-tts-bots listicle** | The format that actually ranks in this SERP (all current page-1 results are vendor listicles). |
 | 17 | **Per-language pages ×34** | "Portuguese TTS Bot for Discord" etc. — nobody targets non-English TTS queries; the 34 languages are an SEO moat. Localized H1. |
 | 18 | **Commands docs page** | SEO surface + reassurance (Dyno/Craig both have one). |
-| 19 | **Vote-reward loop** | Signed top.gg webhook → 48h Vozen Plus on the first eligible vote, once per Discord account ever (votes may be rewarded; reviews are never rewarded). |
+| 19 | **Vote-reward loop** | Signed top.gg webhook → 24h Vozen Plus per eligible vote, capped at four rewards in a rolling 30-day window and 48h ahead (votes may be rewarded; reviews are never rewarded). |
 | 20 | **Live top.gg widget + "leave a review" nudge** | QuantumBot's pattern; attacks incumbent's weak rating where discovery happens. |
 | 21 | **Product Hunt + community launch** | Tue–Thu, demo video ≤90s; r/Discord_Bots showcase (read rules first); accessibility framing ("lets people without mics talk") — it's true and it performs. |
 | 22 | **Analytics** | Privacy-friendly (Plausible/GoatCounter) — can't improve what isn't measured. |

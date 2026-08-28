@@ -55,6 +55,7 @@ impl OperationalProvider {
 pub enum OperationalMetric {
     CommandInvoked,
     GuildJoin,
+    GuildLeave,
     SynthSuccess,
     SynthFailure,
     SynthFallback,
@@ -73,6 +74,7 @@ impl OperationalMetric {
         match self {
             Self::CommandInvoked => "command_invoked",
             Self::GuildJoin => "guild_join",
+            Self::GuildLeave => "guild_leave",
             Self::SynthSuccess => "synth_success",
             Self::SynthFailure => "synth_failure",
             Self::SynthFallback => "synth_fallback",
@@ -91,6 +93,7 @@ impl OperationalMetric {
         match value {
             "command_invoked" => Ok(Self::CommandInvoked),
             "guild_join" => Ok(Self::GuildJoin),
+            "guild_leave" => Ok(Self::GuildLeave),
             "synth_success" => Ok(Self::SynthSuccess),
             "synth_failure" => Ok(Self::SynthFailure),
             "synth_fallback" => Ok(Self::SynthFallback),
@@ -188,6 +191,15 @@ impl SqliteStore {
              DO UPDATE SET spoken_count = spoken_count + 1",
             params![guild_id, user_id, voice_locale(model), engine_key(engine)],
         )?;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128) as i64;
+        // This touches only a server lifecycle row and an identity-free daily aggregate. The
+        // existing user-level talk counter above remains the source for the private top-talker
+        // view, while growth does not consume the user ID at all.
+        self.record_guild_first_value(guild_id, now)?;
         Ok(())
     }
 

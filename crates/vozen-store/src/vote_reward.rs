@@ -1,8 +1,7 @@
 //! Durable Top.gg reward storage.
 //!
-//! The temporary entitlement keeps a Discord ID for exactly as long as the 48-hour Plus reward
-//! needs it. The lifetime one-claim guard keeps only a keyed HMAC, so `/privacy erase` cannot
-//! turn into a way to reclaim the promotion.
+//! The temporary entitlement keeps a Discord ID only while the active reward needs it. A keyed
+//! HMAC ledger enforces a short rolling vote limit and is purged with provider replay data.
 
 use hmac::{Hmac, Mac};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -13,8 +12,11 @@ use crate::{SqliteStore, StoreError};
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// One Top.gg vote reward lasts 48 hours, matching the Node entitlement calculation.
-pub const VOTE_REWARD_MS: i64 = 48 * 60 * 60 * 1_000;
+/// A valid Top.gg vote grants one day of Plus. Rewards may stack, but never more than two days
+/// ahead of the current time.
+pub const VOTE_REWARD_MS: i64 = 24 * 60 * 60 * 1_000;
+pub const VOTE_REWARD_MAX_AHEAD_MS: i64 = 48 * 60 * 60 * 1_000;
+pub const VOTE_REWARD_MAX_GRANTS_PER_30_DAYS: i64 = 4;
 pub const VOTE_REDEMPTION_SECRET_MIN_LENGTH: usize = 32;
 /// Delivery IDs are only provider replay protection; permanent reward idempotency is separate.
 pub const TOPGG_EVENT_RETENTION_MS: i64 = 30 * 24 * 60 * 60 * 1_000;
@@ -24,25 +26,25 @@ const MAX_TOPGG_EVENT_ID_LENGTH: usize = 200;
 pub struct VoteRewardResult {
     pub granted: bool,
     pub expires_at: Option<i64>,
-    pub already_redeemed: bool,
+    pub rate_limited: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VoteRewardStatus {
     pub eligible: bool,
-    pub already_redeemed: bool,
+    pub grants_remaining: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TopggVoteRewardResult {
     Granted { expires_at: i64 },
-    AlreadyRedeemed,
+    RateLimited,
     DuplicateEvent,
 }
 
 impl SqliteStore {
-    /// Pins the stable HMAC key and converts pre-ledger temporary rewards into permanent
-    /// pseudonymous claim markers. A key change fails closed instead of reopening eligibility.
+    /// Pins the stable HMAC key and backfills active legacy rewards into the rolling ledger.
+    /// A key change fails closed instead of making historical rows unmatchable.
     pub fn initialize_vote_redemption_ledger(
         &self,
         redemption_secret: &str,
@@ -62,7 +64,7 @@ impl SqliteStore {
         for (user_id, rewarded_at) in legacy_rewards {
             let user_hash = vote_redemption_hash(redemption_secret, &user_id)?;
             backfilled += transaction.execute(
-                "INSERT OR IGNORE INTO vote_redemption (user_hash, redeemed_at) VALUES (?1, ?2)",
+                "INSERT OR IGNORE INTO vote_reward_ledger (user_hash, granted_at) VALUES (?1, ?2)",
                 params![user_hash, rewarded_at],
             )?;
         }
@@ -85,17 +87,18 @@ impl SqliteStore {
         &self,
         user_id: &str,
         redemption_secret: &str,
+        now: i64,
     ) -> Result<VoteRewardStatus, StoreError> {
         let user_hash = vote_redemption_hash(redemption_secret, user_id)?;
         assert_stable_redemption_secret(self.connection(), redemption_secret)?;
-        let already_redeemed = self.connection().query_row(
-            "SELECT EXISTS(SELECT 1 FROM vote_redemption WHERE user_hash = ?1)",
-            [user_hash],
-            |row| row.get::<_, i64>(0),
-        )? != 0;
+        let claims: i64 = self.connection().query_row(
+            "SELECT COUNT(*) FROM vote_reward_ledger WHERE user_hash = ?1 AND granted_at > ?2",
+            params![user_hash, now - TOPGG_EVENT_RETENTION_MS],
+            |row| row.get(0),
+        )?;
         Ok(VoteRewardStatus {
-            eligible: !already_redeemed,
-            already_redeemed,
+            eligible: claims < VOTE_REWARD_MAX_GRANTS_PER_30_DAYS,
+            grants_remaining: (VOTE_REWARD_MAX_GRANTS_PER_30_DAYS - claims).max(0),
         })
     }
 
@@ -111,20 +114,20 @@ impl SqliteStore {
             TopggVoteRewardResult::Granted { expires_at } => Ok(VoteRewardResult {
                 granted: true,
                 expires_at: Some(expires_at),
-                already_redeemed: false,
+                rate_limited: false,
             }),
-            TopggVoteRewardResult::AlreadyRedeemed => Ok(VoteRewardResult {
+            TopggVoteRewardResult::RateLimited => Ok(VoteRewardResult {
                 granted: false,
                 expires_at: None,
-                already_redeemed: true,
+                rate_limited: true,
             }),
             TopggVoteRewardResult::DuplicateEvent => unreachable!("legacy claims have no event id"),
         }
     }
 
-    /// Atomically claims a Top.gg delivery ID and its single lifetime reward. If storing the
-    /// reward fails, the transaction rolls back the event marker so a legitimate retry remains
-    /// possible. This removes the Node implementation's separate claim/release failure window.
+    /// Atomically claims a Top.gg delivery ID and, within the rolling limit, extends Plus. If
+    /// storage fails, the transaction rolls back the event marker so a legitimate retry remains
+    /// possible.
     pub fn claim_topgg_vote_reward(
         &self,
         event_id: Option<&str>,
@@ -150,27 +153,42 @@ impl SqliteStore {
             }
         }
 
-        let inserted = transaction.execute(
-            "INSERT OR IGNORE INTO vote_redemption (user_hash, redeemed_at) VALUES (?1, ?2)",
-            params![user_hash, now],
+        let grants_in_window: i64 = transaction.query_row(
+            "SELECT COUNT(*) FROM vote_reward_ledger WHERE user_hash = ?1 AND granted_at > ?2",
+            params![user_hash, now - TOPGG_EVENT_RETENTION_MS],
+            |row| row.get(0),
         )?;
-        let result = if inserted == 0 {
-            TopggVoteRewardResult::AlreadyRedeemed
+        let result = if grants_in_window >= VOTE_REWARD_MAX_GRANTS_PER_30_DAYS {
+            TopggVoteRewardResult::RateLimited
         } else {
+            let current_expires_at = transaction
+                .query_row(
+                    "SELECT rewarded_at + ?2 FROM vote_reward WHERE user_id = ?1",
+                    params![user_id, VOTE_REWARD_MS],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?;
+            let base = current_expires_at.unwrap_or(now).max(now);
+            let expires_at = base
+                .saturating_add(VOTE_REWARD_MS)
+                .min(now.saturating_add(VOTE_REWARD_MAX_AHEAD_MS));
             transaction.execute(
                 "INSERT INTO vote_reward (user_id, rewarded_at) VALUES (?1, ?2)
                  ON CONFLICT(user_id) DO UPDATE SET rewarded_at = excluded.rewarded_at",
-                params![user_id, now],
+                params![user_id, expires_at - VOTE_REWARD_MS],
             )?;
-            TopggVoteRewardResult::Granted {
-                expires_at: now + VOTE_REWARD_MS,
-            }
+            transaction.execute(
+                "INSERT INTO vote_reward_ledger (user_hash, granted_at) VALUES (?1, ?2)",
+                params![user_hash, now],
+            )?;
+            TopggVoteRewardResult::Granted { expires_at }
         };
         transaction.commit()?;
         Ok(result)
     }
 
-    /// Removes only expired raw-ID entitlement records. The keyed one-time markers stay.
+    /// Removes expired raw-ID entitlements. Pseudonymous vote rows are retained only for the
+    /// 30-day rolling eligibility window and are purged with provider delivery IDs.
     pub fn purge_expired_vote_rewards(&self, now: i64) -> Result<usize, StoreError> {
         Ok(self.connection().execute(
             "DELETE FROM vote_reward WHERE rewarded_at <= ?1",
@@ -179,10 +197,15 @@ impl SqliteStore {
     }
 
     pub fn purge_expired_topgg_events(&self, now: i64) -> Result<usize, StoreError> {
-        Ok(self.connection().execute(
+        let events = self.connection().execute(
             "DELETE FROM topgg_webhook_event WHERE processed_at < ?1",
             [now - TOPGG_EVENT_RETENTION_MS],
-        )?)
+        )?;
+        let ledger = self.connection().execute(
+            "DELETE FROM vote_reward_ledger WHERE granted_at < ?1",
+            [now - TOPGG_EVENT_RETENTION_MS],
+        )?;
+        Ok(events + ledger)
     }
 }
 
@@ -256,28 +279,48 @@ mod tests {
     const USER: &str = "12345678901234567";
 
     #[test]
-    fn reward_is_lifetime_idempotent_but_temporary_premium_is_erasable() {
+    fn rewards_stack_for_four_votes_then_reset_after_the_rolling_window() {
         let store = SqliteStore::open_in_memory().expect("store");
         assert_eq!(
             store.claim_vote_reward(USER, NOW, SECRET).expect("grant"),
             VoteRewardResult {
                 granted: true,
                 expires_at: Some(NOW + VOTE_REWARD_MS),
-                already_redeemed: false,
+                rate_limited: false,
             }
         );
-        assert!(store.is_user_premium(USER, NOW + 1).expect("premium"));
-        store.erase_user_data(USER).expect("privacy erase");
-        assert_eq!(store.vote_reward_at(USER).expect("reward"), None);
+        for vote in 1..VOTE_REWARD_MAX_GRANTS_PER_30_DAYS {
+            assert!(matches!(
+                store
+                    .claim_vote_reward(USER, NOW + vote, SECRET)
+                    .expect("stacked grant"),
+                VoteRewardResult { granted: true, .. }
+            ));
+        }
         assert_eq!(
             store
-                .claim_vote_reward(USER, NOW + 2, SECRET)
-                .expect("repeat"),
+                .claim_vote_reward(USER, NOW + 5, SECRET)
+                .expect("limited"),
             VoteRewardResult {
                 granted: false,
                 expires_at: None,
-                already_redeemed: true,
+                rate_limited: true,
             }
+        );
+        assert_eq!(
+            store
+                .vote_reward_status(USER, SECRET, NOW + 5)
+                .expect("status"),
+            VoteRewardStatus {
+                eligible: false,
+                grants_remaining: 0,
+            }
+        );
+        assert!(
+            store
+                .claim_vote_reward(USER, NOW + TOPGG_EVENT_RETENTION_MS + 6, SECRET)
+                .expect("new window")
+                .granted
         );
     }
 
@@ -328,12 +371,12 @@ mod tests {
                 .expect("retry"),
             TopggVoteRewardResult::DuplicateEvent
         );
-        assert_eq!(
+        assert!(matches!(
             store
                 .claim_topgg_vote_reward(Some("evt-2"), USER, NOW + 2, SECRET)
                 .expect("other event"),
-            TopggVoteRewardResult::AlreadyRedeemed
-        );
+            TopggVoteRewardResult::Granted { .. }
+        ));
     }
 
     #[test]
@@ -361,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn purge_keeps_the_permanent_marker_but_expires_raw_and_delivery_rows() {
+    fn purge_expires_raw_delivery_and_pseudonymous_rolling_rows() {
         let store = SqliteStore::open_in_memory().expect("store");
         store
             .claim_topgg_vote_reward(Some("old"), USER, NOW, SECRET)
@@ -376,13 +419,15 @@ mod tests {
             store
                 .purge_expired_topgg_events(NOW + TOPGG_EVENT_RETENTION_MS + 1)
                 .expect("purge"),
-            1
+            2
         );
         assert_eq!(
-            store.vote_reward_status(USER, SECRET).expect("status"),
+            store
+                .vote_reward_status(USER, SECRET, NOW + TOPGG_EVENT_RETENTION_MS + 1)
+                .expect("status"),
             VoteRewardStatus {
-                eligible: false,
-                already_redeemed: true
+                eligible: true,
+                grants_remaining: VOTE_REWARD_MAX_GRANTS_PER_30_DAYS,
             }
         );
     }

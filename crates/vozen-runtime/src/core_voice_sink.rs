@@ -2781,6 +2781,11 @@ impl CoreVoiceGatewaySink {
                 },
             )
             .map_err(|_| GatewayEventDispatchError)?;
+        self.store
+            .lock()
+            .map_err(|_| GatewayEventDispatchError)?
+            .record_guild_setup_completed(&guild_id.get().to_string(), system_now_ms())
+            .map_err(|_| GatewayEventDispatchError)?;
 
         let facts =
             CoreVoiceInteractionFacts::from_command(command).ok_or(GatewayEventDispatchError)?;

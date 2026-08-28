@@ -3,6 +3,7 @@
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::ui::message_embed;
@@ -75,28 +76,19 @@ impl VoteGatewaySink {
             .as_deref()
             .filter(|secret| secret.len() >= VOTE_REDEMPTION_SECRET_MIN_LENGTH)
         {
-            let already_redeemed = self
+            let limit_reached = self
                 .store
                 .lock()
                 .ok()
                 .and_then(|store| {
                     store
-                        .vote_reward_status(&command.user.id.to_string(), secret)
+                        .vote_reward_status(&command.user.id.to_string(), secret, now_ms())
                         .ok()
                 })
-                .is_some_and(|status| status.already_redeemed);
-            if already_redeemed {
-                let status = self
-                    .localizer
-                    .render_key(
-                        "vote.cooldownStatus",
-                        Some(&command.locale),
-                        command.guild_locale.as_deref(),
-                        &BTreeMap::new(),
-                    )
-                    .ok_or(GatewayEventDispatchError)?;
+                .is_some_and(|status| !status.eligible);
+            if limit_reached {
                 content.push_str("\n\n");
-                content.push_str(&status);
+                content.push_str(rolling_limit_notice(&command.locale));
             }
         }
         let button_label = self
@@ -109,6 +101,21 @@ impl VoteGatewaySink {
             )
             .ok_or(GatewayEventDispatchError)?;
         Ok((content, Some((url, button_label))))
+    }
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}
+
+fn rolling_limit_notice(locale: &str) -> &'static str {
+    if locale.to_ascii_lowercase().starts_with("pt") {
+        "🗳️ Esta conta atingiu o limite de 4 recompensas em 30 dias. Ainda podes votar para apoiar o Vozen."
+    } else {
+        "🗳️ This account has reached the limit of 4 rewards in 30 days. You can still vote to support Vozen."
     }
 }
 

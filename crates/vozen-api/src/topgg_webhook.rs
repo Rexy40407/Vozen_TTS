@@ -133,9 +133,7 @@ async fn topgg_webhook(
                 &state.redemption_secret,
             ) {
                 Ok(TopggVoteRewardResult::DuplicateEvent) => status(StatusCode::OK, "duplicate"),
-                Ok(
-                    TopggVoteRewardResult::Granted { .. } | TopggVoteRewardResult::AlreadyRedeemed,
-                ) => {
+                Ok(TopggVoteRewardResult::Granted { .. } | TopggVoteRewardResult::RateLimited) => {
                     if let Some(metrics) = &state.metrics {
                         metrics.record_vote();
                     }

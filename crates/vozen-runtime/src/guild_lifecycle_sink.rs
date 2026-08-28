@@ -6,13 +6,19 @@ use serenity::all::{Context, Interaction, Message};
 use vozen_discord::{GatewayEventDispatchError, GatewayEventSink};
 use vozen_store::{OperationalMetric, OperationalProvider, ProviderHealth, SqliteStore};
 
+use crate::topgg_metrics::TopggMetricsTrigger;
+
 pub struct GuildLifecycleGatewaySink {
     store: Arc<Mutex<SqliteStore>>,
+    topgg_trigger: Option<TopggMetricsTrigger>,
 }
 
 impl GuildLifecycleGatewaySink {
-    pub fn new(store: Arc<Mutex<SqliteStore>>) -> Self {
-        Self { store }
+    pub fn new(store: Arc<Mutex<SqliteStore>>, topgg_trigger: Option<TopggMetricsTrigger>) -> Self {
+        Self {
+            store,
+            topgg_trigger,
+        }
     }
 }
 
@@ -51,26 +57,54 @@ impl GatewayEventSink for GuildLifecycleGatewaySink {
         let Ok(store) = self.store.lock() else {
             return Err(GatewayEventDispatchError);
         };
+        let now = now_ms();
         store
             .unmark_guild_departed(guild_id)
             .map_err(|_| GatewayEventDispatchError)?;
-        store
-            .add_operational_metric(
-                OperationalMetric::GuildJoin,
-                OperationalProvider::Internal,
-                1.0,
-                None,
-            )
-            .map_err(|_| GatewayEventDispatchError)
+        let joined = store
+            .record_guild_join(guild_id, None, now)
+            .map_err(|_| GatewayEventDispatchError)?;
+        if joined {
+            store
+                .add_operational_metric(
+                    OperationalMetric::GuildJoin,
+                    OperationalProvider::Internal,
+                    1.0,
+                    None,
+                )
+                .map_err(|_| GatewayEventDispatchError)?;
+            if let Some(trigger) = &self.topgg_trigger {
+                trigger.request_sync();
+            }
+        }
+        Ok(())
     }
 
     async fn on_guild_delete(&self, guild_id: &str) -> Result<(), GatewayEventDispatchError> {
         let Ok(store) = self.store.lock() else {
             return Err(GatewayEventDispatchError);
         };
+        let now = now_ms();
         store
-            .mark_guild_departed(guild_id, now_ms())
-            .map_err(|_| GatewayEventDispatchError)
+            .mark_guild_departed(guild_id, now)
+            .map_err(|_| GatewayEventDispatchError)?;
+        if store
+            .record_guild_departure(guild_id, now)
+            .map_err(|_| GatewayEventDispatchError)?
+        {
+            store
+                .add_operational_metric(
+                    OperationalMetric::GuildLeave,
+                    OperationalProvider::Internal,
+                    1.0,
+                    None,
+                )
+                .map_err(|_| GatewayEventDispatchError)?;
+            if let Some(trigger) = &self.topgg_trigger {
+                trigger.request_sync();
+            }
+        }
+        Ok(())
     }
 }
 

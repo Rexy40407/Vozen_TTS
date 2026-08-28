@@ -32,8 +32,12 @@ fails.
 Use `.env.rust.prod.example` as the variable inventory. Keep existing names for
 `DISCORD_TOKEN`, `CLIENT_ID`, `TOPGG_TOKEN`, `TOPGG_WEBHOOK_SECRET`,
 `VOTE_REDEMPTION_SECRET`, `KOFI_WEBHOOK_TOKEN`, `PREMIUM_API_*`,
-`DISCORD_OAUTH_*`, and the TTS/voice paths. Rust validates the same command,
+`DISCORD_OAUTH_*`, `RUST_TTS_INSTALL_OAUTH_*`, the optional
+`CLOUDFLARE_WEB_ANALYTICS_*` server-only proxy values, and the TTS/voice paths. Rust validates the same command,
 database, voice/i18n and game contracts before starting.
+
+For the ordered production rollout, Top.gg diagnostics, vote-reward migration
+and browser-install checks, use [the growth operations runbook](GROWTH-OPERATIONS.md).
 
 The public website remains a static Pages site (`site/`), while the dashboard/API
 is served by the Rust API crates. Top.gg, Ko-fi, OAuth and Premium routes and

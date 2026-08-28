@@ -18,6 +18,9 @@ reqwest.workspace = true
 sha2.workspace = true
 subtle.workspace = true
 thiserror.workspace = true
+time.workspace = true
+uuid.workspace = true
+url.workspace = true
 vozen-core = { path = "../vozen-core" }
 vozen-store = { path = "../vozen-store" }
 

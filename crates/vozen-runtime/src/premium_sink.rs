@@ -151,7 +151,7 @@ impl PremiumGatewaySink {
                 && secret.len() >= VOTE_REDEMPTION_SECRET_MIN_LENGTH
             {
                 let eligible = store
-                    .vote_reward_status(&user_id, secret)
+                    .vote_reward_status(&user_id, secret, now)
                     .map_err(|_| GatewayEventDispatchError)?
                     .eligible;
                 if eligible {
@@ -161,9 +161,6 @@ impl PremiumGatewaySink {
                         parameters.insert("url", format!("https://top.gg/bot/{client_id}/vote"));
                         lines.push(self.message("vote.upsell", command, &parameters)?);
                     }
-                } else {
-                    lines.push(String::new());
-                    lines.push(self.message("vote.cooldownStatus", command, &BTreeMap::new())?);
                 }
             }
         }

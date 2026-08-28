@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use vozen_store::{
     AdminPassRow, AdminPassesView, AdminPlusRow, DominantTalkUsageOptions, KofiPendingGrant,
-    SqliteStore, StripeSubscription, TalkUsageSource, UserEngine,
+    SqliteStore, StripeSubscription, TalkUsageSource, TopggSyncStatus, UserEngine,
 };
 
 use crate::admin_auth::{
@@ -176,6 +176,73 @@ pub struct AdminTopTalker {
     pub usage_samples: i64,
     #[serde(rename = "usageSource")]
     pub usage_source: String,
+}
+
+/// Private growth view. It contains aggregate server counts only, so the static operator panel
+/// can diagnose the funnel without receiving guild IDs or OAuth tokens.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AdminGrowth {
+    pub product: &'static str,
+    #[serde(rename = "currentGuilds")]
+    pub current_guilds: i64,
+    pub joins: i64,
+    pub leaves: i64,
+    pub net: i64,
+    #[serde(rename = "setupCompleted")]
+    pub setup_completed: i64,
+    #[serde(rename = "firstValue")]
+    pub first_value: i64,
+    #[serde(rename = "setupRate")]
+    pub setup_rate: f64,
+    #[serde(rename = "activationRate")]
+    pub activation_rate: f64,
+    #[serde(rename = "retainedW7")]
+    pub retained_w7: i64,
+    #[serde(rename = "eligibleW7")]
+    pub eligible_w7: i64,
+    #[serde(rename = "retainedW30")]
+    pub retained_w30: i64,
+    #[serde(rename = "eligibleW30")]
+    pub eligible_w30: i64,
+    pub daily: Vec<AdminGrowthDaily>,
+    #[serde(rename = "topgg", skip_serializing_if = "Option::is_none")]
+    pub topgg: Option<AdminTopggSync>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminGrowthDaily {
+    pub day: String,
+    pub source: String,
+    pub joins: i64,
+    pub leaves: i64,
+    #[serde(rename = "setupCompleted")]
+    pub setup_completed: i64,
+    #[serde(rename = "firstValue")]
+    pub first_value: i64,
+    pub active: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct AdminTopggSync {
+    #[serde(rename = "lastAttemptAt")]
+    pub last_attempt_at: i64,
+    #[serde(rename = "lastSuccessAt")]
+    pub last_success_at: Option<i64>,
+    #[serde(rename = "lastStatus")]
+    pub last_status: Option<u16>,
+    #[serde(rename = "lastServerCount")]
+    pub last_server_count: Option<i64>,
+    #[serde(rename = "currentServerCount")]
+    pub current_server_count: i64,
+    /// Difference between the current Discord gateway count and the last count
+    /// that the runtime attempted to publish. A successful v1 response is the
+    /// closest server-side confirmation available without exposing Top.gg data.
+    #[serde(rename = "driftPercent", skip_serializing_if = "Option::is_none")]
+    pub drift_percent: Option<f64>,
+    #[serde(rename = "consecutiveFailures")]
+    pub consecutive_failures: i64,
+    pub stale: bool,
+    pub alert: bool,
 }
 
 /// Coarse owner-only operational readings. These values are intentionally aggregate-only: no
@@ -487,6 +554,59 @@ impl AdminApi {
         Ok(rows)
     }
 
+    pub fn growth(&self, from_day: &str, to_day: &str) -> Result<AdminGrowth, AdminGrantError> {
+        let now = (self.now)();
+        let store = self.store.lock().map_err(|_| AdminGrantError::Store)?;
+        let overview = store
+            .growth_overview(now)
+            .map_err(|_| AdminGrantError::Store)?;
+        let daily = store
+            .list_growth_daily_metrics(from_day, to_day)
+            .map_err(|_| AdminGrantError::Store)?;
+        let joins = daily.iter().map(|point| point.joins).sum::<i64>();
+        let leaves = daily.iter().map(|point| point.leaves).sum::<i64>();
+        let setup_completed = daily.iter().map(|point| point.setup_completed).sum::<i64>();
+        let first_value = daily.iter().map(|point| point.first_value).sum::<i64>();
+        let rate = |numerator: i64| {
+            if joins == 0 {
+                0.0
+            } else {
+                numerator as f64 / joins as f64
+            }
+        };
+        Ok(AdminGrowth {
+            product: "tts",
+            current_guilds: overview.current_guilds,
+            joins,
+            leaves,
+            net: joins - leaves,
+            setup_completed,
+            first_value,
+            setup_rate: rate(setup_completed),
+            activation_rate: rate(first_value),
+            retained_w7: overview.retained_w7,
+            eligible_w7: overview.eligible_w7,
+            retained_w30: overview.retained_w30,
+            eligible_w30: overview.eligible_w30,
+            daily: daily
+                .into_iter()
+                .map(|point| AdminGrowthDaily {
+                    day: point.day,
+                    source: point.source,
+                    joins: point.joins,
+                    leaves: point.leaves,
+                    setup_completed: point.setup_completed,
+                    first_value: point.first_value,
+                    active: point.active,
+                })
+                .collect(),
+            topgg: store
+                .topgg_sync_status(now)
+                .map_err(|_| AdminGrantError::Store)?
+                .map(|status| AdminTopggSync::from_status(status, overview.current_guilds)),
+        })
+    }
+
     pub async fn list_top_talkers(&self) -> Result<Vec<AdminTopTalker>, AdminGrantError> {
         let (rows, usage) = {
             let store = self.store.lock().map_err(|_| AdminGrantError::Store)?;
@@ -596,6 +716,31 @@ impl AdminApi {
         .map_err(|_| AdminGrantError::Store)?;
         (self.log)(&format!("[admin] revoke {kind} {id} -> {ok}"));
         Ok(ok)
+    }
+}
+
+impl AdminTopggSync {
+    fn from_status(value: TopggSyncStatus, current_server_count: i64) -> Self {
+        let drift_percent = value.last_server_count.map(|reported| {
+            if reported == 0 {
+                if current_server_count == 0 { 0.0 } else { 1.0 }
+            } else {
+                (current_server_count.saturating_sub(reported).unsigned_abs() as f64)
+                    / reported.unsigned_abs().max(1) as f64
+            }
+        });
+        let alert = value.stale || drift_percent.is_some_and(|value| value > 0.05);
+        Self {
+            last_attempt_at: value.last_attempt_at,
+            last_success_at: value.last_success_at,
+            last_status: value.last_status,
+            last_server_count: value.last_server_count,
+            current_server_count,
+            drift_percent,
+            consecutive_failures: value.consecutive_failures,
+            stale: value.stale,
+            alert,
+        }
     }
 }
 
@@ -749,6 +894,35 @@ mod tests {
         assert!(api.login(Some("wrong-user")).await.is_none());
         assert!(api.login(Some("wrong-app")).await.is_none());
         assert!(api.authorize(Some("owner-token")).is_none());
+    }
+
+    #[test]
+    fn topgg_alerts_after_ninety_minutes_or_more_than_five_percent_drift() {
+        let status = TopggSyncStatus {
+            last_attempt_at: NOW,
+            last_success_at: Some(NOW),
+            last_status: Some(204),
+            last_server_count: Some(100),
+            consecutive_failures: 0,
+            stale: false,
+        };
+        let boundary = AdminTopggSync::from_status(status, 105);
+        assert_eq!(boundary.drift_percent, Some(0.05));
+        assert!(
+            !boundary.alert,
+            "the threshold is strictly greater than five percent"
+        );
+        let drifted = AdminTopggSync::from_status(status, 106);
+        assert!(drifted.alert);
+        assert_eq!(drifted.current_server_count, 106);
+        let stale = AdminTopggSync::from_status(
+            TopggSyncStatus {
+                stale: true,
+                ..status
+            },
+            100,
+        );
+        assert!(stale.alert);
     }
 
     #[test]

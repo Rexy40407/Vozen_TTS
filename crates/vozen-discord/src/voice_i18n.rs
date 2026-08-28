@@ -60,6 +60,12 @@ impl VoiceResponseLocalizer {
         let locale = self
             .catalog
             .resolve_locale(interaction_locale, guild_locale);
+        // The reward policy changed from a lifetime grant to a short rolling limit. Keep the
+        // current operational copy here until the historical Node catalogue is regenerated, so
+        // no supported locale can receive a stale "48h once ever" promise.
+        if let Some(copy) = current_vote_reward_copy(key, locale, parameters) {
+            return Some(copy);
+        }
         self.catalog
             .message(key, locale)
             .map(|template| interpolate(template, parameters))
@@ -82,6 +88,62 @@ impl VoiceResponseLocalizer {
     pub fn default_for_discord_locale(&self, locale: Option<&str>) -> String {
         self.catalog.resolve_locale(locale, None).to_owned()
     }
+}
+
+fn current_vote_reward_copy(
+    key: &str,
+    locale: &str,
+    parameters: &BTreeMap<&str, String>,
+) -> Option<String> {
+    let url = parameters.get("url").map(String::as_str).unwrap_or("{url}");
+    let copy = match key {
+        "vote.upsell" | "vote.link" => match locale {
+            "pt" => format!(
+                "🗳️ Vota no Vozen no top.gg → **24h de Plus grátis**. Máximo de **4 recompensas em 30 dias** e nunca mais de 48h de Plus acumulado: {url}"
+            ),
+            "es" => format!(
+                "🗳️ Vota por Vozen en top.gg → **24 h de Plus gratis**. Máximo de **4 recompensas en 30 días** y nunca más de 48 h acumuladas: {url}"
+            ),
+            "fr" => format!(
+                "🗳️ Votez pour Vozen sur top.gg → **24 h de Plus gratuit**. Maximum de **4 récompenses sur 30 jours** et jamais plus de 48 h cumulées : {url}"
+            ),
+            "de" => format!(
+                "🗳️ Stimme für Vozen auf top.gg ab → **24 Stunden Plus gratis**. Maximal **4 Belohnungen in 30 Tagen** und nie mehr als 48 Stunden angesammelt: {url}"
+            ),
+            "tr" => format!(
+                "🗳️ top.gg'de Vozen için oy ver → **24 saat ücretsiz Plus**. **30 günde en fazla 4 ödül** ve toplamda en fazla 48 saat: {url}"
+            ),
+            "ru" => format!(
+                "🗳️ Голосуйте за Vozen на top.gg → **24 часа Plus бесплатно**. Не более **4 наград за 30 дней** и не более 48 часов накопленного Plus: {url}"
+            ),
+            "ar" => format!(
+                "🗳️ صوّت لـ Vozen على top.gg → **24 ساعة Plus مجاناً**. بحد أقصى **4 مكافآت خلال 30 يوماً** ولا يزيد الرصيد عن 48 ساعة: {url}"
+            ),
+            "zh" => format!(
+                "🗳️ 在 top.gg 为 Vozen 投票 → **免费 Plus 24 小时**。每 30 天最多 **4 次奖励**，累计不超过 48 小时：{url}"
+            ),
+            "ja" => format!(
+                "🗳️ top.gg で Vozen に投票 → **Plus を24時間無料**。30日間で最大 **4回**、累積は48時間までです：{url}"
+            ),
+            _ => format!(
+                "🗳️ Vote for Vozen on top.gg → **24h of Plus free**. Maximum **4 rewards in 30 days** and never more than 48h accumulated: {url}"
+            ),
+        },
+        "vote.cooldownStatus" => match locale {
+            "pt" => "🗳️ Esta conta atingiu o limite de 4 recompensas em 30 dias. Ainda podes votar para apoiar o Vozen.".to_owned(),
+            "es" => "🗳️ Esta cuenta alcanzó el límite de 4 recompensas en 30 días. Aún puedes votar para apoyar a Vozen.".to_owned(),
+            "fr" => "🗳️ Ce compte a atteint la limite de 4 récompenses sur 30 jours. Vous pouvez toujours voter pour soutenir Vozen.".to_owned(),
+            "de" => "🗳️ Dieses Konto hat das Limit von 4 Belohnungen in 30 Tagen erreicht. Du kannst Vozen weiterhin mit deiner Stimme unterstützen.".to_owned(),
+            "tr" => "🗳️ Bu hesap 30 günde 4 ödül sınırına ulaştı. Vozen'i desteklemek için yine de oy verebilirsin.".to_owned(),
+            "ru" => "🗳️ Этот аккаунт достиг лимита в 4 награды за 30 дней. Вы всё ещё можете голосовать в поддержку Vozen.".to_owned(),
+            "ar" => "🗳️ وصل هذا الحساب إلى حد 4 مكافآت خلال 30 يوماً. لا يزال بإمكانك التصويت لدعم Vozen.".to_owned(),
+            "zh" => "🗳️ 此账号已达到每 30 天 4 次奖励的上限。你仍可投票支持 Vozen。".to_owned(),
+            "ja" => "🗳️ このアカウントは30日間で4回の報酬上限に達しました。Vozenを応援するために投票はできます。".to_owned(),
+            _ => "🗳️ This account has reached the limit of 4 rewards in 30 days. You can still vote to support Vozen.".to_owned(),
+        },
+        _ => return None,
+    };
+    Some(copy)
 }
 
 fn interpolate(template: &str, parameters: &BTreeMap<&str, String>) -> String {
@@ -179,5 +241,26 @@ mod tests {
             localizer.render_key("translation.ready", Some("en-US"), None, &parameters),
             Some("**Translation · pt**\nolá".into())
         );
+    }
+
+    #[test]
+    fn vote_copy_uses_the_current_rolling_reward_policy_for_all_locales() {
+        let localizer = VoiceResponseLocalizer::from_generated_contract().expect("catalog");
+        let mut parameters = BTreeMap::new();
+        parameters.insert("url", "https://top.gg/bot/123/vote".to_owned());
+        for locale in [
+            "en", "pt", "es", "fr", "de", "tr", "ru", "ar", "zh", "ja", "nl",
+        ] {
+            let copy = localizer
+                .render_key("vote.link", Some(locale), None, &parameters)
+                .expect("vote copy");
+            assert!(copy.contains("24") || copy.contains("٢٤"));
+            assert!(copy.contains("4") || copy.contains("４"));
+            assert!(!copy.to_ascii_lowercase().contains("once per account"));
+        }
+        let portuguese = localizer
+            .render_key("vote.cooldownStatus", Some("pt-PT"), None, &parameters)
+            .expect("cooldown copy");
+        assert!(portuguese.contains("4 recompensas"));
     }
 }

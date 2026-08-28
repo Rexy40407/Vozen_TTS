@@ -15,8 +15,11 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
+use time::{Date, Month};
+use vozen_store::utc_day_key_from_unix_millis;
 
 use crate::admin_api::{AdminApi, AdminGrant, AdminGrantError, AdminRevoke};
+use crate::web_analytics::CloudflareWebAnalyticsConfig;
 
 const BODY_MAX_BYTES: usize = 4_000;
 const API_RATE_MAX: usize = 30;
@@ -24,11 +27,15 @@ const API_RATE_WINDOW_MS: i64 = 10_000;
 const LOGIN_RATE_MAX: usize = 6;
 const LOGIN_RATE_WINDOW_MS: i64 = 10 * 60 * 1_000;
 const RATE_MAX_ENTRIES: usize = 2_048;
+const GROWTH_MAX_RANGE_DAYS: i32 = 90;
 
 pub struct AdminRouterConfig {
     pub origin: String,
     pub api: Arc<AdminApi>,
     pub now: Arc<dyn Fn() -> i64 + Send + Sync>,
+    /// Omitted until the server has a read-only Cloudflare token. The route
+    /// remains owner-only either way and never returns configuration values.
+    pub web_analytics: Option<CloudflareWebAnalyticsConfig>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +55,7 @@ struct AdminState {
     origin: HeaderValue,
     api: Arc<AdminApi>,
     now: Arc<dyn Fn() -> i64 + Send + Sync>,
+    web_analytics: Option<CloudflareWebAnalyticsConfig>,
     rate: Arc<Mutex<HashMap<String, RateState>>>,
     login_rate: Arc<Mutex<HashMap<String, RateState>>>,
 }
@@ -67,6 +75,8 @@ pub fn admin_router(config: AdminRouterConfig) -> Result<Router, AdminRouterConf
         .route("/api/admin/guilds", any(admin_request))
         .route("/api/admin/toptalkers", any(admin_request))
         .route("/api/admin/metrics", any(admin_request))
+        .route("/api/admin/growth", any(admin_request))
+        .route("/api/admin/web-analytics", any(admin_request))
         .route("/api/admin/grant", any(admin_request))
         .route("/api/admin/revoke", any(admin_request))
         .layer(DefaultBodyLimit::max(BODY_MAX_BYTES))
@@ -74,6 +84,7 @@ pub fn admin_router(config: AdminRouterConfig) -> Result<Router, AdminRouterConf
             origin,
             api: config.api,
             now: config.now,
+            web_analytics: config.web_analytics,
             rate: Arc::new(Mutex::new(HashMap::new())),
             login_rate: Arc::new(Mutex::new(HashMap::new())),
         }))
@@ -171,6 +182,55 @@ async fn admin_request(
                 .unwrap_or_else(|_| json!({"error":"internal"})),
             &state,
         ),
+        ("/api/admin/growth", Method::GET) => {
+            let Ok((from_day, to_day)) = growth_range(&uri, (state.now)()) else {
+                return response(
+                    StatusCode::BAD_REQUEST,
+                    json!({"error":"bad_range"}),
+                    &state,
+                );
+            };
+            match state.api.growth(&from_day, &to_day) {
+                Ok(growth) => response(
+                    StatusCode::OK,
+                    serde_json::to_value(growth).unwrap_or_else(|_| json!({"error":"internal"})),
+                    &state,
+                ),
+                Err(_) => response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    json!({"error":"internal"}),
+                    &state,
+                ),
+            }
+        }
+        ("/api/admin/web-analytics", Method::GET) => {
+            let Ok((from_day, to_day)) = growth_range(&uri, (state.now)()) else {
+                return response(
+                    StatusCode::BAD_REQUEST,
+                    json!({"error":"bad_range"}),
+                    &state,
+                );
+            };
+            let Some(web_analytics) = state.web_analytics.as_ref() else {
+                return response(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    json!({"error":"web_analytics_unavailable"}),
+                    &state,
+                );
+            };
+            match web_analytics.fetch(&from_day, &to_day, (state.now)()).await {
+                Ok(value) => response(
+                    StatusCode::OK,
+                    serde_json::to_value(value).unwrap_or_else(|_| json!({"error":"internal"})),
+                    &state,
+                ),
+                Err(_) => response(
+                    StatusCode::BAD_GATEWAY,
+                    json!({"error":"web_analytics_unavailable"}),
+                    &state,
+                ),
+            }
+        }
         ("/api/admin/grant", Method::POST) => grant(body, &state),
         ("/api/admin/revoke", Method::POST) => revoke(body, &state),
         (
@@ -178,6 +238,8 @@ async fn admin_request(
             | "/api/admin/guilds"
             | "/api/admin/toptalkers"
             | "/api/admin/metrics"
+            | "/api/admin/growth"
+            | "/api/admin/web-analytics"
             | "/api/admin/grant"
             | "/api/admin/revoke",
             _,
@@ -288,6 +350,54 @@ fn grant_error(error: AdminGrantError) -> &'static str {
         AdminGrantError::BadSeats => "bad_seats",
         AdminGrantError::Store => "internal",
     }
+}
+
+fn growth_range(uri: &Uri, now: i64) -> Result<(String, String), ()> {
+    let mut from = None;
+    let mut to = None;
+    let mut product = None;
+    for pair in uri
+        .query()
+        .unwrap_or_default()
+        .split('&')
+        .filter(|pair| !pair.is_empty())
+    {
+        let Some((key, value)) = pair.split_once('=') else {
+            return Err(());
+        };
+        match key {
+            "from" if from.replace(value).is_none() => {}
+            "to" if to.replace(value).is_none() => {}
+            "product" if product.replace(value).is_none() && value == "tts" => {}
+            _ => return Err(()),
+        }
+    }
+    let to = to
+        .map(str::to_owned)
+        .unwrap_or_else(|| utc_day_key_from_unix_millis(now));
+    let to_date = parse_utc_day(&to).ok_or(())?;
+    let from = from.map(str::to_owned).unwrap_or_else(|| {
+        Date::from_julian_day(to_date.to_julian_day() - 6)
+            .expect("six days before a valid date")
+            .to_string()
+    });
+    let from_date = parse_utc_day(&from).ok_or(())?;
+    let range = to_date.to_julian_day() - from_date.to_julian_day();
+    if !(0..GROWTH_MAX_RANGE_DAYS).contains(&range) {
+        return Err(());
+    }
+    Ok((from, to))
+}
+
+fn parse_utc_day(value: &str) -> Option<Date> {
+    let mut parts = value.split('-');
+    let year = parts.next()?.parse::<i32>().ok()?;
+    let month = parts.next()?.parse::<u8>().ok()?;
+    let day = parts.next()?.parse::<u8>().ok()?;
+    if parts.next().is_some() || value.len() != 10 {
+        return None;
+    }
+    Date::from_calendar_date(year, Month::try_from(month).ok()?, day).ok()
 }
 
 fn bearer_token(headers: &HeaderMap) -> Option<&str> {
@@ -440,6 +550,7 @@ mod tests {
             origin: "https://panel.vozen.org".into(),
             api,
             now: Arc::new(|| NOW),
+            web_analytics: None,
         })
         .expect("router")
     }
@@ -496,6 +607,7 @@ mod tests {
         assert_eq!(body, json!({"plus":[],"passes":[],"pending":[]}));
 
         let metrics = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/admin/metrics")
@@ -528,6 +640,73 @@ mod tests {
                 }]
             })
         );
+
+        let growth = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/admin/growth?from=2023-11-10&to=2023-11-16")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("growth");
+        assert_eq!(growth.status(), StatusCode::OK);
+        let growth: serde_json::Value =
+            serde_json::from_slice(&to_bytes(growth.into_body(), BODY_MAX_BYTES).await.unwrap())
+                .unwrap();
+        assert_eq!(growth["currentGuilds"], 0);
+        assert_eq!(growth["daily"], json!([]));
+    }
+
+    #[tokio::test]
+    async fn web_analytics_is_owner_only_and_fails_closed_when_unconfigured() {
+        let app = router();
+        let denied = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/admin/web-analytics?from=2023-11-10&to=2023-11-16")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("denied response");
+        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+        let login = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/login")
+                    .header("authorization", "Bearer owner-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("login response");
+        let login: serde_json::Value =
+            serde_json::from_slice(&to_bytes(login.into_body(), BODY_MAX_BYTES).await.unwrap())
+                .unwrap();
+        let token = login["token"].as_str().expect("session token");
+        let unavailable = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/admin/web-analytics?from=2023-11-10&to=2023-11-16")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("unavailable response");
+        assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body: serde_json::Value = serde_json::from_slice(
+            &to_bytes(unavailable.into_body(), BODY_MAX_BYTES)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body, json!({"error":"web_analytics_unavailable"}));
     }
 
     #[tokio::test]

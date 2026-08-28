@@ -62,11 +62,12 @@ Existe servidor de suporte (`discord.gg/4kYw2WUbNN`). Ligado ao `/help` (env `SU
   Piper se a Google fechar a porta. (Risco de terceiros, não do Discord.)
 - **Breach:** o ToS de developer (§5) obriga a notificar o Discord e os afetados em caso de
   acesso não autorizado a Dados da API. Documentar o processo antes de escalar.
-- **Recompensa por voto (growth loop):** o primeiro voto elegível no top.gg dá **48h de Vozen Plus** grátis,
-  limitado a **uma única vez por conta** através de um ledger HMAC persistente. Conforme com
+- **Recompensa por voto (growth loop):** cada voto elegível no top.gg dá **24h de Vozen Plus** grátis,
+  limitado a **4 recompensas numa janela móvel de 30 dias** e a no máximo 48h de Plus no futuro.
+  O ledger HMAC pseudónimo e o ID do evento top.gg são apagados após 30 dias. Conforme com
   o top.gg — que **permite** incentivar VOTOS (nunca REVIEWS/ratings, que ficam de fora por
   design; a copy pede sempre "votar"). Sem DM nem ping (hard rule). O ID em claro existe apenas
-  durante as 48h; o marcador HMAC anti-abuso e a retenção estão divulgados no PRIVACY.md.
+  durante a recompensa ativa; a retenção está divulgada no PRIVACY.md.
 - **Rever:** o artigo da política foi atualizado em 2026-07-07 — reavaliar periodicamente.
 
 ## Atualização 2026-07-11 (re-auditoria + novo trabalho)
