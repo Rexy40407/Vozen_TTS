@@ -83,7 +83,19 @@ it from the private TTS panel: no token or identifier may appear in browser
 responses. The beacon is deliberately absent from account, dashboard, callback
 and private-panel pages.
 
-## 5. Launch checks
+## 5. Growth measurement coverage
+
+`currentGuilds` is the current inventory, independent of the selected date
+range. `joins`, `leaves` and `net` describe observed changes inside that range.
+They must not be presented as the bot's lifetime installation count.
+
+`baselineGuilds` preserves the initial inventory imported when telemetry began.
+Those rows are not new acquisition events and have no trustworthy historical
+installation date. `measurementStartedOn` is the first telemetry day, not the
+bot's launch date. A 90-day filter cannot reconstruct events that predate this
+coverage. The private panel must show that coverage alongside measured growth.
+
+## 6. Launch checks
 
 1. Deploy the backend canary first, then the static site canary, then the
    private panel.

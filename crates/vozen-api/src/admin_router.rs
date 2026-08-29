@@ -656,6 +656,8 @@ mod tests {
             serde_json::from_slice(&to_bytes(growth.into_body(), BODY_MAX_BYTES).await.unwrap())
                 .unwrap();
         assert_eq!(growth["currentGuilds"], 0);
+        assert_eq!(growth["baselineGuilds"], 0);
+        assert_eq!(growth["measurementStartedOn"], serde_json::Value::Null);
         assert_eq!(growth["configuredGuilds"], 0);
         assert_eq!(growth["usedGuilds"], 0);
         assert_eq!(growth["daily"], json!([]));

@@ -39,6 +39,7 @@ impl GrowthEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GrowthOverview {
     pub current_guilds: i64,
+    pub baseline_guilds: i64,
     pub configured_guilds: i64,
     pub used_guilds: i64,
     pub joins: i64,
@@ -266,6 +267,12 @@ impl SqliteStore {
             [],
             |row| row.get(0),
         )?;
+        let baseline_guilds = connection.query_row(
+            "SELECT COALESCE(SUM(value), 0) FROM growth_daily_metric
+             WHERE product = ?1 AND source = ?2 AND event = 'joined'",
+            params![PRODUCT, BASELINE_SOURCE],
+            |row| row.get(0),
+        )?;
         let used_guilds = connection.query_row(
             "SELECT COUNT(DISTINCT stats.guild_id)
              FROM talk_stats stats
@@ -280,6 +287,7 @@ impl SqliteStore {
         let retained_w30 = count_retained(connection, now, 30)?;
         Ok(GrowthOverview {
             current_guilds,
+            baseline_guilds,
             configured_guilds,
             used_guilds,
             joins: sum(GrowthEvent::Joined)?,
@@ -291,6 +299,18 @@ impl SqliteStore {
             retained_w30,
             eligible_w30,
         })
+    }
+
+    /// The first day with telemetry is coverage metadata, not the bot's launch date.
+    /// It is intentionally independent of the requested dashboard date range.
+    pub fn growth_measurement_started_on(&self) -> Result<Option<String>, StoreError> {
+        self.connection()
+            .query_row(
+                "SELECT MIN(day) FROM growth_daily_metric WHERE product = ?1",
+                [PRODUCT],
+                |row| row.get(0),
+            )
+            .map_err(StoreError::from)
     }
 
     pub fn list_growth_daily_metrics(
@@ -609,6 +629,8 @@ mod tests {
             .expect("baseline activity");
 
         let overview = store.growth_overview(NOW).expect("overview");
+        assert_eq!(overview.current_guilds, 1);
+        assert_eq!(overview.baseline_guilds, 1);
         assert_eq!(overview.joins, 0);
         assert_eq!(overview.setup_completed, 0);
         assert_eq!(overview.first_value, 0);
@@ -620,6 +642,48 @@ mod tests {
             .expect("daily metrics");
         assert_eq!(metrics.iter().map(|point| point.joins).sum::<i64>(), 0);
         assert_eq!(metrics.iter().map(|point| point.active).sum::<i64>(), 2);
+    }
+
+    #[test]
+    fn measurement_coverage_preserves_initial_inventory_across_rejoins() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        assert_eq!(
+            store.growth_measurement_started_on().expect("coverage"),
+            None
+        );
+        store
+            .record_guild_join("existing", Some(BASELINE_SOURCE), DAY)
+            .expect("baseline join");
+        store
+            .record_guild_join("new", Some("tts-hero"), 2 * DAY)
+            .expect("new join");
+        store
+            .record_guild_departure("existing", 3 * DAY)
+            .expect("departure");
+        store
+            .record_guild_join("existing", Some("topgg"), 4 * DAY)
+            .expect("rejoin");
+
+        let overview = store.growth_overview(NOW).expect("overview");
+        assert_eq!(overview.baseline_guilds, 1);
+        assert_eq!(overview.joins, 2);
+        assert_eq!(overview.leaves, 1);
+        assert_eq!(overview.current_guilds, 2);
+        assert_eq!(
+            store.growth_measurement_started_on().expect("coverage"),
+            Some("1970-01-02".into())
+        );
+        let recent = store
+            .list_growth_daily_metrics("1970-01-05", "1970-01-05")
+            .expect("recent window");
+        assert_eq!(recent.iter().map(|point| point.joins).sum::<i64>(), 1);
+        assert_eq!(
+            store
+                .growth_overview(NOW)
+                .expect("overview")
+                .baseline_guilds,
+            1
+        );
     }
 
     #[test]

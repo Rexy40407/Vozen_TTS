@@ -185,6 +185,10 @@ pub struct AdminGrowth {
     pub product: &'static str,
     #[serde(rename = "currentGuilds")]
     pub current_guilds: i64,
+    #[serde(rename = "baselineGuilds")]
+    pub baseline_guilds: i64,
+    #[serde(rename = "measurementStartedOn")]
+    pub measurement_started_on: Option<String>,
     #[serde(rename = "configuredGuilds")]
     pub configured_guilds: i64,
     #[serde(rename = "usedGuilds")]
@@ -583,6 +587,10 @@ impl AdminApi {
         Ok(AdminGrowth {
             product: "tts",
             current_guilds: overview.current_guilds,
+            baseline_guilds: overview.baseline_guilds,
+            measurement_started_on: store
+                .growth_measurement_started_on()
+                .map_err(|_| AdminGrantError::Store)?,
             configured_guilds: overview.configured_guilds,
             used_guilds: overview.used_guilds,
             joins,
@@ -903,6 +911,37 @@ mod tests {
         assert!(api.login(Some("wrong-user")).await.is_none());
         assert!(api.login(Some("wrong-app")).await.is_none());
         assert!(api.authorize(Some("owner-token")).is_none());
+    }
+
+    #[test]
+    fn wide_growth_window_separates_current_inventory_from_measured_net_change() {
+        let api = api();
+        {
+            let store = api.store.lock().expect("store");
+            for index in 0..168 {
+                store
+                    .record_guild_join(&format!("baseline-{index}"), Some("baseline"), NOW)
+                    .expect("baseline join");
+            }
+            for index in 0..7 {
+                store
+                    .record_guild_join(&format!("new-{index}"), Some("tts-hero"), NOW)
+                    .expect("new join");
+            }
+            for index in 0..3 {
+                store
+                    .record_guild_departure(&format!("new-{index}"), NOW + 1)
+                    .expect("departure");
+            }
+        }
+
+        let growth = api.growth("2023-08-17", "2023-11-14").expect("growth");
+        assert_eq!(growth.current_guilds, 172);
+        assert_eq!(growth.baseline_guilds, 168);
+        assert_eq!(growth.measurement_started_on.as_deref(), Some("2023-11-14"));
+        assert_eq!(growth.joins, 7);
+        assert_eq!(growth.leaves, 3);
+        assert_eq!(growth.net, 4);
     }
 
     #[test]
