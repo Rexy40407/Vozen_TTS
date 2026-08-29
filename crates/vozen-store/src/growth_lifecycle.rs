@@ -38,6 +38,7 @@ impl GrowthEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GrowthOverview {
     pub current_guilds: i64,
+    pub configured_guilds: i64,
     pub joins: i64,
     pub leaves: i64,
     pub setup_completed: i64,
@@ -240,12 +241,24 @@ impl SqliteStore {
             [],
             |row| row.get(0),
         )?;
+        let configured_guilds = connection.query_row(
+            "SELECT COUNT(*)
+             FROM guild_growth_lifecycle lifecycle
+             INNER JOIN guild_config config ON config.guild_id = lifecycle.guild_id
+             WHERE lifecycle.departed_at IS NULL
+               AND config.tts_channel_id IS NOT NULL
+               AND config.autoread = 1
+               AND config.enabled = 1",
+            [],
+            |row| row.get(0),
+        )?;
         let eligible_w7 = count_eligible(connection, now, 7)?;
         let retained_w7 = count_retained(connection, now, 7)?;
         let eligible_w30 = count_eligible(connection, now, 30)?;
         let retained_w30 = count_retained(connection, now, 30)?;
         Ok(GrowthOverview {
             current_guilds,
+            configured_guilds,
             joins: sum(GrowthEvent::Joined)?,
             leaves: sum(GrowthEvent::Left)?,
             setup_completed: sum(GrowthEvent::SetupCompleted)?,
@@ -516,5 +529,37 @@ mod tests {
         assert_eq!(overview.retained_w7, 1);
         assert_eq!(overview.eligible_w30, 1);
         assert_eq!(overview.retained_w30, 0);
+    }
+
+    #[test]
+    fn overview_counts_current_ready_tts_configurations_separately_from_funnel_events() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store.record_guild_join("ready", None, DAY).expect("join");
+        store
+            .update_guild_config(
+                "ready",
+                crate::GuildConfigPatch {
+                    tts_channel_id: Some(Some("channel".into())),
+                    autoread: Some(true),
+                    ..Default::default()
+                },
+            )
+            .expect("ready config");
+        store
+            .record_guild_join("not-ready", None, DAY)
+            .expect("join");
+        store
+            .update_guild_config(
+                "not-ready",
+                crate::GuildConfigPatch {
+                    tts_channel_id: Some(Some("channel".into())),
+                    ..Default::default()
+                },
+            )
+            .expect("incomplete config");
+
+        let overview = store.growth_overview(NOW).expect("overview");
+        assert_eq!(overview.current_guilds, 2);
+        assert_eq!(overview.configured_guilds, 1);
     }
 }

@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteStore, StoreError};
@@ -181,9 +183,13 @@ impl SqliteStore {
         guild_id: &str,
         patch: GuildConfigPatch,
     ) -> Result<GuildConfig, StoreError> {
-        let mut config = self.guild_config(guild_id)?;
+        let previous = self.guild_config(guild_id)?;
+        let mut config = previous.clone();
         config.apply(patch);
         self.save_guild_config(guild_id, &config)?;
+        if !tts_ready(&previous) && tts_ready(&config) {
+            self.record_guild_setup_completed(guild_id, now_ms())?;
+        }
         Ok(config)
     }
 
@@ -265,6 +271,17 @@ fn bool_or_default(value: Option<i64>, default: bool) -> bool {
     value.map_or(default, |raw| raw == 1)
 }
 
+fn tts_ready(config: &GuildConfig) -> bool {
+    config.enabled && config.autoread && config.tts_channel_id.is_some()
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().try_into().unwrap_or(i64::MAX))
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,6 +347,42 @@ mod tests {
         assert_eq!(
             store.guild_config("guild").expect("read config"),
             GuildConfig::default()
+        );
+    }
+
+    #[test]
+    fn first_ready_tts_configuration_records_one_setup_completion() {
+        let store = SqliteStore::open_in_memory().expect("open store");
+        store
+            .record_guild_join("guild", None, 86_400_000)
+            .expect("join");
+
+        store
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    tts_channel_id: Some(Some("channel".into())),
+                    autoread: Some(true),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("mark ready");
+        store
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    default_voice: Some("en_US-amy-medium".into()),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("change voice");
+
+        assert_eq!(
+            store
+                .growth_overview(60 * 86_400_000)
+                .expect("overview")
+                .setup_completed,
+            1
         );
     }
 }
