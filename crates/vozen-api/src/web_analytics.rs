@@ -20,8 +20,9 @@ const GRAPHQL_ENDPOINT: &str = "https://api.cloudflare.com/client/v4/graphql";
 const CACHE_TTL_MS: i64 = 5 * 60 * 1_000;
 const BREAKDOWN_LIMIT: usize = 10;
 
-// Cloudflare's RUM datasets are account-scoped. `siteTag` identifies the
-// configured Web Analytics site; this is intentionally not a browser token.
+// Cloudflare's RUM datasets are account-scoped. `siteTag` is the Web Analytics
+// property ID used by the dashboard URL (for example `/web-analytics/edit/<siteTag>`).
+// It is deliberately different from the public beacon token embedded in the website.
 const PAGELOAD_QUERY: &str = r#"
 query VozenRumPageloads($accountId: String!, $siteTag: String!, $since: String!, $until: String!) {
   viewer {
@@ -66,6 +67,7 @@ pub struct CloudflareWebAnalyticsConfig {
     // association. The RUM GraphQL datasets themselves are scoped by account
     // and Web Analytics site tag.
     _zone_id: String,
+    // Cloudflare Web Analytics property ID, not the browser beacon token.
     site_tag: String,
     api_token: String,
     client: Client,

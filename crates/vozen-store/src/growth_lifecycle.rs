@@ -10,6 +10,7 @@ use crate::{SqliteStore, StoreError, utc_day_key_from_unix_millis};
 
 const PRODUCT: &str = "tts";
 const UNKNOWN_SOURCE: &str = "unknown";
+const BASELINE_SOURCE: &str = "baseline";
 const DAY_MS: i64 = 24 * 60 * 60 * 1_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +40,7 @@ impl GrowthEvent {
 pub struct GrowthOverview {
     pub current_guilds: i64,
     pub configured_guilds: i64,
+    pub used_guilds: i64,
     pub joins: i64,
     pub leaves: i64,
     pub setup_completed: i64,
@@ -100,7 +102,10 @@ impl SqliteStore {
                     "UPDATE guild_growth_lifecycle
                      SET last_joined_at = ?2,
                          departed_at = NULL,
-                         install_source = CASE WHEN install_source = 'unknown' THEN ?3 ELSE install_source END
+                         install_source = CASE
+                           WHEN install_source IN ('unknown', 'baseline') THEN ?3
+                           ELSE install_source
+                         END
                      WHERE guild_id = ?1",
                     params![guild_id, now, source],
                 )?;
@@ -109,7 +114,7 @@ impl SqliteStore {
                 add_daily(
                     &transaction,
                     now,
-                    if current_source == UNKNOWN_SOURCE {
+                    if current_source == UNKNOWN_SOURCE || current_source == BASELINE_SOURCE {
                         &source
                     } else {
                         &current_source
@@ -148,7 +153,10 @@ impl SqliteStore {
              VALUES (?1, ?2, ?3, ?3, ?4)
              ON CONFLICT(guild_id) DO UPDATE SET
                install_source = CASE
-                 WHEN guild_growth_lifecycle.install_source = 'unknown' THEN excluded.install_source
+                 WHEN guild_growth_lifecycle.install_source = 'unknown'
+                   OR (guild_growth_lifecycle.install_source = 'baseline'
+                       AND guild_growth_lifecycle.departed_at IS NOT NULL)
+                   THEN excluded.install_source
                  ELSE guild_growth_lifecycle.install_source
                END",
             params![guild_id, PRODUCT, now, source],
@@ -227,11 +235,17 @@ impl SqliteStore {
     pub fn growth_overview(&self, now: i64) -> Result<GrowthOverview, StoreError> {
         let connection = self.connection();
         let sum = |event: GrowthEvent| -> Result<i64, StoreError> {
+            let include_baseline = event == GrowthEvent::Left;
             connection
                 .query_row(
                     "SELECT COALESCE(SUM(value), 0) FROM growth_daily_metric
-                     WHERE product = ?1 AND event = ?2",
-                    params![PRODUCT, event.as_database()],
+                     WHERE product = ?1 AND event = ?2 AND (?3 OR source <> ?4)",
+                    params![
+                        PRODUCT,
+                        event.as_database(),
+                        include_baseline,
+                        BASELINE_SOURCE
+                    ],
                     |row| row.get(0),
                 )
                 .map_err(StoreError::from)
@@ -252,6 +266,14 @@ impl SqliteStore {
             [],
             |row| row.get(0),
         )?;
+        let used_guilds = connection.query_row(
+            "SELECT COUNT(DISTINCT stats.guild_id)
+             FROM talk_stats stats
+             INNER JOIN guild_growth_lifecycle lifecycle ON lifecycle.guild_id = stats.guild_id
+             WHERE lifecycle.departed_at IS NULL AND stats.spoken_count > 0",
+            [],
+            |row| row.get(0),
+        )?;
         let eligible_w7 = count_eligible(connection, now, 7)?;
         let retained_w7 = count_retained(connection, now, 7)?;
         let eligible_w30 = count_eligible(connection, now, 30)?;
@@ -259,6 +281,7 @@ impl SqliteStore {
         Ok(GrowthOverview {
             current_guilds,
             configured_guilds,
+            used_guilds,
             joins: sum(GrowthEvent::Joined)?,
             leaves: sum(GrowthEvent::Left)?,
             setup_completed: sum(GrowthEvent::SetupCompleted)?,
@@ -282,17 +305,17 @@ impl SqliteStore {
         }
         let mut statement = self.connection().prepare(
             "SELECT day, source,
-               COALESCE(SUM(CASE WHEN event = 'joined' THEN value END), 0),
+               COALESCE(SUM(CASE WHEN source <> ?4 AND event = 'joined' THEN value END), 0),
                COALESCE(SUM(CASE WHEN event = 'left' THEN value END), 0),
-               COALESCE(SUM(CASE WHEN event = 'setup_completed' THEN value END), 0),
-               COALESCE(SUM(CASE WHEN event = 'first_value' THEN value END), 0),
+               COALESCE(SUM(CASE WHEN source <> ?4 AND event = 'setup_completed' THEN value END), 0),
+               COALESCE(SUM(CASE WHEN source <> ?4 AND event = 'first_value' THEN value END), 0),
                COALESCE(SUM(CASE WHEN event = 'active' THEN value END), 0)
              FROM growth_daily_metric
              WHERE product = ?1 AND day >= ?2 AND day <= ?3
              GROUP BY day, source ORDER BY day ASC, source ASC",
         )?;
         statement
-            .query_map(params![PRODUCT, from_day, to_day], |row| {
+            .query_map(params![PRODUCT, from_day, to_day, BASELINE_SOURCE], |row| {
                 Ok(GrowthDailyMetric {
                     day: row.get(0)?,
                     source: row.get(1)?,
@@ -388,8 +411,12 @@ fn count_eligible(
     connection
         .query_row(
             "SELECT COUNT(*) FROM guild_growth_lifecycle
-             WHERE first_value_at IS NOT NULL AND first_value_at <= ?1",
-            [now.saturating_sub(days.saturating_mul(DAY_MS))],
+             WHERE install_source <> ?2
+               AND first_value_at IS NOT NULL AND first_value_at <= ?1",
+            params![
+                now.saturating_sub(days.saturating_mul(DAY_MS)),
+                BASELINE_SOURCE
+            ],
             |row| row.get(0),
         )
         .map_err(StoreError::from)
@@ -403,12 +430,14 @@ fn count_retained(
     connection
         .query_row(
             "SELECT COUNT(*) FROM guild_growth_lifecycle
-             WHERE first_value_at IS NOT NULL
+             WHERE install_source <> ?3
+               AND first_value_at IS NOT NULL
                AND first_value_at <= ?1
                AND last_active_at >= first_value_at + ?2",
             params![
                 now.saturating_sub(days.saturating_mul(DAY_MS)),
-                days * DAY_MS
+                days * DAY_MS,
+                BASELINE_SOURCE
             ],
             |row| row.get(0),
         )
@@ -561,5 +590,73 @@ mod tests {
         let overview = store.growth_overview(NOW).expect("overview");
         assert_eq!(overview.current_guilds, 2);
         assert_eq!(overview.configured_guilds, 1);
+    }
+
+    #[test]
+    fn baseline_rows_do_not_inflate_acquisition_or_retention() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .record_guild_join("existing", Some(BASELINE_SOURCE), DAY)
+            .expect("baseline join");
+        store
+            .record_guild_setup_completed("existing", DAY + 1)
+            .expect("baseline setup");
+        store
+            .record_guild_first_value("existing", DAY + 2)
+            .expect("baseline value");
+        store
+            .record_guild_activity("existing", DAY + 8 * DAY)
+            .expect("baseline activity");
+
+        let overview = store.growth_overview(NOW).expect("overview");
+        assert_eq!(overview.joins, 0);
+        assert_eq!(overview.setup_completed, 0);
+        assert_eq!(overview.first_value, 0);
+        assert_eq!(overview.eligible_w7, 0);
+        assert_eq!(overview.retained_w7, 0);
+
+        let metrics = store
+            .list_growth_daily_metrics("1970-01-02", "1970-01-10")
+            .expect("daily metrics");
+        assert_eq!(metrics.iter().map(|point| point.joins).sum::<i64>(), 0);
+        assert_eq!(metrics.iter().map(|point| point.active).sum::<i64>(), 2);
+    }
+
+    #[test]
+    fn historical_talk_stats_count_current_servers_with_real_use() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store.record_guild_join("used", None, DAY).expect("join");
+        store
+            .connection()
+            .execute(
+                "INSERT INTO talk_stats (guild_id, user_id, spoken_count) VALUES (?1, ?2, ?3)",
+                params!["used", "user", 2],
+            )
+            .expect("talk stats");
+        store.record_guild_join("unused", None, DAY).expect("join");
+
+        let overview = store.growth_overview(NOW).expect("overview");
+        assert_eq!(overview.used_guilds, 1);
+    }
+
+    #[test]
+    fn reauthorising_an_active_baseline_server_does_not_turn_it_into_new_acquisition() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .record_guild_join("existing", Some(BASELINE_SOURCE), DAY)
+            .expect("baseline join");
+        store
+            .set_guild_install_source("existing", "tts-hero", DAY + 1)
+            .expect("reauthorise");
+
+        let source: String = store
+            .connection()
+            .query_row(
+                "SELECT install_source FROM guild_growth_lifecycle WHERE guild_id='existing'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("source");
+        assert_eq!(source, BASELINE_SOURCE);
     }
 }

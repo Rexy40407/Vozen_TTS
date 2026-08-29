@@ -187,6 +187,8 @@ pub struct AdminGrowth {
     pub current_guilds: i64,
     #[serde(rename = "configuredGuilds")]
     pub configured_guilds: i64,
+    #[serde(rename = "usedGuilds")]
+    pub used_guilds: i64,
     pub joins: i64,
     pub leaves: i64,
     pub net: i64,
@@ -582,6 +584,7 @@ impl AdminApi {
             product: "tts",
             current_guilds: overview.current_guilds,
             configured_guilds: overview.configured_guilds,
+            used_guilds: overview.used_guilds,
             joins,
             leaves,
             net: joins - leaves,

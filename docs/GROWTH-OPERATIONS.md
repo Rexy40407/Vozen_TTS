@@ -74,7 +74,7 @@ following in the runtime environment only:
 CLOUDFLARE_WEB_ANALYTICS_ENABLED=true
 CLOUDFLARE_ACCOUNT_ID=<account id>
 CLOUDFLARE_ZONE_ID=<zone id>
-CLOUDFLARE_WEB_ANALYTICS_SITE_TAG=<public beacon site tag>
+CLOUDFLARE_WEB_ANALYTICS_SITE_TAG=<Web Analytics property ID from /web-analytics/edit/...>
 CLOUDFLARE_WEB_ANALYTICS_TOKEN=<read-only GraphQL token>
 ```
 

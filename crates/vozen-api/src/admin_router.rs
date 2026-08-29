@@ -657,6 +657,7 @@ mod tests {
                 .unwrap();
         assert_eq!(growth["currentGuilds"], 0);
         assert_eq!(growth["configuredGuilds"], 0);
+        assert_eq!(growth["usedGuilds"], 0);
         assert_eq!(growth["daily"], json!([]));
     }
 
