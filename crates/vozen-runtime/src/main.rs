@@ -3419,26 +3419,29 @@ fn spawn_topgg_metrics(
             // Verify the v1 Bearer credential first. In particular, this prevents a legacy or
             // revoked token from being mistaken for a successful posting path.
             let validation = validate_topgg_v1_token(&http, &config.token).await;
-            let outcome = if validation.succeeded() {
+            let (outcome, sent_server_count) = if validation.succeeded() {
                 if !commands_synced && let Some(commands) = public_topgg_commands() {
                     commands_synced = sync_topgg_commands(&http, &config.token, commands).await;
                 }
-                post_topgg_stats_with_shards(
-                    &http,
-                    &config.client_id,
-                    &config.token,
-                    server_count,
-                    1,
+                (
+                    post_topgg_stats_with_shards(
+                        &http,
+                        &config.client_id,
+                        &config.token,
+                        server_count,
+                        1,
+                    )
+                    .await,
+                    Some(server_count),
                 )
-                .await
             } else {
-                validation
+                (validation, None)
             };
             if let Ok(store) = store.lock() {
                 let _ = store.record_topgg_sync_attempt(
                     system_now_ms(),
                     outcome.status(),
-                    Some(server_count),
+                    sent_server_count,
                     outcome.succeeded(),
                     outcome.detail(),
                 );
