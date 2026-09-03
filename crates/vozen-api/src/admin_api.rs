@@ -200,6 +200,9 @@ pub struct AdminGrowth {
     pub setup_completed: i64,
     #[serde(rename = "firstValue")]
     pub first_value: i64,
+    /// Authenticated, unique Top.gg deliveries in the requested date range. This is an
+    /// identity-free aggregate and includes valid votes even when the reward cap is reached.
+    pub votes: i64,
     #[serde(rename = "setupRate")]
     pub setup_rate: f64,
     #[serde(rename = "activationRate")]
@@ -228,6 +231,7 @@ pub struct AdminGrowthDaily {
     #[serde(rename = "firstValue")]
     pub first_value: i64,
     pub active: i64,
+    pub votes: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -577,6 +581,7 @@ impl AdminApi {
         let leaves = daily.iter().map(|point| point.leaves).sum::<i64>();
         let setup_completed = daily.iter().map(|point| point.setup_completed).sum::<i64>();
         let first_value = daily.iter().map(|point| point.first_value).sum::<i64>();
+        let votes = daily.iter().map(|point| point.votes).sum::<i64>();
         let rate = |numerator: i64| {
             if joins == 0 {
                 0.0
@@ -598,6 +603,7 @@ impl AdminApi {
             net: joins - leaves,
             setup_completed,
             first_value,
+            votes,
             setup_rate: rate(setup_completed),
             activation_rate: rate(first_value),
             retained_w7: overview.retained_w7,
@@ -614,6 +620,7 @@ impl AdminApi {
                     setup_completed: point.setup_completed,
                     first_value: point.first_value,
                     active: point.active,
+                    votes: point.votes,
                 })
                 .collect(),
             topgg: store
@@ -942,6 +949,27 @@ mod tests {
         assert_eq!(growth.joins, 7);
         assert_eq!(growth.leaves, 3);
         assert_eq!(growth.net, 4);
+    }
+
+    #[test]
+    fn growth_contract_exposes_unique_valid_votes_for_the_requested_window() {
+        let api = api();
+        {
+            let store = api.store.lock().expect("store");
+            store
+                .claim_topgg_vote_reward(
+                    Some("vote-event"),
+                    "12345678901234567",
+                    NOW,
+                    "0123456789abcdef0123456789abcdef",
+                )
+                .expect("vote");
+        }
+
+        let growth = api.growth("2023-11-14", "2023-11-14").expect("growth");
+        assert_eq!(growth.votes, 1);
+        assert_eq!(growth.daily.len(), 1);
+        assert_eq!(growth.daily[0].votes, 1);
     }
 
     #[test]

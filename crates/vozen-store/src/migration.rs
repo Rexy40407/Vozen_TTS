@@ -92,6 +92,20 @@ pub(crate) fn migrate_legacy_schema(connection: &Connection) -> Result<(), Store
     )?;
     add_missing_columns(connection, "topgg_sync_state", TOPGG_SYNC_STATE_COLUMNS)?;
 
+    // Older releases retained provider delivery IDs for 30 days but did not expose an
+    // identity-free vote series. Seed the durable aggregate from those existing rows. MAX makes
+    // this safe on every startup and never reduces counts after raw replay rows are purged.
+    connection.execute_batch(
+        "INSERT INTO growth_daily_metric (day, product, source, event, value)
+         SELECT strftime('%Y-%m-%d', processed_at / 1000, 'unixepoch'),
+                'tts', 'topgg', 'vote', COUNT(*)
+         FROM topgg_webhook_event
+         WHERE processed_at >= 0
+         GROUP BY strftime('%Y-%m-%d', processed_at / 1000, 'unixepoch')
+         ON CONFLICT(day, product, source, event)
+         DO UPDATE SET value = MAX(growth_daily_metric.value, excluded.value);",
+    )?;
+
     let supporter_columns = table_columns(connection, "kofi_supporter")?;
     if supporter_columns.contains("email") && !supporter_columns.contains("email_hash") {
         // The values in old rows are intentionally no longer usable as an email lookup key; they
@@ -253,6 +267,36 @@ mod tests {
                 .expect("optin present")
         );
         drop(store);
+        let _ = remove_file(&path);
+        let _ = remove_file(format!("{}-wal", path.display()));
+        let _ = remove_file(format!("{}-shm", path.display()));
+    }
+
+    #[test]
+    fn backfills_existing_topgg_deliveries_into_daily_votes_idempotently() {
+        let path = temporary_database_path();
+        let store = SqliteStore::open(&path).expect("initial database");
+        store
+            .connection()
+            .execute(
+                "INSERT INTO topgg_webhook_event (event_id, processed_at) VALUES ('old-1', 1699920000000), ('old-2', 1699920001000)",
+                [],
+            )
+            .expect("historical events");
+        drop(store);
+
+        for _ in 0..2 {
+            let reopened = SqliteStore::open(&path).expect("migrate");
+            assert_eq!(
+                reopened
+                    .list_growth_daily_metrics("2023-11-14", "2023-11-14")
+                    .expect("daily metrics")[0]
+                    .votes,
+                2
+            );
+            drop(reopened);
+        }
+
         let _ = remove_file(&path);
         let _ = remove_file(format!("{}-wal", path.display()));
         let _ = remove_file(format!("{}-shm", path.display()));

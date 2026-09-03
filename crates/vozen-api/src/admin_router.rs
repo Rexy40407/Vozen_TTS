@@ -660,6 +660,7 @@ mod tests {
         assert_eq!(growth["measurementStartedOn"], serde_json::Value::Null);
         assert_eq!(growth["configuredGuilds"], 0);
         assert_eq!(growth["usedGuilds"], 0);
+        assert_eq!(growth["votes"], 0);
         assert_eq!(growth["daily"], json!([]));
     }
 

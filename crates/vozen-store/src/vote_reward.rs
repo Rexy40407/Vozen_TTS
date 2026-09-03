@@ -151,6 +151,7 @@ impl SqliteStore {
                 transaction.commit()?;
                 return Ok(TopggVoteRewardResult::DuplicateEvent);
             }
+            crate::growth_lifecycle::add_topgg_vote_daily(&transaction, now)?;
         }
 
         let grants_in_window: i64 = transaction.query_row(
@@ -377,6 +378,37 @@ mod tests {
                 .expect("other event"),
             TopggVoteRewardResult::Granted { .. }
         ));
+    }
+
+    #[test]
+    fn unique_provider_votes_create_identity_free_daily_metrics_once() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        for index in 0..=VOTE_REWARD_MAX_GRANTS_PER_30_DAYS {
+            store
+                .claim_topgg_vote_reward(Some(&format!("vote-{index}")), USER, NOW + index, SECRET)
+                .expect("valid vote");
+        }
+        store
+            .claim_topgg_vote_reward(Some("vote-0"), USER, NOW + 100, SECRET)
+            .expect("provider retry");
+
+        let metrics = store
+            .list_growth_daily_metrics("1970-01-01", "1970-01-01")
+            .expect("daily growth");
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].source, "topgg");
+        assert_eq!(metrics[0].votes, 5);
+        assert_eq!(metrics[0].joins, 0);
+
+        let user_identifiers: i64 = store
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM growth_daily_metric WHERE source = ?1 OR source = ?2",
+                params![USER, vote_redemption_hash(SECRET, USER).expect("hash")],
+                |row| row.get(0),
+            )
+            .expect("privacy check");
+        assert_eq!(user_identifiers, 0);
     }
 
     #[test]

@@ -20,6 +20,7 @@ enum GrowthEvent {
     SetupCompleted,
     FirstValue,
     Active,
+    Vote,
 }
 
 impl GrowthEvent {
@@ -30,6 +31,7 @@ impl GrowthEvent {
             Self::SetupCompleted => "setup_completed",
             Self::FirstValue => "first_value",
             Self::Active => "active",
+            Self::Vote => "vote",
         }
     }
 }
@@ -61,6 +63,7 @@ pub struct GrowthDailyMetric {
     pub setup_completed: i64,
     pub first_value: i64,
     pub active: i64,
+    pub votes: i64,
 }
 
 impl SqliteStore {
@@ -329,7 +332,8 @@ impl SqliteStore {
                COALESCE(SUM(CASE WHEN event = 'left' THEN value END), 0),
                COALESCE(SUM(CASE WHEN source <> ?4 AND event = 'setup_completed' THEN value END), 0),
                COALESCE(SUM(CASE WHEN source <> ?4 AND event = 'first_value' THEN value END), 0),
-               COALESCE(SUM(CASE WHEN event = 'active' THEN value END), 0)
+               COALESCE(SUM(CASE WHEN event = 'active' THEN value END), 0),
+               COALESCE(SUM(CASE WHEN event = 'vote' THEN value END), 0)
              FROM growth_daily_metric
              WHERE product = ?1 AND day >= ?2 AND day <= ?3
              GROUP BY day, source ORDER BY day ASC, source ASC",
@@ -344,6 +348,7 @@ impl SqliteStore {
                     setup_completed: row.get(4)?,
                     first_value: row.get(5)?,
                     active: row.get(6)?,
+                    votes: row.get(7)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()
@@ -374,6 +379,16 @@ impl SqliteStore {
         transaction.commit()?;
         Ok(())
     }
+}
+
+/// Records an authenticated, provider-idempotent Top.gg delivery without retaining a user or
+/// server identifier in the long-lived growth series. The caller keeps this write in the same
+/// transaction as the provider event claim so retries can never inflate the aggregate.
+pub(crate) fn add_topgg_vote_daily(
+    transaction: &rusqlite::Transaction<'_>,
+    now: i64,
+) -> Result<(), StoreError> {
+    add_daily(transaction, now, "topgg", GrowthEvent::Vote)
 }
 
 fn ensure_lifecycle(

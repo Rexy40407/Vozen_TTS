@@ -31,6 +31,12 @@ the keyed ledger and provider replay ID are removed after 30 days.
 Before announcing the change, send one verified test vote and confirm that a
 replayed delivery does not change the entitlement or vote count.
 
+The private growth endpoint returns `votes` for the requested period and a
+`votes` counter on each daily row. These are long-lived aggregate counters only:
+they contain no Discord user ID, user hash, server ID or provider event ID. On
+the first upgraded startup, retained provider events are backfilled into the
+daily series idempotently so the visible 30-day history does not restart at zero.
+
 ## 3. TTS server-side installation
 
 In the Discord Developer Portal, register exactly:

@@ -3,7 +3,7 @@
 //! This boundary performs no database write and never grants an entitlement. Its only job is to
 //! authenticate the untouched raw body, parse the two currently supported payload shapes and
 //! identify a real upvote for the configured Discord application. A later durable ledger owns
-//! idempotency and the one-time Plus reward.
+//! idempotency and the rolling Plus reward.
 
 use hmac::{Hmac, Mac};
 use serde_json::Value;
