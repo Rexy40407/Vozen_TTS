@@ -561,7 +561,10 @@ mod tests {
             &self,
             request: &SynthRequest,
         ) -> Result<PathBuf, CommandSynthesisError> {
-            self.0.lock().expect("captured requests").push(request.clone());
+            self.0
+                .lock()
+                .expect("captured requests")
+                .push(request.clone());
             Ok(PathBuf::from("voice.wav"))
         }
     }
@@ -1022,10 +1025,7 @@ mod tests {
                 },
                 GuildSynthesisCoordinator::default(),
                 CoreVoiceSettings {
-                    available_models: vec![
-                        "en_US-amy-medium".into(),
-                        "es_ES-davefx-medium".into(),
-                    ],
+                    available_models: vec!["en_US-amy-medium".into(), "es_ES-davefx-medium".into()],
                     ..settings()
                 },
                 Arc::new(|| 0),
