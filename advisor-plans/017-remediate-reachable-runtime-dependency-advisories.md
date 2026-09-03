@@ -68,15 +68,15 @@ trading security for an untested bot outage.
 
 ## Commands you will need
 
-| Purpose | Command | Expected on success |
-|---|---|---|
-| Inventory | `cargo audit` | no high/critical runtime advisories after remediation |
-| Dependency provenance | `cargo tree --workspace --all-features -i <crate>` | identifies root for each affected crate |
-| Standard Rust checks | `npm run check:rust` | exit 0 |
-| Voice-driver checks | `npm run check:rust-voice` | exit 0 |
-| Release voice test | `cargo test --release -p vozen-runtime --features voice-driver` | all pass |
-| Static checks | `npm ci --ignore-scripts; npm rebuild esbuild; npm run check:site` | exit 0 |
-| Image smoke | Run the existing production-image CI workflow/job | runtime health endpoint is healthy |
+| Purpose               | Command                                                            | Expected on success                                   |
+| --------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
+| Inventory             | `cargo audit`                                                      | no high/critical runtime advisories after remediation |
+| Dependency provenance | `cargo tree --workspace --all-features -i <crate>`                 | identifies root for each affected crate               |
+| Standard Rust checks  | `npm run check:rust`                                               | exit 0                                                |
+| Voice-driver checks   | `npm run check:rust-voice`                                         | exit 0                                                |
+| Release voice test    | `cargo test --release -p vozen-runtime --features voice-driver`    | all pass                                              |
+| Static checks         | `npm ci --ignore-scripts; npm rebuild esbuild; npm run check:site` | exit 0                                                |
+| Image smoke           | Run the existing production-image CI workflow/job                  | runtime health endpoint is healthy                    |
 
 ## Scope
 
@@ -173,11 +173,11 @@ post-deploy `cargo audit` baseline is clean.
 ## Done criteria
 
 - [ ] `cargo audit` reports no high/critical advisory reachable from the
-  production runtime, or every non-reachable exception is documented with a
-  deterministic reproduction command and owner.
+      production runtime, or every non-reachable exception is documented with a
+      deterministic reproduction command and owner.
 - [ ] `failure 0.1.8` and `rand 0.7.3` have no production path.
 - [ ] The selected Serenity/Songbird/TLS graph passes standard, voice-driver,
-  release-voice, and image-smoke gates.
+      release-voice, and image-smoke gates.
 - [ ] No security gate or runtime feature was disabled to pass CI.
 - [ ] Production promotion occurs only after staging health/observation.
 

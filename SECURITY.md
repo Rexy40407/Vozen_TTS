@@ -6,10 +6,10 @@ Vozen does not currently publish stable versioned releases. Security fixes are
 made on the `migration/vozen-rust` production line and the hosted service is
 deployed from the exact CI-tested commit on that branch.
 
-| Version                          | Supported |
-| -------------------------------- | --------- |
-| Current `migration/vozen-rust` branch | Yes    |
-| Older commits and modified forks | No        |
+| Version                               | Supported |
+| ------------------------------------- | --------- |
+| Current `migration/vozen-rust` branch | Yes       |
+| Older commits and modified forks      | No        |
 
 Self-hosters should update to the latest `migration/vozen-rust` commit before reporting a
 problem that may already have been fixed.

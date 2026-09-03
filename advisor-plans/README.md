@@ -9,26 +9,26 @@ isolated worktree, run every verification gate, and must not push or deploy.
 
 ## Execution order & status
 
-| Plan | Title | Priority | Effort | Depends on | Status |
-|---|---|---:|---:|---|---|
-| 001 | Normalize Stripe entitlement timestamps | P1 | M | — | DONE (afe5b67, reviewed) |
-| 002 | Complete privacy tombstones in the Postgres mirror | P1 | M | — | DONE (683532d, reviewed; replica-contract script unavailable in clean baseline) |
-| 003 | Replace the stale Postgres voice-cache fingerprint gate | P1 | M | — | DONE (9a0f0cd + 339e12f, reviewed; replica-contract script unavailable in clean baseline) |
-| 004 | Move telemetry writes off the speech hot path | P2 | M | — | DONE (5e340a9 + f3c95da, reviewed; npm/check:rust and one workspace rerun blocked by Windows policy) |
-| 005 | Parallelize bounded multi-segment TTS synthesis | P2 | M | 004 | DONE (fde024f, reviewed) |
-| 006 | Add gateway-sink integration coverage | P2 | M | — | DONE (4b5286c, reviewed) |
-| 007 | Make the production image smoke test start the runtime | P2 | M | 006 | DONE (3ab4f24, reviewed; local Windows cargo build blocked by policy, CI authoritative) |
-| 008 | Repair the self-host esbuild check recipe | P2 | S | — | DONE (7c2a8ce, reviewed) |
-| 009 | Fix the Pages workflow path filter | P2 | S | — | DONE (22773f6, reviewed; site check blocked by isolated npm install EPERM) |
-| 010 | Split runtime configuration and startup assembly | P3 | L | 001,002,003 | STOPPED (high-risk refactor would touch pending startup changes; no safe isolated delta) |
-| 011 | Consolidate duplicated config gateway plumbing | P3 | L | 010 | BLOCKED (dependency 010 stopped) |
-| 012 | Audit and document duplicate Cargo dependency stacks | P3 | M | — | DONE (cf2d1ba, reviewed; cargo-audit not installed) |
-| 013 | Correct the runtime migration documentation | P3 | S | 001,002,003 | DONE (9766104, reviewed) |
-| 014 | Reconcile the monetization policy document | P3 | S | 001 | DONE (94dadc7, reviewed; equivalent site checks passed) |
-| 015 | Add repository-local agent and deploy guidance | P3 | S | — | DONE (1e99a1f, reviewed) |
-| 016 | Define the shadow-flag retirement matrix | P3 | L | 001,002,003,006 | DONE (5694b11, reviewed; cargo workspace passed in executor, local rerun blocked by Windows Application Control OS 4551) |
-| 017 | Remediate reachable TTS runtime dependency advisories | P0 | L | — | PARTIAL (TLS branch fixed; DAVE/OpenMLS and chess/failure remain) |
-| 018 | Reconcile production ref and harden deploy debug | P1 | M | 017 | PARTIAL (debug/docs fixed; ref convergence and production gate remain) |
+| Plan | Title                                                   | Priority | Effort | Depends on      | Status                                                                                                                   |
+| ---- | ------------------------------------------------------- | -------: | -----: | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 001  | Normalize Stripe entitlement timestamps                 |       P1 |      M | —               | DONE (afe5b67, reviewed)                                                                                                 |
+| 002  | Complete privacy tombstones in the Postgres mirror      |       P1 |      M | —               | DONE (683532d, reviewed; replica-contract script unavailable in clean baseline)                                          |
+| 003  | Replace the stale Postgres voice-cache fingerprint gate |       P1 |      M | —               | DONE (9a0f0cd + 339e12f, reviewed; replica-contract script unavailable in clean baseline)                                |
+| 004  | Move telemetry writes off the speech hot path           |       P2 |      M | —               | DONE (5e340a9 + f3c95da, reviewed; npm/check:rust and one workspace rerun blocked by Windows policy)                     |
+| 005  | Parallelize bounded multi-segment TTS synthesis         |       P2 |      M | 004             | DONE (fde024f, reviewed)                                                                                                 |
+| 006  | Add gateway-sink integration coverage                   |       P2 |      M | —               | DONE (4b5286c, reviewed)                                                                                                 |
+| 007  | Make the production image smoke test start the runtime  |       P2 |      M | 006             | DONE (3ab4f24, reviewed; local Windows cargo build blocked by policy, CI authoritative)                                  |
+| 008  | Repair the self-host esbuild check recipe               |       P2 |      S | —               | DONE (7c2a8ce, reviewed)                                                                                                 |
+| 009  | Fix the Pages workflow path filter                      |       P2 |      S | —               | DONE (22773f6, reviewed; site check blocked by isolated npm install EPERM)                                               |
+| 010  | Split runtime configuration and startup assembly        |       P3 |      L | 001,002,003     | STOPPED (high-risk refactor would touch pending startup changes; no safe isolated delta)                                 |
+| 011  | Consolidate duplicated config gateway plumbing          |       P3 |      L | 010             | BLOCKED (dependency 010 stopped)                                                                                         |
+| 012  | Audit and document duplicate Cargo dependency stacks    |       P3 |      M | —               | DONE (cf2d1ba, reviewed; cargo-audit not installed)                                                                      |
+| 013  | Correct the runtime migration documentation             |       P3 |      S | 001,002,003     | DONE (9766104, reviewed)                                                                                                 |
+| 014  | Reconcile the monetization policy document              |       P3 |      S | 001             | DONE (94dadc7, reviewed; equivalent site checks passed)                                                                  |
+| 015  | Add repository-local agent and deploy guidance          |       P3 |      S | —               | DONE (1e99a1f, reviewed)                                                                                                 |
+| 016  | Define the shadow-flag retirement matrix                |       P3 |      L | 001,002,003,006 | DONE (5694b11, reviewed; cargo workspace passed in executor, local rerun blocked by Windows Application Control OS 4551) |
+| 017  | Remediate reachable TTS runtime dependency advisories   |       P0 |      L | —               | PARTIAL (TLS branch fixed; DAVE/OpenMLS and chess/failure remain)                                                        |
+| 018  | Reconcile production ref and harden deploy debug        |       P1 |      M | 017             | PARTIAL (debug/docs fixed; ref convergence and production gate remain)                                                   |
 
 ## Dependency notes
 
