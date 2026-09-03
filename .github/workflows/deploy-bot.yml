@@ -116,6 +116,14 @@ jobs:
             <<<"$run_json" >/dev/null
           echo "run_id=$ARTIFACT_RUN_ID" >> "$GITHUB_OUTPUT"
 
+      - name: Check out exact CI-tested source
+        if: env.DIAGNOSTICS_ONLY != 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Download CI-built production image
         if: env.DIAGNOSTICS_ONLY != 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -172,6 +180,35 @@ jobs:
           )
           echo "binary_bytes=$(stat --format=%s "$binary")" >> "$GITHUB_OUTPUT"
 
+      # Production does not retain GitHub credentials. Transport the exact
+      # repository history selected by the provenance check as a checksummed
+      # local bundle so the VPS can verify ancestry and update its checkout
+      # without reaching back into the private repository.
+      - name: Bundle exact CI-tested source for VPS
+        if: env.DIAGNOSTICS_ONLY != 'true'
+        id: source_bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir=".vozen-deploy-artifact/source-bundle"
+          bundle_name="vozen-source-$DEPLOY_SHA.bundle"
+          bundle="$bundle_dir/$bundle_name"
+          bundle_ref="refs/vozen/deploy-bundle"
+          cleanup_ref() { git update-ref -d "$bundle_ref" >/dev/null 2>&1 || true; }
+          trap cleanup_ref EXIT
+          mkdir -p "$bundle_dir"
+          git update-ref "$bundle_ref" "$DEPLOY_SHA"
+          git bundle create "$bundle" "$bundle_ref"
+          git bundle verify "$bundle"
+          [ "$(git bundle list-heads "$bundle" "$bundle_ref")" = "$DEPLOY_SHA $bundle_ref" ]
+          (
+            cd "$bundle_dir"
+            sha256sum "$bundle_name" > "$bundle_name.sha256"
+          )
+          bundle_bytes="$(stat --format=%s "$bundle")"
+          (( bundle_bytes > 0 && bundle_bytes <= 512 * 1024 * 1024 ))
+          echo "bundle_bytes=$bundle_bytes" >> "$GITHUB_OUTPUT"
+
       - name: Check production release direction
         if: env.DIAGNOSTICS_ONLY != 'true'
         id: production_preflight
@@ -205,27 +242,6 @@ jobs:
               printf 'Unexpected checkout path: %s\n' "$checkout_status" >&2
               exit 1
             fi
-            current_commit="$(git rev-parse HEAD)"
-            preflight_root="$(mktemp -d /tmp/vozen-deploy-preflight.XXXXXX)"
-            case "$preflight_root" in
-              /tmp/vozen-deploy-preflight.*) ;;
-              *) echo "Unsafe preflight path" >&2; exit 1 ;;
-            esac
-            cleanup_preflight() { rm -rf -- "$preflight_root"; }
-            trap cleanup_preflight EXIT
-            git clone --quiet --bare --filter=blob:none --single-branch \
-              --branch migration/vozen-rust "$(git remote get-url origin)" "$preflight_root/repo"
-            remote_head="$(git -C "$preflight_root/repo" rev-parse HEAD)"
-            git -C "$preflight_root/repo" cat-file -e "$DEPLOY_SHA^{commit}"
-            git -C "$preflight_root/repo" merge-base --is-ancestor "$DEPLOY_SHA" "$remote_head"
-            if [ "$current_commit" != "$DEPLOY_SHA" ] \
-              && git -C "$preflight_root/repo" cat-file -e "$current_commit^{commit}" 2>/dev/null \
-              && git -C "$preflight_root/repo" merge-base --is-ancestor "$DEPLOY_SHA" "$current_commit"; then
-              cleanup_preflight
-              trap - EXIT
-              printf 'VOZEN_PREFLIGHT=stale\n'
-              exit 0
-            fi
             container="vozen-prod-vozen-1"
             live_image="$(docker container inspect --format '{{.Image}}' "$container")"
             [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
@@ -237,8 +253,6 @@ jobs:
               # rollback image before loading one verified full-image bootstrap.
               deploy_mode="full"
             fi
-            cleanup_preflight
-            trap - EXIT
             printf 'VOZEN_PREFLIGHT=deploy_%s\n' "$deploy_mode"
 
       - name: Normalize production preflight decision
@@ -273,6 +287,7 @@ jobs:
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         env:
           BINARY_BYTES: ${{ steps.runtime_binary.outputs.binary_bytes }}
+          SOURCE_BUNDLE_BYTES: ${{ steps.source_bundle.outputs.bundle_bytes }}
           ARTIFACT_BYTES: ${{ steps.image_artifact.outputs.compressed_bytes }}
           UNPACKED_BYTES: ${{ steps.image_artifact.outputs.unpacked_bytes }}
           DEPLOY_MODE: ${{ steps.release_decision.outputs.mode }}
@@ -280,11 +295,13 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: BINARY_BYTES,ARTIFACT_BYTES,UNPACKED_BYTES,DEPLOY_MODE
+          envs: BINARY_BYTES,SOURCE_BUNDLE_BYTES,ARTIFACT_BYTES,UNPACKED_BYTES,DEPLOY_MODE
           script: |
             set -euo pipefail
             [[ "$BINARY_BYTES" =~ ^[0-9]+$ ]]
             (( BINARY_BYTES > 0 && BINARY_BYTES <= 512 * 1024 * 1024 ))
+            [[ "$SOURCE_BUNDLE_BYTES" =~ ^[0-9]+$ ]]
+            (( SOURCE_BUNDLE_BYTES > 0 && SOURCE_BUNDLE_BYTES <= 512 * 1024 * 1024 ))
             [[ "$ARTIFACT_BYTES" =~ ^[0-9]+$ ]]
             [[ "$UNPACKED_BYTES" =~ ^[0-9]+$ ]]
             (( ARTIFACT_BYTES > 0 && ARTIFACT_BYTES <= 2 * 1024 * 1024 * 1024 ))
@@ -342,9 +359,9 @@ jobs:
             layer_load_headroom="$((512 * 1024 * 1024))"
             if [ "$artifact_device" = "$docker_device" ]; then
               if [ "$DEPLOY_MODE" = "delta" ]; then
-                combined_required="$((BINARY_BYTES + layer_load_headroom))"
+                combined_required="$((BINARY_BYTES + SOURCE_BUNDLE_BYTES + layer_load_headroom))"
               else
-                combined_required="$((ARTIFACT_BYTES + UNPACKED_BYTES + layer_load_headroom))"
+                combined_required="$((SOURCE_BUNDLE_BYTES + ARTIFACT_BYTES + UNPACKED_BYTES + layer_load_headroom))"
               fi
               (( artifact_available >= combined_required )) || {
                 echo "Insufficient shared filesystem space for the verified $DEPLOY_MODE production image." >&2
@@ -352,10 +369,10 @@ jobs:
               }
             else
               if [ "$DEPLOY_MODE" = "delta" ]; then
-                artifact_required="$((BINARY_BYTES + layer_load_headroom))"
+                artifact_required="$((BINARY_BYTES + SOURCE_BUNDLE_BYTES + layer_load_headroom))"
                 docker_required="$layer_load_headroom"
               else
-                artifact_required="$((ARTIFACT_BYTES + layer_load_headroom))"
+                artifact_required="$((SOURCE_BUNDLE_BYTES + ARTIFACT_BYTES + layer_load_headroom))"
                 docker_required="$((UNPACKED_BYTES + layer_load_headroom))"
               fi
               (( artifact_available >= artifact_required && docker_available >= docker_required )) || {
@@ -363,6 +380,17 @@ jobs:
                 exit 1
               }
             fi
+
+      - name: Transfer CI-verified source bundle
+        if: env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy'
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: .vozen-deploy-artifact/source-bundle/*
+          target: /home/vozen/vozen-deploy-artifacts/${{ env.DEPLOY_SHA }}
+          strip_components: 2
 
       - name: Transfer CI-verified runtime delta
         if: env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy' && steps.release_decision.outputs.mode == 'delta'
@@ -385,7 +413,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: .vozen-deploy-artifact/*
+          source: .vozen-deploy-artifact/vozen-rust-${{ env.DEPLOY_SHA }}.tar.gz,.vozen-deploy-artifact/vozen-rust-${{ env.DEPLOY_SHA }}.tar.gz.sha256
           target: /home/vozen/vozen-deploy-artifacts/${{ env.DEPLOY_SHA }}
           strip_components: 1
 
@@ -463,6 +491,8 @@ jobs:
             artifact_root="${VOZEN_ARTIFACT_ROOT:-/home/vozen/vozen-deploy-artifacts}"
             artifact_dir="$artifact_root/$DEPLOY_SHA"
             runtime_binary="vozen-runtime-$DEPLOY_SHA"
+            source_bundle="vozen-source-$DEPLOY_SHA.bundle"
+            source_checksum="vozen-source-$DEPLOY_SHA.bundle.sha256"
             image_archive="vozen-rust-$DEPLOY_SHA.tar.gz"
             image_checksum="vozen-rust-$DEPLOY_SHA.tar.gz.sha256"
             candidate_image="vozen-rust:$DEPLOY_SHA"
@@ -472,6 +502,8 @@ jobs:
               rm --force -- \
                 "$artifact_dir/$runtime_binary" \
                 "$artifact_dir/$runtime_binary.sha256" \
+                "$artifact_dir/$source_bundle" \
+                "$artifact_dir/$source_checksum" \
                 "$artifact_dir/$image_archive" \
                 "$artifact_dir/$image_checksum"
               rmdir -- "$artifact_dir" 2>/dev/null || true
@@ -502,12 +534,20 @@ jobs:
             require_runtime_secret STRIPE_PUBLISHABLE_KEY
             require_runtime_secret STRIPE_WEBHOOK_SECRET
 
-            # The production clone was originally created as a single-branch
-            # checkout. Fetch the production ref and verify the exact SHA tested
-            # by CI before changing the checkout.
-            git fetch origin +refs/heads/migration/vozen-rust:refs/remotes/origin/migration/vozen-rust
+            # Import the checksummed source history delivered by the authenticated
+            # runner. The VPS needs no GitHub credential and never trusts a branch
+            # name supplied by the local checkout.
+            (
+              cd "$artifact_dir"
+              sha256sum --check "$source_checksum"
+            )
+            git bundle verify "$artifact_dir/$source_bundle"
+            bundle_ref="refs/vozen/deploy-bundle"
+            [ "$(git bundle list-heads "$artifact_dir/$source_bundle" "$bundle_ref")" = "$DEPLOY_SHA $bundle_ref" ]
+            local_deploy_ref="refs/vozen/deploy/$DEPLOY_SHA"
+            git fetch --no-tags "$artifact_dir/$source_bundle" "$bundle_ref:$local_deploy_ref"
+            [ "$(git rev-parse "$local_deploy_ref")" = "$DEPLOY_SHA" ]
             git cat-file -e "$DEPLOY_SHA^{commit}"
-            git merge-base --is-ancestor "$DEPLOY_SHA" origin/migration/vozen-rust
             current_commit="$(git rev-parse HEAD)"
             target_commit="$DEPLOY_SHA"
             [[ "${DEPLOY_MODE:-}" =~ ^(delta|full)$ ]] || {
@@ -836,6 +876,8 @@ jobs:
             rm --force -- \
               "$artifact_dir/vozen-runtime-$DEPLOY_SHA" \
               "$artifact_dir/vozen-runtime-$DEPLOY_SHA.sha256" \
+              "$artifact_dir/vozen-source-$DEPLOY_SHA.bundle" \
+              "$artifact_dir/vozen-source-$DEPLOY_SHA.bundle.sha256" \
               "$artifact_dir/vozen-rust-$DEPLOY_SHA.tar.gz" \
               "$artifact_dir/vozen-rust-$DEPLOY_SHA.tar.gz.sha256"
             rmdir -- "$artifact_dir" 2>/dev/null || true

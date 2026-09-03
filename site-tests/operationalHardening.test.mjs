@@ -76,6 +76,10 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('container="vozen-prod-vozen-1"');
     expect(deploy).toContain('docker image tag "$live_image" vozen-rust:rollback');
     expect(deploy).toContain('Extract verified runtime binary for layer-preserving deploy');
+    expect(deploy).toContain('Bundle exact CI-tested source for VPS');
+    expect(deploy).toContain('sha256sum --check "$source_checksum"');
+    expect(deploy).toContain('git fetch --no-tags "$artifact_dir/$source_bundle"');
+    expect(deploy).not.toContain('git fetch origin +refs/heads/migration/vozen-rust');
     expect(deploy).toContain(
       'Running production image is not recoverable as a delta deployment base.',
     );
@@ -100,7 +104,9 @@ describe('operational security configuration', () => {
     expect(deploy).toContain('neither --all nor --volumes');
     expect(deploy).not.toContain('docker system prune --all');
     expect(deploy).not.toContain('docker system prune --volumes');
-    expect(deploy).toContain('combined_required="$((BINARY_BYTES + layer_load_headroom))"');
+    expect(deploy).toContain(
+      'combined_required="$((BINARY_BYTES + SOURCE_BUNDLE_BYTES + layer_load_headroom))"',
+    );
     expect(deploy).toContain(
       'Runtime-layer inputs changed; refusing a binary-only VPS deployment.',
     );
@@ -315,6 +321,8 @@ export -f systemctl docker curl python3`,
         mkdirSync(artifactDir, { recursive: true });
         writeFileSync(join(artifactDir, `vozen-runtime-${targetSha}`), 'fixture');
         writeFileSync(join(artifactDir, `vozen-runtime-${targetSha}.sha256`), 'fixture');
+        writeFileSync(join(artifactDir, `vozen-source-${targetSha}.bundle`), 'fixture');
+        writeFileSync(join(artifactDir, `vozen-source-${targetSha}.bundle.sha256`), 'fixture');
         writeFileSync(
           join(deployDir, '.env.rust.prod'),
           'STRIPE_SECRET_KEY=test\nSTRIPE_PUBLISHABLE_KEY=test\nSTRIPE_WEBHOOK_SECRET=test\n',
@@ -324,7 +332,14 @@ export -f systemctl docker curl python3`,
           String.raw`git() {
 printf '%s\n' "$*" >> "$FAKE_GIT_LOG"
 if [ "$1" = "fetch" ] || [ "$1" = "cat-file" ]; then return 0; fi
-if [ "$1" = "rev-parse" ]; then echo "$FAKE_CURRENT_SHA"; return 0; fi
+if [ "$1" = "bundle" ]; then
+  if [ "$2" = "list-heads" ]; then printf '%s refs/vozen/deploy-bundle\n' "$FAKE_TARGET_SHA"; fi
+  return 0
+fi
+if [ "$1" = "rev-parse" ]; then
+  if [ "$2" = "refs/vozen/deploy/$FAKE_TARGET_SHA" ]; then echo "$FAKE_TARGET_SHA"; else echo "$FAKE_CURRENT_SHA"; fi
+  return 0
+fi
 if [ "$1" = "status" ]; then
   [[ "$*" == *":(exclude).env.rust.prod"* ]] || return 65
   [[ "$*" == *":(exclude).env.rust.prod.backup-*"* ]] || return 65
@@ -334,7 +349,6 @@ if [ "$1" = "status" ]; then
   return 0
 fi
 if [ "$1" = "merge-base" ]; then
-  [ "$4" = "origin/migration/vozen-rust" ] && return 0
   [ "$3" = "$4" ] && return 0
   [ "$FAKE_MODE" = "stale" ] && [ "$3" = "$FAKE_TARGET_SHA" ] && return 0
   [ "$FAKE_MODE" = "forward" ] && [ "$3" = "$FAKE_CURRENT_SHA" ] && return 0
@@ -612,7 +626,9 @@ export -f git docker bash chmod gzip python3 sha256sum sudo`,
     expect(script).not.toContain('fonts.gstatic.com');
     expect(script).toContain("style-src 'self' 'unsafe-inline'");
     expect(script).toContain("font-src 'self'");
-    expect(script).toContain("script-src 'self' https://static.cloudflareinsights.com https://js.stripe.com https://*.js.stripe.com");
+    expect(script).toContain(
+      "script-src 'self' https://static.cloudflareinsights.com https://js.stripe.com https://*.js.stripe.com",
+    );
     expect(script).toContain("connect-src 'self' https://cloudflareinsights.com");
     expect(script).toContain('frame-src https://checkout.stripe.com https://js.stripe.com');
     expect(script).toContain('https://api.stripe.com');
