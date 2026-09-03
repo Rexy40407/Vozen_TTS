@@ -208,6 +208,8 @@ pub struct WebAnalyticsResponse {
     pub visits: u64,
     #[serde(rename = "pageViews")]
     pub page_views: u64,
+    #[serde(rename = "productVisits")]
+    pub product_visits: WebAnalyticsProductVisits,
     #[serde(rename = "topPages")]
     pub top_pages: Vec<WebAnalyticsBreakdown>,
     pub referrers: Vec<WebAnalyticsBreakdown>,
@@ -216,6 +218,18 @@ pub struct WebAnalyticsResponse {
     pub core_web_vitals: WebVitals,
     #[serde(rename = "partialData")]
     pub partial_data: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct WebAnalyticsProductVisits {
+    pub tts: u64,
+    pub helper: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WebAnalyticsProduct {
+    Tts,
+    Helper,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -249,6 +263,7 @@ fn normalise_response(
     let mut pages = BTreeMap::<String, u64>::new();
     let mut referrers = BTreeMap::<String, u64>::new();
     let mut devices = BTreeMap::<String, u64>::new();
+    let mut product_visits = WebAnalyticsProductVisits::default();
     for group in groups {
         let count = group.get("count").and_then(Value::as_u64).unwrap_or(0);
         let group_visits = group
@@ -263,6 +278,15 @@ fn normalise_response(
             .and_then(Value::as_str)
             .and_then(path_label)
         {
+            match product_from_path(&label) {
+                Some(WebAnalyticsProduct::Tts) => {
+                    product_visits.tts = product_visits.tts.saturating_add(group_visits);
+                }
+                Some(WebAnalyticsProduct::Helper) => {
+                    product_visits.helper = product_visits.helper.saturating_add(group_visits);
+                }
+                None => {}
+            }
             add_breakdown(&mut pages, label, count);
         }
         if let Some(label) = dimensions
@@ -298,6 +322,7 @@ fn normalise_response(
         last_updated: now_ms,
         visits,
         page_views,
+        product_visits,
         top_pages: sorted_breakdown(pages),
         referrers: sorted_breakdown(referrers),
         devices: sorted_breakdown(devices),
@@ -347,6 +372,33 @@ fn path_label(value: &str) -> Option<String> {
     Some(path.to_owned())
 }
 
+fn product_from_path(path: &str) -> Option<WebAnalyticsProduct> {
+    let segments = path
+        .trim_matches('/')
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    if segments.contains(&"helper")
+        || segments
+            .iter()
+            .any(|segment| segment.contains("helper-moderation-tickets-roles"))
+    {
+        return Some(WebAnalyticsProduct::Helper);
+    }
+    if segments.contains(&"tts")
+        || matches!(segments.first().copied(), Some("commands" | "premium"))
+        || segments.iter().any(|segment| {
+            matches!(
+                *segment,
+                "discord-without-a-mic" | "vozen-vs-generic-discord-tts"
+            )
+        })
+    {
+        return Some(WebAnalyticsProduct::Tts);
+    }
+    None
+}
+
 fn text_label(value: &str) -> Option<String> {
     let value = value.trim();
     if value.is_empty() || value.len() > 180 || value.chars().any(char::is_control) {
@@ -386,6 +438,8 @@ mod tests {
             .expect("normalised response");
         assert_eq!(result.visits, 6);
         assert_eq!(result.page_views, 15);
+        assert_eq!(result.product_visits.tts, 4);
+        assert_eq!(result.product_visits.helper, 2);
         assert_eq!(
             result.top_pages[0],
             WebAnalyticsBreakdown {
@@ -398,6 +452,38 @@ mod tests {
         assert_eq!(result.core_web_vitals.cls_p75, Some(0.06));
         let public = serde_json::to_string(&result).expect("serialise");
         assert!(!public.contains("secret"));
+    }
+
+    #[test]
+    fn product_visits_cover_localised_landing_docs_and_editorial_routes() {
+        let cases = [
+            ("/tts/", Some(WebAnalyticsProduct::Tts)),
+            ("/pt/tts/", Some(WebAnalyticsProduct::Tts)),
+            (
+                "/docs/tts/getting-started/install/",
+                Some(WebAnalyticsProduct::Tts),
+            ),
+            ("/commands/", Some(WebAnalyticsProduct::Tts)),
+            (
+                "/guides/discord-without-a-mic/",
+                Some(WebAnalyticsProduct::Tts),
+            ),
+            ("/helper/", Some(WebAnalyticsProduct::Helper)),
+            ("/ar/helper/", Some(WebAnalyticsProduct::Helper)),
+            (
+                "/docs/helper/modules/support/tickets/",
+                Some(WebAnalyticsProduct::Helper),
+            ),
+            (
+                "/pt/guides/helper-moderation-tickets-roles/",
+                Some(WebAnalyticsProduct::Helper),
+            ),
+            ("/", None),
+            ("/privacy", None),
+        ];
+        for (path, expected) in cases {
+            assert_eq!(product_from_path(path), expected, "path: {path}");
+        }
     }
 
     #[test]
