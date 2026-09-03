@@ -198,7 +198,7 @@ where
     pub async fn execute(&self, invocation: MessageVoiceInvocation<'_>) -> MessageVoiceOutcome {
         let received_at = Instant::now();
         let now_ms = (self.now_ms)();
-        let voice_data = match self.voice_data.snapshot(
+        let mut voice_data = match self.voice_data.snapshot(
             &self.read_store,
             invocation.facts.guild_id,
             invocation.facts.channel_id,
@@ -208,6 +208,16 @@ where
             Ok(data) => data,
             Err(_) => return MessageVoiceOutcome::StoreUnavailable,
         };
+        if let Ok(store) = self.store.lock()
+            && let Ok(live_voice) =
+                store.get_user_voice(invocation.facts.guild_id, invocation.facts.author_id)
+        {
+            // Personal voice writes reach the local compatibility store before the
+            // asynchronous Postgres mirror and both read-side caches can refresh.
+            // Overlay that authoritative row so /voice set and /voice reset apply
+            // to the very next message.
+            voice_data.preparation.user_voice = live_voice;
+        }
         let lane = {
             match admit_discord_message_with_data(&voice_data.admission, invocation.facts) {
                 MessageSpeechDecision::Allowed { lane } => lane,
@@ -519,10 +529,10 @@ mod tests {
     };
 
     use async_trait::async_trait;
-    use vozen_core::{QueueLane, SynthRequest};
+    use vozen_core::{QueueLane, SynthRequest, SynthesisEngine};
     use vozen_store::{
         DominantTalkUsageOptions, GuildConfigPatch, OperationalMetric, OperationalProvider,
-        SqliteStore, TalkUsageSource,
+        SqliteStore, TalkUsageSource, UserVoice,
     };
 
     use super::*;
@@ -538,6 +548,20 @@ mod tests {
             _request: &SynthRequest,
         ) -> Result<PathBuf, CommandSynthesisError> {
             self.0.fetch_add(1, Ordering::Relaxed);
+            Ok(PathBuf::from("voice.wav"))
+        }
+    }
+
+    #[derive(Default)]
+    struct CapturingSynthesizer(Mutex<Vec<SynthRequest>>);
+
+    #[async_trait]
+    impl CommandSpeechSynthesizer for CapturingSynthesizer {
+        async fn synthesize(
+            &self,
+            request: &SynthRequest,
+        ) -> Result<PathBuf, CommandSynthesisError> {
+            self.0.lock().expect("captured requests").push(request.clone());
             Ok(PathBuf::from("voice.wav"))
         }
     }
@@ -968,6 +992,82 @@ mod tests {
                 .expect("writer config")
                 .tts_channel_id
                 .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn personal_voice_change_is_visible_before_the_postgres_snapshot_refreshes() {
+        let write_store = configured_store();
+        let read_store = configured_store();
+        let old_voice = UserVoice {
+            model: "en_US-amy-medium".into(),
+            speed: 1.0,
+            engine: UserEngine::Google,
+        };
+        for store in [&write_store, &read_store] {
+            store
+                .lock()
+                .expect("store")
+                .set_user_voice("guild", "user", &old_voice)
+                .expect("old voice");
+        }
+        let service =
+            MessageVoiceService::new_with_synthesis_coordinator_runtime_batch_and_read_store(
+                write_store.clone(),
+                read_store,
+                CapturingSynthesizer::default(),
+                FakePlayback {
+                    reserve: true,
+                    enqueued: AtomicUsize::new(0),
+                },
+                GuildSynthesisCoordinator::default(),
+                CoreVoiceSettings {
+                    available_models: vec![
+                        "en_US-amy-medium".into(),
+                        "es_ES-davefx-medium".into(),
+                    ],
+                    ..settings()
+                },
+                Arc::new(|| 0),
+                RuntimeBatchBuffer::default(),
+            );
+
+        assert!(matches!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Queued { .. }
+        ));
+        write_store
+            .lock()
+            .expect("writer")
+            .set_user_voice(
+                "guild",
+                "user",
+                &UserVoice {
+                    model: "es_ES-davefx-medium".into(),
+                    speed: 1.0,
+                    engine: UserEngine::Piper,
+                },
+            )
+            .expect("new voice");
+        assert!(matches!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Queued { .. }
+        ));
+
+        let requests = service
+            .synthesizer
+            .0
+            .lock()
+            .expect("captured requests")
+            .iter()
+            .map(|request| (request.model.clone(), request.engine))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            requests,
+            vec![
+                ("en_US-amy-medium".to_owned(), SynthesisEngine::Default),
+                ("es_ES-davefx-medium".to_owned(), SynthesisEngine::Piper),
+            ]
         );
     }
 }
