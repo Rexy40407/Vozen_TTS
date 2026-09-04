@@ -21,6 +21,8 @@ enum GrowthEvent {
     FirstValue,
     Active,
     Vote,
+    RetainedW7,
+    RetainedW30,
 }
 
 impl GrowthEvent {
@@ -32,6 +34,8 @@ impl GrowthEvent {
             Self::FirstValue => "first_value",
             Self::Active => "active",
             Self::Vote => "vote",
+            Self::RetainedW7 => "retained_w7",
+            Self::RetainedW30 => "retained_w30",
         }
     }
 }
@@ -229,6 +233,7 @@ impl SqliteStore {
             let source = lifecycle_source(&transaction, guild_id)?;
             add_daily(&transaction, now, &source, GrowthEvent::Active)?;
         }
+        record_due_retention(&transaction, guild_id, now)?;
         transaction.commit()?;
         Ok(())
     }
@@ -285,9 +290,9 @@ impl SqliteStore {
             |row| row.get(0),
         )?;
         let eligible_w7 = count_eligible(connection, now, 7)?;
-        let retained_w7 = count_retained(connection, now, 7)?;
+        let retained_w7 = sum(GrowthEvent::RetainedW7)?;
         let eligible_w30 = count_eligible(connection, now, 30)?;
-        let retained_w30 = count_retained(connection, now, 30)?;
+        let retained_w30 = sum(GrowthEvent::RetainedW30)?;
         Ok(GrowthOverview {
             current_guilds,
             baseline_guilds,
@@ -419,12 +424,12 @@ fn lifecycle_source(
 }
 
 fn add_daily(
-    transaction: &rusqlite::Transaction<'_>,
+    connection: &rusqlite::Connection,
     now: i64,
     source: &str,
     event: GrowthEvent,
 ) -> Result<(), StoreError> {
-    transaction.execute(
+    connection.execute(
         "INSERT INTO growth_daily_metric (day, product, source, event, value)
          VALUES (?1, ?2, ?3, ?4, 1)
          ON CONFLICT(day, product, source, event) DO UPDATE SET value = value + 1",
@@ -438,6 +443,44 @@ fn add_daily(
     Ok(())
 }
 
+fn record_due_retention(
+    transaction: &rusqlite::Transaction<'_>,
+    guild_id: &str,
+    now: i64,
+) -> Result<(), StoreError> {
+    let (first_value_at, source): (Option<i64>, String) = transaction.query_row(
+        "SELECT first_value_at, install_source
+         FROM guild_growth_lifecycle WHERE guild_id = ?1",
+        [guild_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let Some(first_value_at) = first_value_at else {
+        return Ok(());
+    };
+    if source == BASELINE_SOURCE {
+        return Ok(());
+    }
+
+    for (window_days, event) in [
+        (7_i64, GrowthEvent::RetainedW7),
+        (30_i64, GrowthEvent::RetainedW30),
+    ] {
+        let threshold = first_value_at.saturating_add(window_days.saturating_mul(DAY_MS));
+        if now < threshold {
+            continue;
+        }
+        let inserted = transaction.execute(
+            "INSERT OR IGNORE INTO guild_growth_retention_record (guild_id, window_days)
+             VALUES (?1, ?2)",
+            params![guild_id, window_days],
+        )?;
+        if inserted != 0 {
+            add_daily(transaction, now, &source, event)?;
+        }
+    }
+    Ok(())
+}
+
 fn count_eligible(
     connection: &rusqlite::Connection,
     now: i64,
@@ -445,34 +488,12 @@ fn count_eligible(
 ) -> Result<i64, StoreError> {
     connection
         .query_row(
-            "SELECT COUNT(*) FROM guild_growth_lifecycle
-             WHERE install_source <> ?2
-               AND first_value_at IS NOT NULL AND first_value_at <= ?1",
+            "SELECT COALESCE(SUM(value), 0) FROM growth_daily_metric
+             WHERE product = ?1 AND event = 'first_value' AND source <> ?2 AND day <= ?3",
             params![
-                now.saturating_sub(days.saturating_mul(DAY_MS)),
-                BASELINE_SOURCE
-            ],
-            |row| row.get(0),
-        )
-        .map_err(StoreError::from)
-}
-
-fn count_retained(
-    connection: &rusqlite::Connection,
-    now: i64,
-    days: i64,
-) -> Result<i64, StoreError> {
-    connection
-        .query_row(
-            "SELECT COUNT(*) FROM guild_growth_lifecycle
-             WHERE install_source <> ?3
-               AND first_value_at IS NOT NULL
-               AND first_value_at <= ?1
-               AND last_active_at >= first_value_at + ?2",
-            params![
-                now.saturating_sub(days.saturating_mul(DAY_MS)),
-                days * DAY_MS,
-                BASELINE_SOURCE
+                PRODUCT,
+                BASELINE_SOURCE,
+                utc_day_key_from_unix_millis(now.saturating_sub(days.saturating_mul(DAY_MS)))
             ],
             |row| row.get(0),
         )
@@ -593,6 +614,51 @@ mod tests {
         assert_eq!(overview.retained_w7, 1);
         assert_eq!(overview.eligible_w30, 1);
         assert_eq!(overview.retained_w30, 0);
+    }
+
+    #[test]
+    fn retention_outcomes_survive_the_required_guild_identity_purge() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        let start = 1_800_000_000_000_i64;
+        for guild_id in ["week", "month"] {
+            store
+                .record_guild_join(guild_id, Some("home"), start)
+                .expect("join");
+            store
+                .record_guild_first_value(guild_id, start)
+                .expect("activate");
+        }
+        store
+            .record_guild_activity("week", start + 8 * DAY_MS)
+            .expect("week return");
+        store
+            .record_guild_activity("month", start + 31 * DAY_MS)
+            .expect("month return");
+
+        let before = store
+            .growth_overview(start + 40 * DAY_MS)
+            .expect("overview before purge");
+        assert_eq!((before.eligible_w7, before.retained_w7), (2, 2));
+        assert_eq!((before.eligible_w30, before.retained_w30), (2, 1));
+
+        store.purge_guild_data("week").expect("purge week");
+        store.purge_guild_data("month").expect("purge month");
+        let after = store
+            .growth_overview(start + 40 * DAY_MS)
+            .expect("overview after purge");
+        assert_eq!((after.eligible_w7, after.retained_w7), (2, 2));
+        assert_eq!((after.eligible_w30, after.retained_w30), (2, 1));
+        assert_eq!(
+            store
+                .connection()
+                .query_row(
+                    "SELECT COUNT(*) FROM guild_growth_retention_record",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("retention identities"),
+            0
+        );
     }
 
     #[test]

@@ -54,6 +54,11 @@
     },
     {
       "type": "table",
+      "name": "guild_growth_retention_record",
+      "sql": "CREATE TABLE guild_growth_retention_record (\n        guild_id    TEXT NOT NULL,\n        window_days INTEGER NOT NULL CHECK (window_days IN (7, 30)),\n        PRIMARY KEY (guild_id, window_days)\n      )"
+    },
+    {
+      "type": "table",
       "name": "growth_daily_metric",
       "sql": "CREATE TABLE growth_daily_metric (\n        day      TEXT NOT NULL,\n        product  TEXT NOT NULL,\n        source   TEXT NOT NULL,\n        event    TEXT NOT NULL,\n        value    INTEGER NOT NULL DEFAULT 0,\n        PRIMARY KEY (day, product, source, event)\n      )"
     },
