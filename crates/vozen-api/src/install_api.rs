@@ -356,7 +356,10 @@ mod tests {
             .is_none()
         );
         assert_eq!(install_source(Some("https://attacker.invalid")), None);
-        assert_eq!(install_source(Some("discordbotlist")), Some("discordbotlist"));
+        assert_eq!(
+            install_source(Some("discordbotlist")),
+            Some("discordbotlist")
+        );
     }
 
     #[test]
