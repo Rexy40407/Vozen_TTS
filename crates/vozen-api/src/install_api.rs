@@ -277,6 +277,7 @@ fn install_source(value: Option<&str>) -> Option<&'static str> {
         "tts-pricing" => Some("tts-pricing"),
         "commands" => Some("commands"),
         "topgg" => Some("topgg"),
+        "discordbotlist" => Some("discordbotlist"),
         _ => None,
     }
 }
@@ -355,6 +356,7 @@ mod tests {
             .is_none()
         );
         assert_eq!(install_source(Some("https://attacker.invalid")), None);
+        assert_eq!(install_source(Some("discordbotlist")), Some("discordbotlist"));
     }
 
     #[test]
