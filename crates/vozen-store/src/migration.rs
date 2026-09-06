@@ -108,6 +108,7 @@ pub(crate) fn migrate_legacy_schema(connection: &Connection) -> Result<(), Store
          DO UPDATE SET value = MAX(growth_daily_metric.value, excluded.value);",
     )?;
 
+    backfill_growth_setup_from_first_value(connection)?;
     backfill_growth_retention(connection)?;
 
     let supporter_columns = table_columns(connection, "kofi_supporter")?;
@@ -130,6 +131,49 @@ pub(crate) fn migrate_legacy_schema(connection: &Connection) -> Result<(), Store
            PRIMARY KEY (guild_id, user_id)
          );",
     )?;
+    Ok(())
+}
+
+/// A successful TTS playback cannot happen before the server is configured. Early lifecycle
+/// releases recorded the playback but did not persist the corresponding setup event, which made
+/// the aggregate funnel look impossible. Infer only this mechanical prerequisite and use the
+/// existing playback timestamp/source; the NULL guard makes this repair safe on every startup.
+fn backfill_growth_setup_from_first_value(connection: &Connection) -> Result<(), StoreError> {
+    let candidates = {
+        let mut statement = connection.prepare(
+            "SELECT guild_id, first_value_at, install_source
+             FROM guild_growth_lifecycle
+             WHERE setup_completed_at IS NULL AND first_value_at IS NOT NULL",
+        )?;
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+
+    for (guild_id, first_value_at, source) in candidates {
+        let changed = connection.execute(
+            "UPDATE guild_growth_lifecycle
+             SET setup_completed_at = ?2
+             WHERE guild_id = ?1 AND setup_completed_at IS NULL",
+            params![guild_id, first_value_at],
+        )?;
+        if changed == 0 {
+            continue;
+        }
+        connection.execute(
+            "INSERT INTO growth_daily_metric(day, product, source, event, value)
+             VALUES (?1, 'tts', ?2, 'setup_completed', 1)
+             ON CONFLICT(day, product, source, event)
+             DO UPDATE SET value = value + 1",
+            params![utc_day_key_from_unix_millis(first_value_at), source],
+        )?;
+    }
     Ok(())
 }
 
@@ -377,6 +421,8 @@ mod tests {
             let overview = reopened
                 .growth_overview(41 * DAY)
                 .expect("retention overview");
+            assert_eq!(overview.setup_completed, 2);
+            assert_eq!(overview.first_value, 2);
             assert_eq!((overview.eligible_w7, overview.retained_w7), (2, 2));
             assert_eq!((overview.eligible_w30, overview.retained_w30), (2, 1));
             assert_eq!(

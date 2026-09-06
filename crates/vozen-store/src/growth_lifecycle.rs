@@ -209,8 +209,10 @@ impl SqliteStore {
     }
 
     /// Marks the first successful user-facing value (a queued/reproduced TTS item) and records
-    /// one active-server observation per UTC day.
+    /// one active-server observation per UTC day. A successful TTS item necessarily means the
+    /// server completed setup, so preserve that funnel invariant even for direct runtime calls.
     pub fn record_guild_first_value(&self, guild_id: &str, now: i64) -> Result<(), StoreError> {
+        self.record_guild_setup_completed(guild_id, now)?;
         self.record_once(guild_id, now, "first_value_at", GrowthEvent::FirstValue)?;
         self.record_guild_activity(guild_id, now)
     }
@@ -606,6 +608,9 @@ mod tests {
         store
             .record_guild_first_value("guild", DAY)
             .expect("first value");
+        let after_first_value = store.growth_overview(DAY).expect("overview after value");
+        assert_eq!(after_first_value.setup_completed, 1);
+        assert_eq!(after_first_value.first_value, 1);
         store
             .record_guild_activity("guild", DAY + 8 * DAY)
             .expect("week activity");
