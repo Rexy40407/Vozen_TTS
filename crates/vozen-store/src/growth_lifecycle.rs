@@ -134,10 +134,6 @@ impl SqliteStore {
             Some(None) => {
                 // Discord emits Guild Create during every gateway resume. An already-active row
                 // is therefore not a new acquisition and must not inflate the join series.
-                transaction.execute(
-                    "UPDATE guild_growth_lifecycle SET last_joined_at = ?2 WHERE guild_id = ?1",
-                    params![guild_id, now],
-                )?;
                 false
             }
         };
@@ -155,20 +151,38 @@ impl SqliteStore {
     ) -> Result<(), StoreError> {
         validate_guild_id(guild_id)?;
         let source = normalize_source(Some(source))?;
-        self.connection().execute(
-            "INSERT INTO guild_growth_lifecycle
-               (guild_id, product, first_joined_at, last_joined_at, install_source)
-             VALUES (?1, ?2, ?3, ?3, ?4)
-             ON CONFLICT(guild_id) DO UPDATE SET
-               install_source = CASE
-                 WHEN guild_growth_lifecycle.install_source = 'unknown'
-                   OR (guild_growth_lifecycle.install_source = 'baseline'
-                       AND guild_growth_lifecycle.departed_at IS NOT NULL)
-                   THEN excluded.install_source
-                 ELSE guild_growth_lifecycle.install_source
-               END",
-            params![guild_id, PRODUCT, now, source],
+        // The verified OAuth exchange may beat Guild Create. Record the same idempotent
+        // transition in either order, instead of inserting a row with no join counter.
+        if self.record_guild_join(guild_id, Some(&source), now)? {
+            return Ok(());
+        }
+        let transaction = self.connection().unchecked_transaction()?;
+        let (previous_source, joined_at): (String, i64) = transaction.query_row(
+            "SELECT install_source, last_joined_at FROM guild_growth_lifecycle WHERE guild_id = ?1",
+            [guild_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
+        // Only a recent observed acquisition can be attributed by this callback. A later
+        // reauthorisation must not relabel historical inventory or invent an entry date.
+        if previous_source == UNKNOWN_SOURCE
+            && source != UNKNOWN_SOURCE
+            && (0..=10 * 60 * 1_000).contains(&now.saturating_sub(joined_at))
+        {
+            let changed = transaction.execute(
+                "UPDATE growth_daily_metric SET value = value - 1
+                 WHERE day = ?1 AND product = ?2 AND source = 'unknown'
+                   AND event = 'joined' AND value > 0",
+                params![utc_day_key_from_unix_millis(joined_at), PRODUCT],
+            )?;
+            if changed != 0 {
+                add_daily(&transaction, joined_at, &source, GrowthEvent::Joined)?;
+                transaction.execute(
+                    "UPDATE guild_growth_lifecycle SET install_source = ?2 WHERE guild_id = ?1",
+                    params![guild_id, source],
+                )?;
+            }
+        }
+        transaction.commit()?;
         Ok(())
     }
 
@@ -541,6 +555,59 @@ fn validate_day(day: &str) -> Result<(), StoreError> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn oauth_and_gateway_count_one_attributed_join_in_either_order() {
+        for oauth_first in [false, true] {
+            let store = SqliteStore::open_in_memory().unwrap();
+            let start = DAY - 1;
+            if oauth_first {
+                store
+                    .set_guild_install_source("guild", "tts-hero", start)
+                    .unwrap();
+            }
+            store.record_guild_join("guild", None, start).unwrap();
+            store
+                .set_guild_install_source("guild", "tts-hero", DAY + 1)
+                .unwrap();
+            store
+                .set_guild_install_source("guild", "topgg", DAY + 2)
+                .unwrap();
+            store.record_guild_join("guild", None, 2 * DAY).unwrap();
+            let rows = store
+                .list_growth_daily_metrics("1970-01-01", "1970-01-03")
+                .unwrap();
+            assert_eq!(rows.iter().map(|row| row.joins).sum::<i64>(), 1);
+            let joined = rows.iter().find(|row| row.joins == 1).unwrap();
+            assert_eq!((&*joined.day, &*joined.source), ("1970-01-01", "tts-hero"));
+            let last: i64 = store
+                .connection()
+                .query_row(
+                    "SELECT last_joined_at FROM guild_growth_lifecycle WHERE guild_id='guild'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(last, start);
+        }
+    }
+
+    #[test]
+    fn reauthorising_old_unknown_guild_does_not_relabel_acquisition() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.record_guild_join("guild", None, DAY).unwrap();
+        store.record_guild_join("guild", None, 3 * DAY).unwrap();
+        store
+            .set_guild_install_source("guild", "topgg", 3 * DAY + 1)
+            .unwrap();
+        let rows = store
+            .list_growth_daily_metrics("1970-01-02", "1970-01-04")
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].source, "unknown");
+        assert_eq!(rows[0].joins, 1);
+    }
+
     use super::*;
 
     const DAY: i64 = 86_400_000;

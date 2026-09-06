@@ -181,7 +181,6 @@ async fn start(
 struct CallbackQuery {
     code: Option<String>,
     state: Option<String>,
-    guild_id: Option<String>,
     error: Option<String>,
 }
 
@@ -239,11 +238,7 @@ async fn callback(
         .json()
         .await
         .map_err(|_| InstallResponseError::BadGateway)?;
-    let guild_id = body
-        .pointer("/guild/id")
-        .and_then(serde_json::Value::as_str)
-        .or(query.guild_id.as_deref())
-        .filter(|value| valid_snowflake(value));
+    let guild_id = verified_guild_id(&body);
     if let Some(guild_id) = guild_id {
         state
             .store
@@ -313,6 +308,14 @@ fn valid_snowflake(value: &str) -> bool {
     (17..=22).contains(&value.len()) && value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
+fn verified_guild_id(body: &serde_json::Value) -> Option<&str> {
+    // Query parameters are controlled by the browser. Only the server-to-server
+    // token exchange can attest which guild the bot was actually installed in.
+    body.pointer("/guild/id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| valid_snowflake(value))
+}
+
 enum InstallResponseError {
     BadRequest(&'static str),
     BadGateway,
@@ -337,6 +340,21 @@ impl IntoResponse for InstallResponseError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn installed_guild_requires_the_trusted_token_response() {
+        assert_eq!(
+            verified_guild_id(&serde_json::json!({"guild":{"id":"123456789012345678"}})),
+            Some("123456789012345678")
+        );
+        for body in [
+            serde_json::json!({}),
+            serde_json::json!({"guild_id":"123456789012345678"}),
+            serde_json::json!({"guild":{"id":"invalid"}}),
+            serde_json::json!({"guild":{"id":123456789012345678_u64}}),
+        ] {
+            assert_eq!(verified_guild_id(&body), None);
+        }
+    }
     #[test]
     fn signed_state_rejects_tampering_and_unapproved_sources() {
         let state = signed_state(
