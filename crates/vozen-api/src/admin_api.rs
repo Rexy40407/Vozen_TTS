@@ -12,8 +12,9 @@ use std::{
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use vozen_store::{
-    AdminPassRow, AdminPassesView, AdminPlusRow, DominantTalkUsageOptions, KofiPendingGrant,
-    SqliteStore, StripeSubscription, TalkUsageSource, TopggSyncDetail, TopggSyncStatus, UserEngine,
+    AdminMemberHistoryPoint, AdminPassRow, AdminPassesView, AdminPlusRow, DominantTalkUsageOptions,
+    KofiPendingGrant, SqliteStore, StripeSubscription, TalkUsageSource, TopggSyncDetail,
+    TopggSyncStatus, UserEngine,
 };
 
 use crate::admin_auth::{
@@ -162,6 +163,13 @@ pub struct AdminGuildRow {
     pub streak: i64,
     #[serde(rename = "bestStreak")]
     pub best_streak: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminGuildsView {
+    pub guilds: Vec<AdminGuildRow>,
+    #[serde(rename = "memberHistory")]
+    pub member_history: Vec<AdminMemberHistoryPoint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -566,6 +574,26 @@ impl AdminApi {
                 .then_with(|| left.id.cmp(&right.id))
         });
         Ok(rows)
+    }
+
+    pub fn list_guilds_with_history(&self) -> Result<AdminGuildsView, AdminGrantError> {
+        let guilds = self.list_guilds()?;
+        let store = self.store.lock().map_err(|_| AdminGrantError::Store)?;
+        if !guilds.is_empty() {
+            let member_count = guilds.iter().fold(0_i64, |total, guild| {
+                total.saturating_add(guild.member_count.max(0))
+            });
+            store
+                .record_admin_member_total(&(self.local_day)(), member_count, (self.now)())
+                .map_err(|_| AdminGrantError::Store)?;
+        }
+        let member_history = store
+            .list_admin_member_history(7)
+            .map_err(|_| AdminGrantError::Store)?;
+        Ok(AdminGuildsView {
+            guilds,
+            member_history,
+        })
     }
 
     pub fn growth(&self, from_day: &str, to_day: &str) -> Result<AdminGrowth, AdminGrantError> {
@@ -1074,6 +1102,12 @@ mod tests {
             system_metrics: None,
         });
         assert_eq!(api.list_guilds().expect("guilds")[0].messages, 2);
+        let guilds = api.list_guilds_with_history().expect("guilds with history");
+        assert_eq!(guilds.guilds.len(), 1);
+        assert_eq!(
+            guilds.member_history.last().map(|point| point.count),
+            Some(4)
+        );
         let talker = api.list_top_talkers().await.expect("talkers").remove(0);
         assert_eq!(talker.total, 2);
         assert_eq!(talker.username.as_deref(), Some("Ana"));

@@ -131,6 +131,15 @@ pub(crate) fn migrate_legacy_schema(connection: &Connection) -> Result<(), Store
            PRIMARY KEY (guild_id, user_id)
          );",
     )?;
+    // This table stores one aggregate total per UTC day for the private owner panel. It contains
+    // no member, username or guild identifiers and is intentionally additive/idempotent.
+    connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS admin_member_daily_total (
+           day TEXT PRIMARY KEY,
+           member_count INTEGER NOT NULL CHECK (member_count >= 0),
+           captured_at INTEGER NOT NULL CHECK (captured_at >= 0)
+         );",
+    )?;
     Ok(())
 }
 

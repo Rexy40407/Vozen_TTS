@@ -160,8 +160,12 @@ async fn admin_request(
                 &state,
             ),
         },
-        ("/api/admin/guilds", Method::GET) => match state.api.list_guilds() {
-            Ok(guilds) => response(StatusCode::OK, json!({"guilds":guilds}), &state),
+        ("/api/admin/guilds", Method::GET) => match state.api.list_guilds_with_history() {
+            Ok(guilds) => response(
+                StatusCode::OK,
+                serde_json::to_value(guilds).unwrap_or_else(|_| json!({"error":"internal"})),
+                &state,
+            ),
             Err(_) => response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 json!({"error":"internal"}),

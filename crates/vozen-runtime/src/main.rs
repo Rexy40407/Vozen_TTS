@@ -2546,6 +2546,9 @@ async fn run() -> Result<(), RuntimeError> {
     // This handle is intentionally process-scoped. The dashboard/rejoin adapters receive a
     // clone later; they never infer bot presence from a stale database row.
     let gateway_state = GatewayState::default();
+    if config.admin.is_some() {
+        spawn_admin_member_history(store.clone(), gateway_state.clone());
+    }
     loop_lag::spawn(gateway_state.metrics().as_ref().clone());
     let topgg_trigger = if let Some(topgg_metrics) = config.topgg_metrics {
         let trigger = TopggMetricsTrigger::default();
@@ -3357,6 +3360,39 @@ fn spawn_admin_metric_history(
                 .as_ref()
                 .and_then(|cache| cache.read().ok().and_then(|value| value.clone()));
             admin_metrics::record_daily_history(&database_path, supabase);
+        }
+    });
+}
+
+/// Records one aggregate guild-member total per UTC day independently of dashboard visits. The
+/// first minute gives Discord time to deliver Guild Create snapshots after READY; later polls
+/// update the same day with the newest live total. Empty or not-yet-ready gateway state is never
+/// persisted as a misleading zero.
+fn spawn_admin_member_history(store: Arc<Mutex<SqliteStore>>, gateway_state: GatewayState) {
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        let mut interval = tokio::time::interval(Duration::from_secs(15 * 60));
+        loop {
+            interval.tick().await;
+            if !gateway_state.is_ready() {
+                continue;
+            }
+            let snapshots = gateway_state.guild_snapshots();
+            if snapshots.is_empty() {
+                continue;
+            }
+            let member_count = snapshots.iter().fold(0_i64, |total, guild| {
+                total.saturating_add(i64::try_from(guild.member_count).unwrap_or(i64::MAX))
+            });
+            if let Ok(store) = store.lock()
+                && let Err(error) = store.record_admin_member_total(
+                    &system_local_day(),
+                    member_count,
+                    system_now_ms(),
+                )
+            {
+                eprintln!("[admin] member history snapshot failed: {error}");
+            }
         }
     });
 }

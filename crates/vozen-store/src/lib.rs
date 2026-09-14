@@ -56,8 +56,8 @@ mod vote_reward;
 
 pub use admin_passes::{AdminPassRow, AdminPassesView, AdminPlusRow};
 pub use admin_stats::{
-    AdminGuildStats, AdminTopTalkerRow, GameScoreRow, GameUserStats, GuildGamePlayerRow,
-    GuildGameStats,
+    AdminGuildStats, AdminMemberHistoryPoint, AdminTopTalkerRow, GameScoreRow, GameUserStats,
+    GuildGamePlayerRow, GuildGameStats,
 };
 pub use blocklist::{AddBlockwordResult, MAX_BLOCKWORDS};
 pub use channel_profile::{ChannelProfile, ChannelProfilePatch, MAX_CHANNEL_PROFILES_PER_GUILD};
@@ -553,6 +553,11 @@ mod tests {
             store
                 .has_schema_object("kofi_pending")
                 .expect("query Ko-fi pending")
+        );
+        assert!(
+            store
+                .has_schema_object("admin_member_daily_total")
+                .expect("query member history")
         );
         assert!(
             store

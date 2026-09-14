@@ -1,6 +1,7 @@
 //! Read-only aggregate queries used by the owner console.
 
 use rusqlite::params;
+use serde::Serialize;
 
 use crate::{SqliteStore, StoreError, TalkRow};
 
@@ -17,6 +18,12 @@ pub struct AdminGuildStats {
 pub struct AdminTopTalkerRow {
     pub user_id: String,
     pub total: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AdminMemberHistoryPoint {
+    pub day: String,
+    pub count: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,6 +57,57 @@ pub struct GameUserStats {
 }
 
 impl SqliteStore {
+    /// Stores only the aggregate member total observed for a UTC day. No member IDs,
+    /// usernames or guild IDs are persisted, so this is operational telemetry rather than user
+    /// data. Later observations replace an earlier reading for the same day.
+    pub fn record_admin_member_total(
+        &self,
+        day: &str,
+        member_count: i64,
+        captured_at: i64,
+    ) -> Result<(), StoreError> {
+        time::Date::parse(day, &time::format_description::well_known::Iso8601::DATE)
+            .map_err(|_| StoreError::InvalidOperationalMetricDay(day.to_owned()))?;
+        if member_count < 0 || captured_at < 0 {
+            return Err(StoreError::InvalidOperationalMetricValue);
+        }
+        self.connection().execute(
+            "INSERT INTO admin_member_daily_total (day, member_count, captured_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(day) DO UPDATE SET
+               member_count = excluded.member_count,
+               captured_at = excluded.captured_at
+             WHERE excluded.captured_at >= admin_member_daily_total.captured_at",
+            params![day, member_count, captured_at],
+        )?;
+        Ok(())
+    }
+
+    /// Returns the latest aggregate daily readings in chronological order. Missing days are not
+    /// synthesized; the owner panel renders them as unavailable instead of as zero.
+    pub fn list_admin_member_history(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<AdminMemberHistoryPoint>, StoreError> {
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        let mut statement = self.connection().prepare(
+            "SELECT day, member_count
+             FROM admin_member_daily_total
+             ORDER BY day DESC
+             LIMIT ?1",
+        )?;
+        let mut points = statement
+            .query_map(params![limit], |row| {
+                Ok(AdminMemberHistoryPoint {
+                    day: row.get(0)?,
+                    count: row.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        points.reverse();
+        Ok(points)
+    }
+
     /// Returns only existing aggregate counters; no message content is read or collected.
     pub fn admin_guild_stats(
         &self,
@@ -214,6 +272,34 @@ mod tests {
         assert_eq!(stats.speakers, 2);
         assert_eq!(stats.top_speakers[0].user_id, "u1");
         assert_eq!(store.admin_top_talkers(2).expect("top")[0].user_id, "u1");
+    }
+
+    #[test]
+    fn stores_latest_daily_member_total_without_fabricating_missing_days() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .record_admin_member_total("2026-07-22", 12, 100)
+            .expect("first reading");
+        store
+            .record_admin_member_total("2026-07-23", 15, 200)
+            .expect("second reading");
+        store
+            .record_admin_member_total("2026-07-23", 17, 300)
+            .expect("latest reading");
+
+        assert_eq!(
+            store.list_admin_member_history(7).expect("history"),
+            vec![
+                AdminMemberHistoryPoint {
+                    day: "2026-07-22".into(),
+                    count: 12,
+                },
+                AdminMemberHistoryPoint {
+                    day: "2026-07-23".into(),
+                    count: 17,
+                },
+            ]
+        );
     }
 
     #[test]
