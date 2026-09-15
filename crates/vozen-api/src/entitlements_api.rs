@@ -1,7 +1,7 @@
 //! Authenticated cross-product entitlement read API.
 //!
-//! This is deliberately read-only. Billing remains owned by the existing Vozen
-//! store; Helper receives a signed snapshot and never duplicates checkout logic.
+//! Billing remains owned by the existing Vozen store. Trusted product services
+//! can explicitly assign an existing subscription seat after authorizing the user.
 
 use std::{
     collections::HashMap,
@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 
-use vozen_store::SqliteStore;
+use vozen_store::{ActivateStatus, SqliteStore};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -61,11 +61,110 @@ struct ResolveResponse {
 pub fn entitlements_router(config: EntitlementsConfig) -> Router {
     Router::new()
         .route("/internal/v1/entitlements/resolve", post(resolve))
+        .route("/internal/v1/entitlements/seats", post(seats))
+        .layer(axum::extract::DefaultBodyLimit::max(2048))
         .with_state(StateInner {
             store: config.store,
             service_secret: config.service_secret,
             seen_nonces: Arc::new(Mutex::new(HashMap::new())),
         })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SeatRequest {
+    subject_id: String,
+    guild_id: String,
+    // Bound into the signed body: a resolve request can never be replayed as a write.
+    operation: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SeatResponse {
+    guild_premium: bool,
+    pass_active: bool,
+    seats: i64,
+    used: i64,
+}
+
+async fn seats(
+    State(state): State<StateInner>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> axum::response::Response {
+    if !verify_request(&headers, &body, &state.service_secret, &state.seen_nonces) {
+        return (StatusCode::UNAUTHORIZED, "invalid service signature").into_response();
+    }
+    let request: SeatRequest = match serde_json::from_slice(&body) {
+        Ok(request) => request,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid request").into_response(),
+    };
+    let valid_id = |value: &str| {
+        !value.is_empty()
+            && value.len() <= 64
+            && value
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-')
+    };
+    if !valid_id(&request.subject_id)
+        || !valid_id(&request.guild_id)
+        || !matches!(request.operation.as_str(), "status" | "activate")
+    {
+        return (StatusCode::BAD_REQUEST, "invalid request").into_response();
+    }
+    let now = (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i64;
+    let result = state
+        .store
+        .lock()
+        .map_err(|_| "unavailable")
+        .and_then(|store| {
+            seat_operation(
+                &store,
+                &request.subject_id,
+                &request.guild_id,
+                request.operation == "activate",
+                now,
+            )
+        });
+    match result {
+        Ok(status) => axum::Json(status).into_response(),
+        Err("no_seats") => (StatusCode::CONFLICT, "no_seats").into_response(),
+        Err("no_pass") => (StatusCode::FORBIDDEN, "no_pass").into_response(),
+        Err(_) => (StatusCode::SERVICE_UNAVAILABLE, "premium_unavailable").into_response(),
+    }
+}
+
+fn seat_operation(
+    store: &SqliteStore,
+    user: &str,
+    guild: &str,
+    activate: bool,
+    now: i64,
+) -> Result<SeatResponse, &'static str> {
+    let mut guild_premium = store
+        .effective_guild_premium_expiry(guild, now)
+        .map_err(|_| "unavailable")?
+        .is_some();
+    if activate && !guild_premium {
+        let result = store
+            .activate_seat(user, guild, now)
+            .map_err(|_| "unavailable")?;
+        match result.status {
+            ActivateStatus::Ok | ActivateStatus::Already => guild_premium = true,
+            ActivateStatus::NoSeats => return Err("no_seats"),
+            ActivateStatus::NoPass | ActivateStatus::Expired => return Err("no_pass"),
+        }
+    }
+    let pass = store
+        .premium_status(user, now)
+        .map_err(|_| "unavailable")?
+        .pass;
+    Ok(SeatResponse {
+        guild_premium,
+        pass_active: pass.as_ref().is_some_and(|pass| pass.active),
+        seats: pass.as_ref().map_or(0, |pass| pass.seats),
+        used: pass.as_ref().map_or(0, |pass| pass.used),
+    })
 }
 
 async fn resolve(
@@ -228,6 +327,92 @@ mod tests {
     use super::*;
     use axum::http::HeaderValue;
     use std::collections::HashMap;
+
+    #[test]
+    fn seat_activation_is_explicit_bounded_and_idempotent() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = 1_000;
+        store.grant_guild_pass("owner", 3, 30, "test", now).unwrap();
+        let status = seat_operation(&store, "owner", "a", false, now).unwrap();
+        assert_eq!(status.used, 0);
+        assert!(!status.guild_premium);
+        assert_eq!(
+            seat_operation(&store, "owner", "a", true, now)
+                .unwrap()
+                .used,
+            1
+        );
+        assert_eq!(
+            seat_operation(&store, "owner", "a", true, now)
+                .unwrap()
+                .used,
+            1
+        );
+        for guild in ["b", "c"] {
+            seat_operation(&store, "owner", guild, true, now).unwrap();
+        }
+        assert!(seat_operation(&store, "owner", "d", true, now).is_err());
+        assert_eq!(
+            store
+                .premium_status("owner", now)
+                .unwrap()
+                .pass
+                .unwrap()
+                .used,
+            3
+        );
+        assert!(seat_operation(&store, "free", "d", true, now).is_err());
+        // Already funded by another account: do not spend the caller's seat.
+        store.grant_guild_pass("other", 5, 30, "test", now).unwrap();
+        let shared = seat_operation(&store, "other", "a", true, now).unwrap();
+        assert!(shared.guild_premium);
+        assert_eq!(shared.used, 0);
+        assert!(seat_operation(&store, "owner", "e", true, now + 31 * 86_400_000).is_err());
+    }
+
+    #[tokio::test]
+    async fn seat_http_rejects_unsigned_and_non_seat_requests() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+        for signed in [false, true] {
+            let store = SqliteStore::open_in_memory().unwrap();
+            let app = entitlements_router(EntitlementsConfig {
+                store: Arc::new(Mutex::new(store)),
+                service_secret: "test-secret".into(),
+            });
+            // A signed resolve payload lacks the mandatory seat operation.
+            let body = br#"{"subject_id":"u","guild_id":"g"}"#;
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/internal/v1/entitlements/seats");
+            if signed {
+                let now = OffsetDateTime::now_utc().unix_timestamp();
+                let hash = URL_SAFE_NO_PAD.encode(Sha256::digest(body));
+                let mut mac = HmacSha256::new_from_slice(b"test-secret").unwrap();
+                mac.update(format!("{now}\nseat-test\n{hash}").as_bytes());
+                request = request
+                    .header("x-vozen-timestamp", now.to_string())
+                    .header("x-vozen-nonce", "seat-test")
+                    .header(
+                        "x-vozen-signature",
+                        format!("v1={}", URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())),
+                    );
+            }
+            let result = app
+                .oneshot(request.body(Body::from(body.to_vec())).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                result.status(),
+                if signed {
+                    StatusCode::BAD_REQUEST
+                } else {
+                    StatusCode::UNAUTHORIZED
+                }
+            );
+        }
+    }
 
     #[test]
     fn signed_request_rejects_stale_timestamp() {
