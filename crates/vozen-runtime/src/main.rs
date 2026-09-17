@@ -2512,6 +2512,13 @@ async fn run() -> Result<(), RuntimeError> {
             .enable_postgres_replica_outbox()?;
         eprintln!("[postgres] durable SQLite change capture enabled for mirror");
         postgres_outbox::spawn(postgres.pool(), store.clone(), runtime_batch_buffer.clone());
+    } else {
+        // Replica triggers survive restarts. Stop capture when running on SQLite alone,
+        // while preserving already queued batches for an explicit reconciliation.
+        store
+            .lock()
+            .map_err(|_| RuntimeError::StoreLock)?
+            .configure_postgres_replica_outbox(false)?;
     }
     run_startup_data_hygiene(&config.database_path);
     let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
@@ -3066,6 +3073,7 @@ fn build_http_router(
                     let supabase_metrics = supabase_metrics.clone();
                     let store = store.clone();
                     move || {
+                        let mirror_enabled = supabase_metrics.is_some();
                         let supabase = supabase_metrics
                             .as_ref()
                             .and_then(|cache| cache.read().ok().and_then(|value| value.clone()));
@@ -3084,10 +3092,14 @@ fn build_http_router(
                             &database_path,
                             active_voice_servers,
                             supabase,
-                            store
-                                .lock()
-                                .ok()
-                                .and_then(|value| value.runtime_outbox_metrics().ok()),
+                            if mirror_enabled {
+                                store
+                                    .lock()
+                                    .ok()
+                                    .and_then(|value| value.runtime_outbox_metrics().ok())
+                            } else {
+                                None
+                            },
                         )
                     }
                 })),

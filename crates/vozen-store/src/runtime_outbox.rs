@@ -390,4 +390,44 @@ mod tests {
             .expect("insert");
         assert!(store.list_runtime_outbox(10).expect("outbox").is_empty());
     }
+
+    #[test]
+    fn vps_only_preserves_pending_replica_events_but_stops_capture() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store.enable_postgres_replica_outbox().expect("enable");
+        store
+            .connection()
+            .execute(
+                "INSERT INTO guild_config (guild_id, locale) VALUES ('existing-guild', 'pt')",
+                [],
+            )
+            .expect("insert before disabling");
+        let pending = store.list_runtime_outbox(10).expect("pending");
+        assert_eq!(pending.len(), 1);
+        store
+            .configure_postgres_replica_outbox(false)
+            .expect("disable");
+        store
+            .configure_postgres_replica_outbox(false)
+            .expect("repeat startup");
+        store
+            .connection()
+            .execute(
+                "UPDATE guild_config SET locale = 'en' WHERE guild_id = 'existing-guild'",
+                [],
+            )
+            .expect("local write still works");
+        let preserved = store.list_runtime_outbox(10).expect("preserved queue");
+        assert_eq!(preserved.len(), 1);
+        assert_eq!(preserved[0].payload, pending[0].payload);
+        let locale: String = store
+            .connection()
+            .query_row(
+                "SELECT locale FROM guild_config WHERE guild_id = 'existing-guild'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("local data");
+        assert_eq!(locale, "en");
+    }
 }
