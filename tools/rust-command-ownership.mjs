@@ -42,7 +42,7 @@ const configFlags = new Map([
   ['config x-said', 'RUST_CONFIG_TOGGLES_ENABLED'],
   ['config auto-join', 'RUST_CONFIG_TOGGLES_ENABLED'],
   ['config read-bots', 'RUST_CONFIG_TOGGLES_ENABLED'],
-  ['config text-in-voice', 'RUST_CONFIG_TOGGLES_ENABLED'],
+  ['config voice-channel-reading', 'RUST_CONFIG_TOGGLES_ENABLED'],
   ['config anti-spam', 'RUST_CONFIG_TOGGLES_ENABLED'],
   ['config streaks', 'RUST_CONFIG_TOGGLES_ENABLED'],
   ['config soundboard', 'RUST_CONFIG_TOGGLES_ENABLED'],

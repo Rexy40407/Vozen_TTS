@@ -6,7 +6,7 @@ Base: `efb36fa`, isolated checkout `vozen-task`, 2026-09-17.
 
 - `/randomizer` requires language and engine, with language autocomplete and the same Google/Piper/Kokoro choices as the other fun commands. Direct CSV and modal sessions retain both choices. Narration is localized to the selected language. A saved compatible voice is preferred; a different-language default cannot override the selection. Piper does not select synthetic Google models. Kokoro retains its Premium requirement.
 - Missing or invalid arguments receive an ephemeral response. Speech failures use the ordinary localized voice outcome instead of always claiming the bot is absent.
-- Voice-channel chat reading defaults on for new configurations and legacy databases missing the setting. Existing saved settings are preserved; an existing disabled setting can be enabled with `/config text-in-voice active:true`, and disabled with `active:false`.
+- Voice-channel chat reading defaults on for new configurations and legacy databases missing the setting. Existing saved settings are preserved; an existing disabled setting can be enabled with `/config voice-channel-reading active:true`, and disabled with `active:false`.
 - Passive reading still requires the author and bot to share the voice channel and respects opt-out and role policy. Auto-join is restricted to the configured setup text channel. `/join` is unchanged.
 
 ## Verification

@@ -51,7 +51,7 @@ pub fn parse_config_toggle_command(
         "x-said" => ConfigToggle::Xsaid,
         "auto-join" => ConfigToggle::AutoJoin,
         "read-bots" => ConfigToggle::ReadBots,
-        "text-in-voice" => ConfigToggle::TextInVoice,
+        "voice-channel-reading" => ConfigToggle::TextInVoice,
         "anti-spam" => ConfigToggle::AntiSpam,
         "streaks" => ConfigToggle::Streaks,
         "soundboard" => ConfigToggle::Soundboard,
@@ -85,12 +85,12 @@ mod tests {
     #[test]
     fn parses_each_promoted_toggle_and_leaves_other_config_paths_unclaimed() {
         let parsed = parse_config_toggle_command(&command(
-            r#"{"id":"1","name":"config","type":1,"options":[{"name":"auto-read","type":1,"options":[{"name":"active","type":5,"value":true}]}]}"#
+            r#"{"id":"1","name":"config","type":1,"options":[{"name":"voice-channel-reading","type":1,"options":[{"name":"active","type":5,"value":true}]}]}"#
         )).expect("toggle");
         assert_eq!(
             parsed,
             Some(ConfigToggleCommand {
-                toggle: ConfigToggle::AutoRead,
+                toggle: ConfigToggle::TextInVoice,
                 enabled: true
             })
         );

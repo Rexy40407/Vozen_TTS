@@ -1186,7 +1186,7 @@
         },
         {
           "type": 1,
-          "name": "text-in-voice",
+          "name": "voice-channel-reading",
           "description": "Also read the text chat inside the voice channel Vozen is in (on by default)",
           "options": [
             {
