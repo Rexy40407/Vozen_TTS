@@ -208,15 +208,21 @@ where
             Ok(data) => data,
             Err(_) => return MessageVoiceOutcome::StoreUnavailable,
         };
-        if let Ok(store) = self.store.lock()
-            && let Ok(live_voice) =
-                store.get_user_voice(invocation.facts.guild_id, invocation.facts.author_id)
         {
-            // Personal voice writes reach the local compatibility store before the
-            // asynchronous Postgres mirror and both read-side caches can refresh.
-            // Overlay that authoritative row so /voice set and /voice reset apply
-            // to the very next message.
-            voice_data.preparation.user_voice = live_voice;
+            let Ok(store) = self.store.lock() else {
+                return MessageVoiceOutcome::StoreUnavailable;
+            };
+            if voice_data
+                .refresh_live_settings(
+                    &store,
+                    invocation.facts.guild_id,
+                    invocation.facts.channel_id,
+                    invocation.facts.author_id,
+                )
+                .is_err()
+            {
+                return MessageVoiceOutcome::StoreUnavailable;
+            }
         }
         let lane = {
             match admit_discord_message_with_data(&voice_data.admission, invocation.facts) {
@@ -966,7 +972,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn automatic_voice_reads_the_separate_local_postgres_snapshot_cache() {
+    async fn stale_replica_cannot_enable_reading_without_authoritative_setup() {
         let write_store = Arc::new(Mutex::new(SqliteStore::open_in_memory().expect("writer")));
         let read_store = configured_store();
         let service =
@@ -983,10 +989,10 @@ mod tests {
                 Arc::new(|| 0),
                 RuntimeBatchBuffer::default(),
             );
-        assert!(matches!(
+        assert_eq!(
             service.execute(invocation(Some("voice"))).await,
-            MessageVoiceOutcome::Queued { .. }
-        ));
+            MessageVoiceOutcome::Denied(MessageSpeechDenial::NotTriggered)
+        );
         assert!(
             write_store
                 .lock()
@@ -996,6 +1002,122 @@ mod tests {
                 .tts_channel_id
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn voice_channel_reading_uses_live_settings_even_with_a_warm_stale_replica() {
+        let write_store = configured_store();
+        let read_store = configured_store();
+        for store in [&write_store, &read_store] {
+            store
+                .lock()
+                .expect("store")
+                .update_guild_config(
+                    "guild",
+                    GuildConfigPatch {
+                        text_in_voice: Some(false),
+                        ..GuildConfigPatch::default()
+                    },
+                )
+                .expect("disabled initially");
+        }
+        let service =
+            MessageVoiceService::new_with_synthesis_coordinator_runtime_batch_and_read_store(
+                write_store.clone(),
+                read_store,
+                FakeSynthesizer::default(),
+                FakePlayback {
+                    reserve: true,
+                    enqueued: AtomicUsize::new(0),
+                },
+                GuildSynthesisCoordinator::default(),
+                settings(),
+                Arc::new(|| 0),
+                RuntimeBatchBuffer::default(),
+            );
+        let voice_message = || {
+            let mut message = invocation(Some("voice"));
+            message.facts.channel_id = "voice";
+            message
+        };
+        assert_eq!(
+            service.execute(voice_message()).await,
+            MessageVoiceOutcome::Denied(MessageSpeechDenial::NotTriggered)
+        );
+        write_store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    text_in_voice: Some(true),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("enable live");
+        assert!(matches!(
+            service.execute(voice_message()).await,
+            MessageVoiceOutcome::Queued { .. }
+        ));
+
+        let mut other_call = voice_message();
+        other_call.facts.author_voice_channel_id = Some("another-call");
+        assert_eq!(
+            service.execute(other_call).await,
+            MessageVoiceOutcome::Denied(MessageSpeechDenial::NotInSameVoice)
+        );
+        write_store
+            .lock()
+            .expect("store")
+            .set_opt_out("guild", "user")
+            .expect("opt out");
+        assert_eq!(
+            service.execute(voice_message()).await,
+            MessageVoiceOutcome::Denied(MessageSpeechDenial::PassiveOptOut)
+        );
+        write_store
+            .lock()
+            .expect("store")
+            .set_opt_in("guild", "user")
+            .expect("opt in");
+
+        write_store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    tts_role_id: Some(Some("required".into())),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("require role");
+        assert_eq!(
+            service.execute(voice_message()).await,
+            MessageVoiceOutcome::Denied(MessageSpeechDenial::RequiredRoleMissing)
+        );
+        write_store
+            .lock()
+            .expect("store")
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    tts_role_id: Some(None),
+                    text_in_voice: Some(false),
+                    ..GuildConfigPatch::default()
+                },
+            )
+            .expect("disable live");
+        assert_eq!(
+            service.execute(voice_message()).await,
+            MessageVoiceOutcome::Denied(MessageSpeechDenial::NotTriggered)
+        );
+        assert!(matches!(
+            service.execute(invocation(Some("voice"))).await,
+            MessageVoiceOutcome::Queued { .. }
+        ));
+        assert_eq!(service.synthesizer.0.load(Ordering::Relaxed), 2);
+        assert_eq!(service.playback.enqueued.load(Ordering::Relaxed), 2);
     }
 
     #[tokio::test]

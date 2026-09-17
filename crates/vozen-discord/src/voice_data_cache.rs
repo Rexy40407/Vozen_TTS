@@ -23,6 +23,30 @@ pub(crate) struct VoiceDataSnapshot {
     pub preparation: VoicePreparationData,
 }
 
+impl VoiceDataSnapshot {
+    /// SQLite is authoritative until the explicit Postgres cutover. Replication lag must
+    /// neither ignore a newly enabled reading option nor undo a disable/opt-out/role gate.
+    pub(crate) fn refresh_live_settings(
+        &mut self,
+        store: &SqliteStore,
+        guild_id: &str,
+        channel_id: &str,
+        user_id: &str,
+    ) -> Result<(), StoreError> {
+        let guild = store.guild_config(guild_id)?;
+        let profile = store.channel_profile(guild_id, channel_id)?;
+        self.admission = MessageAdmissionData {
+            guild: guild.clone(),
+            profile: profile.clone(),
+            opted_out: store.is_opted_out(guild_id, user_id)?,
+        };
+        self.preparation.guild = guild;
+        self.preparation.profile = profile;
+        self.preparation.user_voice = store.get_user_voice(guild_id, user_id)?;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct CacheKey {
     guild_id: String,

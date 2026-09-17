@@ -3596,6 +3596,20 @@ impl GatewayEventSink for CoreVoiceGatewaySink {
                 resolve_channel: &resolve_channel,
             })
             .await;
+        if !facts.author_is_bot
+            && facts.bot_voice_channel_id.as_deref() == Some(facts.channel_id.as_str())
+        {
+            // Diagnose the integrated voice-chat path without logging message content or users.
+            let result = match &outcome {
+                MessageVoiceOutcome::Denied(reason) => format!("denied:{reason:?}"),
+                MessageVoiceOutcome::Queued { .. } => "queued".to_owned(),
+                other => format!("{other:?}"),
+            };
+            eprintln!(
+                "[voice:channel-chat] guild={} outcome={result}",
+                facts.guild_id
+            );
+        }
         if let MessageVoiceOutcome::Queued { talk } = outcome {
             if let Ok(mut speakers) = self.last_speakers.lock() {
                 speakers.insert(facts.guild_id.clone(), facts.author_id.clone());
