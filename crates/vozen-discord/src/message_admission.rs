@@ -103,7 +103,12 @@ pub fn should_attempt_autojoin(
     facts: DiscordMessageFacts<'_>,
 ) -> Result<bool, StoreError> {
     let config = store.guild_config(facts.guild_id)?;
-    if !config.enabled || !config.autojoin || facts.bot_voice_channel_id.is_some() {
+    if !config.enabled
+        || !config.autojoin
+        || facts.bot_voice_channel_id.is_some()
+        || config.tts_channel_id.as_deref() != Some(facts.channel_id)
+        || facts.author_voice_channel_id == Some(facts.channel_id)
+    {
         return Ok(false);
     }
     if facts.author_voice_channel_id.is_none() || (facts.author_is_bot && !config.read_bots) {
@@ -120,8 +125,7 @@ pub fn should_attempt_autojoin(
     }
 
     let explicitly_requested = facts.mentioned_bot || facts.replied_to_bot;
-    let passive_trigger =
-        auto_read || (config.text_in_voice && facts.bot_voice_channel_id == Some(facts.channel_id));
+    let passive_trigger = auto_read;
     if !explicitly_requested && !passive_trigger {
         return Ok(false);
     }
@@ -210,6 +214,79 @@ mod tests {
         let mut other = candidate;
         other.channel_id = "other";
         assert!(!should_attempt_autojoin(&store, other).expect("decision"));
+    }
+
+    #[test]
+    fn voice_chat_is_enabled_by_default_but_can_be_disabled() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        let mut message = facts();
+        message.channel_id = "voice";
+        assert!(matches!(
+            admit_discord_message(&store, message).unwrap(),
+            MessageSpeechDecision::Allowed { .. }
+        ));
+        message.author_voice_channel_id = Some("another-call");
+        assert_eq!(
+            admit_discord_message(&store, message).unwrap(),
+            MessageSpeechDecision::Denied {
+                reason: MessageSpeechDenial::NotInSameVoice
+            }
+        );
+        message.author_voice_channel_id = Some("voice");
+        store.set_opt_out("guild", "user").unwrap();
+        assert_eq!(
+            admit_discord_message(&store, message).unwrap(),
+            MessageSpeechDecision::Denied {
+                reason: MessageSpeechDenial::PassiveOptOut
+            }
+        );
+        store
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    text_in_voice: Some(false),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            admit_discord_message(&store, message).unwrap(),
+            MessageSpeechDecision::Denied {
+                reason: MessageSpeechDenial::NotTriggered
+            }
+        );
+    }
+
+    #[test]
+    fn voice_chat_never_autojoin_even_with_a_mention_or_profile() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .update_guild_config(
+                "guild",
+                GuildConfigPatch {
+                    autojoin: Some(true),
+                    tts_channel_id: Some(Some("text".into())),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        store
+            .save_channel_profile(
+                "guild",
+                "voice",
+                &ChannelProfilePatch {
+                    auto_read: Some(true),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let mut message = facts();
+        message.channel_id = "voice";
+        message.bot_voice_channel_id = None;
+        message.mentioned_bot = true;
+        assert!(!should_attempt_autojoin(&store, message).unwrap());
+        message.channel_id = "text";
+        assert!(should_attempt_autojoin(&store, message).unwrap());
     }
 
     #[test]

@@ -24,7 +24,7 @@ const GUILD_CONFIG_COLUMNS: &[(&str, &str)] = &[
     ("xsaid", "INTEGER NOT NULL DEFAULT 1"),
     ("autojoin", "INTEGER NOT NULL DEFAULT 0"),
     ("read_bots", "INTEGER NOT NULL DEFAULT 0"),
-    ("text_in_voice", "INTEGER NOT NULL DEFAULT 0"),
+    ("text_in_voice", "INTEGER NOT NULL DEFAULT 1"),
     ("greet_on_join", "INTEGER NOT NULL DEFAULT 1"),
     ("greet_locale", "TEXT NOT NULL DEFAULT 'en'"),
     ("antispam", "INTEGER NOT NULL DEFAULT 0"),

@@ -354,7 +354,7 @@ pub use randomizer::{
     MAX_DIRECT_INPUT_CHARS, MAX_MODAL_OPTIONS, MAX_OPTION_CHARS, MAX_OPTIONS, MIN_OPTIONS,
     RandomizerCommand, RandomizerCommandError, RandomizerInteractionError, RandomizerSession,
     SESSION_TTL_MS, parse_amount_component_id, parse_direct_options, parse_fill_component_id,
-    parse_modal_options, parse_randomizer_command, pick_option,
+    parse_modal_options, parse_randomizer_command, pick_option, randomizer_model,
 };
 pub use redeem_command::{RedeemCommand, RedeemCommandError, parse_redeem_command};
 pub use reflexes_driver::{ReflexesDriver, ReflexesDriverAction, ReflexesGameDriver};

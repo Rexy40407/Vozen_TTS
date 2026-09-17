@@ -86,9 +86,10 @@ impl AutocompleteGatewaySink {
             }
             ("game", "game") => subcommand == Some("play") && self.options.game_play,
             ("game", "language") => subcommand == Some("play") && self.options.game_play,
-            ("joke" | "rizz" | "8-ball" | "fortune" | "fact" | "wyr", "language") => {
-                self.options.core_voice
-            }
+            (
+                "joke" | "rizz" | "8-ball" | "fortune" | "fact" | "wyr" | "randomizer",
+                "language",
+            ) => self.options.core_voice,
             ("transcribe", "language") => {
                 subcommand == Some("start") && self.options.transcription_live
             }
@@ -113,7 +114,8 @@ impl AutocompleteGatewaySink {
             ("game", "game") => filter_games(query, locale, &self.localizer),
             ("game", "language") => filter_word_chain_languages(query),
             (
-                "joke" | "rizz" | "8-ball" | "fortune" | "fact" | "wyr" | "transcribe",
+                "joke" | "rizz" | "8-ball" | "fortune" | "fact" | "wyr" | "randomizer"
+                | "transcribe",
                 "language",
             ) => filter_joke_languages(query),
             ("config" | "translate", "locale") => filter_locales(query),

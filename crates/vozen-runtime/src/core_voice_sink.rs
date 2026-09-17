@@ -2144,6 +2144,7 @@ impl CoreVoiceGatewaySink {
         locale: Option<&str>,
         guild_locale: Option<&str>,
         options: &[String],
+        voice: (&str, &str),
     ) -> Result<String, GatewayEventDispatchError> {
         let winner = pick_option(options).ok_or(GatewayEventDispatchError)?;
         let localizer = self.randomizer_localizer()?;
@@ -2156,15 +2157,59 @@ impl CoreVoiceGatewaySink {
         parameters.clear();
         parameters.insert("winner", winner.to_owned());
         let speak_text = localizer
-            .render_key("rand.speak", locale, guild_locale, &parameters)
+            .render_key("rand.speak", Some(voice.0), None, &parameters)
             .ok_or(GatewayEventDispatchError)?;
-        let spoke = self.executor(context)?.speak_text(facts, &speak_text).await
-            == CoreVoiceOutcome::Tts(CoreTtsOutcome::Queued);
+        let engine = GameRuntime::game_engine(voice.1).ok_or(GatewayEventDispatchError)?;
+        let (stored, premium) = {
+            let store = self.store.lock().map_err(|_| GatewayEventDispatchError)?;
+            let stored = store
+                .get_user_voice(&facts.guild_id, &facts.user_id)
+                .map_err(|_| GatewayEventDispatchError)?;
+            let premium = store
+                .is_user_premium(&facts.user_id, system_now_ms())
+                .and_then(|user| {
+                    store
+                        .is_guild_premium(&facts.guild_id, system_now_ms())
+                        .map(|guild| user || guild)
+                })
+                .map_err(|_| GatewayEventDispatchError)?;
+            (stored, premium)
+        };
+        if engine == SynthesisEngine::Kokoro && !premium {
+            return localizer
+                .render_key(
+                    "voice.engine.kokoroLocked",
+                    locale,
+                    guild_locale,
+                    &BTreeMap::new(),
+                )
+                .ok_or(GatewayEventDispatchError);
+        }
+        let model = vozen_discord::randomizer_model(
+            &self.options.settings.available_models,
+            stored.as_ref().map(|value| value.model.as_str()),
+            voice.0,
+            voice.1,
+        );
+        let Some(model) = model else {
+            return localizer
+                .render_key("voice.unknownModel", locale, guild_locale, &BTreeMap::new())
+                .ok_or(GatewayEventDispatchError);
+        };
+        let speed = stored
+            .as_ref()
+            .map(|value| value.speed)
+            .filter(|value| value.is_finite())
+            .unwrap_or(self.options.settings.default_speed);
+        let executor = self.executor(context)?;
+        let outcome = executor
+            .speak_text_with_voice(facts, &speak_text, model, speed, engine, true)
+            .await;
         let mut content = format!("🎲 {line}");
-        if !spoke {
-            let not_in_voice = localizer
-                .render_key("rand.notInVoice", locale, guild_locale, &BTreeMap::new())
-                .ok_or(GatewayEventDispatchError)?;
+        if outcome != CoreVoiceOutcome::Tts(CoreTtsOutcome::Queued) {
+            let not_in_voice = executor
+                .render_speak_outcome(outcome, facts, locale)
+                .map_err(|_| GatewayEventDispatchError)?;
             content.push('\n');
             content.push_str(&not_in_voice);
         }
@@ -2213,8 +2258,17 @@ impl CoreVoiceGatewaySink {
         let Some(facts) = CoreVoiceInteractionFacts::from_command(command) else {
             return Ok(());
         };
-        let parsed =
-            parse_randomizer_command(&command.data).map_err(|_| GatewayEventDispatchError)?;
+        let parsed = match parse_randomizer_command(&command.data) {
+            Ok(parsed) => parsed,
+            Err(_) => {
+                command.create_response(context, CreateInteractionResponse::Message(
+                    CreateInteractionResponseMessage::new()
+                        .content("Choose a language and voice engine in `/randomizer`, and provide at least two options.")
+                        .ephemeral(true),
+                )).await.map_err(|_| GatewayEventDispatchError)?;
+                return Ok(());
+            }
+        };
         let Some(parsed) = parsed else {
             return Ok(());
         };
@@ -2222,15 +2276,22 @@ impl CoreVoiceGatewaySink {
         self.prune_randomizer_sessions(now_ms);
         let guild_id = guild_id.get().to_string();
         let user_id = command.user.id.get().to_string();
+        let (language, engine) = parsed.voice();
         let issued = RandomizerSession {
             user_id,
             guild_id,
             amount: None,
             locale: command.locale.clone(),
+            language: language.to_owned(),
+            engine: engine.to_owned(),
             issued_at_ms: now_ms,
         };
         match parsed {
-            RandomizerCommand::Direct { options } => {
+            RandomizerCommand::Direct {
+                options,
+                language,
+                engine,
+            } => {
                 command
                     .defer(context)
                     .await
@@ -2242,6 +2303,7 @@ impl CoreVoiceGatewaySink {
                         Some(&command.locale),
                         command.guild_locale.as_deref(),
                         &options,
+                        (&language, &engine),
                     )
                     .await?;
                 command
@@ -2259,7 +2321,7 @@ impl CoreVoiceGatewaySink {
                     .await
                     .map_err(|_| GatewayEventDispatchError)?;
             }
-            RandomizerCommand::ChooseAmount => {
+            RandomizerCommand::ChooseAmount { .. } => {
                 if let Ok(mut sessions) = self.randomizer_sessions.lock() {
                     sessions.insert(command.id.get().to_string(), issued);
                 }
@@ -2315,7 +2377,7 @@ impl CoreVoiceGatewaySink {
                     .await
                     .map_err(|_| GatewayEventDispatchError)?;
             }
-            RandomizerCommand::Modal { amount } => {
+            RandomizerCommand::Modal { amount, .. } => {
                 if let Ok(mut sessions) = self.randomizer_sessions.lock() {
                     let mut session = issued;
                     session.amount = Some(amount);
@@ -2439,6 +2501,7 @@ impl CoreVoiceGatewaySink {
                 Some(&modal.locale),
                 modal.guild_locale.as_deref(),
                 &options,
+                (&session.language, &session.engine),
             )
             .await?;
         modal

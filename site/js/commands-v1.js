@@ -25,7 +25,7 @@
     ["/game play", "Start a voice or text minigame with the server.", "fun", "Free + Premium", "Menu · language · engine"],
     ["/game list", "See the minigames available to this server.", "fun", "Free", ""],
     ["/game stop", "Stop the active minigame.", "fun", "Free", ""],
-    ["/randomizer", "Pick one option at random and say it out loud.", "fun", "Free", "Options · language"],
+    ["/randomizer", "Pick one option at random and say it out loud.", "fun", "Free", "Language · engine · amount or options"],
     ["/top-speakers", "See who Vozen has read the most, with daily streaks.", "stats", "Free", ""],
     ["/server-stats", "View server messages, top talkers and game stats.", "stats", "Free + Premium", "Free preview"],
     ["/stats", "Show Vozen bot statistics.", "stats", "Admin", ""],

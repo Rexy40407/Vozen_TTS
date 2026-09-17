@@ -19,9 +19,34 @@ pub const SESSION_TTL_MS: i64 = 10 * 60 * 1000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RandomizerCommand {
-    ChooseAmount,
-    Modal { amount: usize },
-    Direct { options: Vec<String> },
+    ChooseAmount {
+        language: String,
+        engine: String,
+    },
+    Modal {
+        amount: usize,
+        language: String,
+        engine: String,
+    },
+    Direct {
+        options: Vec<String>,
+        language: String,
+        engine: String,
+    },
+}
+
+impl RandomizerCommand {
+    pub fn voice(&self) -> (&str, &str) {
+        match self {
+            Self::ChooseAmount { language, engine }
+            | Self::Modal {
+                language, engine, ..
+            }
+            | Self::Direct {
+                language, engine, ..
+            } => (language, engine),
+        }
+    }
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -30,6 +55,8 @@ pub enum RandomizerCommandError {
     Contract(#[from] vozen_contracts::ContractError),
     #[error("randomizer contains an undeclared option")]
     UnexpectedOption,
+    #[error("choose a supported language and voice engine")]
+    InvalidVoice,
     #[error("randomizer amount must be an integer between 2 and 5")]
     InvalidAmount,
     #[error("randomizer options must contain at least two comma-separated values")]
@@ -62,6 +89,8 @@ pub struct RandomizerSession {
     pub guild_id: String,
     pub amount: Option<usize>,
     pub locale: String,
+    pub language: String,
+    pub engine: String,
     pub issued_at_ms: i64,
 }
 
@@ -84,8 +113,20 @@ pub fn parse_randomizer_command(
 
     let mut amount = None;
     let mut options = None;
+    let mut language = None;
+    let mut engine = None;
     for option in &command.options {
         match (option.name.as_str(), &option.value) {
+            ("language", CommandDataOptionValue::String(value)) => {
+                if language.replace(value.clone()).is_some() {
+                    return Err(RandomizerCommandError::UnexpectedOption);
+                }
+            }
+            ("engine", CommandDataOptionValue::String(value)) => {
+                if engine.replace(value.clone()).is_some() {
+                    return Err(RandomizerCommandError::UnexpectedOption);
+                }
+            }
             ("amount", CommandDataOptionValue::Integer(value)) => {
                 if amount.replace(*value).is_some() {
                     return Err(RandomizerCommandError::UnexpectedOption);
@@ -101,20 +142,35 @@ pub fn parse_randomizer_command(
         }
     }
 
+    let language = language
+        .filter(|value| crate::joke_lang_by_key(value).is_some())
+        .ok_or(RandomizerCommandError::InvalidVoice)?;
+    let engine = engine
+        .filter(|value| matches!(value.as_str(), "google" | "piper" | "kokoro"))
+        .ok_or(RandomizerCommandError::InvalidVoice)?;
+
     // Node intentionally gives the CSV path precedence when both optional arguments exist.
     if let Some(raw) = options {
         return parse_direct_options(&raw)
-            .map(|options| RandomizerCommand::Direct { options })
+            .map(|options| RandomizerCommand::Direct {
+                options,
+                language,
+                engine,
+            })
             .map(Some);
     }
     match amount {
-        None => Ok(Some(RandomizerCommand::ChooseAmount)),
+        None => Ok(Some(RandomizerCommand::ChooseAmount { language, engine })),
         Some(value) => {
             let amount = usize::try_from(value)
                 .ok()
                 .filter(|value| (MIN_OPTIONS..=MAX_MODAL_OPTIONS).contains(value))
                 .ok_or(RandomizerCommandError::InvalidAmount)?;
-            Ok(Some(RandomizerCommand::Modal { amount }))
+            Ok(Some(RandomizerCommand::Modal {
+                amount,
+                language,
+                engine,
+            }))
         }
     }
 }
@@ -134,6 +190,26 @@ pub fn parse_direct_options(raw: &str) -> Result<Vec<String>, RandomizerCommandE
     }
     // Node accepts the whole bounded Discord string and announces only its first 50 entries.
     Ok(options.into_iter().take(MAX_OPTIONS).collect())
+}
+
+/// Keep the selected language even when the user's saved voice belongs to another language.
+/// Synthetic Google models are not installed Piper voices.
+pub fn randomizer_model<'a>(
+    available: &'a [String],
+    preferred: Option<&str>,
+    language: &str,
+    engine: &str,
+) -> Option<&'a str> {
+    let prefix = crate::joke_lang_by_key(language)?.prefix;
+    let compatible = |model: &&String| {
+        model.starts_with(prefix) && (engine != "piper" || !model.ends_with("-google-medium"))
+    };
+    available
+        .iter()
+        .filter(compatible)
+        .find(|model| Some(model.as_str()) == preferred)
+        .or_else(|| available.iter().find(compatible))
+        .map(String::as_str)
 }
 
 pub fn parse_modal_options(
@@ -219,7 +295,10 @@ mod tests {
     use super::*;
     fn empty_command() -> CommandData {
         serde_json::from_value(serde_json::json!({
-            "id": "1", "name": "randomizer", "type": 1, "options": []
+            "id": "1", "name": "randomizer", "type": 1, "options": [
+                {"name":"language", "type":3, "value":"pt"},
+                {"name":"engine", "type":3, "value":"piper"}
+            ]
         }))
         .expect("command")
     }
@@ -237,10 +316,46 @@ mod tests {
     }
 
     #[test]
+    fn selected_language_does_not_fall_back_to_english() {
+        let models = vec![
+            "en_US-amy-medium".into(),
+            "pt_PT-google-medium".into(),
+            "pt_BR-faber-medium".into(),
+        ];
+        assert_eq!(
+            randomizer_model(&models, Some("en_US-amy-medium"), "pt", "google"),
+            Some("pt_PT-google-medium")
+        );
+        assert_eq!(
+            randomizer_model(&models, Some("pt_PT-google-medium"), "pt", "piper"),
+            Some("pt_BR-faber-medium")
+        );
+        assert_eq!(randomizer_model(&models, None, "fr", "piper"), None);
+    }
+
+    #[test]
+    fn voice_selection_is_required_and_validated() {
+        let mut command = empty_command();
+        command.options.clear();
+        assert_eq!(
+            parse_randomizer_command(&command),
+            Err(RandomizerCommandError::InvalidVoice)
+        );
+        let mut command = empty_command();
+        command.options[1].value = CommandDataOptionValue::String("unknown".into());
+        assert_eq!(
+            parse_randomizer_command(&command),
+            Err(RandomizerCommandError::InvalidVoice)
+        );
+    }
+
+    #[test]
     fn command_paths_match_node_precedence() {
         let command = serde_json::from_value(serde_json::json!({
             "id": "1", "name": "randomizer", "type": 1,
             "options": [
+                {"name":"language", "type":3, "value":"pt"},
+                {"name":"engine", "type":3, "value":"piper"},
                 {"name": "amount", "type": 4, "value": 3},
                 {"name": "options", "type": 3, "value": "a,b"}
             ]
@@ -249,7 +364,9 @@ mod tests {
         assert_eq!(
             parse_randomizer_command(&command).expect("parse"),
             Some(RandomizerCommand::Direct {
-                options: vec!["a".into(), "b".into()]
+                options: vec!["a".into(), "b".into()],
+                language: "pt".into(),
+                engine: "piper".into()
             })
         );
     }
@@ -258,7 +375,10 @@ mod tests {
     fn amount_and_component_ids_are_strict() {
         assert_eq!(
             parse_randomizer_command(&empty_command()).expect("parse"),
-            Some(RandomizerCommand::ChooseAmount)
+            Some(RandomizerCommand::ChooseAmount {
+                language: "pt".into(),
+                engine: "piper".into()
+            })
         );
         assert_eq!(
             parse_amount_component_id("randAmount:42"),
@@ -275,6 +395,8 @@ mod tests {
             guild_id: "g".into(),
             amount: Some(2),
             locale: "en".into(),
+            language: "pt".into(),
+            engine: "piper".into(),
             issued_at_ms: 10,
         };
         assert!(session.valid_at(10 + SESSION_TTL_MS));
