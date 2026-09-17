@@ -487,4 +487,39 @@ mod tests {
         assert_eq!(premium.plan, "premium");
         assert_eq!(premium.guild_limit, 3);
     }
+
+    #[test]
+    fn guild_seat_unlocks_premium_for_every_administrator_of_that_guild() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = OffsetDateTime::now_utc().unix_timestamp_nanos() as i64 / 1_000_000;
+        store
+            .grant_guild_pass("subscription-owner", 3, 30, "test", now)
+            .unwrap();
+        store
+            .activate_seat("subscription-owner", "funded-guild", now)
+            .unwrap();
+
+        let other_admin = resolve_from_store(
+            &store,
+            &ResolveRequest {
+                subject_id: "different-guild-admin".into(),
+                guild_id: Some("funded-guild".into()),
+            },
+            now,
+        )
+        .unwrap();
+        assert_eq!(other_admin.plan, "premium");
+        assert_eq!(other_admin.scope, "guild");
+
+        let other_guild = resolve_from_store(
+            &store,
+            &ResolveRequest {
+                subject_id: "different-guild-admin".into(),
+                guild_id: Some("unfunded-guild".into()),
+            },
+            now,
+        )
+        .unwrap();
+        assert_eq!(other_guild.plan, "free");
+    }
 }
