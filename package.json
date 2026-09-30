@@ -22,7 +22,7 @@
     "build:i18n": "node tools/build-i18n.mjs",
     "check:i18n": "node tools/build-i18n.mjs --check",
     "check:site-copy": "node tools/check-site-copy.mjs",
-    "check:site": "vitest run site-tests/operationalHardening.test.mjs site-tests/siteTrust.test.mjs site-tests/siteI18n.test.mjs site-tests/dashboardCoreSettings.test.mjs site-tests/siteUxPolish.test.mjs site-tests/fullAuditRegression.test.mjs --pool forks --maxWorkers 1 --minWorkers 1 && npm run check:i18n && npm run check:site-copy && npm run build:site"
+    "check:site": "vitest run site-tests/operationalHardening.test.mjs site-tests/siteTrust.test.mjs site-tests/siteI18n.test.mjs site-tests/dashboardCoreSettings.test.mjs site-tests/siteUxPolish.test.mjs site-tests/fullAuditRegression.test.mjs --pool forks --maxWorkers 1 --minWorkers 1 && vitest run site-tests/deployRollback.test.mjs --pool forks --maxWorkers 1 --minWorkers 1 && npm run check:i18n && npm run check:site-copy && npm run build:site"
   },
   "dependencies": {},
   "devDependencies": {

@@ -132,7 +132,7 @@ wait_until_healthy() {
     )"
     if [ "$container_health" = "healthy" ] \
       && curl --fail --silent --show-error --max-time 5 "$HEALTH_URL" >/dev/null \
-      && docker logs "$CONTAINER" 2>&1 | grep -q "healthy: Ready"; then
+      && docker logs "$CONTAINER" 2>&1 | grep -F "healthy: Ready" >/dev/null; then
       return 0
     fi
     sleep 5
@@ -141,6 +141,37 @@ wait_until_healthy() {
 }
 
 export VOZEN_BUILD_SHA="$(git rev-parse HEAD)"
+replacement_attempted=false
+previous_prod_image=""
+cleanup_failed_deploy() {
+  local status=$?
+  trap - EXIT
+  if [ "$status" -ne 0 ]; then
+    if [ "$replacement_attempted" = "false" ] && [ -n "$previous_prod_image" ]; then
+      docker image tag "$previous_prod_image" vozen-rust:prod || true
+    elif [ "$rollback_available" = "true" ]; then
+      echo "Rolling back to the previous Rust image." >&2
+      if docker image tag "$ROLLBACK_IMAGE" vozen-rust:prod; then
+        if [ "$replacement_attempted" = "true" ]; then
+          docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" stop "$SERVICE" || true
+          if docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
+            up -d --force-recreate --no-build "$SERVICE" && wait_until_healthy; then
+            echo "Rollback health verification: ok" >&2
+          else
+            echo "Rollback container did not become healthy." >&2
+          fi
+        fi
+      else
+        echo "Unable to restore the rollback image tag; manual recovery is required." >&2
+      fi
+    fi
+    if [ -n "$PREBUILT_IMAGE" ]; then
+      docker image rm "$PREBUILT_IMAGE" >/dev/null 2>&1 || true
+    fi
+  fi
+  exit "$status"
+}
+trap cleanup_failed_deploy EXIT
 compose_build_args=()
 if [ -n "$PREBUILT_IMAGE" ]; then
   prebuilt_revision="$(
@@ -152,27 +183,7 @@ if [ -n "$PREBUILT_IMAGE" ]; then
     echo "Refusing deploy: prebuilt image revision does not match the checked-out commit." >&2
     exit 1
   fi
-  previous_prod_image="$(
-    docker image inspect --format '{{.Id}}' vozen-rust:prod 2>/dev/null || true
-  )"
-  rollback_promoted=false
-  cleanup_failed_candidate() {
-    status=$?
-    if [ "$status" -ne 0 ]; then
-      if [ "$rollback_promoted" != "true" ]; then
-        if [ -n "$previous_prod_image" ]; then
-          if ! docker image tag "$previous_prod_image" vozen-rust:prod; then
-            echo "Warning: failed to restore the previous production image tag." >&2
-          fi
-        else
-          docker image rm vozen-rust:prod >/dev/null 2>&1 || true
-        fi
-      fi
-      docker image rm "$PREBUILT_IMAGE" >/dev/null 2>&1 || true
-    fi
-    exit "$status"
-  }
-  trap cleanup_failed_candidate EXIT
+  previous_prod_image="$(docker image inspect --format '{{.Id}}' vozen-rust:prod 2>/dev/null || true)"
   docker image tag "$PREBUILT_IMAGE" vozen-rust:prod
   compose_build_args=(--no-build)
   echo "Using CI-built production image for ${VOZEN_BUILD_SHA:0:12}."
@@ -187,6 +198,7 @@ python3 scripts/backup-rust-db.py \
   --source "$DATABASE" \
   --destination-dir "$BACKUP_DIR"
 
+replacement_attempted=true
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
   up -d --force-recreate "${compose_build_args[@]}" "$SERVICE"
 
@@ -195,19 +207,6 @@ if ! wait_until_healthy; then
   docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" logs \
     --tail 200 "$SERVICE" >&2 || true
 
-  if [ "$rollback_available" = "true" ]; then
-    echo "Rolling back to the previous Rust image." >&2
-    docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" stop "$SERVICE" || true
-    docker image tag "$ROLLBACK_IMAGE" vozen-rust:prod
-    rollback_promoted=true
-    docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
-      up -d --force-recreate --no-build "$SERVICE"
-    if wait_until_healthy; then
-      echo "Rollback health verification: ok" >&2
-    else
-      echo "Rollback container did not become healthy." >&2
-    fi
-  fi
   exit 1
 fi
 
@@ -227,13 +226,14 @@ if integrity is None or integrity[0] != "ok" or foreign_keys:
 print("Post-deploy database verification: ok")
 PY
 
+docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps "$SERVICE"
+curl --fail --silent --show-error --max-time 5 "$HEALTH_URL"
+echo
+
 deploy_state_tmp="$(mktemp "$DEPLOY_STATE_DIR/deployed-sha.XXXXXX")"
 chmod 600 "$deploy_state_tmp"
 printf '%s\n' "$VOZEN_BUILD_SHA" > "$deploy_state_tmp"
 mv "$deploy_state_tmp" "$DEPLOY_STATE"
 
-docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
-docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps "$SERVICE"
-curl --fail --silent --show-error --max-time 5 "$HEALTH_URL"
-echo
+# Retain the known-good image for operator recovery after this release.
 trap - EXIT

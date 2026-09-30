@@ -66,9 +66,12 @@ impl VoiceReceiver {
     /// stopped. Pending short noise is discarded by `UtteranceCollector`.
     pub fn disconnect_user(&mut self, user_id: u64) -> Option<ReceivedUtterance> {
         self.ssrc_users.retain(|_, mapped| *mapped != user_id);
-        self.collectors
-            .remove(&user_id)
-            .and_then(|mut collector| collector.flush())
+        let mut collector = self.collectors.remove(&user_id)?;
+        if !(self.consented)(user_id) {
+            return None;
+        }
+        collector
+            .flush()
             .map(|utterance| ReceivedUtterance { user_id, utterance })
     }
 
@@ -77,6 +80,9 @@ impl VoiceReceiver {
     pub fn stop(&mut self) -> Vec<ReceivedUtterance> {
         let mut output = Vec::new();
         for (user_id, mut collector) in std::mem::take(&mut self.collectors) {
+            if !(self.consented)(user_id) {
+                continue;
+            }
             if let Some(utterance) = collector.flush() {
                 output.push(ReceivedUtterance { user_id, utterance });
             }
@@ -251,6 +257,47 @@ mod tests {
         consent.store(true, Ordering::Relaxed);
         assert!(receiver.push_pcm(4, frame(700)).is_none());
         assert_eq!(receiver.pending_speakers(), 1);
+    }
+
+    #[test]
+    fn revoke_before_disconnect_discards_audio_without_another_frame() {
+        let consent = Arc::new(AtomicBool::new(true));
+        let gate = {
+            let consent = consent.clone();
+            Arc::new(move |_| consent.load(Ordering::Relaxed))
+        };
+        let mut receiver = VoiceReceiver::new(1_920, gate);
+        receiver.map_ssrc(2, 42);
+        for _ in 0..15 {
+            receiver.push_pcm(2, frame(500));
+        }
+        consent.store(false, Ordering::Relaxed);
+        assert!(receiver.disconnect_user(42).is_none());
+        assert_eq!(receiver.pending_speakers(), 0);
+        assert_eq!(receiver.mapped_user(2), None);
+    }
+
+    #[test]
+    fn stop_flushes_only_speakers_whose_consent_is_still_active() {
+        let consent = Arc::new(AtomicBool::new(true));
+        let gate = {
+            let consent = consent.clone();
+            Arc::new(move |user_id| user_id == 7 || consent.load(Ordering::Relaxed))
+        };
+        let mut receiver = VoiceReceiver::new(1_920, gate);
+        receiver.map_ssrc(2, 42);
+        receiver.map_ssrc(3, 7);
+        for _ in 0..15 {
+            receiver.push_pcm(2, frame(500));
+            receiver.push_pcm(3, frame(500));
+        }
+        consent.store(false, Ordering::Relaxed);
+        let output = receiver.stop();
+        assert_eq!(output.len(), 1);
+        assert_eq!(output[0].user_id, 7);
+        assert_eq!(receiver.pending_speakers(), 0);
+        assert_eq!(receiver.mapped_user(2), None);
+        assert_eq!(receiver.mapped_user(3), None);
     }
 
     #[test]

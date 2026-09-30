@@ -66,7 +66,7 @@ impl UtteranceCollector {
         self.chunks.push(frame);
         self.total_ms += frame_ms;
         self.silence_run_ms += frame_ms;
-        if self.silence_run_ms < self.silence_gap_ms {
+        if self.silence_run_ms < self.silence_gap_ms && self.total_ms < self.max_utterance_ms {
             return None;
         }
         if self.voiced_ms >= self.min_utterance_ms {
@@ -157,6 +157,21 @@ mod tests {
         assert_eq!(utterance.duration_ms, 1_140);
         assert_eq!(utterance.voiced_ms, 320);
         assert_eq!(utterance.pcm.len(), 109_440);
+    }
+
+    #[test]
+    fn twenty_second_cap_also_applies_to_trailing_silence() {
+        let mut collector = UtteranceCollector::new();
+        for _ in 0..990 {
+            assert!(collector.push(frame(500)).is_none());
+        }
+        for _ in 0..9 {
+            assert!(collector.push(frame(0)).is_none());
+        }
+        let utterance = collector.push(frame(0)).expect("cap includes silence");
+        assert_eq!(utterance.duration_ms, 20_000);
+        assert_eq!(utterance.voiced_ms, 19_800);
+        assert!(collector.flush().is_none());
     }
 
     #[test]

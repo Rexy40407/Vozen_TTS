@@ -39,13 +39,13 @@ pub(crate) async fn fetch_avatar_data_url(avatar_url: Option<&str>) -> Option<St
         .timeout(Duration::from_secs(2))
         .build()
         .ok()?;
-    let response = client.get(avatar_url).send().await.ok()?;
+    let mut response = client.get(avatar_url).send().await.ok()?;
     if !response.status().is_success() {
         return None;
     }
     if response
         .content_length()
-        .is_some_and(|length| length as usize > MAX_AVATAR_BYTES)
+        .is_some_and(|length| length > MAX_AVATAR_BYTES as u64)
     {
         return None;
     }
@@ -57,9 +57,12 @@ pub(crate) async fn fetch_avatar_data_url(avatar_url: Option<&str>) -> Option<St
         .filter(|value| matches!(*value, "image/png" | "image/jpeg" | "image/webp"))
         .unwrap_or("image/png")
         .to_owned();
-    let bytes = response.bytes().await.ok()?;
-    if bytes.len() > MAX_AVATAR_BYTES {
-        return None;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.ok()? {
+        if chunk.len() > MAX_AVATAR_BYTES.saturating_sub(bytes.len()) {
+            return None;
+        }
+        bytes.extend_from_slice(&chunk);
     }
     Some(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
 }
@@ -153,7 +156,7 @@ fn build_streak_card_svg(
                 escape_xml(url)
             )
         })
-        .unwrap_or_else(|| r##"<circle cx="600" cy="148" r="80" fill="#ffffff"/>"##.to_owned());
+        .unwrap_or_default();
 
     format!(
         r##"<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-label="{name} {streak_label} day streak">
@@ -163,6 +166,7 @@ fn build_streak_card_svg(
   <rect width="1200" height="680" fill="#061522"/>
   <rect x="23" y="23" width="1154" height="634" rx="32" fill="none" stroke="#29465a" stroke-width="2"/>
   <circle cx="600" cy="148" r="84" fill="#061522" stroke="#29465a" stroke-width="2"/>
+  <circle cx="600" cy="148" r="80" fill="#ffffff"/>
   {avatar}
   <text x="600" y="278" text-anchor="middle" fill="#eef2f6" font-family="DejaVu Sans, sans-serif" font-size="31" font-weight="700" letter-spacing="1.2">{name}</text>
   <line x1="600" y1="345" x2="600" y2="560" stroke="#29465a" stroke-width="2"/>
@@ -203,9 +207,44 @@ mod tests {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
 
     use super::{
-        INNER_FLAME_PATH, OUTER_FLAME_PATH, build_streak_card, build_streak_card_svg,
-        card_avatar_url,
+        INNER_FLAME_PATH, MAX_AVATAR_BYTES, OUTER_FLAME_PATH, build_streak_card,
+        build_streak_card_svg, card_avatar_url, fetch_avatar_data_url,
     };
+
+    #[tokio::test]
+    async fn oversized_chunked_avatar_is_rejected_before_the_body_finishes() {
+        use tokio::{io::AsyncWriteExt, net::TcpListener, sync::oneshot};
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
+        let url = format!("http://{}/avatar", listener.local_addr().expect("address"));
+        let (release, hold_open) = oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("request");
+            let headers = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n",
+                MAX_AVATAR_BYTES + 1
+            );
+            stream.write_all(headers.as_bytes()).await.expect("headers");
+            stream
+                .write_all(&vec![0; MAX_AVATAR_BYTES + 1])
+                .await
+                .expect("oversized chunk");
+            stream.write_all(b"\r\n").await.expect("chunk boundary");
+            let _ = hold_open.await;
+        });
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            fetch_avatar_data_url(Some(&url)),
+        )
+        .await;
+        let _ = release.send(());
+        server.await.expect("server");
+        assert!(
+            result
+                .expect("reject without waiting for body completion")
+                .is_none()
+        );
+    }
 
     fn decode_card(png: &[u8]) -> resvg::tiny_skia::Pixmap {
         resvg::tiny_skia::Pixmap::decode_png(png).expect("decoded card")
@@ -228,6 +267,15 @@ mod tests {
     fn card_rasterizes_to_a_fixed_size_png() {
         let png = build_streak_card("Micon & Co", 42, None).expect("png");
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        let card = decode_card(&png);
+        let center = card
+            .pixel(600, 148)
+            .expect("placeholder center")
+            .demultiply();
+        assert_eq!(
+            (center.red(), center.green(), center.blue()),
+            (255, 255, 255)
+        );
         assert_eq!(
             u32::from_be_bytes(png[16..20].try_into().expect("width")),
             1200
@@ -407,6 +455,15 @@ mod tests {
         let png = build_streak_card("Micon", 42, Some("data:image/png;base64,not-an-image"))
             .expect("placeholder png");
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        let card = decode_card(&png);
+        let center = card
+            .pixel(600, 148)
+            .expect("placeholder center")
+            .demultiply();
+        assert_eq!(
+            (center.red(), center.green(), center.blue()),
+            (255, 255, 255)
+        );
     }
 
     #[test]

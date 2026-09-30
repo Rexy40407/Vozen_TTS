@@ -100,7 +100,10 @@ pub fn concat_wavs(wavs: &[Vec<u8>], silence_ms: u32) -> Result<Vec<u8>, WavErro
         .iter()
         .map(|wav| parse_wav(wav))
         .collect::<Result<Vec<_>, _>>()?;
-    if parsed.iter().any(|wav| !is_piper_format(wav.format)) {
+    if parsed
+        .iter()
+        .any(|wav| !is_piper_format(wav.format) || wav.data.len() % usize::from(block_align()) != 0)
+    {
         return Err(WavError::UnsupportedFormat);
     }
     let silence_bytes = (u64::from(silence_ms) * u64::from(PIPER_SAMPLE_RATE) / 1_000)
@@ -197,6 +200,19 @@ mod tests {
         let mut stereo = build_wav(&[1, 2]);
         stereo[22..24].copy_from_slice(&2u16.to_le_bytes());
         assert_eq!(concat_wavs(&[stereo], 0), Err(WavError::UnsupportedFormat));
+    }
+
+    #[test]
+    fn rejects_incomplete_pcm_samples_before_concatenation() {
+        let mut malformed = build_wav(&[1, 2, 3]);
+        malformed.push(0); // RIFF padding does not form part of the PCM sample data.
+        let riff_size = (malformed.len() - 8) as u32;
+        malformed[4..8].copy_from_slice(&riff_size.to_le_bytes());
+        assert_eq!(parse_wav(&malformed).expect("container").data.len(), 3);
+        assert_eq!(
+            concat_wavs(&[malformed, build_wav(&[4, 5])], 0),
+            Err(WavError::UnsupportedFormat)
+        );
     }
 
     #[test]

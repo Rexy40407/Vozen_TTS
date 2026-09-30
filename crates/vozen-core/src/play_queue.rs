@@ -106,7 +106,10 @@ impl PlayQueue {
         if !self.accessibility.is_empty()
             && (self.standard.is_empty() || self.accessibility_burst < MAX_ACCESSIBILITY_BURST)
         {
-            self.accessibility_burst += 1;
+            self.accessibility_burst = self
+                .accessibility_burst
+                .saturating_add(1)
+                .min(MAX_ACCESSIBILITY_BURST);
             return self.accessibility.pop_front();
         }
         if let Some(item) = self.standard.pop_front() {
@@ -205,6 +208,30 @@ mod tests {
             .map(|_| queue.dequeue().expect("item").request.text)
             .collect();
         assert_eq!(order, ["a1", "a2", "a3", "normal", "a4"]);
+    }
+
+    #[test]
+    fn long_accessibility_only_run_stays_bounded_and_yields_to_standard() {
+        let mut queue = PlayQueue::new(2);
+        for _ in 0..300 {
+            assert!(queue.enqueue_many(
+                [request("accessible")],
+                options(QueueLane::Accessibility, None),
+            ));
+            assert_eq!(
+                queue.dequeue().expect("accessible item").request.text,
+                "accessible"
+            );
+        }
+        assert!(queue.enqueue_many([request("standard")], options(QueueLane::Standard, None)));
+        assert!(queue.enqueue_many(
+            [request("accessible")],
+            options(QueueLane::Accessibility, None),
+        ));
+        assert_eq!(
+            queue.dequeue().expect("standard item").request.text,
+            "standard"
+        );
     }
 
     #[test]
