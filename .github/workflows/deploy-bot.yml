@@ -1,814 +1,126 @@
-# Auto-deploy of the Rust runtime to the production VPS. The checkout and
-# persistent SQLite database live in ~/vozen-rust-prod; the legacy Node service
-# must stay stopped.
+# Fixed-target publishing through the host-owned broker; no administrative SSH key.
 name: Deploy bot to VPS
-
 permissions:
   actions: read
   contents: read
-
+  id-token: write
 on:
-  # Production is intentionally released from the Rust migration branch. The old
-  # main checkout is not the production source of truth.
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [migration/vozen-rust]
   workflow_dispatch:
     inputs:
       production_sha:
-        description: "Exact CI-tested migration/vozen-rust commit to deploy"
+        description: Exact successful CI production revision
         required: true
         type: string
-      diagnostics_only:
-        description: "Report VPS filesystem and Docker storage usage without changing state"
-        required: false
-        default: false
-        type: boolean
       artifact_run_id:
-        description: "Successful CI run containing the immutable production image"
-        required: false
+        description: Successful CI run with the immutable image
+        required: true
         type: string
-
 concurrency:
   group: deploy-bot
   cancel-in-progress: false
-
 jobs:
   deploy:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     env:
       DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.production_sha }}
-      DIAGNOSTICS_ONLY: ${{ inputs.diagnostics_only && 'true' || 'false' }}
       ARTIFACT_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.artifact_run_id }}
     steps:
-      - name: Validate VPS deploy inputs
+      - name: Validate exact successful production CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_REPOSITORY_ID: ${{ github.repository_id }}
         shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ARTIFACT_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID")"
+          jq -e --arg sha "$DEPLOY_SHA" --argjson id "$TRUSTED_REPOSITORY_ID" \
+            '.name == "CI" and .event == "push" and .status == "completed" and
+             .conclusion == "success" and .head_repository.id == $id and
+             .head_branch == "migration/vozen-rust" and .head_sha == $sha' \
+            <<<"$run_json" >/dev/null
+          head="$(gh api "repos/$GITHUB_REPOSITORY/commits/migration/vozen-rust" --jq .sha)"
+          test "$head" = "$DEPLOY_SHA"
+      - name: Download exact CI image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vozen-rust-image-${{ env.DEPLOY_SHA }}
+          path: image
+          github-token: ${{ github.token }}
+          run-id: ${{ env.ARTIFACT_RUN_ID }}
+      - name: Verify checksum and artifact bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd image
+          file="vozen-rust-$DEPLOY_SHA.tar.gz"
+          test -f "$file" && test ! -L "$file"
+          test -f "$file.sha256" && test ! -L "$file.sha256"
+          test "$(wc -l < "$file.sha256")" = 1
+          read -r digest name extra < "$file.sha256"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          test "$name" = "$file" && test -z "${extra:-}"
+          sha256sum --check --strict "$file.sha256"
+          size="$(stat --format=%s "$file")"
+          (( size > 0 && size <= 2 * 1024 * 1024 * 1024 ))
+          echo "ARCHIVE_SHA256=$digest" >> "$GITHUB_ENV"
+      - name: Transfer artifact as the unprivileged Vozen account
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-        run: |
-          test -n "$VPS_HOST" || { echo "::error title=Missing VPS_HOST::Add the VPS_HOST repository secret."; exit 1; }
-          test -n "$VPS_USER" || { echo "::error title=Missing VPS_USER::Add the VPS_USER repository secret."; exit 1; }
-          test -n "$VPS_SSH_KEY" || { echo "::error title=Missing VPS_SSH_KEY::Add the VPS_SSH_KEY repository secret."; exit 1; }
-
-      - name: Verify immutable image artifact provenance
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        id: artifact
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TRUSTED_REPOSITORY_ID: ${{ github.repository_id }}
-        run: |
-          set -euo pipefail
-          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$ARTIFACT_RUN_ID" =~ ^[0-9]+$ ]]
-          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID")"
-          jq -e \
-            --arg sha "$DEPLOY_SHA" \
-            --argjson repository_id "$TRUSTED_REPOSITORY_ID" \
-            '.name == "CI" and .event == "push" and .conclusion == "success" and
-             .head_repository.id == $repository_id and .head_branch == "migration/vozen-rust" and
-             .head_sha == $sha' \
-            <<<"$run_json" >/dev/null
-          echo "run_id=$ARTIFACT_RUN_ID" >> "$GITHUB_OUTPUT"
-
-      - name: Check out exact CI-tested source
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: ${{ env.DEPLOY_SHA }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Download CI-built production image
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: vozen-rust-image-${{ env.DEPLOY_SHA }}
-          path: .vozen-deploy-artifact
-          github-token: ${{ github.token }}
-          run-id: ${{ steps.artifact.outputs.run_id }}
-
-      - name: Verify production image artifact checksum and size
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        id: image_artifact
         shell: bash
         run: |
           set -euo pipefail
-          cd .vozen-deploy-artifact
-          sha256sum --check "vozen-rust-$DEPLOY_SHA.tar.gz.sha256"
-          artifact_bytes="$(stat --format=%s "vozen-rust-$DEPLOY_SHA.tar.gz")"
-          unpacked_bytes="$(gzip --decompress --stdout "vozen-rust-$DEPLOY_SHA.tar.gz" | wc --bytes)"
-          (( artifact_bytes > 0 && artifact_bytes <= 2 * 1024 * 1024 * 1024 ))
-          (( unpacked_bytes > 0 && unpacked_bytes <= 8 * 1024 * 1024 * 1024 ))
-          echo "compressed_bytes=$artifact_bytes" >> "$GITHUB_OUTPUT"
-          echo "unpacked_bytes=$unpacked_bytes" >> "$GITHUB_OUTPUT"
-
-      # The VPS keeps the prior image as rollback. The runtime executable is the
-      # only changed layer for Rust-only releases, so extract it from the
-      # checksum-verified CI image on the runner and transfer the small,
-      # independently checksummed delta rather than a second multi-gigabyte
-      # Python/model filesystem to a constrained production disk.
-      - name: Extract verified runtime binary for layer-preserving deploy
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        id: runtime_binary
+          test "$VPS_HOST" = 146.59.147.110 && test "$VPS_USER" = vozen
+          test -n "$VPS_SSH_KEY"
+          install -d -m 700 "$RUNNER_TEMP/vozen-ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$RUNNER_TEMP/vozen-ssh/key"
+          chmod 600 "$RUNNER_TEMP/vozen-ssh/key"
+          printf '%s\n' '146.59.147.110 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKLNiT3f6Sb3jUULntSsWv4goIYwVXS+qC0Nlea/O3El' > "$RUNNER_TEMP/vozen-ssh/known_hosts"
+          options=(-i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15)
+          ssh "${options[@]}" vozen@146.59.147.110 \
+            "umask 077; mkdir -p /home/vozen/vozen-deploy-artifacts/$DEPLOY_SHA"
+          scp "${options[@]}" "image/vozen-rust-$DEPLOY_SHA.tar.gz" \
+            "vozen@146.59.147.110:/home/vozen/vozen-deploy-artifacts/$DEPLOY_SHA/vozen-rust-$DEPLOY_SHA.tar.gz"
+      - name: Authenticate digest-bound broker request and deploy
         shell: bash
         run: |
           set -euo pipefail
-          cd .vozen-deploy-artifact
-          image="vozen-rust:$DEPLOY_SHA"
-          container="vozen-runtime-extract-${GITHUB_RUN_ID}"
-          cleanup() {
-            docker rm --force "$container" >/dev/null 2>&1 || true
-            docker image rm "$image" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          docker image load --input "vozen-rust-$DEPLOY_SHA.tar.gz" >/dev/null
-          docker create --name "$container" "$image" >/dev/null
-          mkdir runtime-binary
-          binary="runtime-binary/vozen-runtime-$DEPLOY_SHA"
-          docker cp "$container:/usr/local/bin/vozen-runtime" "$binary"
-          test -s "$binary"
-          test -x "$binary"
-          (
-            cd runtime-binary
-            sha256sum "$(basename "$binary")" > "$(basename "$binary").sha256"
-          )
-          echo "binary_bytes=$(stat --format=%s "$binary")" >> "$GITHUB_OUTPUT"
-
-      # Production does not retain GitHub credentials. Transport the exact
-      # repository history selected by the provenance check as a checksummed
-      # local bundle so the VPS can verify ancestry and update its checkout
-      # without reaching back into the private repository.
-      - name: Bundle exact CI-tested source for VPS
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        id: source_bundle
+          node --input-type=module <<'JS'
+          import { writeFileSync } from 'node:fs';
+          const { DEPLOY_SHA: sha, ARTIFACT_RUN_ID: run_id, ARCHIVE_SHA256: sha256 } = process.env;
+          const audience = `vozen-deploy:${sha}:${run_id}:${sha256}`;
+          const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+          url.searchParams.set('audience', audience);
+          const response = await fetch(url, { headers: { Authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` } });
+          if (!response.ok) throw new Error('OIDC request failed');
+          const { value: token } = await response.json();
+          if (typeof token !== 'string' || token.length > 16000) throw new Error('Invalid OIDC response');
+          console.log(`::add-mask::${token}`);
+          writeFileSync(`${process.env.RUNNER_TEMP}/vozen-ssh/request.json`, JSON.stringify({ sha, run_id, sha256, token }), { mode: 0o600 });
+          JS
+          ssh -i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15 \
+            vozen@146.59.147.110 'sudo -n /usr/local/sbin/vozen-deploy-broker' \
+            < "$RUNNER_TEMP/vozen-ssh/request.json"
+      - name: Remove only the successfully deployed incoming archive
         shell: bash
         run: |
           set -euo pipefail
-          bundle_dir=".vozen-deploy-artifact/source-bundle"
-          bundle_name="vozen-source-$DEPLOY_SHA.bundle"
-          bundle="$bundle_dir/$bundle_name"
-          bundle_ref="refs/vozen/deploy-bundle"
-          cleanup_ref() { git update-ref -d "$bundle_ref" >/dev/null 2>&1 || true; }
-          trap cleanup_ref EXIT
-          mkdir -p "$bundle_dir"
-          git update-ref "$bundle_ref" "$DEPLOY_SHA"
-          git bundle create "$bundle" "$bundle_ref"
-          git bundle verify "$bundle"
-          [ "$(git bundle list-heads "$bundle" "$bundle_ref")" = "$DEPLOY_SHA $bundle_ref" ]
-          (
-            cd "$bundle_dir"
-            sha256sum "$bundle_name" > "$bundle_name.sha256"
-          )
-          bundle_bytes="$(stat --format=%s "$bundle")"
-          (( bundle_bytes > 0 && bundle_bytes <= 512 * 1024 * 1024 ))
-          echo "bundle_bytes=$bundle_bytes" >> "$GITHUB_OUTPUT"
-
-      - name: Check production release direction
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        id: production_preflight
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
-        env:
-          DEPLOY_SHA: ${{ env.DEPLOY_SHA }}
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          envs: DEPLOY_SHA
-          capture_stdout: true
-          script: |
-            set -euo pipefail
-            test "$(hostname)" = vps-4a10dd35
-            sudo -n /usr/local/sbin/vozen-data-guard
-            cd /home/vozen/vozen-rust-prod
-            [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
-
-            # Reject dirty and stale production state before pruning or transferring anything.
-            # The deploy step repeats these checks after transfer to close the TOCTOU window.
-            if ! checkout_status="$(
-              git status --porcelain --untracked-files=all -- . \
-                ':(exclude).env.rust.prod' \
-                ':(exclude).env.rust.prod.backup-*' \
-                ':(exclude)rust-data' \
-                ':(exclude)rust-data/**'
-            )"; then
-              echo "Unable to verify production checkout cleanliness" >&2
-              exit 1
-            fi
-            if [ -n "$checkout_status" ]; then
-              echo "Production checkout has local changes; refusing preflight" >&2
-              printf 'Unexpected checkout path: %s\n' "$checkout_status" >&2
-              exit 1
-            fi
-            container="vozen-rust-prod-vozen-1"
-            live_image="$(docker container inspect --format '{{.Image}}' "$container")"
-            [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
-            if docker image inspect "$live_image" >/dev/null 2>&1; then
-              deploy_mode="delta"
-            else
-              # Docker can keep a running container after its local image metadata
-              # has been pruned. The release later snapshots that container as the
-              # rollback image before loading one verified full-image bootstrap.
-              echo "Encrypted host requires a recoverable image; operator recovery needed." >&2
-              exit 1
-            fi
-            printf 'VOZEN_PREFLIGHT=deploy_%s\n' "$deploy_mode"
-
-      - name: Normalize production preflight decision
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        id: release_decision
+          ssh -i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15 \
+            vozen@146.59.147.110 \
+            "set -eu; directory=/home/vozen/vozen-deploy-artifacts/$DEPLOY_SHA; \
+             test \"\$(realpath \"\$directory\")\" = \"\$directory\"; \
+             rm -f -- \"\$directory/vozen-rust-$DEPLOY_SHA.tar.gz\"; \
+             rmdir -- \"\$directory\" 2>/dev/null || true"
+      - name: Remove runner credentials
+        if: always()
         shell: bash
-        env:
-          PREFLIGHT_STDOUT: ${{ steps.production_preflight.outputs.stdout }}
         run: |
-          set -euo pipefail
-          mapfile -t markers < <(
-            sed --quiet --regexp-extended \
-              's/^(out: )?VOZEN_PREFLIGHT=(deploy_(delta|full)|stale)\r?$/VOZEN_PREFLIGHT=\2/p' \
-              <<<"$PREFLIGHT_STDOUT"
-          )
-          if [ "${#markers[@]}" -ne 1 ]; then
-            echo "Expected exactly one production preflight decision marker." >&2
-            exit 1
-          fi
-          marker="${markers[0]#VOZEN_PREFLIGHT=}"
-          case "$marker" in
-            deploy_delta) decision="deploy"; deploy_mode="delta" ;;
-            deploy_full) decision="deploy"; deploy_mode="full" ;;
-            stale) decision="stale"; deploy_mode="stale" ;;
-            *) echo "Invalid production preflight marker." >&2; exit 1 ;;
-          esac
-          echo "decision=$decision" >> "$GITHUB_OUTPUT"
-          echo "mode=$deploy_mode" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare VPS storage for production image
-        if: env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy'
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
-        env:
-          BINARY_BYTES: ${{ steps.runtime_binary.outputs.binary_bytes }}
-          SOURCE_BUNDLE_BYTES: ${{ steps.source_bundle.outputs.bundle_bytes }}
-          ARTIFACT_BYTES: ${{ steps.image_artifact.outputs.compressed_bytes }}
-          UNPACKED_BYTES: ${{ steps.image_artifact.outputs.unpacked_bytes }}
-          DEPLOY_MODE: ${{ steps.release_decision.outputs.mode }}
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          envs: BINARY_BYTES,SOURCE_BUNDLE_BYTES,ARTIFACT_BYTES,UNPACKED_BYTES,DEPLOY_MODE
-          script: |
-            set -euo pipefail
-            [[ "$BINARY_BYTES" =~ ^[0-9]+$ ]]
-            (( BINARY_BYTES > 0 && BINARY_BYTES <= 512 * 1024 * 1024 ))
-            [[ "$SOURCE_BUNDLE_BYTES" =~ ^[0-9]+$ ]]
-            (( SOURCE_BUNDLE_BYTES > 0 && SOURCE_BUNDLE_BYTES <= 512 * 1024 * 1024 ))
-            [[ "$ARTIFACT_BYTES" =~ ^[0-9]+$ ]]
-            [[ "$UNPACKED_BYTES" =~ ^[0-9]+$ ]]
-            (( ARTIFACT_BYTES > 0 && ARTIFACT_BYTES <= 2 * 1024 * 1024 * 1024 ))
-            (( UNPACKED_BYTES > 0 && UNPACKED_BYTES <= 8 * 1024 * 1024 * 1024 ))
-            [[ "$DEPLOY_MODE" =~ ^(delta|full)$ ]]
-
-            # Protect the running image as rollback without removing other images.
-            container="vozen-rust-prod-vozen-1"
-            live_image="$(docker container inspect --format '{{.Image}}' "$container")"
-            [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
-            if [ "$DEPLOY_MODE" = "delta" ]; then
-              # A layer-preserving candidate needs the live image as its immutable base.
-              docker image inspect "$live_image" >/dev/null 2>&1 || {
-                echo "Running production image is not recoverable as a delta deployment base." >&2
-                exit 1
-              }
-              docker image tag "$live_image" vozen-rust:rollback
-              docker image inspect vozen-rust:rollback >/dev/null
-            else
-              # Docker cannot safely commit this container because the backing
-              # image content has already lost metadata. The deploy script keeps
-              # the stopped container itself under a rollback name while it
-              # starts and health-checks the verified replacement.
-              docker container inspect "$container" >/dev/null
-            fi
-
-            # Preserve all existing images and rollback; only check capacity.
-            docker_root="$(docker info --format '{{.DockerRootDir}}')"
-            artifact_device="$(df --output=source /home/vozen | tail -n 1)"
-            docker_device="$(df --output=source "$docker_root" | tail -n 1)"
-            artifact_available="$(df --output=avail --block-size=1 /home/vozen | tail -n 1 | tr -d ' ')"
-            docker_available="$(df --output=avail --block-size=1 "$docker_root" | tail -n 1 | tr -d ' ')"
-
-            # Delta candidates inherit the healthy rollback image and add only the CI-verified
-            # Rust executable. A one-time full bootstrap must hold the verified compressed
-            # archive and the loaded image together. Keep 512 MiB for Docker metadata and
-            # cleanup; refuse before transfer if the exact filesystem cannot hold it.
-            layer_load_headroom="$((512 * 1024 * 1024))"
-            if [ "$artifact_device" = "$docker_device" ]; then
-              if [ "$DEPLOY_MODE" = "delta" ]; then
-                combined_required="$((BINARY_BYTES + SOURCE_BUNDLE_BYTES + layer_load_headroom))"
-              else
-                combined_required="$((SOURCE_BUNDLE_BYTES + ARTIFACT_BYTES + UNPACKED_BYTES + layer_load_headroom))"
-              fi
-              (( artifact_available >= combined_required )) || {
-                echo "Insufficient shared filesystem space for the verified $DEPLOY_MODE production image." >&2
-                exit 1
-              }
-            else
-              if [ "$DEPLOY_MODE" = "delta" ]; then
-                artifact_required="$((BINARY_BYTES + SOURCE_BUNDLE_BYTES + layer_load_headroom))"
-                docker_required="$layer_load_headroom"
-              else
-                artifact_required="$((SOURCE_BUNDLE_BYTES + ARTIFACT_BYTES + layer_load_headroom))"
-                docker_required="$((UNPACKED_BYTES + layer_load_headroom))"
-              fi
-              (( artifact_available >= artifact_required && docker_available >= docker_required )) || {
-                echo "Insufficient artifact or Docker filesystem space for the verified $DEPLOY_MODE production image." >&2
-                exit 1
-              }
-            fi
-
-      - name: Transfer CI-verified source bundle
-        if: env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy'
-        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: .vozen-deploy-artifact/source-bundle/*
-          target: /home/vozen/vozen-deploy-artifacts/${{ env.DEPLOY_SHA }}
-          strip_components: 2
-
-      - name: Transfer CI-verified runtime delta
-        if: env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy' && steps.release_decision.outputs.mode == 'delta'
-        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: .vozen-deploy-artifact/runtime-binary/*
-          target: /home/vozen/vozen-deploy-artifacts/${{ env.DEPLOY_SHA }}
-          strip_components: 2
-
-      # This path is used only when Docker no longer has the running image's
-      # metadata, so a delta cannot be proven safe. The archive remains
-      # checksum-verified from CI and is validated again on the VPS before load.
-      - name: Transfer CI-verified full-image bootstrap
-        if: env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy' && steps.release_decision.outputs.mode == 'full'
-        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: .vozen-deploy-artifact/vozen-rust-${{ env.DEPLOY_SHA }}.tar.gz,.vozen-deploy-artifact/vozen-rust-${{ env.DEPLOY_SHA }}.tar.gz.sha256
-          target: /home/vozen/vozen-deploy-artifacts/${{ env.DEPLOY_SHA }}
-          strip_components: 1
-
-      # This action receives the production SSH key, so it is pinned to a commit.
-      - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
-        if: env.DIAGNOSTICS_ONLY == 'true' || steps.release_decision.outputs.decision == 'deploy'
-        env:
-          DEPLOY_MODE: ${{ steps.release_decision.outputs.mode }}
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          envs: DEPLOY_SHA,DIAGNOSTICS_ONLY,DEPLOY_MODE
-          command_timeout: 45m
-          debug: false
-          script: |
-            set -euo pipefail
-            test "$(hostname)" = vps-4a10dd35
-            sudo -n /usr/local/sbin/vozen-data-guard
-            cd /home/vozen/vozen-rust-prod
-            test -n "$DEPLOY_SHA"
-
-            if [ "${DIAGNOSTICS_ONLY:-false}" = "true" ]; then
-              df -h / /var/lib/docker 2>/dev/null || df -h /
-              df -ih / /var/lib/docker 2>/dev/null || df -ih /
-              docker info --format 'Docker root: {{.DockerRootDir}}'
-              docker system df --verbose
-              docker buildx ls || true
-              docker buildx du --verbose || true
-              docker image ls --all --digests
-              docker ps --all --size \
-                --format 'table {{.ID}}\t{{.Status}}\t{{.Size}}\t{{.Image}}\t{{.Names}}'
-              docker volume ls
-              docker network ls
-              docker_root="$(docker info --format '{{.DockerRootDir}}')"
-              sudo -n du -xhd1 "$docker_root" 2>/dev/null || true
-              printf '\nRust database and backup usage:\n'
-              du -sh rust-data/tts.db rust-data/tts.db-wal rust-data/tts.db-shm 2>/dev/null || true
-              du -sh --apparent-size rust-data/tts.db rust-data/tts.db-wal rust-data/tts.db-shm 2>/dev/null || true
-              stat --printf='logical bytes: %s %n\n' rust-data/tts.db rust-data/tts.db-wal rust-data/tts.db-shm 2>/dev/null || true
-              du -sh /home/vozen/vozen-backups 2>/dev/null || true
-              find /home/vozen/vozen-backups -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM %10s %f\n' 2>/dev/null | sort || true
-              printf '\nExternal growth configuration (values withheld):\n'
-              configured() {
-                key="$1"
-                if grep -Eq "^${key}=.+" .env.rust.prod; then
-                  printf '%s: present\n' "$key"
-                else
-                  printf '%s: missing\n' "$key"
-                fi
-              }
-              for key in \
-                TOPGG_TOKEN TOPGG_WEBHOOK_SECRET VOTE_REDEMPTION_SECRET \
-                RUST_TTS_INSTALL_OAUTH_ENABLED TTS_INSTALL_OAUTH_CLIENT_SECRET \
-                TTS_INSTALL_OAUTH_STATE_SECRET TTS_INSTALL_OAUTH_REDIRECT_URI \
-                CLOUDFLARE_WEB_ANALYTICS_ENABLED CLOUDFLARE_ACCOUNT_ID \
-                CLOUDFLARE_ZONE_ID CLOUDFLARE_WEB_ANALYTICS_SITE_TAG \
-                CLOUDFLARE_WEB_ANALYTICS_TOKEN; do
-                configured "$key"
-              done
-              exit 0
-            fi
-
-            artifact_root="${VOZEN_ARTIFACT_ROOT:-/home/vozen/vozen-deploy-artifacts}"
-            artifact_dir="$artifact_root/$DEPLOY_SHA"
-            runtime_binary="vozen-runtime-$DEPLOY_SHA"
-            source_bundle="vozen-source-$DEPLOY_SHA.bundle"
-            source_checksum="vozen-source-$DEPLOY_SHA.bundle.sha256"
-            image_archive="vozen-rust-$DEPLOY_SHA.tar.gz"
-            image_checksum="vozen-rust-$DEPLOY_SHA.tar.gz.sha256"
-            candidate_image="vozen-rust:$DEPLOY_SHA"
-            candidate_container="vozen-runtime-candidate-${DEPLOY_SHA:0:12}"
-            candidate_cleanup_armed=false
-            cleanup_staged_artifact() {
-              rm --force -- \
-                "$artifact_dir/$runtime_binary" \
-                "$artifact_dir/$runtime_binary.sha256" \
-                "$artifact_dir/$source_bundle" \
-                "$artifact_dir/$source_checksum" \
-                "$artifact_dir/$image_archive" \
-                "$artifact_dir/$image_checksum"
-              rmdir -- "$artifact_dir" 2>/dev/null || true
-            }
-            cleanup_deploy_attempt() {
-              status=$?
-              cleanup_staged_artifact || true
-              if [ "$status" -ne 0 ] && [ "$candidate_cleanup_armed" = "true" ]; then
-                docker rm --force "$candidate_container" >/dev/null 2>&1 || true
-                docker image rm "$candidate_image" >/dev/null 2>&1 || true
-              fi
-              exit "$status"
-            }
-            trap cleanup_deploy_attempt EXIT
-
-            # Payment credentials are provisioned directly on the VPS in a
-            # mode-600 environment file. Do not carry them in this SSH action:
-            # the remote command line is observable to local processes.
-            require_runtime_secret() {
-              key="$1"
-              if ! grep -Eq "^${key}=.+" .env.rust.prod; then
-                echo "::error title=Missing VPS runtime secret::${key} must be provisioned directly on the VPS."
-                exit 1
-              fi
-            }
-            require_runtime_secret STRIPE_SECRET_KEY
-            require_runtime_secret STRIPE_PUBLISHABLE_KEY
-            require_runtime_secret STRIPE_WEBHOOK_SECRET
-
-            # Import the checksummed source history delivered by the authenticated
-            # runner. The VPS needs no GitHub credential and never trusts a branch
-            # name supplied by the local checkout.
-            (
-              cd "$artifact_dir"
-              sha256sum --check "$source_checksum"
-            )
-            git bundle verify "$artifact_dir/$source_bundle"
-            bundle_ref="refs/vozen/deploy-bundle"
-            [ "$(git bundle list-heads "$artifact_dir/$source_bundle" "$bundle_ref")" = "$DEPLOY_SHA $bundle_ref" ]
-            local_deploy_ref="refs/vozen/deploy/$DEPLOY_SHA"
-            git fetch --no-tags "$artifact_dir/$source_bundle" "$bundle_ref:$local_deploy_ref"
-            [ "$(git rev-parse "$local_deploy_ref")" = "$DEPLOY_SHA" ]
-            git cat-file -e "$DEPLOY_SHA^{commit}"
-            current_commit="$(git rev-parse HEAD)"
-            target_commit="$DEPLOY_SHA"
-            [[ "${DEPLOY_MODE:-}" =~ ^(delta|full)$ ]] || {
-              echo "Invalid deploy mode from authenticated preflight." >&2
-              exit 1
-            }
-            compose_project="vozen-rust-prod"
-            compose_service="vozen"
-            compose_file="docker-compose.rust.prod.yml"
-            deploy_state_dir="/home/vozen/vozen-deploy-state"
-            container="${compose_project}-${compose_service}-1"
-            database="${VOZEN_DATABASE:-rust-data/tts.db}"
-            backup_dir="${VOZEN_BACKUP_DIR:-/home/vozen/vozen-backups}"
-            run_full_bootstrap() {
-              # The migration checkout owns the normal deploy script. A full-image bootstrap must
-              # also work while that checkout predates the container-retention fallback: the image
-              # was checksum- and OCI-label-verified above, and the current container is retained
-              # until the replacement passes application health and SQLite integrity verification.
-              rollback_container="${container}-rollback"
-              health_url="${VOZEN_HEALTH_URL:-http://127.0.0.1:3001/health}"
-              rollback_active=false
-
-              restore_full_bootstrap() {
-                if [ "$rollback_active" != "true" ]; then
-                  return 0
-                fi
-                echo "Restoring the retained production container after full bootstrap failure." >&2
-                docker compose -p "$compose_project" -f "$compose_file" stop "$compose_service" >/dev/null 2>&1 || true
-                docker rm --force "$container" >/dev/null 2>&1 || true
-                if ! docker container rename "$rollback_container" "$container"; then
-                  echo "::error::Could not restore the retained production container name." >&2
-                  return 1
-                fi
-                if ! docker start "$container"; then
-                  echo "::error::Could not restart the retained production container." >&2
-                  return 1
-                fi
-                rollback_active=false
-              }
-
-              if systemctl is-active --quiet vozen.service; then
-                echo "::error::Legacy vozen.service is active; refusing a competing full bootstrap." >&2
-                return 1
-              fi
-              test -f .env.rust.prod
-              test -f "$database"
-              if docker container inspect "$rollback_container" >/dev/null 2>&1; then
-                echo "::error::A retained rollback container already exists; refusing to overwrite it." >&2
-                return 1
-              fi
-              docker image inspect "$candidate_image" >/dev/null
-              candidate_revision="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$candidate_image")"
-              if [ "$candidate_revision" != "$target_commit" ]; then
-                echo "::error::Full bootstrap image revision does not match the CI-tested commit." >&2
-                return 1
-              fi
-              docker image tag "$candidate_image" vozen-rust:prod
-              if ! docker container rename "$container" "$rollback_container"; then
-                echo "::error::Could not retain the current production container for rollback." >&2
-                return 1
-              fi
-              rollback_active=true
-              if ! docker stop "$rollback_container"; then
-                restore_full_bootstrap || true
-                return 1
-              fi
-              if ! docker compose -p "$compose_project" -f "$compose_file" up -d --force-recreate --no-build "$compose_service"; then
-                restore_full_bootstrap || true
-                return 1
-              fi
-
-              healthy=false
-              for _ in $(seq 1 48); do
-                if [ "$(docker container inspect --format '{{.State.Health.Status}}' "$container" 2>/dev/null || true)" = "healthy" ] \
-                  && curl --fail --silent --show-error "$health_url" >/dev/null \
-                  && docker logs --tail 120 "$container" 2>&1 | grep --quiet 'healthy: Ready'; then
-                  healthy=true
-                  break
-                fi
-                sleep 5
-              done
-              if [ "$healthy" != "true" ]; then
-                echo "::error::Full bootstrap candidate did not become healthy." >&2
-                docker logs --tail 160 "$container" 2>&1 || true
-                restore_full_bootstrap || true
-                return 1
-              fi
-              if ! python3 - "$database" <<'PY'
-            import sqlite3
-            import sys
-
-            connection = sqlite3.connect(sys.argv[1])
-            try:
-                result = connection.execute("PRAGMA integrity_check").fetchone()[0]
-            finally:
-                connection.close()
-            if result.lower() != "ok":
-                raise SystemExit(f"SQLite integrity check failed: {result}")
-            PY
-              then
-                echo "::error::Full bootstrap database integrity verification failed." >&2
-                restore_full_bootstrap || true
-                return 1
-              fi
-              if ! (
-                if [ -L "$deploy_state_dir" ]; then
-                  echo "Deployment state directory must not be a symlink." >&2
-                  exit 1
-                fi
-                install -d -m 700 "$deploy_state_dir"
-                chmod 700 "$deploy_state_dir"
-                state_tmp="$(mktemp "$deploy_state_dir/deployed-sha.XXXXXX")"
-                chmod 600 "$state_tmp"
-                printf '%s\n' "$target_commit" > "$state_tmp"
-                mv -f "$state_tmp" "$deploy_state_dir/deployed-sha"
-              ); then
-                echo "::error::Could not persist the verified deployment state." >&2
-                restore_full_bootstrap || true
-                return 1
-              fi
-              if ! docker rm "$rollback_container" >/dev/null; then
-                echo "::warning::Replacement is healthy but its stopped rollback container needs manual cleanup." >&2
-              fi
-              rollback_active=false
-              echo "Full bootstrap deployed $target_commit with retained-container rollback protection."
-            }
-            run_rust_deploy() {
-              if [ "$DEPLOY_MODE" = "full" ]; then
-                run_full_bootstrap
-                return
-              fi
-              rollback_source_sha=""
-              deploy_state="$deploy_state_dir/deployed-sha"
-              running_revision="$(
-                docker container inspect \
-                  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
-                  "$container" 2>/dev/null || true
-              )"
-              # One-time bootstrap for the unlabelled container that was verified running before
-              # revision-labelled images and protected deploy state existed. Once this deploy
-              # succeeds, the host-only state file and immutable image label take precedence.
-              if [ ! -f "$deploy_state" ] \
-                && [[ ! "$running_revision" =~ ^[0-9a-f]{40}$ ]]; then
-                rollback_source_sha="28f3b1f6df4d1f84d22e0afa2718c657dffcae80"
-              fi
-              VOZEN_COMPOSE_PROJECT="$compose_project" \
-                VOZEN_COMPOSE_SERVICE="$compose_service" \
-                VOZEN_COMPOSE_FILE="$compose_file" \
-                VOZEN_DEPLOY_STATE_DIR="$deploy_state_dir" \
-                VOZEN_ROLLBACK_SOURCE_SHA="$rollback_source_sha" \
-                VOZEN_PREBUILT_IMAGE="vozen-rust:$target_commit" \
-                VOZEN_EXPECTED_IMAGE_REVISION="$target_commit" \
-                bash scripts/deploy-rust-vps.sh
-            }
-            # The VPS runtime env and durable data are intentionally untracked and excluded from
-            # the Dockerfile's selective COPY inputs. Every other tracked or untracked path must
-            # match the CI-tested checkout exactly.
-            if ! checkout_status="$(
-              git status --porcelain --untracked-files=all -- . \
-                ':(exclude).env.rust.prod' \
-                ':(exclude).env.rust.prod.backup-*' \
-                ':(exclude)rust-data' \
-                ':(exclude)rust-data/**'
-            )"; then
-              echo "::error::Unable to verify production checkout cleanliness"
-              exit 1
-            fi
-            if [ -n "$checkout_status" ]; then
-              echo "::error::Production checkout has local changes; refusing to deploy it"
-              printf 'Unexpected checkout path: %s\n' "$checkout_status"
-              exit 1
-            fi
-            if [ "$current_commit" != "$target_commit" ] \
-              && git merge-base --is-ancestor "$target_commit" "$current_commit"; then
-              echo "Current checkout $current_commit is newer than requested $target_commit; refusing rollback"
-              exit 0
-            fi
-
-            # Keep non-sensitive runtime flags current without printing any configuration values.
-            # This happens only after stale and dirty requests have been rejected without effects.
-            set_env() {
-              key="$1"
-              value="$2"
-              file=".env.rust.prod"
-              tmp="${file}.tmp"
-              if [ -f "$file" ]; then
-                : > "$tmp"
-                while IFS= read -r line || [ -n "$line" ]; do
-                  case "$line" in
-                    "$key="*) printf '%s=%s\n' "$key" "$value" >> "$tmp" ;;
-                    *) printf '%s\n' "$line" >> "$tmp" ;;
-                  esac
-                done < "$file"
-                if ! grep -q "^${key}=" "$file"; then
-                  printf '%s=%s\n' "$key" "$value" >> "$tmp"
-                fi
-              else
-                printf '%s=%s\n' "$key" "$value" > "$tmp"
-              fi
-              chmod 600 "$tmp"
-              mv "$tmp" "$file"
-            }
-
-            set_env RUST_PAYMENTS_ENABLED true
-            set_env RUST_CONFIG_GREET_LANGUAGE_ENABLED true
-            set_env PREMIUM_API_ENABLED true
-            set_env ECOSYSTEM_OAUTH_CLIENT_ID "1537738930722443364"
-            set_env STRIPE_PRICE_PLUS_MONTHLY price_1TxsU9QFJYeD1Af0C1HtEWWE
-            set_env STRIPE_PRICE_PLUS_YEARLY price_1TxsXSQFJYeD1Af0B2o7xYKq
-            set_env STRIPE_PRICE_PREMIUM_MONTHLY price_1TxsdeQFJYeD1Af0ujsKbFde
-            set_env STRIPE_PRICE_PREMIUM_YEARLY price_1Txsk7QFJYeD1Af0GipTrZTd
-            set_env STRIPE_PRICE_MAX_MONTHLY price_1Txsp7QFJYeD1Af0LVQvo30q
-            set_env STRIPE_PRICE_MAX_YEARLY price_1TxspPQFJYeD1Af0EG6lUKIl
-
-            if [ "$current_commit" != "$target_commit" ]; then
-              if git merge-base --is-ancestor "$current_commit" "$target_commit"; then
-                git merge --ff-only "$target_commit"
-              else
-                # Production may still be checked out from the legacy main history. Once the
-                # working tree is confirmed clean, detach directly at the validated migration SHA
-                # instead of rewriting or merging unrelated production history.
-                git checkout --detach "$target_commit"
-              fi
-            fi
-
-            artifact_dir="$artifact_root/$target_commit"
-            if [ "$DEPLOY_MODE" = "delta" ]; then
-              (
-                cd "$artifact_dir"
-                sha256sum --check "$runtime_binary.sha256"
-              )
-              test -s "$artifact_dir/$runtime_binary"
-
-              # A delta is safe only when the container's image identifies a migration commit and
-              # no runtime layer inputs changed since it. Rust sources and the SQLite schema compile
-              # into this executable; Docker, Python, model and healthcheck changes require a full
-              # image release with more VPS storage instead of silently inheriting stale tools.
-              revision_label='{{index .Config.Labels "org.opencontainers.image.revision"}}'
-              live_image="$(docker container inspect --format '{{.Image}}' "$container")"
-              base_revision="$(docker container inspect --format "$revision_label" "$container")"
-              if [[ ! "$base_revision" =~ ^[0-9a-f]{40}$ ]]; then
-                # A state value is written only after a prebuilt image passed health and SQLite
-                # verification. It is a narrowly scoped fallback for Docker metadata loss, never
-                # a guess at the image's origin.
-                state_file="$deploy_state_dir/deployed-sha"
-                if [ -f "$state_file" ]; then
-                  base_revision="$(tr -d '\r\n' < "$state_file")"
-                fi
-              fi
-              [[ "$base_revision" =~ ^[0-9a-f]{40}$ ]] || {
-                echo "Running image has no verified deployment revision; refusing a binary delta." >&2
-                exit 1
-              }
-              git cat-file -e "$base_revision^{commit}"
-              git merge-base --is-ancestor "$base_revision" "$target_commit"
-              if git diff --name-only "$base_revision" "$target_commit" | grep --extended-regexp --quiet '^(Dockerfile\.rust|docker/|tools/(requirements-|kokoro_server\.py|whisper_sidecar\.py)|assets/sfx/)'; then
-                echo "Runtime-layer inputs changed; refusing a binary-only VPS deployment." >&2
-                exit 1
-              fi
-
-              # Build a one-layer candidate on top of the running image. The previous image remains
-              # tagged as rollback, and `deploy-rust-vps.sh` still performs backup, recreate, health
-              # and database-integrity verification before making this candidate authoritative.
-              candidate_cleanup_armed=true
-              docker rm --force "$candidate_container" >/dev/null 2>&1 || true
-              docker create --name "$candidate_container" "$live_image" >/dev/null
-              docker cp "$artifact_dir/$runtime_binary" "$candidate_container:/usr/local/bin/vozen-runtime"
-              docker commit \
-                --change "LABEL org.opencontainers.image.revision=$target_commit" \
-                "$candidate_container" "$candidate_image" >/dev/null
-              docker rm "$candidate_container" >/dev/null
-              cleanup_staged_artifact
-              run_rust_deploy
-            else
-              # Bootstrap only after checksum validation from CI. `docker image load` has been
-              # observed to return success under host pressure, so inspect and verify the immutable
-              # OCI revision before a container is recreated.
-              (
-                cd "$artifact_dir"
-                sha256sum --check "$image_checksum"
-              )
-              test -s "$artifact_dir/$image_archive"
-              # Back up before loading the multi-gigabyte candidate image. A backup failure then
-              # aborts without changing Docker state and without competing with the image layer
-              # for the last free blocks on the constrained production filesystem.
-              test -f "$database"
-              if ! python3 scripts/backup-rust-db.py --source "$database" --destination-dir "$backup_dir"; then
-                echo "::error::Database backup failed before full bootstrap; retaining the current production container." >&2
-                exit 1
-              fi
-              candidate_cleanup_armed=true
-              gzip --decompress --stdout "$artifact_dir/$image_archive" | docker image load >/dev/null
-              docker image inspect "$candidate_image" >/dev/null
-              loaded_revision="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$candidate_image")"
-              [ "$loaded_revision" = "$target_commit" ] || {
-                echo "Loaded bootstrap image revision does not match the CI-tested commit." >&2
-                exit 1
-              }
-              cleanup_staged_artifact
-              run_rust_deploy
-            fi
-            docker image rm "$candidate_image" >/dev/null
-            candidate_cleanup_armed=false
-
-            # Retain the known-good rollback image; no global Docker cleanup.
-
-      - name: Remove staged deploy artifact
-        if: always() && env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy'
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
-        env:
-          DEPLOY_SHA: ${{ env.DEPLOY_SHA }}
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          envs: DEPLOY_SHA
-          script: |
-            set -euo pipefail
-            [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
-            artifact_dir="/home/vozen/vozen-deploy-artifacts/$DEPLOY_SHA"
-            rm --force -- \
-              "$artifact_dir/vozen-runtime-$DEPLOY_SHA" \
-              "$artifact_dir/vozen-runtime-$DEPLOY_SHA.sha256" \
-              "$artifact_dir/vozen-source-$DEPLOY_SHA.bundle" \
-              "$artifact_dir/vozen-source-$DEPLOY_SHA.bundle.sha256" \
-              "$artifact_dir/vozen-rust-$DEPLOY_SHA.tar.gz" \
-              "$artifact_dir/vozen-rust-$DEPLOY_SHA.tar.gz.sha256"
-            rmdir -- "$artifact_dir" 2>/dev/null || true
+          rm -f -- "$RUNNER_TEMP/vozen-ssh/key" "$RUNNER_TEMP/vozen-ssh/request.json"
