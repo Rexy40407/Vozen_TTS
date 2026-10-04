@@ -83,10 +83,8 @@ jobs:
           printf '%s\n' '146.59.147.110 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKLNiT3f6Sb3jUULntSsWv4goIYwVXS+qC0Nlea/O3El' > "$RUNNER_TEMP/vozen-ssh/known_hosts"
           options=(-i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes
             -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15)
-          ssh "${options[@]}" vozen@146.59.147.110 \
-            "umask 077; mkdir -p /home/vozen/vozen-deploy-artifacts/$DEPLOY_SHA"
-          scp "${options[@]}" "image/vozen-rust-$DEPLOY_SHA.tar.gz" \
-            "vozen@146.59.147.110:/home/vozen/vozen-deploy-artifacts/$DEPLOY_SHA/vozen-rust-$DEPLOY_SHA.tar.gz"
+          ssh "${options[@]}" vozen@146.59.147.110 "put $DEPLOY_SHA" \
+            < "image/vozen-rust-$DEPLOY_SHA.tar.gz"
       - name: Authenticate digest-bound broker request and deploy
         shell: bash
         run: |
@@ -106,7 +104,7 @@ jobs:
           JS
           ssh -i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15 \
-            vozen@146.59.147.110 'sudo -n /usr/local/sbin/vozen-deploy-broker' \
+            vozen@146.59.147.110 'deploy' \
             < "$RUNNER_TEMP/vozen-ssh/request.json"
       - name: Remove only the successfully deployed incoming archive
         shell: bash
@@ -114,11 +112,7 @@ jobs:
           set -euo pipefail
           ssh -i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15 \
-            vozen@146.59.147.110 \
-            "set -eu; directory=/home/vozen/vozen-deploy-artifacts/$DEPLOY_SHA; \
-             test \"\$(realpath \"\$directory\")\" = \"\$directory\"; \
-             rm -f -- \"\$directory/vozen-rust-$DEPLOY_SHA.tar.gz\"; \
-             rmdir -- \"\$directory\" 2>/dev/null || true"
+            vozen@146.59.147.110 "cleanup $DEPLOY_SHA"
       - name: Remove runner credentials
         if: always()
         shell: bash
