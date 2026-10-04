@@ -17,16 +17,16 @@ on:
   workflow_dispatch:
     inputs:
       production_sha:
-        description: 'Exact CI-tested migration/vozen-rust commit to deploy'
+        description: "Exact CI-tested migration/vozen-rust commit to deploy"
         required: true
         type: string
       diagnostics_only:
-        description: 'Report VPS filesystem and Docker storage usage without changing state'
+        description: "Report VPS filesystem and Docker storage usage without changing state"
         required: false
         default: false
         type: boolean
       artifact_run_id:
-        description: 'Successful CI run containing the immutable production image'
+        description: "Successful CI run containing the immutable production image"
         required: false
         type: string
 
@@ -55,45 +55,6 @@ jobs:
           test -n "$VPS_HOST" || { echo "::error title=Missing VPS_HOST::Add the VPS_HOST repository secret."; exit 1; }
           test -n "$VPS_USER" || { echo "::error title=Missing VPS_USER::Add the VPS_USER repository secret."; exit 1; }
           test -n "$VPS_SSH_KEY" || { echo "::error title=Missing VPS_SSH_KEY::Add the VPS_SSH_KEY repository secret."; exit 1; }
-
-      # The prior full-image attempt exhausted the VPS before its final cleanup
-      # could run, including the exact staging directory below. Reclaim only
-      # that known failed artefact and Docker data which is not referenced by
-      # any container; the running bot, rollback image, volumes, networks and
-      # database are never stopped, removed or pruned here.
-      - name: Reclaim known failed deploy storage before preflight
-        if: env.DIAGNOSTICS_ONLY != 'true'
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            container="vozen-prod-vozen-1"
-            docker container inspect "$container" >/dev/null
-
-            artifact_root="/home/vozen/vozen-deploy-artifacts"
-            stale_sha="1a8d3dedd78261bca2b646a9af360f216219d783"
-            stale_dir="$artifact_root/$stale_sha"
-            case "$stale_dir" in
-              /home/vozen/vozen-deploy-artifacts/1a8d3dedd78261bca2b646a9af360f216219d783) ;;
-              *) echo "Unsafe failed-artifact path" >&2; exit 1 ;;
-            esac
-            if [ -d "$stale_dir" ]; then
-              rm --force -- \
-                "$stale_dir/vozen-rust-$stale_sha.tar.gz" \
-                "$stale_dir/vozen-rust-$stale_sha.tar.gz.sha256"
-              rmdir -- "$stale_dir"
-            fi
-
-            if docker buildx version >/dev/null 2>&1; then
-              docker buildx prune --all --force
-            fi
-            docker builder prune --all --force
-            docker image prune --all --force
-            docker system prune --force
-            df -h / /home/vozen "$(docker info --format '{{.DockerRootDir}}')"
 
       - name: Verify immutable image artifact provenance
         if: env.DIAGNOSTICS_ONLY != 'true'
@@ -223,7 +184,9 @@ jobs:
           capture_stdout: true
           script: |
             set -euo pipefail
-            cd ~/vozen-rust-prod
+            test "$(hostname)" = vps-4a10dd35
+            sudo -n /usr/local/sbin/vozen-data-guard
+            cd /home/vozen/vozen-rust-prod
             [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
 
             # Reject dirty and stale production state before pruning or transferring anything.
@@ -232,6 +195,7 @@ jobs:
               git status --porcelain --untracked-files=all -- . \
                 ':(exclude).env.rust.prod' \
                 ':(exclude).env.rust.prod.backup-*' \
+                ':(exclude)rust-data' \
                 ':(exclude)rust-data/**'
             )"; then
               echo "Unable to verify production checkout cleanliness" >&2
@@ -242,7 +206,7 @@ jobs:
               printf 'Unexpected checkout path: %s\n' "$checkout_status" >&2
               exit 1
             fi
-            container="vozen-prod-vozen-1"
+            container="vozen-rust-prod-vozen-1"
             live_image="$(docker container inspect --format '{{.Image}}' "$container")"
             [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
             if docker image inspect "$live_image" >/dev/null 2>&1; then
@@ -251,7 +215,8 @@ jobs:
               # Docker can keep a running container after its local image metadata
               # has been pruned. The release later snapshots that container as the
               # rollback image before loading one verified full-image bootstrap.
-              deploy_mode="full"
+              echo "Encrypted host requires a recoverable image; operator recovery needed." >&2
+              exit 1
             fi
             printf 'VOZEN_PREFLIGHT=deploy_%s\n' "$deploy_mode"
 
@@ -308,20 +273,8 @@ jobs:
             (( UNPACKED_BYTES > 0 && UNPACKED_BYTES <= 8 * 1024 * 1024 * 1024 ))
             [[ "$DEPLOY_MODE" =~ ^(delta|full)$ ]]
 
-            reclaim_build_storage() {
-              if docker buildx version >/dev/null 2>&1; then
-                docker buildx prune --all --force
-              fi
-              docker builder prune --all --force
-              docker image prune --force
-              docker system prune --force
-            }
-
-            # Build cache from historical VPS builds remains non-reclaimable while it is
-            # referenced by dormant images. First protect the *running*, healthy production
-            # container as rollback, then release only inactive image tags. This does not stop
-            # or delete the container, its volumes, networks, or data.
-            container="vozen-prod-vozen-1"
+            # Protect the running image as rollback without removing other images.
+            container="vozen-rust-prod-vozen-1"
             live_image="$(docker container inspect --format '{{.Image}}' "$container")"
             [[ "$live_image" =~ ^sha256:[0-9a-f]{64}$ ]]
             if [ "$DEPLOY_MODE" = "delta" ]; then
@@ -339,13 +292,8 @@ jobs:
               # starts and health-checks the verified replacement.
               docker container inspect "$container" >/dev/null
             fi
-            docker image rm vozen-rust:prod || true
 
-            # Builder cache and dangling images are now disposable. The legacy Docker builder
-            # can retain cache that both builder-prune commands do not see, so the final system
-            # prune intentionally has neither --all nor --volumes.
-            reclaim_build_storage
-
+            # Preserve all existing images and rollback; only check capacity.
             docker_root="$(docker info --format '{{.DockerRootDir}}')"
             artifact_device="$(df --output=source /home/vozen | tail -n 1)"
             docker_device="$(df --output=source "$docker_root" | tail -n 1)"
@@ -428,10 +376,12 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           envs: DEPLOY_SHA,DIAGNOSTICS_ONLY,DEPLOY_MODE
           command_timeout: 45m
-          debug: true
+          debug: false
           script: |
             set -euo pipefail
-            cd ~/vozen-rust-prod
+            test "$(hostname)" = vps-4a10dd35
+            sudo -n /usr/local/sbin/vozen-data-guard
+            cd /home/vozen/vozen-rust-prod
             test -n "$DEPLOY_SHA"
 
             if [ "${DIAGNOSTICS_ONLY:-false}" = "true" ]; then
@@ -454,19 +404,6 @@ jobs:
               stat --printf='logical bytes: %s %n\n' rust-data/tts.db rust-data/tts.db-wal rust-data/tts.db-shm 2>/dev/null || true
               du -sh /home/vozen/vozen-backups 2>/dev/null || true
               find /home/vozen/vozen-backups -maxdepth 1 -type f -printf '%TY-%Tm-%Td %TH:%TM %10s %f\n' 2>/dev/null | sort || true
-              probe_dir="$(mktemp -d /tmp/vozen-backup-probe.XXXXXX)"
-              case "$probe_dir" in
-                /tmp/vozen-backup-probe.*) ;;
-                *) echo "Unsafe SQLite backup probe path" >&2; exit 1 ;;
-              esac
-              if python3 scripts/backup-rust-db.py --source rust-data/tts.db --destination-dir "$probe_dir"; then
-                echo "SQLite backup probe: success"
-              else
-                echo "SQLite backup probe: failed" >&2
-                rm -rf -- "$probe_dir"
-                exit 1
-              fi
-              rm -rf -- "$probe_dir"
               printf '\nExternal growth configuration (values withheld):\n'
               configured() {
                 key="$1"
@@ -514,7 +451,6 @@ jobs:
               if [ "$status" -ne 0 ] && [ "$candidate_cleanup_armed" = "true" ]; then
                 docker rm --force "$candidate_container" >/dev/null 2>&1 || true
                 docker image rm "$candidate_image" >/dev/null 2>&1 || true
-                docker image prune --force >/dev/null 2>&1 || true
               fi
               exit "$status"
             }
@@ -554,7 +490,7 @@ jobs:
               echo "Invalid deploy mode from authenticated preflight." >&2
               exit 1
             }
-            compose_project="vozen-prod"
+            compose_project="vozen-rust-prod"
             compose_service="vozen"
             compose_file="docker-compose.rust.prod.yml"
             deploy_state_dir="/home/vozen/vozen-deploy-state"
@@ -709,6 +645,7 @@ jobs:
               git status --porcelain --untracked-files=all -- . \
                 ':(exclude).env.rust.prod' \
                 ':(exclude).env.rust.prod.backup-*' \
+                ':(exclude)rust-data' \
                 ':(exclude)rust-data/**'
             )"; then
               echo "::error::Unable to verify production checkout cleanliness"
@@ -851,13 +788,7 @@ jobs:
             docker image rm "$candidate_image" >/dev/null
             candidate_cleanup_armed=false
 
-            # After the replacement is healthy, the previous image and build cache are disposable.
-            # Do not prune containers, networks, volumes, or user data.
-            if docker buildx version >/dev/null 2>&1; then
-              docker buildx prune --all --force
-            fi
-            docker builder prune --all --force
-            docker image prune --all --force
+            # Retain the known-good rollback image; no global Docker cleanup.
 
       - name: Remove staged deploy artifact
         if: always() && env.DIAGNOSTICS_ONLY != 'true' && steps.release_decision.outputs.decision == 'deploy'
