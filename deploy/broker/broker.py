@@ -277,6 +277,7 @@ def replace_runtime(candidate, previous):
         command(["/usr/bin/systemctl", "start", UNIT])
         supervisor_stopped = False
         wait_healthy()
+        require(live()["Image"] == candidate, "active image does not match accepted candidate")
         with sqlite3.connect("file:/srv/vozen-secure/data/tts.db?mode=ro", uri=True, timeout=30) as db:
             database_check(db)
     except Exception:

@@ -59,6 +59,11 @@ class TrustTests(unittest.TestCase):
         self.request["token"] = self.token()
         self.verify()
 
+    def test_accepts_workflow_run_event(self):
+        self.claims["event_name"] = "workflow_run"
+        self.request["token"] = self.token()
+        self.verify()
+
     def test_rejects_untrusted_claims(self):
         for key in ("iss", "aud", "repository", "repository_id", "repository_owner_id", "ref",
                     "runner_environment", "workflow_ref", "sub", "event_name"):
@@ -153,6 +158,14 @@ class RecoveryTests(unittest.TestCase):
         self.assertNotIn("PYTHONPATH", broker.CLEAN_ENV)
         self.assertNotIn("COMPOSE_FILE", broker.CLEAN_ENV)
         self.assertEqual(broker.CLEAN_ENV["DOCKER_HOST"], "unix:///var/run/docker.sock")
+
+    def test_wrong_active_digest_attempts_image_recovery(self):
+        images = []
+        with patch.object(broker, "command"), patch.object(broker, "compose", side_effect=images.append), \
+                patch.object(broker, "wait_healthy"), patch.object(broker, "live", return_value={"Image": "unexpected"}):
+            with self.assertRaises(broker.Refusal):
+                broker.replace_runtime("candidate", "previous")
+        self.assertEqual(images, ["candidate", "previous"])
 
 
 @unittest.skipUnless(os.name == "posix", "requires Linux no-follow dirfds")
