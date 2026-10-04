@@ -14,7 +14,7 @@ function posix(value) {
 }
 // Execute the production script, replacing only its external services. No Docker,
 // network, production database, or credentials are used by these fixtures.
-function runDeploy(scenario, prebuilt = false) {
+function runDeploy(scenario, prebuilt = false, encrypted = false) {
   const root = mkdtempSync(resolve(tmpdir(), 'vozen-deploy-test-'));
   try {
     mkdirSync(resolve(root, 'rust-data'));
@@ -27,6 +27,19 @@ function runDeploy(scenario, prebuilt = false) {
         `
       git() { printf '%040d\\n' 1; }
       systemctl() { return 1; }
+      test() {
+        if [[ "$1" == '-f' && "$2" == '/etc/vozen/encryption-enabled' ]]; then
+          [[ "$VOZEN_TEST_ENCRYPTED" == 'true' ]]; return
+        fi
+        builtin test "$@"
+      }
+      realpath() { printf '/srv/vozen-secure/backups\\n'; }
+      sudo() {
+        printf 'sudo %s\\n' "$*" >> "$VOZEN_CALLS"
+        if [[ "$*" == *'vozen-data-guard' && "$SCENARIO" == 'locked-volume' ]]; then return 1; fi
+        if [[ "$*" == *'systemctl start '* && "$SCENARIO" == 'supervisor-failure' ]]; then return 1; fi
+        return 0
+      }
       ${process.platform === 'win32' ? 'install() { mkdir -p "${@: -1}"; }; chmod() { :; }' : ''}
       sleep() { :; }
       seq() { printf '1\\n'; }
@@ -73,6 +86,7 @@ function runDeploy(scenario, prebuilt = false) {
         env: {
           ...process.env,
           SCENARIO: scenario,
+          VOZEN_TEST_ENCRYPTED: encrypted ? 'true' : 'false',
           VOZEN_PREBUILT_IMAGE: prebuilt ? 'vozen-rust:candidate' : '',
           VOZEN_DEPLOY_STATE_DIR: posix(resolve(root, 'state')),
           VOZEN_START_SEEN: posix(resolve(root, 'started')),
@@ -116,6 +130,53 @@ describe('production deploy rollback behavior', () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.calls).not.toContain('image rm vozen-rust:rollback');
     expect(result.calls).not.toContain('up -d --force-recreate --no-build vozen');
+  });
+});
+
+describe('manual encrypted runtime deployment', () => {
+  it('targets the verified project and guards before changing remote configuration', () => {
+    const workflow = readFileSync(resolve('.github/workflows/deploy-bot.yml'), 'utf8');
+    expect(workflow).toContain('compose_project="vozen-rust-prod"');
+    expect(workflow.indexOf('sudo -n /usr/local/sbin/vozen-data-guard')).toBeLessThan(
+      workflow.indexOf('set_env RUST_PAYMENTS_ENABLED'),
+    );
+    const staleEvent = workflow.slice(
+      workflow.indexOf('if git merge-base --is-ancestor "$target_commit" "$current_commit";'),
+      workflow.indexOf('if git merge-base --is-ancestor "$current_commit" "$target_commit";'),
+    );
+    expect(staleEvent).not.toContain('up -d');
+    expect(staleEvent).toContain('docker container inspect');
+  });
+  it('refuses a locked volume before Docker or backup work', () => {
+    const result = runDeploy('locked-volume', false, true);
+    expect(result.status).not.toBe(0);
+    expect(result.calls).toContain('vozen-data-guard');
+    expect(result.calls).not.toContain('compose ');
+    expect(result.calls).not.toContain('systemctl stop');
+  });
+  it.each(['build-failure', 'backup-failure'])('keeps supervision online after %s', (scenario) => {
+    const result = runDeploy(scenario, false, true);
+    expect(result.status).not.toBe(0);
+    expect(result.calls).not.toContain('systemctl stop');
+  });
+  it.each(['success', 'start-failure', 'database-failure', 'health-failure'])(
+    'restores supervision after %s',
+    (scenario) => {
+      const result = runDeploy(scenario, false, true);
+      expect(result.status).toBe(scenario === 'success' ? 0 : 1);
+      const stopped = result.calls.indexOf('systemctl stop vozen-encrypted-runtime.service');
+      const recreated = result.calls.indexOf('up -d --force-recreate');
+      const started = result.calls.indexOf('systemctl start vozen-encrypted-runtime.service');
+      expect(stopped).toBeGreaterThan(-1);
+      expect(recreated).toBeGreaterThan(stopped);
+      expect(started).toBeGreaterThan(recreated);
+      expect(result.calls).toContain('compose -p vozen-rust-prod');
+    },
+  );
+  it('does not report success when supervision cannot be restored', () => {
+    const result = runDeploy('supervisor-failure', false, true);
+    expect(result.status).not.toBe(0);
+    expect(result.calls).toContain('image tag vozen-rust:rollback vozen-rust:prod');
   });
 });
 

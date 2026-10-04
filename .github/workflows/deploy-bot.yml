@@ -52,8 +52,12 @@ jobs:
           debug: false
           script: |
             set -euo pipefail
-            cd ~/vozen-rust-prod
+            cd /home/vozen/vozen-rust-prod
             test -n "$DEPLOY_SHA"
+            # Refuse before changing configuration or checkout on a locked host.
+            if [ -f /etc/vozen/encryption-enabled ]; then
+              sudo -n /usr/local/sbin/vozen-data-guard
+            fi
 
             # Payment credentials are provisioned directly on the VPS in a
             # mode-600 environment file. Do not carry them in this SSH action:
@@ -113,7 +117,7 @@ jobs:
             git merge-base --is-ancestor "$DEPLOY_SHA" origin/migration/vozen-rust
             current_commit="$(git rev-parse HEAD)"
             target_commit="$DEPLOY_SHA"
-            compose_project="vozen-prod"
+            compose_project="vozen-rust-prod"
             compose_service="vozen"
             compose_file="docker-compose.rust.prod.yml"
             deploy_state_dir="/home/vozen/vozen-deploy-state"
@@ -151,8 +155,10 @@ jobs:
             fi
             if git merge-base --is-ancestor "$target_commit" "$current_commit"; then
               echo "Current checkout $current_commit is newer than requested $target_commit; refusing rollback"
-              docker compose -p "$compose_project" -f "$compose_file" \
-                up -d --no-build "$compose_service"
+              # A stale CI event must not recreate containers or override the
+              # manually unlocked supervisor. Inspect the current runtime only.
+              docker container inspect --format '{{.State.Status}}' "$container"
+              curl --fail --silent --show-error --max-time 5 http://127.0.0.1:3001/health
               exit 0
             fi
             if git merge-base --is-ancestor "$current_commit" "$target_commit"; then

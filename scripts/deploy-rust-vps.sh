@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEPLOY_DIR="${VOZEN_DEPLOY_DIR:-/home/vozen/vozen-rust-prod}"
-COMPOSE_PROJECT="${VOZEN_COMPOSE_PROJECT:-vozen-prod}"
+COMPOSE_PROJECT="${VOZEN_COMPOSE_PROJECT:-vozen-rust-prod}"
 COMPOSE_FILE="${VOZEN_COMPOSE_FILE:-docker-compose.rust.prod.yml}"
 SERVICE="${VOZEN_COMPOSE_SERVICE:-vozen}"
 CONTAINER="${COMPOSE_PROJECT}-${SERVICE}-1"
@@ -18,8 +18,13 @@ cd "$DEPLOY_DIR"
 
 # Host-managed encryption is intentionally unlocked by an operator after reboot.
 # Never build/recreate a production container against a locked data directory.
-if [ -f /etc/vozen/encryption-enabled ]; then
-  /usr/local/sbin/vozen-data-guard
+if test -f /etc/vozen/encryption-enabled; then
+  sudo -n /usr/local/sbin/vozen-data-guard
+  if [ "$COMPOSE_PROJECT" != vozen-rust-prod ] \
+    || [ "$(realpath "$BACKUP_DIR")" != /srv/vozen-secure/backups ]; then
+    echo "Refusing deploy: encrypted host requires its verified project and backup directory." >&2
+    exit 1
+  fi
   export VOZEN_RESTART_POLICY=no
   export VOZEN_REQUIRE_ENCRYPTED_DATA=1
 fi
@@ -151,6 +156,14 @@ wait_until_healthy() {
 export VOZEN_BUILD_SHA="$(git rev-parse HEAD)"
 replacement_attempted=false
 previous_prod_image=""
+supervisor_stopped=false
+restore_supervisor() {
+  if [ "$supervisor_stopped" = "true" ]; then
+    sudo -n systemctl reset-failed vozen-encrypted-runtime.service || return 1
+    sudo -n systemctl start vozen-encrypted-runtime.service || return 1
+    supervisor_stopped=false
+  fi
+}
 cleanup_failed_deploy() {
   local status=$?
   trap - EXIT
@@ -163,7 +176,8 @@ cleanup_failed_deploy() {
         if [ "$replacement_attempted" = "true" ]; then
           docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" stop "$SERVICE" || true
           if docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
-            up -d --force-recreate --no-build "$SERVICE" && wait_until_healthy; then
+            up -d --force-recreate --no-build "$SERVICE" \
+            && restore_supervisor && wait_until_healthy; then
             echo "Rollback health verification: ok" >&2
           else
             echo "Rollback container did not become healthy." >&2
@@ -176,6 +190,10 @@ cleanup_failed_deploy() {
     if [ -n "$PREBUILT_IMAGE" ]; then
       docker image rm "$PREBUILT_IMAGE" >/dev/null 2>&1 || true
     fi
+  fi
+  if ! restore_supervisor; then
+    echo "Unable to restore the encrypted runtime supervisor; operator recovery required." >&2
+    status=1
   fi
   exit "$status"
 }
@@ -206,9 +224,16 @@ python3 scripts/backup-rust-db.py \
   --source "$DATABASE" \
   --destination-dir "$BACKUP_DIR"
 
+# Stop systemd only after build and backup, so it cannot restart the old
+# container while Compose replaces it. The failure trap restores supervision.
+if test -f /etc/vozen/encryption-enabled; then
+  supervisor_stopped=true
+  sudo -n systemctl stop vozen-encrypted-runtime.service
+fi
 replacement_attempted=true
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" \
   up -d --force-recreate "${compose_build_args[@]}" "$SERVICE"
+restore_supervisor
 
 if ! wait_until_healthy; then
   echo "New Rust container did not become healthy; collecting logs." >&2

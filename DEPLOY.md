@@ -41,11 +41,16 @@ Once Caddy points `api.vozen.org` at port 3001, `https://vozen.org/status`
 reads the live bot, database, and voice-provider state. The public endpoint only
 exposes coarse aggregate states; it never exposes tokens, messages, or internals.
 
-1. `git fetch origin && git checkout migration/vozen-rust && git pull --ff-only`.
-2. Pare o compose, copie `rust-data/tts.db` para um backup datado.
-3. `docker compose -f docker-compose.rust.prod.yml up -d --build`.
-4. Se a verificação falhar, volte ao commit anterior e restaure apenas a cópia
-   de segurança da base; nunca apague a base em produção.
+1. Confirme a revisão aprovada pela CI e que o checkout está limpo antes de
+   atualizar os ficheiros; preserve configurações privadas e dados.
+2. Na instalação encriptada, desbloqueie o volume e execute o verificador do host.
+3. Execute `VOZEN_COMPOSE_PROJECT=vozen-rust-prod bash scripts/deploy-rust-vps.sh`.
+   O script constrói com o bot online, faz backup SQLite consistente e só depois
+   para o supervisor systemd para recriar o contentor. Reinicia a supervisão
+   antes de verificar saúde e mantém a imagem anterior para rollback.
+4. Em falha, o script tenta restaurar a imagem anterior e a supervisão. Não
+   restaura uma base antiga sobre dados mais recentes. Recuperação de dados
+   exige uma decisão separada do operador.
 
 Antes de publicar, a CI executa os contratos JSON, canários, testes/clippy Rust,
 os testes do site e a construção da imagem. A branch `legacy-typescript` mantém
@@ -69,12 +74,19 @@ avoiding a dependency wait for an absent mapper. The host guard checks the
 mount, mapper, data marker, database and expected data-directory symlink.
 
 Unlock and run `/usr/local/sbin/vozen-data-guard` before publishing. Use the
-actual project `VOZEN_COMPOSE_PROJECT=vozen-rust-prod`, not the historical
-default `vozen-prod`. The deployment script exports the disabled Docker restart
+actual project `VOZEN_COMPOSE_PROJECT=vozen-rust-prod`, also the script default,
+not the historical `vozen-prod`. The deployment script exports the disabled Docker restart
 policy when `/etc/vozen/encryption-enabled` exists. For manual Compose commands,
 pass `--env-file .env.rust.prod`: a service's `env_file` does not provide Compose
 interpolation variables. Preserve `VOZEN_REQUIRE_ENCRYPTED_DATA=1` in private
 configuration. Never start a second production gateway.
+
+The GitHub deployment workflow checks the encryption guard before changing
+configuration or the checkout. It uses `vozen-rust-prod`; stale CI events only
+inspect the running container and health. The script requires passwordless
+operator access to the installed guard and runtime systemd unit on this host.
+Build or backup failures leave the supervisor running. Replacement and rollback
+restore supervision; inability to restore it remains a deployment failure.
 
 Preserve ACLs and xattrs when copying data (`rsync -aAX`) and test access with
 the actual container UID before cutover. Use the SQLite online backup script
