@@ -125,6 +125,10 @@ class TrustTests(unittest.TestCase):
 
 
 class RecoveryTests(unittest.TestCase):
+    def test_cancellation_is_a_recoverable_exception(self):
+        with self.assertRaises(broker.Refusal):
+            broker.cancelled(None, None)
+
     def test_backup_and_canary_before_supervisor_stop(self):
         source = pathlib.Path(broker.__file__).read_text()
         source = source[source.index("def deploy(request):"):]

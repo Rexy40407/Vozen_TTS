@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import select
+import signal
 import shutil
 import socket
 import sqlite3
@@ -357,8 +358,14 @@ def deploy(request):
             staging.rmdir()
 
 
+def cancelled(_signal, _frame):
+    raise Refusal("deployment interrupted")
+
+
 def main():
     try:
+        signal.signal(signal.SIGTERM, cancelled)
+        signal.signal(signal.SIGINT, cancelled)
         deadline, raw = time.monotonic() + 30, bytearray()
         while True:
             remaining = deadline - time.monotonic()
