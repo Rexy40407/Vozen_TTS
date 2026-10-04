@@ -59,6 +59,10 @@ jobs:
               sudo -n /usr/local/sbin/vozen-data-guard
             fi
 
+            # Refuse missing deploy capabilities before editing configuration.
+            docker version --format '{{.Server.Version}}' >/dev/null
+            docker compose version >/dev/null
+
             # Payment credentials are provisioned directly on the VPS in a
             # mode-600 environment file. Do not carry them in this SSH action:
             # the remote command line is observable to local processes.

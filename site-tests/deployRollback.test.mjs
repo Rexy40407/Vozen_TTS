@@ -55,6 +55,8 @@ function runDeploy(scenario, prebuilt = false, encrypted = false) {
       docker() {
         printf '%s\\n' "$*" >> "$VOZEN_CALLS"
         case "$*" in
+          'version --format {{.Server.Version}}') [[ "$SCENARIO" != 'docker-denied' ]] ;;
+          'compose version') [[ "$SCENARIO" != 'compose-missing' ]] ;;
           'image inspect --format {{.Id}} '*) printf 'sha256:previous-prod\\n' ;;
           'image inspect --format '* ) printf '%040d\\n' 1 ;;
           'container inspect --format {{.Image}} '*) printf 'sha256:previous\\n' ;;
@@ -98,7 +100,12 @@ function runDeploy(scenario, prebuilt = false, encrypted = false) {
     );
     if (result.error) throw result.error;
     const callsPath = resolve(root, 'calls');
-    return { ...result, calls: existsSync(callsPath) ? readFileSync(callsPath, 'utf8') : '' };
+    return {
+      ...result,
+      calls: existsSync(callsPath) ? readFileSync(callsPath, 'utf8') : '',
+      stateExists: existsSync(resolve(root, 'state')),
+      environment: readFileSync(resolve(root, '.env.rust.prod'), 'utf8'),
+    };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -134,10 +141,26 @@ describe('production deploy rollback behavior', () => {
 });
 
 describe('manual encrypted runtime deployment', () => {
+  it.each(['docker-denied', 'compose-missing'])(
+    'refuses %s without state, image, configuration or supervisor changes',
+    (scenario) => {
+      const result = runDeploy(scenario, false, true);
+      expect(result.status).not.toBe(0);
+      expect(result.stateExists).toBe(false);
+      expect(result.environment).toBe('TEST_ONLY=true\n');
+      expect(result.calls).not.toContain('image tag');
+      expect(result.calls).not.toContain('systemctl stop');
+      expect(result.calls).not.toContain('up -d');
+    },
+  );
   it('targets the verified project and guards before changing remote configuration', () => {
     const workflow = readFileSync(resolve('.github/workflows/deploy-bot.yml'), 'utf8');
     expect(workflow).toContain('compose_project="vozen-rust-prod"');
     expect(workflow.indexOf('sudo -n /usr/local/sbin/vozen-data-guard')).toBeLessThan(
+      workflow.indexOf('set_env RUST_PAYMENTS_ENABLED'),
+    );
+    expect(workflow.indexOf('docker version --format')).toBeGreaterThan(-1);
+    expect(workflow.indexOf('docker version --format')).toBeLessThan(
       workflow.indexOf('set_env RUST_PAYMENTS_ENABLED'),
     );
     const staleEvent = workflow.slice(

@@ -48,6 +48,18 @@ if [ -L "$DEPLOY_STATE_DIR" ]; then
   echo "Refusing deploy: deployment state directory must not be a symlink." >&2
   exit 1
 fi
+
+# Check the deployment account before creating state or changing image tags.
+# A reachable CLI is not proof that this account can access the Docker daemon.
+if ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
+  echo "Refusing deploy: Docker daemon is unavailable to this account." >&2
+  exit 1
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  echo "Refusing deploy: Docker Compose is unavailable." >&2
+  exit 1
+fi
+
 install -d -m 700 "$DEPLOY_STATE_DIR"
 chmod 700 "$DEPLOY_STATE_DIR"
 
