@@ -50,3 +50,40 @@ exposes coarse aggregate states; it never exposes tokens, messages, or internals
 Antes de publicar, a CI executa os contratos JSON, canários, testes/clippy Rust,
 os testes do site e a construção da imagem. A branch `legacy-typescript` mantém
 o snapshot de recuperação do runtime antigo.
+
+## Encrypted production storage with manual unlock
+
+The installed host procedures in `deploy/encryption/` operate on the existing
+LUKS device `/dev/mapper/vozen-data` mounted at `/srv/vozen-secure`. They do not
+format or migrate disks. Do not install them blindly on other hosts.
+
+For this installation, Docker uses `restart=no` and the encrypted runtime
+systemd service supervises the container after operator unlock. After reboot,
+the bot remains stopped until its key is supplied through stdin. Keep keys
+outside the VPS and Git, with an independently tested recovery copy. Two DPAPI
+files tied to the same Windows profile are not an independent recovery backup.
+
+Install the mount unit with its escaped name `srv-vozen\x2dsecure.mount`.
+The runtime orders itself after the mount but does not require it at boot,
+avoiding a dependency wait for an absent mapper. The host guard checks the
+mount, mapper, data marker, database and expected data-directory symlink.
+
+Unlock and run `/usr/local/sbin/vozen-data-guard` before publishing. Use the
+actual project `VOZEN_COMPOSE_PROJECT=vozen-rust-prod`, not the historical
+default `vozen-prod`. The deployment script exports the disabled Docker restart
+policy when `/etc/vozen/encryption-enabled` exists. For manual Compose commands,
+pass `--env-file .env.rust.prod`: a service's `env_file` does not provide Compose
+interpolation variables. Preserve `VOZEN_REQUIRE_ENCRYPTED_DATA=1` in private
+configuration. Never start a second production gateway.
+
+Preserve ACLs and xattrs when copying data (`rsync -aAX`) and test access with
+the actual container UID before cutover. Use the SQLite online backup script
+instead of copying only an active WAL database's main file. Verify integrity,
+foreign keys, HTTP health, gateway readiness and the encrypted backup target.
+Never restore an old database snapshot over newer writes without an explicit
+recovery decision; image rollback and database restore are separate operations.
+
+Encryption of active data does not encrypt historical plaintext copies,
+provider backups or old disk blocks from a copy-based migration. Retire exact
+historical copies only after independent recovery verification and explicit
+owner authorization. Do not claim complete coverage while those copies remain.

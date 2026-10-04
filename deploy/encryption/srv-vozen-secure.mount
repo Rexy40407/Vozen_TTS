@@ -1,0 +1,10 @@
+[Unit]
+Description=Manually unlocked Vozen encrypted data
+ConditionPathExists=/dev/mapper/vozen-data
+
+[Mount]
+What=/dev/mapper/vozen-data
+Where=/srv/vozen-secure
+Type=ext4
+Options=nodev,nosuid,noexec
+TimeoutSec=30

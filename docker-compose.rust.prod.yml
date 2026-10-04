@@ -6,7 +6,20 @@ services:
       args:
         VOZEN_REVISION: ${VOZEN_BUILD_SHA:-unknown}
     image: vozen-rust:prod
-    restart: unless-stopped
+    restart: ${VOZEN_RESTART_POLICY:-unless-stopped}
+    # Encrypted installations must not create a fresh DB while the volume is locked.
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        if [ "$${VOZEN_REQUIRE_ENCRYPTED_DATA:-0}" = "1" ]; then
+          test -f /data/.vozen-luks-volume || {
+            echo 'Encrypted Vozen data is locked; operator unlock required.' >&2
+            exit 78
+          }
+        fi
+        exec /usr/local/bin/vozen-runtime "$$@"
+      - vozen-runtime
     env_file:
       - .env.rust.prod
     environment:

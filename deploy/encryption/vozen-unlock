@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+test "$(id -u)" = 0
+exec 9>/run/lock/vozen-encryption.lock
+flock -n 9
+if cryptsetup status vozen-data >/dev/null 2>&1; then
+  /usr/local/sbin/vozen-data-guard
+  systemctl start vozen-encrypted-runtime.service
+  echo 'Vozen volume already unlocked.'
+  exit 0
+fi
+key=$(mktemp /run/vozen-unlock.XXXXXX)
+trap 'rm -f -- "$key"' EXIT
+dd if=/dev/stdin of="$key" bs=64 count=1 iflag=fullblock status=none
+test "$(stat -c %s "$key")" = 64
+cryptsetup open --type luks --key-file "$key" /var/lib/vozen-encrypted/data.luks vozen-data
+if ! systemctl start 'srv-vozen\x2dsecure.mount'; then
+  cryptsetup close vozen-data
+  exit 1
+fi
+/usr/local/sbin/vozen-data-guard
+systemctl start vozen-encrypted-runtime.service
+echo 'Encrypted Vozen data unlocked; runtime started.'

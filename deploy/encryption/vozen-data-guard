@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=/srv/vozen-secure
+source=$(findmnt -rn --mountpoint "$root" -o SOURCE)
+test "$source" = /dev/mapper/vozen-data
+cryptsetup status vozen-data >/dev/null
+test -f "$root/data/.vozen-luks-volume"
+test -f "$root/data/tts.db"
+test "$(realpath /home/vozen/vozen-rust-prod/rust-data)" = "$root/data"

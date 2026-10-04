@@ -16,6 +16,14 @@ DEPLOY_STATE="$DEPLOY_STATE_DIR/deployed-sha"
 
 cd "$DEPLOY_DIR"
 
+# Host-managed encryption is intentionally unlocked by an operator after reboot.
+# Never build/recreate a production container against a locked data directory.
+if [ -f /etc/vozen/encryption-enabled ]; then
+  /usr/local/sbin/vozen-data-guard
+  export VOZEN_RESTART_POLICY=no
+  export VOZEN_REQUIRE_ENCRYPTED_DATA=1
+fi
+
 if systemctl is-active --quiet vozen.service; then
   echo "Refusing deploy: legacy vozen.service is active." >&2
   exit 1
