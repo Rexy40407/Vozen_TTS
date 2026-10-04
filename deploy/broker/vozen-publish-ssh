@@ -1,0 +1,3 @@
+#!/bin/sh
+test "$#" -eq 0 || exit 64
+exec /usr/bin/python3 -I /usr/local/lib/vozen-deploy-broker/publish.py

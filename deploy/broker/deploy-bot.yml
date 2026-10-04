@@ -1,0 +1,124 @@
+# Fixed-target publishing through the host-owned broker; no administrative SSH key.
+name: Deploy bot to VPS
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [migration/vozen-rust]
+  workflow_dispatch:
+    inputs:
+      production_sha:
+        description: Exact successful CI production revision
+        required: true
+        type: string
+      artifact_run_id:
+        description: Successful CI run with the immutable image
+        required: true
+        type: string
+concurrency:
+  group: deploy-bot
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.production_sha }}
+      ARTIFACT_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.artifact_run_id }}
+    steps:
+      - name: Validate exact successful production CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_REPOSITORY_ID: ${{ github.repository_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ARTIFACT_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID")"
+          jq -e --arg sha "$DEPLOY_SHA" --argjson id "$TRUSTED_REPOSITORY_ID" \
+            '.name == "CI" and .event == "push" and .status == "completed" and
+             .conclusion == "success" and .head_repository.id == $id and
+             .head_branch == "migration/vozen-rust" and .head_sha == $sha' \
+            <<<"$run_json" >/dev/null
+          head="$(gh api "repos/$GITHUB_REPOSITORY/commits/migration/vozen-rust" --jq .sha)"
+          test "$head" = "$DEPLOY_SHA"
+      - name: Download exact CI image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vozen-rust-image-${{ env.DEPLOY_SHA }}
+          path: image
+          github-token: ${{ github.token }}
+          run-id: ${{ env.ARTIFACT_RUN_ID }}
+      - name: Verify checksum and artifact bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd image
+          file="vozen-rust-$DEPLOY_SHA.tar.gz"
+          test -f "$file" && test ! -L "$file"
+          test -f "$file.sha256" && test ! -L "$file.sha256"
+          test "$(wc -l < "$file.sha256")" = 1
+          read -r digest name extra < "$file.sha256"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          test "$name" = "$file" && test -z "${extra:-}"
+          sha256sum --check --strict "$file.sha256"
+          size="$(stat --format=%s "$file")"
+          (( size > 0 && size <= 2 * 1024 * 1024 * 1024 ))
+          echo "ARCHIVE_SHA256=$digest" >> "$GITHUB_ENV"
+      - name: Transfer artifact as the unprivileged Vozen account
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$VPS_HOST" = 146.59.147.110 && test "$VPS_USER" = vozen
+          test -n "$VPS_SSH_KEY"
+          install -d -m 700 "$RUNNER_TEMP/vozen-ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$RUNNER_TEMP/vozen-ssh/key"
+          chmod 600 "$RUNNER_TEMP/vozen-ssh/key"
+          printf '%s\n' '146.59.147.110 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKLNiT3f6Sb3jUULntSsWv4goIYwVXS+qC0Nlea/O3El' > "$RUNNER_TEMP/vozen-ssh/known_hosts"
+          options=(-i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15)
+          ssh "${options[@]}" vozen@146.59.147.110 "put $DEPLOY_SHA" \
+            < "image/vozen-rust-$DEPLOY_SHA.tar.gz"
+      - name: Authenticate digest-bound broker request and deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'JS'
+          import { writeFileSync } from 'node:fs';
+          const { DEPLOY_SHA: sha, ARTIFACT_RUN_ID: run_id, ARCHIVE_SHA256: sha256 } = process.env;
+          const audience = `vozen-deploy:${sha}:${run_id}:${sha256}`;
+          const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+          url.searchParams.set('audience', audience);
+          const response = await fetch(url, { headers: { Authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` } });
+          if (!response.ok) throw new Error('OIDC request failed');
+          const { value: token } = await response.json();
+          if (typeof token !== 'string' || token.length > 16000) throw new Error('Invalid OIDC response');
+          console.log(`::add-mask::${token}`);
+          writeFileSync(`${process.env.RUNNER_TEMP}/vozen-ssh/request.json`, JSON.stringify({ sha, run_id, sha256, token }), { mode: 0o600 });
+          JS
+          ssh -i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15 \
+            vozen@146.59.147.110 'deploy' \
+            < "$RUNNER_TEMP/vozen-ssh/request.json"
+      - name: Remove only the successfully deployed incoming archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/vozen-ssh/key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vozen-ssh/known_hosts" -o ConnectTimeout=15 \
+            vozen@146.59.147.110 "cleanup $DEPLOY_SHA"
+      - name: Remove runner credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -f -- "$RUNNER_TEMP/vozen-ssh/key" "$RUNNER_TEMP/vozen-ssh/request.json"
