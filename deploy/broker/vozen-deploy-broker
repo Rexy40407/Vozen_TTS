@@ -1,0 +1,4 @@
+#!/bin/sh
+# Never import Python modules or configuration from the calling account.
+test "$#" -eq 0 || exit 64
+exec /usr/bin/python3 -I /usr/local/lib/vozen-deploy-broker/broker.py

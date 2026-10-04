@@ -1,0 +1,23 @@
+name: Broker checks
+on:
+  push:
+    paths:
+      - 'deploy/broker/**'
+      - 'scripts/validate-docker-image-archive.py'
+      - '.github/workflows/broker-checks.yml'
+  pull_request:
+    paths:
+      - 'deploy/broker/**'
+      - 'scripts/validate-docker-image-archive.py'
+      - '.github/workflows/broker-checks.yml'
+permissions:
+  contents: read
+jobs:
+  broker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install distribution cryptography for credential-free tests
+        run: sudo apt-get update && sudo apt-get install -y python3-cryptography
+      - run: /usr/bin/python3 -m unittest discover -s deploy/broker -p test_broker.py -v
+      - run: node deploy/broker/check_workflow.mjs

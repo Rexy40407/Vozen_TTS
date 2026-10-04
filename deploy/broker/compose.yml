@@ -1,0 +1,42 @@
+services:
+  vozen:
+    image: ${VOZEN_BROKER_IMAGE:?broker image required}
+    container_name: vozen-rust-prod-vozen-1
+    user: '1000:1000'
+    restart: 'no'
+    security_opt:
+      - no-new-privileges:true
+    env_file:
+      - /srv/vozen-secure/broker/runtime.env
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        test -f /data/.vozen-luks-volume || exit 78
+        exec /usr/local/bin/vozen-runtime "$$@"
+      - vozen-runtime
+    environment:
+      VOZEN_REQUIRE_ENCRYPTED_DATA: '1'
+      RUST_IMAGE_SMOKE: 'false'
+      DB_PATH: /data/tts.db
+      MODELS_DIR: /models
+      PIPER_PATH: /usr/local/lib/piper/piper
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      RUST_VOICE_CACHE_DIR: /data/audio-cache/rust
+      RUST_TTS_FILE_CACHE_DIR: /data/audio-cache/rust-file
+      RUST_GTTS_CACHE_DIR: /data/audio-cache/rust-gtts
+      RUST_NEURAL_CACHE_DIR: /data/audio-cache/rust-neural
+      RUST_GCLOUD_CACHE_DIR: /data/audio-cache/rust-gcloud
+      RUST_KOKORO_CACHE_DIR: /data/audio-cache/rust-kokoro
+      KOKORO_CMD: /app/tools/kokoro-venv/bin/python /app/tools/kokoro_server.py
+      KOKORO_LANGS: en,es,fr,hi,it,pt,ja
+      RUST_COMMANDS_STATE_PATH: /data/commands-state-rust.json
+      PUBLIC_STATUS_ENABLED: 'true'
+    tmpfs:
+      - /tmp:mode=1777
+    volumes:
+      - /srv/vozen-secure/data:/data
+      - /var/lib/vozen-deploy-broker/models:/models:ro
+      - /var/lib/vozen-deploy-broker/piper:/opt/piper:ro
+    ports:
+      - '127.0.0.1:3001:3001'
