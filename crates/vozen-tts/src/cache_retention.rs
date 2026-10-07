@@ -180,7 +180,7 @@ mod tests {
         assert!(dir.join("keep.txt").exists());
         assert!(!work.exists());
         assert_eq!(purge_expired_audio_cache(&dir, now).await.unwrap(), 0);
-        std::fs::remove_dir_all(dir).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(purge_expired_audio_cache(&dir, now).await.unwrap(), 0);
     }
 
