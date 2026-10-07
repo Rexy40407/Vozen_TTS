@@ -23,7 +23,9 @@ use tokio::{
 use uuid::Uuid;
 use vozen_core::SynthRequest;
 
-use crate::{TtsError, concat_wavs, lower_all_caps_runs, parse_wav, prepend_silence_wav};
+use crate::{
+    TtsError, concat_wavs, lower_all_caps_runs, non_empty_file, parse_wav, prepend_silence_wav,
+};
 
 const DEFAULT_SYNTH_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -437,14 +439,6 @@ async fn validate_asset(path: &Path) -> Result<PathBuf, TtsError> {
     let bytes = tokio::fs::read(path).await?;
     parse_wav(&bytes)?;
     Ok(path.to_owned())
-}
-
-async fn non_empty_file(path: &Path) -> Result<bool, std::io::Error> {
-    match tokio::fs::metadata(path).await {
-        Ok(metadata) => Ok(metadata.is_file() && metadata.len() > 0),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(error),
-    }
 }
 
 async fn write_cached(

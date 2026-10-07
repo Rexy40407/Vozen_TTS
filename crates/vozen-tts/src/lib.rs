@@ -20,12 +20,17 @@ use tokio::{io::AsyncWriteExt, process::Command, sync::Semaphore, time::timeout}
 use uuid::Uuid;
 use vozen_core::{RuntimeMetrics, SynthRequest};
 
+mod cache_retention;
 mod gcloud;
 mod gtts;
 mod kokoro;
 mod neural;
 mod wav_concat;
 
+use cache_retention::non_empty_file;
+pub use cache_retention::{
+    AUDIO_CACHE_MAX_AGE, AUDIO_CACHE_SWEEP_INTERVAL, purge_expired_audio_cache,
+};
 pub use gcloud::{
     GcloudEngine, GcloudLedgerError, GcloudLimits, GcloudOptions, GcloudUsageLedger,
     bcp47_of_model, monthly_limit_for,
@@ -434,14 +439,6 @@ fn single_segment_request(
         single_voice: Some(true),
         emphasis_source: None,
         lead_silence_ms: 0,
-    }
-}
-
-async fn non_empty_file(path: &Path) -> Result<bool, std::io::Error> {
-    match tokio::fs::metadata(path).await {
-        Ok(metadata) => Ok(metadata.is_file() && metadata.len() > 0),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(error),
     }
 }
 

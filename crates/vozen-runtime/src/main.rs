@@ -2414,6 +2414,8 @@ enum RuntimeError {
     Router(#[from] vozen_api::RuntimeRouterError),
     #[error("health listener failed: {0}")]
     HealthListener(#[from] std::io::Error),
+    #[error("audio cache startup retention failed: {0}")]
+    AudioCacheRetention(std::io::Error),
 }
 
 #[tokio::main]
@@ -2521,6 +2523,9 @@ async fn run() -> Result<(), RuntimeError> {
             .configure_postgres_replica_outbox(false)?;
     }
     run_startup_data_hygiene(&config.database_path);
+    start_audio_cache_retention(audio_cache_directories(&config))
+        .await
+        .map_err(RuntimeError::AudioCacheRetention)?;
     let ffmpeg_path = nonempty_env("FFMPEG_PATH").unwrap_or_else(|| "ffmpeg".to_owned());
     match transcription_adapter::check_ffmpeg(std::path::Path::new(&ffmpeg_path)).await {
         transcription_adapter::FfmpegHealth::Available { version } => {
@@ -3315,6 +3320,84 @@ fn purge_vote_retention(
     Ok((rewards, events))
 }
 
+fn audio_cache_directories(config: &RuntimeConfig) -> Vec<PathBuf> {
+    // Also sweep disabled providers: their old artifacts still require retention.
+    let mut directories: Vec<PathBuf> = [
+        ("RUST_VOICE_CACHE_DIR", "./audio-cache/rust"),
+        ("RUST_GTTS_CACHE_DIR", "./audio-cache/rust-gtts"),
+        ("RUST_NEURAL_CACHE_DIR", "./audio-cache/rust-neural"),
+        ("RUST_GCLOUD_CACHE_DIR", "./audio-cache/rust-gcloud"),
+        ("RUST_KOKORO_CACHE_DIR", "./audio-cache/rust-kokoro"),
+        ("RUST_TTS_FILE_CACHE_DIR", "./audio-cache/rust-file"),
+    ]
+    .into_iter()
+    .map(|(key, default)| PathBuf::from(nonempty_env(key).unwrap_or_else(|| default.to_owned())))
+    .collect();
+    if let Some(voice) = config.core_voice.as_ref() {
+        directories.extend([
+            voice.cache_dir.clone(),
+            voice.gtts_cache_dir.clone(),
+            voice.neural_cache_dir.clone(),
+            voice.gcloud_cache_dir.clone(),
+            voice.kokoro_cache_dir.clone(),
+        ]);
+    }
+    if let Some(file) = config.tts_file.as_ref() {
+        directories.push(file.cache_dir.clone());
+    }
+    directories.sort();
+    directories.dedup();
+    directories
+}
+
+async fn sweep_audio_caches(directories: &[PathBuf]) -> Result<usize, std::io::Error> {
+    let now = SystemTime::now();
+    let mut removed = 0;
+    let mut failure = None;
+    for directory in directories {
+        match vozen_tts::purge_expired_audio_cache(directory, now).await {
+            Ok(count) => removed += count,
+            Err(error) => failure = Some(error),
+        }
+    }
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(removed),
+    }
+}
+
+async fn start_audio_cache_retention(directories: Vec<PathBuf>) -> Result<(), std::io::Error> {
+    // Refuse startup if pre-existing expired speech cannot be removed. No Discord session exists yet.
+    let removed = sweep_audio_caches(&directories).await?;
+    eprintln!(
+        "[retention] audio cache startup: {removed} expired payload(s) removed; max age 7 days; sweep hourly"
+    );
+    spawn_audio_cache_retention(directories, vozen_tts::AUDIO_CACHE_SWEEP_INTERVAL);
+    Ok(())
+}
+
+fn spawn_audio_cache_retention(
+    directories: Vec<PathBuf>,
+    period: Duration,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(period);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await; // Startup sweep already handled the immediate tick.
+        loop {
+            interval.tick().await;
+            match sweep_audio_caches(&directories).await {
+                Ok(removed) => {
+                    eprintln!("[retention] audio cache sweep: {removed} expired payload(s) removed")
+                }
+                Err(error) => {
+                    eprintln!("[retention] audio cache sweep failed; retry next hour: {error}")
+                }
+            }
+        }
+    })
+}
+
 fn spawn_vote_retention(store: Arc<Mutex<SqliteStore>>) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
@@ -3517,6 +3600,63 @@ mod tests {
     use super::*;
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn audio_retention_cleans_startup_and_then_idle_caches() {
+        let root =
+            std::env::temp_dir().join(format!("vozen-runtime-retention-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let old = SystemTime::now() - vozen_tts::AUDIO_CACHE_MAX_AGE - Duration::from_secs(60);
+        let paths: Vec<_> = (0..6).map(|index| root.join(index.to_string())).collect();
+        for directory in &paths {
+            std::fs::create_dir(directory).unwrap();
+            let file = directory.join("startup.wav");
+            std::fs::write(&file, b"audio").unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&file)
+                .unwrap()
+                .set_times(std::fs::FileTimes::new().set_modified(old))
+                .unwrap();
+        }
+        start_audio_cache_retention(paths.clone()).await.unwrap();
+        assert!(
+            paths
+                .iter()
+                .all(|directory| !directory.join("startup.wav").exists())
+        );
+        let idle = paths[0].join("idle.wav");
+        std::fs::write(&idle, b"audio").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&idle)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(old))
+            .unwrap();
+        let task = spawn_audio_cache_retention(paths, Duration::from_millis(20));
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while idle.exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        task.abort();
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn audio_retention_refuses_startup_on_invalid_root() {
+        let file =
+            std::env::temp_dir().join(format!("vozen-runtime-retention-{}", uuid::Uuid::new_v4()));
+        std::fs::write(&file, b"not a directory").unwrap();
+        assert!(
+            start_audio_cache_retention(vec![file.clone()])
+                .await
+                .is_err()
+        );
+        std::fs::remove_file(file).unwrap();
+    }
 
     #[test]
     fn runtime_errors_without_a_token() {
