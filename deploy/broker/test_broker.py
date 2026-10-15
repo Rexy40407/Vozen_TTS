@@ -55,7 +55,7 @@ class TrustTests(unittest.TestCase):
         self.verify()
 
     def test_accepts_immutable_subject(self):
-        self.claims["sub"] = "repo:Rexy40407@285029577/Vozen_TTS@1308788653:ref:refs/heads/main"
+        self.claims["sub"] = "repo:Vozen-Team@343175426/Vozen_TTS@1308788653:ref:refs/heads/main"
         self.request["token"] = self.token()
         self.verify()
 
@@ -63,6 +63,23 @@ class TrustTests(unittest.TestCase):
         self.claims["event_name"] = "workflow_run"
         self.request["token"] = self.token()
         self.verify()
+
+    def test_pins_transferred_repository_identity(self):
+        self.assertEqual(broker.REPOSITORY, "Vozen-Team/Vozen_TTS")
+        self.assertEqual(broker.REPOSITORY_ID, "1308788653")
+        self.assertEqual(broker.OWNER_ID, "343175426")
+
+    def test_rejects_previous_owner_and_subjects(self):
+        for change in (
+            {"repository": "Rexy40407/Vozen_TTS"},
+            {"repository_owner_id": "285029577"},
+            {"sub": "repo:Rexy40407/Vozen_TTS:ref:refs/heads/main"},
+            {"sub": "repo:Rexy40407@285029577/Vozen_TTS@1308788653:ref:refs/heads/main"},
+            {"workflow_ref": "Rexy40407/Vozen_TTS/.github/workflows/deploy-bot.yml@refs/heads/main"},
+        ):
+            with self.subTest(change=change), self.assertRaises(broker.Refusal):
+                self.request["token"] = self.token({**self.claims, **change})
+                self.verify()
 
     def test_rejects_untrusted_claims(self):
         for key in ("iss", "aud", "repository", "repository_id", "repository_owner_id", "ref",

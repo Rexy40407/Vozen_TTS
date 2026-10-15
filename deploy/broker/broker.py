@@ -23,9 +23,9 @@ import urllib.request
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-REPOSITORY = "Rexy40407/Vozen_TTS"
+REPOSITORY = "Vozen-Team/Vozen_TTS"
 REPOSITORY_ID = "1308788653"
-OWNER_ID = "285029577"
+OWNER_ID = "343175426"
 ISSUER = "https://token.actions.githubusercontent.com"
 LIB = pathlib.Path("/usr/local/lib/vozen-deploy-broker")
 STATE = pathlib.Path("/var/lib/vozen-deploy-broker")
@@ -107,7 +107,7 @@ def verify_oidc(request, jwks, now):
     require(all(claims.get(key) == value for key, value in expected.items()), "OIDC trust mismatch")
     require(claims.get("event_name") in {"workflow_dispatch", "workflow_run"}, "untrusted event")
     subjects = {"repo:" + REPOSITORY + ":ref:refs/heads/main",
-                "repo:Rexy40407@" + OWNER_ID + "/Vozen_TTS@" + REPOSITORY_ID + ":ref:refs/heads/main"}
+                "repo:Vozen-Team@" + OWNER_ID + "/Vozen_TTS@" + REPOSITORY_ID + ":ref:refs/heads/main"}
     require(claims.get("sub") in subjects, "untrusted subject")
     for name in ("exp", "iat", "nbf"):
         require(type(claims.get(name)) is int, "invalid token time")
