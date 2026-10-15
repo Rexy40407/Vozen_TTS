@@ -34,6 +34,8 @@ jobs:
       - run: rustup toolchain install 1.97.1 --profile minimal
       - run: rustup component add clippy rustfmt --toolchain 1.97.1
       - run: npm run check:rust-contracts
+      - name: Verify scoped Cloudflare API proxy renderer
+        run: python3 -m unittest discover -s deploy/cloudflare -p 'test_api_proxy.py' -v
       - run: npm run check:rust-canaries
       - run: npm run check:rust
       # The portable Rust build deliberately omits Songbird's native Opus driver. Verify the
