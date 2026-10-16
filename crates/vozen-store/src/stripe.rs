@@ -215,7 +215,7 @@ impl SqliteStore {
                 subscription_id,
                 period_end,
             } => {
-                let Some(mut subscription) = transaction
+                let Some(subscription) = transaction
                     .query_row(
                         "SELECT subscription_id, customer_id, user_id, plan, seats,
                                 current_period_end, status, updated_at
@@ -240,38 +240,54 @@ impl SqliteStore {
                         "Stripe invoice references an unknown subscription".into(),
                     ));
                 };
-                let period_end = period_end.unwrap_or(subscription.current_period_end);
-                let days = ((period_end.saturating_sub(now) + 86_399_999) / 86_400_000).max(1);
-                subscription.current_period_end = period_end;
-                subscription.status = "active".into();
-                subscription.updated_at = now;
+                let period_end = period_end.filter(|end| *end > 0).ok_or_else(|| {
+                    StoreError::IntegrityCheck("Stripe invoice missing valid paid period".into())
+                })?;
+                let status = if period_end > now
+                    && period_end >= subscription.current_period_end
+                    && subscription.status != "canceled"
+                {
+                    "active"
+                } else {
+                    &subscription.status
+                };
                 transaction.execute(
                     "UPDATE stripe_subscription SET current_period_end=?2, status=?3, updated_at=?4
                      WHERE subscription_id=?1",
                     params![
                         subscription.subscription_id,
-                        period_end,
-                        subscription.status,
+                        period_end.max(subscription.current_period_end),
+                        status,
                         now
                     ],
                 )?;
-                if subscription.plan == "plus" {
-                    crate::premium::grant_user_premium_on(
-                        &transaction,
-                        &subscription.user_id,
-                        days,
-                        "stripe",
-                        now,
-                    )?;
-                } else {
-                    crate::premium::grant_guild_pass_on(
-                        &transaction,
-                        &subscription.user_id,
-                        subscription.seats,
-                        days,
-                        "stripe",
-                        now,
-                    )?;
+                // Stripe sells a calendar period, not an additive number of days. Project
+                // its absolute paid-through date so distinct events for the same invoice,
+                // retries and late invoices converge without extending access repeatedly.
+                // Other sources' longer grants remain intact; expired invoices grant nothing.
+                if period_end > now {
+                    if subscription.plan == "plus" {
+                        transaction.execute(
+                            "INSERT INTO premium_user (user_id, expires_at, source)
+                             VALUES (?1, ?2, 'stripe')
+                             ON CONFLICT(user_id) DO UPDATE SET
+                               expires_at=excluded.expires_at, source=excluded.source
+                             WHERE excluded.expires_at > premium_user.expires_at",
+                            params![subscription.user_id, period_end],
+                        )?;
+                    } else {
+                        transaction.execute(
+                            "INSERT INTO premium_pass (user_id, seats, expires_at, source)
+                             VALUES (?1, ?2, ?3, 'stripe')
+                             ON CONFLICT(user_id) DO UPDATE SET
+                               seats=MAX(premium_pass.seats, excluded.seats),
+                               expires_at=MAX(premium_pass.expires_at, excluded.expires_at),
+                               source=excluded.source
+                             WHERE excluded.expires_at > premium_pass.expires_at
+                                OR excluded.seats > premium_pass.seats",
+                            params![subscription.user_id, subscription.seats, period_end],
+                        )?;
+                    }
                 }
             }
             StripeEventInput::SubscriptionUpdated {
@@ -384,6 +400,76 @@ mod tests {
             !store
                 .stripe_event_processed("evt_unknown_invoice")
                 .expect("marker")
+        );
+    }
+
+    #[test]
+    fn invalid_paid_period_rolls_back_event_and_subscription_changes() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .apply_stripe_event_once("checkout", &checkout(), NOW)
+            .unwrap();
+        for period_end in [None, Some(0), Some(-1)] {
+            let result = store.apply_stripe_event_once(
+                "invalid",
+                &StripeEventInput::InvoicePaid {
+                    subscription_id: "sub_test".into(),
+                    period_end,
+                },
+                NOW,
+            );
+            assert!(result.is_err());
+            assert!(!store.stripe_event_processed("invalid").unwrap());
+            assert_eq!(
+                store
+                    .stripe_subscription("sub_test")
+                    .unwrap()
+                    .unwrap()
+                    .current_period_end,
+                0
+            );
+            assert!(store.user_premium_expiry("user_test").unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn failed_entitlement_write_rolls_back_paid_period_and_allows_retry() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .apply_stripe_event_once("checkout", &checkout(), NOW)
+            .unwrap();
+        store
+            .connection()
+            .execute_batch(
+                "CREATE TEMP TRIGGER fail_grant BEFORE INSERT ON premium_user
+             BEGIN SELECT RAISE(ABORT, 'isolated grant failure'); END;",
+            )
+            .unwrap();
+        let paid = StripeEventInput::InvoicePaid {
+            subscription_id: "sub_test".into(),
+            period_end: Some(NOW + 3_600_000),
+        };
+        assert!(store.apply_stripe_event_once("paid", &paid, NOW).is_err());
+        assert!(!store.stripe_event_processed("paid").unwrap());
+        assert_eq!(
+            store
+                .stripe_subscription("sub_test")
+                .unwrap()
+                .unwrap()
+                .current_period_end,
+            0
+        );
+        store
+            .connection()
+            .execute_batch("DROP TRIGGER fail_grant")
+            .unwrap();
+        assert_eq!(
+            store.apply_stripe_event_once("paid", &paid, NOW).unwrap(),
+            StripeEventApplyOutcome::Applied
+        );
+        assert_eq!(
+            store.user_premium_expiry("user_test").unwrap(),
+            Some(NOW + 3_600_000)
         );
     }
 

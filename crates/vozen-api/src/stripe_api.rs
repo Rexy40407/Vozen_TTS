@@ -629,15 +629,16 @@ fn stripe_event_input(event_type: &str, object: &Value) -> Result<StripeEventInp
             })
         }
         "invoice.paid" => Ok(StripeEventInput::InvoicePaid {
-            subscription_id: object
-                .get("subscription")
-                .and_then(Value::as_str)
-                .ok_or("invoice missing subscription")?
-                .into(),
-            period_end: object
-                .pointer("/lines/data/0/period/end")
-                .and_then(Value::as_i64)
-                .and_then(stripe_period_end_ms),
+            subscription_id: invoice_subscription_id(object)?.into(),
+            // A missing/invalid paid-through date must never invent a new access period.
+            period_end: Some(
+                object
+                    .pointer("/lines/data/0/period/end")
+                    .and_then(Value::as_i64)
+                    .filter(|seconds| *seconds > 0)
+                    .and_then(stripe_period_end_ms)
+                    .ok_or("invoice missing valid paid period")?,
+            ),
         }),
         "customer.subscription.updated" | "customer.subscription.deleted" => {
             Ok(StripeEventInput::SubscriptionUpdated {
@@ -649,6 +650,13 @@ fn stripe_event_input(event_type: &str, object: &Value) -> Result<StripeEventInp
                 period_end: object
                     .get("current_period_end")
                     .and_then(Value::as_i64)
+                    .or_else(|| {
+                        // Vozen subscriptions contain one recurring price. Since Basil,
+                        // its current period lives on the subscription item instead.
+                        object
+                            .pointer("/items/data/0/current_period_end")
+                            .and_then(Value::as_i64)
+                    })
                     .and_then(stripe_period_end_ms),
                 status: object
                     .get("status")
@@ -658,14 +666,45 @@ fn stripe_event_input(event_type: &str, object: &Value) -> Result<StripeEventInp
             })
         }
         "invoice.payment_failed" => Ok(StripeEventInput::InvoiceFailed {
-            subscription_id: object
-                .get("subscription")
-                .and_then(Value::as_str)
-                .ok_or("invoice missing subscription")?
-                .into(),
+            subscription_id: invoice_subscription_id(object)?.into(),
         }),
         _ => Ok(StripeEventInput::Ignored),
     }
+}
+
+/// Stripe Basil and later moved invoice.subscription under a discriminated parent.
+/// Keep legacy webhooks compatible, but reject ambiguous identities rather than guessing.
+fn invoice_subscription_id(object: &Value) -> Result<&str, String> {
+    let legacy = object
+        .get("subscription")
+        .filter(|value| !value.is_null())
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .ok_or("invalid invoice subscription")
+        })
+        .transpose()?;
+    let current = object
+        .get("parent")
+        .filter(|value| !value.is_null())
+        .map(|parent| {
+            if parent.get("type").and_then(Value::as_str) != Some("subscription_details") {
+                return Err("invoice parent is not a subscription");
+            }
+            parent
+                .pointer("/subscription_details/subscription")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .ok_or("invoice parent missing subscription")
+        })
+        .transpose()?;
+    if matches!((legacy, current), (Some(a), Some(b)) if a != b) {
+        return Err("invoice has conflicting subscriptions".into());
+    }
+    legacy
+        .or(current)
+        .ok_or_else(|| "invoice missing subscription".into())
 }
 
 fn bearer_token(headers: &HeaderMap) -> Option<&str> {
