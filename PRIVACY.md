@@ -2,7 +2,7 @@
 
 > _type it, hear it._
 
-**Last updated:** 2026-08-28
+**Last updated:** 2026-10-17
 
 Vozen is an **open-source**, **self-hosted** Text-to-Speech (TTS) bot for Discord: each operator runs their own instance on their own computer or server (VPS). This policy describes **faithfully** what data the instance stores, where, and how to remove it.
 
@@ -97,7 +97,7 @@ To synthesize speech, Vozen **reads the text content** of messages in the cases 
 
 To avoid re-synthesizing repeated phrases, Vozen stores the **generated audio files** (`.wav`) in a local cache folder (`audio-cache/`, next to the database). It is important to understand exactly what this implies:
 
-- **The key (file name) is a** `SHA-1` **content identifier** computed from `cleaned_text + voice_model + speed`. The plain text does not appear in the file name or database. This hash is not encryption and must not be treated as a security boundary; the cached audio itself reveals the spoken content.
+- **The production Rust cache uses a SHA-256 content identifier** derived from the cleaned text, voice model, speed and relevant synthesis options. The plain text does not appear in the file name. This hash is not encryption and must not be treated as a security boundary; the cached audio itself reveals the spoken content.
 - **However, the `.wav` file itself is the spoken audio of the cleaned message.** Anyone with access to the instance's file system can play that file and hear the content. This is not a "hiding place" for the content — it is simply the generated audio, stored for reuse.
 - The production Rust cache is **limited and regenerable**: it keeps at most ~500 completed files per engine and expires generated audio **seven days after its last write**. Reading a cached file does not extend that deadline. Expired hits are deleted instead of reused; a sweep runs before the Discord gateway starts and every hour thereafter, even without traffic, across all configured provider and TTS-file caches. It also removes expired synthesis temporary files and abandoned gTTS workspaces. Under normal operation, an idle file may remain until the next hourly sweep (up to seven days plus one hour). Startup fails if the initial sweep fails; later cleanup errors are logged and retried, so an operator must address storage or permission failures. Curated sound assets are not message-generated cache and are excluded. The legacy Node implementation still uses count-based eviction, not this age policy. Deleting cache loses no configuration; audio is re-synthesized when needed.
 
@@ -182,6 +182,10 @@ For users and server administrators, the bot's commands allow data to be removed
 | **Your erasable personal data** | `/privacy erase`                 | One command (asks you to confirm). Deletes personal settings, preferences, consent, daily transcription usage, scores, `talk_stats`, and `talk_usage` tied to your user ID across **all** servers. Paid rights and minimum financial records follow the separate retention rule below. |
 
 > **To delete your erasable personal data, use `/privacy erase`** — it asks you to confirm, then removes personal settings, preferences, consent, daily transcription usage, scores, `talk_stats`, `talk_usage`, and any active free vote entitlement tied to your user ID across every server (`user_voice`, `user_nickname`, `user_abbreviation`, `pronunciation_user`, `user_effect`, `tts_optout`, `stt_consent`, `stt_daily_usage`, `game_score`, `talk_stats`, `talk_usage`, `user_birthday`, `vote_reward`, and the other user-scoped operational records listed above). Transcription text already posted to a channel is a normal Discord message, not bot-side data (see section 2.3). Erasure does **not** reset the rolling vote-reward limit: the keyed pseudonymous HMAC ledger is retained for no more than 30 days solely for rate limiting and abuse prevention. Active paid entitlements and the minimum purchase and activation-consent records needed for accounting, fraud prevention, disputes, and legal obligations may also be retained. Retained records are restricted to those purposes and deleted or anonymized when no longer necessary; contact the operator to exercise a legal right.
+
+Older installations can retain a `user_persona` table from a previous runtime. The Rust runtime does not create new persona records, but user erasure and departed-server cleanup also remove matching records from that table when it exists.
+
+Erasing the live database does not rewrite earlier backup snapshots. Operators must control access and retention for those copies separately, including external copies, and account for erasure requests before returning a restored snapshot to service. The production instance's managed daily SQLite backups retain the current Lisbon calendar date and the preceding 29 dates; historical backups and manually exported copies are outside that automated retention mechanism.
 
 The audio cache is regenerable and self-limiting (see section 2.1); deleting it loses no configuration.
 

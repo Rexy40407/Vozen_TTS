@@ -148,6 +148,9 @@ impl SqliteStore {
                 [guild_id],
             )?;
         }
+        if legacy_persona_exists(&transaction)? {
+            transaction.execute("DELETE FROM user_persona WHERE guild_id = ?1", [guild_id])?;
+        }
         enqueue_privacy_tombstone(&transaction, "guild", guild_id)?;
         transaction.commit()?;
         Ok(())
@@ -186,10 +189,23 @@ impl SqliteStore {
                 PrivacyPurgeKey::GuildId => unreachable!("guild key in user erase spec"),
             }
         }
+        if legacy_persona_exists(&transaction)? {
+            transaction.execute("DELETE FROM user_persona WHERE user_id = ?1", [user_id])?;
+        }
         enqueue_privacy_tombstone(&transaction, "user", user_id)?;
         transaction.commit()?;
         Ok(())
     }
+}
+
+// Rust no longer creates or writes this legacy table, but upgraded databases can retain it.
+// Handle it inside the same erase transaction without creating it on fresh installations.
+fn legacy_persona_exists(transaction: &rusqlite::Transaction<'_>) -> Result<bool, rusqlite::Error> {
+    transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'user_persona')",
+        [],
+        |row| row.get(0),
+    )
 }
 
 fn enqueue_privacy_tombstone(
@@ -210,6 +226,84 @@ fn enqueue_privacy_tombstone(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn privacy_erase_covers_legacy_persona_without_touching_other_users() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .connection()
+            .execute_batch(
+                "CREATE TABLE user_persona (guild_id TEXT, user_id TEXT, persona TEXT);
+             INSERT INTO user_persona VALUES
+             ('guild-a', 'user-a', 'synthetic-a'),
+             ('guild-b', 'user-a', 'synthetic-b'),
+             ('guild-a', 'user-b', 'synthetic-other');",
+            )
+            .expect("legacy persona fixture");
+        store.erase_user_data("user-a").expect("erase");
+        let remaining: Vec<String> = store
+            .connection()
+            .prepare("SELECT user_id FROM user_persona ORDER BY user_id")
+            .expect("query")
+            .query_map([], |row| row.get(0))
+            .expect("rows")
+            .collect::<Result<_, _>>()
+            .expect("values");
+        assert_eq!(remaining, vec!["user-b"]);
+    }
+
+    #[test]
+    fn guild_purge_covers_legacy_persona_without_touching_other_guilds() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .connection()
+            .execute_batch(
+                "CREATE TABLE user_persona (guild_id TEXT, user_id TEXT, persona TEXT);
+             INSERT INTO user_persona VALUES
+             ('guild-a', 'user-a', 'synthetic-a'),
+             ('guild-a', 'user-b', 'synthetic-b'),
+             ('guild-b', 'user-a', 'synthetic-other');",
+            )
+            .expect("legacy persona fixture");
+        store.purge_guild_data("guild-a").expect("purge");
+        let remaining: Vec<String> = store
+            .connection()
+            .prepare("SELECT guild_id FROM user_persona ORDER BY guild_id")
+            .expect("query")
+            .query_map([], |row| row.get(0))
+            .expect("rows")
+            .collect::<Result<_, _>>()
+            .expect("values");
+        assert_eq!(remaining, vec!["guild-b"]);
+    }
+
+    #[test]
+    fn legacy_persona_failure_rolls_back_other_privacy_deletions() {
+        let store = SqliteStore::open_in_memory().expect("store");
+        store
+            .set_nickname("guild-a", "user-a", "synthetic")
+            .expect("nickname");
+        store
+            .connection()
+            .execute_batch(
+                "CREATE TABLE user_persona (guild_id TEXT, user_id TEXT, persona TEXT);
+             INSERT INTO user_persona VALUES ('guild-a', 'user-a', 'synthetic');
+             CREATE TRIGGER reject_persona_delete BEFORE DELETE ON user_persona
+             BEGIN SELECT RAISE(ABORT, 'synthetic deletion failure'); END;",
+            )
+            .expect("failure fixture");
+        assert!(store.erase_user_data("user-a").is_err());
+        assert_eq!(
+            store.nickname("guild-a", "user-a").expect("nickname"),
+            Some("synthetic".into())
+        );
+        assert!(store.purge_guild_data("guild-a").is_err());
+        assert_eq!(
+            store.nickname("guild-a", "user-a").expect("nickname"),
+            Some("synthetic".into())
+        );
+        assert!(store.list_runtime_outbox(10).expect("outbox").is_empty());
+    }
 
     #[test]
     fn privacy_erase_removes_personal_rows_but_retains_paid_rights() {
